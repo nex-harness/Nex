@@ -179,7 +179,13 @@ gate2() {
   # every primitive shape; fuzz keeps the decoder honest.
   check G2.2 "rpc value model: vectors + fuzz + Windows cross-build (step 2.1)" \
     bash -c 'cd go && go test -race -count=1 ./internal/rpc/ && go test -count=1 -run xxx -fuzz "^FuzzUnmarshal$" -fuzztime 15s ./internal/rpc/ && go test -count=1 -run xxx -fuzz "^FuzzFrameReader$" -fuzztime 15s ./internal/rpc/ && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -buildvcs=false -o /dev/null ./internal/rpc/'
-  todo G2.3 "channel server: call/event/cancel/pending (step 2.3)"
+  # G2.3 (step 2.3): the channel server. Covers the call/event/cancel/dispose
+  # semantics, the pending-request queue with its 1 s timeout, the bounded
+  # listener buffer with overflow-dispose, and a race/leak suite that closes a
+  # connection with 100 pending calls and 10 listeners. Replays R02-R08 and R11
+  # against the in-memory socket pair.
+  check G2.3 "channel server: call/event/cancel/pending (step 2.3)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/rpc/ -run "Server|Channel|Listen|Cancel|Pending|Overflow|Replay|Leak|Backpressure|Dispose"'
   todo G2.4 "rpc client: in-memory pair + Node integration (step 2.4)"
   todo G2.5 "http shell: static, server-info, headers (step 2.5)"
   todo G2.6 "web authentication: session store, limiter, cookie (step 2.6)"
