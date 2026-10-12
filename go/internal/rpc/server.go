@@ -37,6 +37,10 @@ type Options struct {
 	// EnqueueTimeout bounds how long a response waits for room in the outbound queue before
 	// the connection is closed as back-pressured. Zero selects DefaultEnqueueTimeout.
 	EnqueueTimeout time.Duration
+	// TraceID is stamped onto every PromiseError this server sends (step 2.10). Empty leaves the
+	// payload byte-for-byte what it was, which is why the recorded vectors are unaffected; a
+	// handler that sets its own traceId keeps it.
+	TraceID string
 }
 
 // Defaults matching the TS constructor and the plan.
@@ -282,7 +286,7 @@ func (s *Server) onPromise(header RequestHeader, body Value) {
 // before start, connection closed). A cancelled call is reported as a plain error so the
 // client rejects rather than hangs.
 func (s *Server) sendPromiseError(id int, err error) {
-	s.sendResponse(ResponsePromiseError, id, errorPayload(err), nil)
+	s.sendResponse(ResponsePromiseError, id, errorPayloadTraced(err, s.opts.TraceID), nil)
 }
 
 // sendCallError maps a handler error onto the wire: an *Error (or a chain containing one)
@@ -349,51 +353,4 @@ func (s *Server) channel(name string) (Channel, bool) {
 	defer s.mu.Unlock()
 	ch, ok := s.channels[name]
 	return ch, ok
-}
-
-// sendResponse encodes one response into a Regular frame and hands it to the connection's
-// writer.
-//
-// Framing happens here, at the single write path, so no caller can forget it: the peer reads
-// with MessageReader, which expects the 13-byte header and ignores anything else.
-//
-// `abandon` lets a caller give up waiting for queue room; pass nil when the caller has
-// nothing to abandon (the writer's own timeout then bounds the wait). A delivery goroutine
-// passes its listener's stop channel so a subscription that has already ended is not held up
-// by a full queue.
-//
-// A serialization failure drops the response, exactly as the TS `try { protocol.send } catch
-// {}` does — a payload the codec cannot encode has no wire representation and the TS
-// swallows it rather than closing a connection that is otherwise healthy.
-func (s *Server) sendResponse(respType, id int, body Value, abandon <-chan struct{}) {
-	payload, err := EncodeResponse(ResponseHeader{Type: respType, ID: id}, body)
-	if err != nil {
-		return
-	}
-	s.writer.enqueue(EncodeFrame(Frame{Type: MsgRegular, Data: payload}), abandon)
-}
-
-// Close tears down the connection: cancels every in-flight call and listener and marks the
-// server closed. It is idempotent and safe to call from Serve's defer and from a handler.
-func (s *Server) Close() {
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return
-	}
-	s.closed = true
-	active := make([]*activeRequest, 0, len(s.activeRequests))
-	for _, a := range s.activeRequests {
-		active = append(active, a)
-	}
-	s.activeRequests = map[int]*activeRequest{}
-	s.mu.Unlock()
-
-	for _, a := range active {
-		a.release(true)
-	}
-	s.cancel()
-	// Stop the writer AFTER cancelling the context, so a writer parked inside a socket
-	// write is released by the cancellation rather than waited on.
-	s.writer.stop()
 }
