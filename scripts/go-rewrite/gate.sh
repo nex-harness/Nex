@@ -208,7 +208,7 @@ gate2() {
   # 10 000 failed logins from one address, session create/validate/revoke/expiry/rotation against a
   # real web-sessions.json, and the constant-time token comparison (AST check).
   check G2.6 "web authentication: session store, limiter, cookie (step 2.6)" bash -c 'cd go && go test -race -count=1 ./internal/server/webauth/'
-  todo G2.7 "host capability + WebSocket endpoints (step 2.7)"
+  check G2.7 "host capability + WebSocket endpoints (step 2.7)" bash -c 'cd go && go test -race -count=1 ./internal/server/hostcap/ ./internal/server/ -run "HostCap|WebSocket|Ws|Capability|Connect"'
   todo G2.8 "gateway: routing table + upstream forwarding (step 2.8)"
   todo G2.9 "node upstream supervision (step 2.9)"
   todo G2.10 "observability and tracing (step 2.10)"
