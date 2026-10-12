@@ -169,12 +169,35 @@ gate1() {
   todo G1.13 "Web and Desktop manual checklist (step 1.14)"
 }
 
+gate2() {
+  common_block 2
+  # G2.1: phase 0 must pass.
+  if GATE_SELFTEST=1 "$0" 0 >"$LOG_DIR/G2.1.log" 2>&1; then echo "PASS G2.1 gate 0 passes"; PASS=$((PASS+1))
+  else echo "FAIL G2.1 gate 0 does not pass (phase 2 entry criterion)   (log: $LOG_DIR/G2.1.log)"; FAIL=$((FAIL+1)); fi
+  # G2.2: value model and serialization agree with the recorded vectors and the
+  # reference TypeScript codec. rpc-vectors.json carries the byte-exact hex for
+  # every primitive shape; fuzz keeps the decoder honest.
+  check G2.2 "rpc value model: vectors + fuzz + Windows cross-build (step 2.1)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/rpc/ && go test -count=1 -run xxx -fuzz "^FuzzUnmarshal$" -fuzztime 15s ./internal/rpc/ && go test -count=1 -run xxx -fuzz "^FuzzFrameReader$" -fuzztime 15s ./internal/rpc/ && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -buildvcs=false -o /dev/null ./internal/rpc/'
+  todo G2.3 "channel server: call/event/cancel/pending (step 2.3)"
+  todo G2.4 "rpc client: in-memory pair + Node integration (step 2.4)"
+  todo G2.5 "http shell: static, server-info, headers (step 2.5)"
+  todo G2.6 "web authentication: session store, limiter, cookie (step 2.6)"
+  todo G2.7 "host capability + WebSocket endpoints (step 2.7)"
+  todo G2.8 "gateway: routing table + upstream forwarding (step 2.8)"
+  todo G2.9 "node upstream supervision (step 2.9)"
+  todo G2.10 "observability and tracing (step 2.10)"
+  todo G2.11 "build / packaging / Docker (step 2.11)"
+  todo G2.12 "end-to-end with real UI (step 2.12)"
+}
+
 gate_unbuilt() { common_block "$1"; todo "G$1.*" "phase $1 checks are defined in its doc but not implemented yet"; }
 
 case "$PHASE" in
   0) gate0 ;;
   1) gate1 ;;
-  2|3|4|5) gate_unbuilt "$PHASE" ;;
+  2) gate2 ;;
+  3|4|5) gate_unbuilt "$PHASE" ;;
   *) echo "unknown phase $PHASE" >&2; exit 2 ;;
 esac
 echo "----"
