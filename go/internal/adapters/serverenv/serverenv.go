@@ -10,12 +10,27 @@
 // Anything else would change which deployments report a configured name or workspace.
 package serverenv
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 // Trimmed returns the value of name with surrounding whitespace removed, or "" when the
 // variable is unset, empty or whitespace-only. This is readTrimmedEnv in http.ts.
 func Trimmed(name string) string {
 	return os.Getenv(name) //nolint:forbidigo // this package is the sanctioned env adapter
+}
+
+// HomeDir is `process.env.HOME?.trim() || homedir()` from packages/services/src/paths.ts, the
+// fallback for the app data base directory. os.UserHomeDir checks HOME first on every platform
+// Go supports and falls back to the passwd/USERPROFILE database, which is what homedir() does,
+// so the trim-and-else rule only has to be expressed here.
+func HomeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(home)
 }
 
 // Hostname returns the machine name used as the last step of the server-id fallback chain,

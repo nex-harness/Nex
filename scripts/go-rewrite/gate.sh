@@ -202,7 +202,12 @@ gate2() {
   # compares status, headers and body SHA-256, so a difference the UI could observe fails here.
   check G2.5 "http shell: static, server-info, headers match recorded TypeScript responses (step 2.5)" \
     bash -c 'cd go && go test -race -count=1 ./internal/server/ -run "Static|ServerInfo|Http|Traversal|SPA"' 
-  todo G2.6 "web authentication: session store, limiter, cookie (step 2.6)"
+  # G2.6 (step 2.6): web authentication. Covers the decision table (auth disabled|enabled x
+  # protected|page|ws x no token|good ?token=|bad ?token=|valid cookie|invalid cookie|locked out),
+  # the three auth routes over a real HTTP server, cookie attributes including the Secure rule,
+  # 10 000 failed logins from one address, session create/validate/revoke/expiry/rotation against a
+  # real web-sessions.json, and the constant-time token comparison (AST check).
+  check G2.6 "web authentication: session store, limiter, cookie (step 2.6)" bash -c 'cd go && go test -race -count=1 ./internal/server/webauth/'
   todo G2.7 "host capability + WebSocket endpoints (step 2.7)"
   todo G2.8 "gateway: routing table + upstream forwarding (step 2.8)"
   todo G2.9 "node upstream supervision (step 2.9)"
