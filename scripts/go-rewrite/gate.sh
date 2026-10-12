@@ -186,7 +186,14 @@ gate2() {
   # against the in-memory socket pair.
   check G2.3 "channel server: call/event/cancel/pending (step 2.3)" \
     bash -c 'cd go && go test -race -count=1 ./internal/rpc/ -run "Server|Channel|Listen|Cancel|Pending|Overflow|Replay|Leak|Backpressure|Dispose"'
-  todo G2.4 "rpc client: in-memory pair + Node integration (step 2.4)"
+  # G2.4 (step 2.4): the Go channel client. Covers the Initialize handshake and id
+  # sequencing, the 202/203 error reconstruction (including every passthrough key), cancel
+  # before start and mid-flight, event listen/dispose, client-side overflow, fail-closed on
+  # Close, and a goroutine-leak check with 100 in-flight calls and 10 listeners. Replays
+  # R01-R08 and R11 through the real Go client against a Go server, comparing the client's
+  # own frames with the TypeScript recordings byte for byte.
+  check G2.4 "rpc client: in-memory pair + Node integration (step 2.4)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/rpc/ -run "Client|Call|Listen|Cancel|Leak"'
   todo G2.5 "http shell: static, server-info, headers (step 2.5)"
   todo G2.6 "web authentication: session store, limiter, cookie (step 2.6)"
   todo G2.7 "host capability + WebSocket endpoints (step 2.7)"
