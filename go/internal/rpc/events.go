@@ -248,7 +248,7 @@ func (s *Server) deliverEvents(l *listener, active *activeRequest) {
 			// the producer; the report that follows is best effort and is dropped if the
 			// connection is already gone.
 			l.abandonNow()
-			s.sendResponse(ResponseEventFire, l.id, bodyOrUndefined(errorPayload(ErrEventOverflow)), nil)
+			s.sendResponse(ResponseEventFire, l.id, bodyOrUndefined(errorPayloadTraced(ErrEventOverflow, s.opts.TraceID)), nil)
 			return
 		case <-l.stop:
 			// Stop producing, but flush what is already buffered before exiting.

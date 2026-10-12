@@ -145,6 +145,29 @@ func errorPayload(err error) Object {
 	return NewObject("message", err.Error(), "name", "Error", "stack", Undefined)
 }
 
+// traceIDKey is the passthrough key the TS client already copies onto the Error it rebuilds, and
+// therefore the one a server can fill in without a protocol change. It is listed last in
+// passthroughKeys, so appending it here keeps the payload's member order the TS produces.
+const traceIDKey = "traceId"
+
+// errorPayloadTraced is errorPayload with the connection's traceId appended when there is one.
+//
+// Two rules make this safe to do unconditionally rather than per call site: a connection with no
+// traceId (Options.TraceId empty — every test, and the Node-equivalent default) produces the
+// bytes it always did, so the recorded R01-R11 vectors are unaffected; and a handler that set
+// traceId itself keeps its own value, because a per-request id beats a per-connection one.
+func errorPayloadTraced(err error, traceID string) Object {
+	payload := errorPayload(err)
+	if traceID == "" {
+		return payload
+	}
+	if _, present := payload.Get(traceIDKey); present {
+		return payload
+	}
+	payload.Set(traceIDKey, traceID)
+	return payload
+}
+
 func stringsToValues(lines []string) []Value {
 	out := make([]Value, len(lines))
 	for i, line := range lines {

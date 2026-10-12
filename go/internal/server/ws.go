@@ -76,6 +76,15 @@ type WSConfig struct {
 	// RPCOptions configures each per-connection rpc.Server (pending timeout, concurrency,
 	// back-pressure). The zero value uses internal/rpc's defaults, which match the TS ones.
 	RPCOptions rpc.Options
+	// SessionsFilePath is where web-sessions.json lives. Empty selects
+	// webauth.DefaultSessionsFilePath(): <data base>/.nex/v2/web-sessions.json, which is exactly
+	// the path entry-http.ts passes. A test passes a path in t.TempDir() to keep its sessions out
+	// of the developer's real config directory.
+	//
+	// This field exists because the store is created HERE, not by the caller: the middleware and the
+	// routes must share one instance (see NewWebSocket), and the endpoints are built before the
+	// caller has any other handle on them.
+	SessionsFilePath string
 	// Log receives per-connection lifecycle events. Nil discards them.
 	Log *slog.Logger
 }
@@ -138,14 +147,26 @@ type WebSocket struct {
 // `createWebAuth()` builds a single store and hands the same instance to both `middleware()` and
 // `mountRoutes()`. Two stores would mean a session created by POST /api/auth/login is unknown to
 // the middleware that guards /ws, so every logged-in browser would still get 401 on the socket.
-// The store is in-memory here, matching the Node server when sessionsFilePath is absent; the file
-// path is wired in step 2.6's caller (internal/server.Options).
+//
+// The store PERSISTS to web-sessions.json, which is the behaviour entry-http.ts gets by always
+// passing `sessionsFilePath: join(getAppConfigDir(), "web-sessions.json")` whenever a token is set.
+// An in-memory-only store would break two things the spec depends on: a session would not survive a
+// server restart (docker-single-image.md's acceptance item 3 is exactly that), and a session minted
+// by the Go front would be invisible to the Node upstream sharing the same data base.
 func NewWebSocket(authToken string, cfg WSConfig) *WebSocket {
 	caps := cfg.Capabilities
 	if caps == nil {
 		caps = hostcap.New(hostcap.Options{})
 	}
-	store := webauth.NewSessionStore(authToken, "", nil, nil)
+	// An empty path means "no token configured" as well as "default path", so the store is only
+	// given a file when auth is actually on: with no token there are no sessions to persist, and
+	// writing an empty web-sessions.json into the developer's config dir on every start would be a
+	// side effect of running a server that does not use sessions at all.
+	sessionsPath := cfg.SessionsFilePath
+	if sessionsPath == "" && strings.TrimSpace(authToken) != "" {
+		sessionsPath = webauth.DefaultSessionsFilePath()
+	}
+	store := webauth.NewSessionStore(authToken, sessionsPath, nil, nil)
 	endpoints := &WebSocket{
 		caps:     caps,
 		rpcOpts:  cfg.RPCOptions,

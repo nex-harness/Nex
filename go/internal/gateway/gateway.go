@@ -97,13 +97,20 @@ func (g *Gateway) RegisterChannel(name string, channel rpc.Channel) {
 // The order is the plan's: the routing table is frozen for this connection, then the upstream leg
 // opens, then the Go rpc.Server exists and Initialize goes out, then forwarding runs. An upstream
 // that is not there is reported as ErrUpstreamUnavailable so the caller can close with 1013.
-func (g *Gateway) Handle(ctx context.Context, client rpc.Socket, mode string) error {
+//
+// log is the connection's logger, minted by internal/server for THIS connection (step 2.10). It
+// arrives here rather than being built here so that the connectionId on a forwarding line is the
+// same one on the open/close pair the endpoint logged, and so the traceId in the error payloads
+// below is the same id. A caller that hands over a zero ConnectionLog gets the discards, which is
+// why nothing in the forwarding path has to test the logger for nil.
+func (g *Gateway) Handle(ctx context.Context, client rpc.Socket, mode string, log server.ConnectionLog) error {
 	connectionMode := ConnectionMode(mode)
 	upstream, err := g.dialer.Open(ctx, mode)
 	if err != nil {
-		// Logged at error because it is not recoverable on this connection: the client will be
-		// closed with 1013 and has to reconnect. The traceId step 2.10 adds lands here.
-		g.logError("gateway: upstream unavailable", connectionMode, err)
+		// error, not warn: this connection is over. The client is closed with 1013 and has to
+		// reconnect, so nothing on it can be recovered. The traceId on the line is the one in the
+		// connection's error payloads.
+		log.UpstreamRefused(err)
 		return fmt.Errorf("%w: %w", server.ErrUpstreamUnavailable, err)
 	}
 
@@ -111,13 +118,17 @@ func (g *Gateway) Handle(ctx context.Context, client rpc.Socket, mode string) er
 	// rpc.Server is constructed over the SAME socket, so its responses and the gateway's forwarded
 	// frames share one write path (lockedSocket) and one writer — the property that makes frames
 	// for one id keep their order across both directions.
-	server := rpc.NewServer(socket, ctx, rpc.Options{})
+	//
+	// TraceID comes from the connection log, so every PromiseError the Go side sends carries the
+	// id a client can quote and an operator can grep.
+	server := rpc.NewServer(socket, ctx, log.RPCOptions())
 
 	connection, err := newConnection(connectionOptions{
 		router: g.router,
 		up:     upstream,
 		client: socket,
 		log:    g.log,
+		conn:   log,
 		mode:   connectionMode,
 	})
 	if err != nil {
@@ -138,9 +149,10 @@ func (g *Gateway) Handle(ctx context.Context, client rpc.Socket, mode string) er
 
 	runErr := connection.Run(ctx)
 	// The upstream dropped (or never came up) mid-connection: the client socket closes with it.
-	// The UI reconnects, and the web client already handles a close.
+	// The UI reconnects, and the web client already handles a close. warn, because the next
+	// connection gets a fresh leg and nothing durable was lost.
 	if runErr != nil {
-		g.logWarn("gateway: connection ended", connectionMode, runErr)
+		log.UpstreamLost(runErr)
 	}
 	return runErr
 }
@@ -162,18 +174,6 @@ func (g *Gateway) CloseTryAgain(socket rpc.Socket, reason string) error {
 
 // Compile-time proof that the gateway is the strangler server expects.
 var _ interface {
-	Handle(ctx context.Context, socket rpc.Socket, mode string) error
+	Handle(ctx context.Context, socket rpc.Socket, mode string, log server.ConnectionLog) error
 	CloseTryAgain(socket rpc.Socket, reason string) error
 } = (*Gateway)(nil)
-
-func (g *Gateway) logError(msg string, mode ConnectionMode, err error) {
-	if g.log != nil {
-		g.log.Error(msg, "mode", string(mode), "error", err)
-	}
-}
-
-func (g *Gateway) logWarn(msg string, mode ConnectionMode, err error) {
-	if g.log != nil {
-		g.log.Warn(msg, "mode", string(mode), "error", err)
-	}
-}

@@ -44,7 +44,12 @@ type Connection struct {
 	up     *Upstream
 	client *lockedSocket
 	log    Logger
-	mode   ConnectionMode
+	// conn is this connection's logging scope from internal/server (step 2.10): it carries the
+	// connectionId and traceId the endpoint minted, and it is what stamps traceId into the error
+	// payloads. It is NOT the process logger — the process logger is what the dialer and the HTTP
+	// proxy use for events that have no connection.
+	conn ConnectionLog
+	mode ConnectionMode
 
 	// server dispatches the frames the router kept. Built by HandleConnection.
 	server *rpc.Server
@@ -66,6 +71,7 @@ type connectionOptions struct {
 	up     *Upstream
 	client *lockedSocket
 	log    Logger
+	conn   ConnectionLog
 	mode   ConnectionMode
 }
 
@@ -86,6 +92,7 @@ func newConnection(opts connectionOptions) (*Connection, error) {
 		up:     opts.up,
 		client: opts.client,
 		log:    opts.log,
+		conn:   opts.conn,
 		mode:   opts.mode,
 		routes: map[int]struct{}{},
 	}, nil
@@ -192,6 +199,12 @@ func (c *Connection) route(ctx context.Context, frame []byte) error {
 // The route is recorded BEFORE the write: a 101 that names this id is only meaningful once Node
 // could have seen the 100, and the client may send it in the very next message. Recording first
 // costs nothing when the write then fails — the connection ends, and the map dies with it.
+//
+// One debug line per forwarded request (`channel.method id`) and nothing more, which is what
+// step 2.10 requires: high-frequency protocol diagnostics at a level a production deployment does
+// not write, with the channel and method NAMES only. The body is never touched — the frame is
+// written upstream verbatim, so a byte-for-byte trace would require reading it, and a request body
+// is user content (see the level table in internal/server/logging.go).
 func (c *Connection) forward(ctx context.Context, frame []byte, info frameInspect) error {
 	c.mu.Lock()
 	if c.closed {
@@ -203,7 +216,12 @@ func (c *Connection) forward(ctx context.Context, frame []byte, info frameInspec
 	c.mu.Unlock()
 	// The client's own bytes, header included: Node's SocketProtocol reads a framed message and
 	// the plan requires the SAME frame to reach it, not a re-encoding of its payload.
-	return c.up.Write(ctx, frame)
+	if err := c.up.Write(ctx, frame); err != nil {
+		c.conn.ForwardFailed(info.ChannelName, info.MethodName, info.RequestID, err)
+		return err
+	}
+	c.conn.Forwarded(info.ChannelName, info.MethodName, info.RequestID)
+	return nil
 }
 
 // wasForwarded reports whether the request with this id went upstream.
@@ -249,7 +267,7 @@ func (c *Connection) dispose() {
 		c.server.Close()
 	}
 	if err := c.up.Close(); err != nil && c.log != nil {
-		c.log.Debug("gateway: upstream close failed", "mode", string(c.mode), "error", err)
+		c.conn.UpstreamLost(err)
 	}
 }
 

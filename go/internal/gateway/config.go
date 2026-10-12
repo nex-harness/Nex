@@ -26,6 +26,8 @@ import (
 	"errors"
 	"path/filepath"
 	"time"
+
+	server "github.com/tylinux/nex/go/internal/server"
 )
 
 // Route names a handler owner. They are the only two values the file accepts; anything else is a
@@ -84,6 +86,17 @@ type Logger interface {
 	Warn(msg string, args ...any)
 	Error(msg string, args ...any)
 }
+
+// ConnectionLog is one client connection's logging scope, built by internal/server when the socket
+// is accepted (step 2.10). The gateway does not construct one: the ids have to be the same on the
+// endpoint's open/close lines, on the forwarding lines and inside the error payloads, and the only
+// way to guarantee that is for one place to mint all three.
+//
+// It is aliased rather than imported as a named type so the rest of this package reads as
+// `conn.Forwarded(...)` instead of `conn server.ConnectionLog.Forwarded(...)`. The dependency
+// direction is unchanged: gateway already imports internal/server, and internal/server does not
+// import gateway.
+type ConnectionLog = server.ConnectionLog
 
 // DefaultDialTimeout bounds one upstream handshake. It is short enough that a Node that is still
 // starting makes the CLIENT fail fast (and retry), rather than parking the connection goroutine

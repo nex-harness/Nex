@@ -65,6 +65,12 @@ var ErrCrashLoopStopped = errors.New("node: crash budget exhausted; upstream is 
 // Logger is the sink the supervisor logs through; *slog.Logger satisfies it. The
 // levels follow the AGENTS.md logging section: process lifecycle at info, crashes at
 // warn, unrecoverable stop failure at error.
+//
+// The production value is the process logger internal/server builds (server.NewLogger), so the
+// supervisor's lines carry the same `[timestamp] [pid] [source]` prefix every other line in the
+// process does and land in the same stream. This interface is what keeps that a wiring decision
+// made once, in the entry point, instead of a hard dependency from this adapter to the HTTP shell
+// (which would invert the dependency direction internal/archcheck enforces).
 type Logger interface {
 	Debug(msg string, args ...any)
 	Info(msg string, args ...any)
@@ -171,6 +177,12 @@ func loggerOrDiscard(log Logger) Logger {
 	}
 	return log
 }
+
+// LoggerOrDiscard is loggerOrDiscard exported for the process entry point, which builds one
+// logger and hands the same value to the supervisor, the gateway and the HTTP shell (step 2.10).
+// A caller that has no logger can pass nil to any of them; this exists so "I have none" is one
+// named decision rather than three separate nil checks.
+func LoggerOrDiscard(log Logger) Logger { return loggerOrDiscard(log) }
 
 type discardLogger struct{}
 

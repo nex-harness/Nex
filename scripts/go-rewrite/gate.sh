@@ -216,7 +216,20 @@ gate2() {
   # traceId passthrough into RPC error payloads, and the shared log-format prefix.
   check G2.10 "observability and tracing (step 2.10)" \
     bash -c 'cd go && go test -race -count=1 ./internal/server/ -run "Log|Trace|ConnectionID|TraceID|Format|Accepted|Closed|Forwarded|Upstream|InfoLevel|Identifiers|PrefixShape" && go test -race -count=1 ./internal/gateway/ -run "Log|Trace"'
-  todo G2.11 "build / packaging / Docker (step 2.11)"
+  # G2.11 (step 2.11): build, packaging, Docker. Cross-compiles go/cmd/nex-server for all five
+  # release targets. The flags that make the build reproducible (-trimpath, -buildvcs=false, the
+  # pinned SOURCE_DATE_EPOCH, -ldflags "-s -w") and the static-linking assertion live in the script,
+  # so a dependency that reintroduced cgo fails here rather than in a release that would not start on
+  # debian-slim. The `ls` is the artifact assertion: five directories, each with a binary.
+  # The acceptance list from docker-single-image.md is scripts/go-rewrite/docker-accept.sh (G2.8);
+  # it is not run here because it starts a server and, when docker is present, pulls an image.
+  check G2.11 "build / packaging / Docker (step 2.11)" bash -c 'bash scripts/go-rewrite/build-server.sh && ls go/dist/*/nex-server*'
+  # The entry point behind those artifacts: --version must report the version the TypeScript build
+  # injects (one package.json, two bundlers), the Node upstream must resolve from the release
+  # layout, and the session store must survive across processes — the regression that made
+  # acceptance item 3 ("a restart keeps sessions") fail.
+  check G2.11.entry "nex-server entry: version, upstream resolution, session persistence" \
+    bash -c 'cd go && go test -count=1 ./cmd/nex-server/ && go test -count=1 -run "Session|NoToken|DefaultSessionsPath" ./internal/server/'
   todo G2.12 "end-to-end with real UI (step 2.12)"
 }
 

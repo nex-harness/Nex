@@ -7,10 +7,10 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"os/signal"
 
+	"github.com/tylinux/nex/go/internal/adapters/logio"
 	"github.com/tylinux/nex/go/internal/protocol"
 )
 
@@ -18,6 +18,11 @@ import (
 var version = "0.0.0-dev"
 
 const usage = "usage: nex-agent app-server --stdio | nex-agent --version"
+
+// logSource is the prefix token for this process's lines, matching the source the TypeScript agent
+// uses (formatLogPrefix("nex-agent", process.pid) in packages/services/src/nex-agent/nexAgentService.ts),
+// so one log tail covers both implementations of the same agent.
+const logSource = "nex-agent"
 
 // claimStdout returns the stream that carries protocol frames and redirects the
 // process-wide os.Stdout to stderr, so a stray fmt.Println can never corrupt the
@@ -30,7 +35,10 @@ func claimStdout() io.Writer {
 }
 
 func run(args []string, stdin io.Reader, frames io.Writer, stderr io.Writer) int {
-	log := slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	// Level info, prefixed in the shared format: AGENTS.md reserves debug for high-frequency
+	// diagnostics, and this process has no env var to raise it (D7), so a deployment that wants
+	// the raw protocol frames reads them from the host that captured stderr.
+	log := logio.New(stderr, logio.Options{Source: logSource, Level: logio.LevelInfo})
 	switch {
 	case len(args) == 1 && args[0] == "--version":
 		fmt.Fprintln(stderr, "nex-agent", version)
