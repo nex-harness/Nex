@@ -89,8 +89,8 @@ func TestResponseHeaderRoundTrip(t *testing.T) {
 	if header.Type != ResponseInitialize || header.ID != 0 {
 		t.Errorf("initialize header: got %+v", header)
 	}
-	if body != nil {
-		t.Errorf("initialize body should be nil, got %#v", body)
+	if !IsUndefined(body) {
+		t.Errorf("initialize body should be Undefined, got %#v", body)
 	}
 
 	success, err := EncodeResponse(ResponseHeader{Type: ResponsePromiseSuccess, ID: 9}, map[string]any{"ok": true})
@@ -122,7 +122,7 @@ func TestCancelOrDispose(t *testing.T) {
 	if header.Type != RequestPromiseCancel || header.ID != 5 {
 		t.Errorf("header: got %+v", header)
 	}
-	if body != nil {
-		t.Errorf("cancel body should decode to nil, got %#v", body)
+	if !IsUndefined(body) {
+		t.Errorf("cancel body should decode to Undefined, got %#v", body)
 	}
 }

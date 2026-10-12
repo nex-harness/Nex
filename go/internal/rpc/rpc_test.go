@@ -140,6 +140,8 @@ func decodeOrderedValue(decoder *json.Decoder, inputMode bool) (any, error) {
 func normalizeTestScalar(token any, inputMode bool) any {
 	switch v := token.(type) {
 	case json.Number:
+		// The reader decodes tag 5 with UseNumber, so a JSON number stays a json.Number.
+		// Comparing numerically (see valuesMatch) keeps the assertion independent of that.
 		if inputMode {
 			if i, err := v.Int64(); err == nil && i >= -2147483648 && i <= 2147483647 {
 				return int32(i)
@@ -238,16 +240,26 @@ func TestDeserializeMatchesTypeScript(t *testing.T) {
 	}
 }
 
-// valuesMatch compares decoded values. Numbers are compared numerically (the TS decoder
-// yields one JS number type; Go distinguishes int32 for the Int tag from float64 for JSON
-// numbers, and both must be accepted). Objects/slices compare structurally with order.
+// valuesMatch compares decoded values. Numbers are compared numerically: the TS decoder
+// yields a single JS number type, while Go distinguishes int32 (tag 6) from json.Number
+// (tag 5), and both must compare equal to the recorded value. Objects/slices compare
+// structurally with order preserved.
 func valuesMatch(a, b any) bool {
+	// The TS decoder returns `undefined` for the Undefined tag; the Go reader returns the
+	// Undefined sentinel. The vector fixture describes it as {"__undefined": true}, which
+	// the test-side parser maps to nil, so nil matches the sentinel here.
+	if IsUndefined(a) {
+		return b == nil
+	}
 	if an, aok := numericValue(a); aok {
 		bn, bok := numericValue(b)
 		return bok && an == bn
 	}
 	switch av := a.(type) {
 	case []byte:
+		bv, ok := b.([]byte)
+		return ok && bytes.Equal(av, bv)
+	case Buffer:
 		bv, ok := b.([]byte)
 		return ok && bytes.Equal(av, bv)
 	case []any:
@@ -288,6 +300,13 @@ func numericValue(value any) (float64, bool) {
 		return float64(v), true
 	case float64:
 		return v, true
+	case json.Number:
+		f, err := v.Float64()
+		if err != nil {
+			// Out-of-range literals (1e400) are compared as text instead.
+			return 0, false
+		}
+		return f, true
 	}
 	return 0, false
 }

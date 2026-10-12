@@ -34,7 +34,7 @@ type RequestHeader struct {
 func EncodeRequest(header RequestHeader, body any) ([]byte, error) {
 	w := NewWriter()
 	payload := []any{int64(header.Type), int64(header.ID), header.ChannelName, header.Name}
-	if err := w.Serialize(asSerializableArray(payload)); err != nil {
+	if err := w.Serialize(payload); err != nil {
 		return nil, err
 	}
 	if err := serializeBody(w, body); err != nil {
@@ -46,7 +46,7 @@ func EncodeRequest(header RequestHeader, body any) ([]byte, error) {
 // EncodeCancelOrDispose serializes `[type, id]` followed by an undefined body.
 func EncodeCancelOrDispose(kind int, id int) ([]byte, error) {
 	w := NewWriter()
-	if err := w.Serialize(asSerializableArray([]any{int64(kind), int64(id)})); err != nil {
+	if err := w.Serialize([]Value{int64(kind), int64(id)}); err != nil {
 		return nil, err
 	}
 	if err := w.Serialize(Undefined); err != nil {
@@ -68,11 +68,11 @@ type ResponseHeader struct {
 func EncodeResponse(header ResponseHeader, body any) ([]byte, error) {
 	w := NewWriter()
 	if header.Type == ResponseInitialize {
-		if err := w.Serialize(asSerializableArray([]any{int64(header.Type)})); err != nil {
+		if err := w.Serialize([]Value{int64(header.Type)}); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := w.Serialize(asSerializableArray([]any{int64(header.Type), int64(header.ID)})); err != nil {
+		if err := w.Serialize([]Value{int64(header.Type), int64(header.ID)}); err != nil {
 			return nil, err
 		}
 	}
@@ -161,11 +161,4 @@ func toString(value any) string {
 		return s
 	}
 	return ""
-}
-
-// asSerializableArray converts a []any of ints/strings into the shapes Writer accepts.
-// Small integer codes must serialize with the Int tag, which requires int32/int64, so we
-// express them as int64 and let the writer decide.
-func asSerializableArray(items []any) []any {
-	return items
 }

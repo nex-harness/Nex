@@ -42,3 +42,14 @@ func (o *Object) Set(key string, value any) {
 
 // Len reports the number of members.
 func (o Object) Len() int { return len(o.Keys) }
+
+// indexOf returns the slot of key, or -1. The decoder uses it to implement JSON.parse's
+// duplicate-key rule: the later value wins but the original position is kept.
+func (o Object) indexOf(key string) int {
+	for i, k := range o.Keys {
+		if k == key {
+			return i
+		}
+	}
+	return -1
+}
