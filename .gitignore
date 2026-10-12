@@ -68,6 +68,10 @@ __pycache__/
 packages/desktop/.e2e-artifacts/
 packages/desktop/.e2e-cache/
 packages/desktop/.e2e-network-capture/
+# go-rewrite 步骤 2.12 真实 UI e2e 的截图 / console 日志 / 两次 front 的 RPC 序列：
+# scripts/go-rewrite/e2e-web-phase2.mjs 每次运行重新生成，内容随机器与时刻变化，是本次运行的
+# 证据而不是固定夹具。门禁断言的是"序列一致且 console 无错"，不依赖任何一份被钉住的旧日志。
+go/testdata/e2e/
 .nex-runtime/
 # 本地计划/草稿目录（不入库）
 .nex/

@@ -230,7 +230,31 @@ gate2() {
   # acceptance item 3 ("a restart keeps sessions") fail.
   check G2.11.entry "nex-server entry: version, upstream resolution, session persistence" \
     bash -c 'cd go && go test -count=1 ./cmd/nex-server/ && go test -count=1 -run "Session|NoToken|DefaultSessionsPath" ./internal/server/'
-  todo G2.12 "end-to-end with real UI (step 2.12)"
+  # G2.12 (step 2.12): the real UI against the Go front. The script drives Chromium through
+  # login -> workspace -> new task -> "Say hello" -> the mock's canned answer, then repeats the
+  # same flow against the pure-Node front and requires the (channel, method) sequence the UI
+  # emitted inside the scenario to be identical. Screenshots, console logs and both sequences
+  # land in go/testdata/e2e/phase2/. The script carries its own 90 s budget per front, so this
+  # check cannot hang the gate.
+  # SKIP (never a silent pass) when a prerequisite is missing: a browser, playwright-core, the
+  # built web/server bundles, or the two binaries. Each reason names the command that fixes it.
+  # A browser is needed. The candidate list mirrors the script's own (system chromium or chrome),
+  # so a machine that ships google-chrome instead of chromium is not skipped for no reason.
+  have_browser=0
+  for candidate in "${CHROMIUM_PATH:-}" /usr/bin/chromium /usr/bin/chromium-browser \
+                   /usr/bin/google-chrome /usr/bin/google-chrome-stable; do
+    [ -n "$candidate" ] && [ -x "$candidate" ] && { have_browser=1; break; }
+  done
+  if [ "$have_browser" -eq 1 ] && [ -f go/dist/linux-amd64/nex-server ] \
+     && [ -f packages/server/dist/entry-http.js ] && [ -f packages/web/dist/index.html ] \
+     && [ -x node_modules/.bin/tsx ] && [ -d node_modules/playwright-core ]; then
+    mkdir -p /tmp/go-rewrite-bin && (cd go && go build -buildvcs=false -o /tmp/go-rewrite-bin/nex-agent ./cmd/nex-agent)
+    check G2.12 "end-to-end with real UI (step 2.12)" \
+      bash -c 'node --import tsx scripts/go-rewrite/e2e-web-phase2.mjs 2>&1 | tail -1 | grep -q "phase2-e2e=ok"'
+  else
+    skip G2.12 "end-to-end with real UI" \
+      "missing a prerequisite: build nex-server (@nex/server + @nex/web, build-server.sh), install node_modules (tsx + playwright-core), or install chromium"
+  fi
 }
 
 gate_unbuilt() { common_block "$1"; todo "G$1.*" "phase $1 checks are defined in its doc but not implemented yet"; }
