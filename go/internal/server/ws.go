@@ -19,13 +19,14 @@ package server
 // "Unauthorized"; a caller WITH a session but no capability gets 401 "Invalid or expired host
 // capability". The two bodies are what the desktop client branches on.
 //
-// The per-connection channel set is a stub here: step 2.8 replaces StubChannel with the gateway
-// router while keeping this file's accept/dispose wiring. Everything above it — upgrade, mode
-// selection, per-connection rpc.Server construction, disposal on close — is already final.
+// Step 2.8 replaced the stub channel set with the gateway: accept, mode selection and disposal are
+// unchanged here, but the per-connection body is now ConnectionOwner.Handle — either the gateway
+// (routing between Go handlers and the Node upstream) or the registrar the step-2.7 tests install.
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -80,10 +81,35 @@ type WSConfig struct {
 }
 
 // ChannelRegistrar builds the per-connection channel set and returns the disposer that tears it
-// down when the socket closes. It is the seam step 2.8 fills with the gateway router; today it
-// installs the stub channel. The map-per-connection shape is already the router's shape, so wiring
-// it later touches this function alone.
+// down when the socket closes. It is the seam step 2.7 used for the stub channel and the one the
+// step-2.7 tests still install.
+//
+// The map-per-connection shape is already the router's shape, which is why the gateway took over
+// through a different seam (ConnectionOwner) rather than through this one: the gateway owns the
+// read loop, so it cannot be expressed as "register a few channels and call Serve".
 type ChannelRegistrar func(server *rpc.Server) (dispose func())
+
+// ErrUpstreamUnavailable is what a ConnectionOwner returns when the Node upstream could not be
+// reached at connection time. The endpoint turns it into a 1013 close, which is why the sentinel
+// lives here rather than in the gateway: the decision belongs to the code that holds the socket.
+var ErrUpstreamUnavailable = errors.New("server: upstream unavailable")
+
+// ConnectionOwner is what handles one accepted connection to the end.
+//
+// The gateway implements it (it owns the routing, the upstream leg and both forward loops); the
+// step-2.7 registrar path implements it in wsstub.go. One interface, so the endpoint code below has
+// no idea which of the two is installed — which is what keeps step 2.8 a replacement rather than a
+// fork.
+//
+// Handle must NOT close the socket: the caller owns it, because only the caller can close it with
+// the status code the failure semantics call for.
+type ConnectionOwner interface {
+	Handle(ctx context.Context, socket rpc.Socket, mode string) error
+	// CloseTryAgain closes a client socket with WebSocket 1013 ("try again later"). The gateway
+	// uses it when the upstream was not there at connection time. A registrar owner has no
+	// upstream, so it closes plainly — the code never matters to a client that never got one.
+	CloseTryAgain(socket rpc.Socket, reason string) error
+}
 
 // WebSocket owns the host capability store and the two WebSocket endpoints. It is created once per
 // HTTP server and is safe for concurrent use; every accepted connection gets its own rpc.Server.
@@ -94,6 +120,10 @@ type WebSocket struct {
 	mw       *webauth.Middleware
 	routes   *webauth.Routes
 	register ChannelRegistrar
+	owner    ConnectionOwner
+	// gateway is the strangler, kept for the one route the Go process never owns itself:
+	// /ws/remote/:id, which is an opaque upgrade forwarded to Node.
+	gateway Gateway
 }
 
 // NewWebSocket builds the endpoint set. authToken is the same NEX_SERVER_AUTH_TOKEN the auth
@@ -111,7 +141,7 @@ func NewWebSocket(authToken string, cfg WSConfig) *WebSocket {
 		caps = hostcap.New(hostcap.Options{})
 	}
 	store := webauth.NewSessionStore(authToken, "", nil, nil)
-	return &WebSocket{
+	endpoints := &WebSocket{
 		caps:     caps,
 		rpcOpts:  cfg.RPCOptions,
 		log:      cfg.Log,
@@ -119,13 +149,29 @@ func NewWebSocket(authToken string, cfg WSConfig) *WebSocket {
 		routes:   webauth.NewRoutes(authToken, store, nil, nil),
 		register: defaultRegistrar,
 	}
+	endpoints.owner = registrarOwner{endpoints: endpoints}
+	return endpoints
 }
 
-// SetRegistrar replaces the per-connection channel builder. Step 2.8 calls this once at
-// construction to install the gateway router; tests use it to install their own channels.
+// SetRegistrar replaces the per-connection channel builder. Tests use it to install their own
+// channels; the gateway replaces the whole owner with SetConnectionOwner instead.
 func (s *WebSocket) SetRegistrar(register ChannelRegistrar) {
 	if register != nil {
 		s.register = register
+		s.owner = registrarOwner{endpoints: s}
+	}
+}
+
+// SetConnectionOwner installs the per-connection handler — the gateway in production. It also
+// clears the registrar, because the two are alternative bodies for the same slot and leaving both
+// installed would make which one runs depend on registration order.
+func (s *WebSocket) SetConnectionOwner(owner ConnectionOwner) {
+	if owner != nil {
+		s.owner = owner
+		s.register = nil
+		if gateway, ok := owner.(Gateway); ok {
+			s.gateway = gateway
+		}
 	}
 }
 
@@ -187,9 +233,23 @@ func (s *WebSocket) Handler(pathName func(*http.Request) (string, bool), next ht
 			s.issueCapability(w, r)
 			return
 		}
+		// /ws/remote/:id bridges a remote backend Node created from POST /api/connect-remote
+		// (ssh/wsl/docker). It stays Node until Phase 3, so the whole upgrade — the handshake, the
+		// per-connection channel server and its one-shot ID lookup — is proxied as one opaque
+		// stream. Proxying it through the gateway's reverse proxy rather than handling it here is
+		// what keeps the Go process from holding remote-connection state it does not own.
+		if strings.HasPrefix(path, wsRemotePrefix) && isUpgradeRequest(r) && s.gateway != nil {
+			if proxy := s.gateway.HTTPHandler(); proxy != nil {
+				proxy.ServeHTTP(w, r)
+				return
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
 }
+
+// wsRemotePrefix is the /ws/remote/:id route prefix from packages/server/src/http.ts.
+const wsRemotePrefix = "/ws/remote/"
 
 // isUpgradeRequest ports the guard at the top of Hono's upgradeWebSocket helper:
 // `if (c.req.header("upgrade")?.toLowerCase() !== "websocket") return;`. A plain GET /ws is not a
@@ -214,14 +274,14 @@ func (s *WebSocket) issueCapability(w http.ResponseWriter, r *http.Request) {
 
 // handleWebSocket performs the upgrade and then owns the connection.
 //
-// It serves the per-connection rpc.Server on THIS goroutine. That is deliberate: net/http has
-// already handed the connection to the library at this point, so the handler goroutine is free,
-// and blocking it here means the deferred disposal runs exactly when the socket ends — the same
-// single place the TypeScript registers socket.onClose.
+// It serves the per-connection handler on THIS goroutine. That is deliberate: net/http has already
+// handed the connection to the library at this point, so the handler goroutine is free, and
+// blocking it here means the deferred teardown runs exactly when the socket ends — the same single
+// place the TypeScript registers socket.onClose.
 //
 // Two observable behaviors are reproduced:
 //   - Initialize is produced once, by the Go server. The upstream's Initialize (step 2.8) is
-//     swallowed rather than forwarded.
+//     swallowed by the gateway rather than forwarded, so a client sees exactly one handshake frame.
 //   - On a rejected upgrade the WebSocket library has already written its own HTTP error, so this
 //     function returns without touching the ResponseWriter. The Node stack refuses the upgrade the
 //     same way (@hono/node-ws ends the socket during its app.request pass), which is why a client
@@ -238,21 +298,28 @@ func (s *WebSocket) handleWebSocket(w http.ResponseWriter, r *http.Request, mode
 	// a live connection immediately. context.Background() is the correct parent for a hijacked
 	// connection; the socket's own error ends the loop.
 	ctx, cancel := context.WithCancel(context.Background())
-	server := rpc.NewServer(conn, ctx, s.rpcOpts)
-	dispose := s.register(server)
 	defer func() {
-		// Same teardown as socket.onClose in setupChannelServer: the connection scope and the
-		// window attachment (both step 2.8) first, then the channel server, then the socket.
-		if dispose != nil {
-			dispose()
-		}
 		cancel()
-		server.Close()
 		_ = conn.Close()
 		s.logf("websocket closed", "path", r.URL.Path, "mode", mode)
 	}()
-	if err := server.Serve(ctx); err != nil {
-		s.logf("websocket ended", "path", r.URL.Path, "mode", mode, "error", err)
+
+	owner := s.owner
+	if owner == nil {
+		owner = registrarOwner{endpoints: s}
+	}
+	// The owner does not close the socket: only this function can, and only with the status code
+	// the failure semantics call for.
+	handleErr := owner.Handle(ctx, conn, mode)
+	if handleErr != nil {
+		s.logf("websocket ended", "path", r.URL.Path, "mode", mode, "error", handleErr)
+	}
+	// An upstream that was not there at connection time gets 1013 ("try again later"), which tells
+	// the client a retry is worth making — distinct from the plain close of a mid-connection drop,
+	// which the deferred conn.Close() below already produces. errors.Is matches the sentinel the
+	// gateway returns, so a registrar owner (which has no upstream) never reaches this branch.
+	if errors.Is(handleErr, ErrUpstreamUnavailable) {
+		_ = owner.CloseTryAgain(conn, "upstream unavailable")
 	}
 }
 

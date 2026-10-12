@@ -36,17 +36,28 @@ var ioPackages = map[string]bool{
 // still goes through adapters (internal/adapters/webroot, internal/adapters/serverenv,
 // internal/adapters/webauthfs), which is why they are absent from
 // osAllowedOutsideAdapters.
+//
+// internal/gateway is the same kind of boundary as internal/server (step 2.8): it dials the
+// Node upstream, reverse-proxies the routes Go does not own, and reads the routing table.
+// Wrapping those in interfaces would only move the net/http calls somewhere less honest.
+// Its channels/ subpackage stays pure — it is a name list — and internal/rpc remains
+// transport-agnostic, which is what gate G2.11 checks separately.
 func ioPathAllowed(relDir string) bool {
 	return strings.HasPrefix(relDir, "cmd/") ||
 		strings.HasPrefix(relDir, "internal/adapters/") ||
 		relDir == "internal/server" ||
-		strings.HasPrefix(relDir, "internal/server/")
+		strings.HasPrefix(relDir, "internal/server/") ||
+		relDir == "internal/gateway"
 }
 
 // osAllowedOutsideAdapters lists packages that may import "os" even though they
 // are not adapters, with the reason. Keep this list short.
 var osAllowedOutsideAdapters = map[string]string{
 	"internal/archcheck": "reads the source tree to check it",
+	// internal/gateway reads the gateway-routes.json routing table itself (step 2.8). The table
+	// is the only persistent state the gateway owns and it is read exactly once at startup, so an
+	// adapter would be a wrapper around os.ReadFile with one call site.
+	"internal/gateway": "reads the gateway-routes.json routing table",
 }
 
 func goFiles(t *testing.T, root string) []string {

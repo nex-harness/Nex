@@ -152,3 +152,22 @@ func (c *Conn) Close() error {
 	}
 	return c.closeErr
 }
+
+// CloseStatus ends the connection with a specific WebSocket close code.
+//
+// It exists because rpc.Socket.Close() cannot carry a status, and one status matters: the gateway
+// closes a client with 1013 ("try again later") when the Node upstream was not there at connection
+// time, which is a different signal to the UI than the normal-close of a mid-connection drop.
+//
+// Like Close, it is idempotent: only the FIRST call performs the close handshake, and every later
+// call returns the recorded result. A second close handshake would be a protocol error on an
+// already-closed socket, and the teardown path must never fail for that reason.
+func (c *Conn) CloseStatus(code websocket.StatusCode, reason string) error {
+	c.closeOnce.Do(func() {
+		c.closeErr = c.conn.Close(code, reason)
+	})
+	if errors.Is(c.closeErr, net.ErrClosed) {
+		return ErrClosed
+	}
+	return c.closeErr
+}

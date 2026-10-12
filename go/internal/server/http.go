@@ -65,8 +65,34 @@ type Options struct {
 	// rpc.Server. Nil builds the production defaults, matching createHostCapabilityStore() with no
 	// options and the TS ChannelServer constructor defaults.
 	WSConfig *WSConfig
+	// Endpoints replaces the endpoint set NewHandler would build for itself. It exists for a
+	// caller that OWNS the set already: the gateway installs itself as the per-connection owner
+	// and therefore has to exist before the shell can wrap it. Building the endpoints twice would
+	// give the capability store two instances, and the two /ws/host tickets would disagree —
+	// exactly the failure the single-store comment on NewWebSocket warns about. Nil is the normal
+	// case and builds the set here.
+	Endpoints *WebSocket
+	// Gateway serves accepted connections through the strangler router (step 2.8): Go-owned channels
+	// are dispatched locally and everything else is forwarded to the Node upstream on a dedicated
+	// 1:1 leg. Nil means no gateway, and the endpoints fall back to the registrar path — which is
+	// what a caller that only wants the HTTP shell wants.
+	Gateway Gateway
 	// WorkspacePath is NEX_SERVER_WORKSPACE; empty means no workspaces are advertised.
 	WorkspacePath string
+}
+
+// Gateway is the strangler as the HTTP shell sees it: the per-connection WebSocket owner plus the
+// reverse proxy for the routes Go does not own.
+//
+// It is an interface rather than the concrete gateway type so internal/server keeps no dependency
+// on the gateway's internals (the dependency runs one way) and so a test can install a fake
+// without a Node process behind it. A Gateway is also a ConnectionOwner: HandleConnection is the
+// same method with the upstream's addressable in scope.
+type Gateway interface {
+	ConnectionOwner
+	// HTTPHandler forwards the routes Go does not own. Nil means "nothing to forward", and the
+	// routes it would have handled become the 404 the Go shell already produces.
+	HTTPHandler() http.Handler
 }
 
 // Config is the frozen configuration the handler uses. Node resolves the same values once at
@@ -112,7 +138,13 @@ func NewHandler(opts Options) (http.Handler, *Config, error) {
 	if opts.WSConfig != nil {
 		wsConfig = *opts.WSConfig
 	}
-	wsEndpoints := NewWebSocket(opts.AuthToken, wsConfig)
+	wsEndpoints := opts.Endpoints
+	if wsEndpoints == nil {
+		wsEndpoints = NewWebSocket(opts.AuthToken, wsConfig)
+	}
+	if opts.Gateway != nil {
+		wsEndpoints.SetConnectionOwner(opts.Gateway)
+	}
 	cfg.WS = wsEndpoints
 
 	// The /api/* namespace is dispatched directly rather than through http.ServeMux for two
@@ -123,12 +155,21 @@ func NewHandler(opts Options) (http.Handler, *Config, error) {
 	//     when it changes one, where Hono hands the target to the handler untouched — so
 	//     /../etc/passwd and //assets/app.js must reach the static handler verbatim.
 	// The three auth routes are consulted first (webAuth.mountRoutes is registered before
-	// /api/server-info and the capability route in http.ts); anything unowned is a 404 here and
-	// belongs to a later step's route table or, while the strangler runs, to the Node upstream.
+	// /api/server-info and the capability route in http.ts).
+	//
+	// The gateway (step 2.8) sits at the END of the /api/* chain, so it sees exactly the routes
+	// the Go shell does not own — /api/pets/*, /api/bots/*, /api/connect-remote. Everything the
+	// Go shell owns is answered before it is reached, which is what makes "Go owns these routes"
+	// one statement in one place instead of a set of exclusions in two.
+	proxy := gatewayHandler(opts.Gateway)
 	terminalAPI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if escaped, ok := urlPathname(r); ok && escaped == serverInfoPath &&
 			(r.Method == http.MethodGet || r.Method == http.MethodHead) {
 			writeServerInfo(w, NewServerInfo(cfg))
+			return
+		}
+		if proxy != nil {
+			proxy.ServeHTTP(w, r)
 			return
 		}
 		writeNotFound(w)
@@ -185,6 +226,15 @@ func withAuth(cfg *Config, endpoints *WebSocket, handler http.Handler) http.Hand
 		return handler
 	}
 	return middleware.Wrap(handler)
+}
+
+// gatewayHandler returns the reverse proxy for the routes Go does not own, or nil when there is no
+// gateway. A nil is a pass-through, so the caller can chain it unconditionally.
+func gatewayHandler(g Gateway) http.Handler {
+	if g == nil {
+		return nil
+	}
+	return g.HTTPHandler()
 }
 
 // pathWouldBeRewritten reports whether ServeMux would clean the target. Only the cases the

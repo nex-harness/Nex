@@ -7,6 +7,11 @@ import (
 	"fmt"
 )
 
+// FrameHeaderSize is HEADER_SIZE from packages/rpc/src/protocol.ts, exported: a caller that must
+// inspect a frame WITHOUT decoding it — the gateway router of step 2.8, which forwards the
+// client's bytes verbatim — still needs to know where the payload begins.
+const FrameHeaderSize = frameHeaderSize
+
 // frameHeaderSize is HEADER_SIZE from packages/rpc/src/protocol.ts.
 const frameHeaderSize = 13
 
@@ -173,6 +178,40 @@ func (r *MessageReader) Read(ctx context.Context) ([]byte, error) {
 		}
 		return frame.Data, nil
 	}
+}
+
+// ReadFrame is Read, but it returns the frame WITH its 13-byte ProtocolMessage header instead of
+// just the payload, and it does not skip non-Regular types — the caller decides.
+//
+// It exists for the gateway (step 2.8), which forwards a client's frame to the upstream as the
+// client's own bytes. Read hands back only the payload, and rebuilding a header from it would
+// reconstruct the id and ack fields rather than preserve the ones the client actually sent.
+//
+// The returned bytes are freshly allocated, so a caller may keep them past the next Read.
+// MessageReader's contract is unchanged: exactly one goroutine may read from it.
+func (r *MessageReader) ReadFrame(ctx context.Context) ([]byte, error) {
+	frame, err := r.nextFrame(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return encodeFrame(frame), nil
+}
+
+// encodeFrame rebuilds the on-wire bytes of a frame: the 13-byte header followed by the body.
+//
+// The header fields are recoverable from the Frame the reader produced — it copied them out before
+// consuming the buffer — so this reproduces exactly what the peer sent rather than re-encoding the
+// payload. The ProtocolMessage id and ack are always 0 on the WebSocket paths (SocketProtocol.send
+// hardcodes them), and they are carried through unchanged so a frame from a protocol that uses them
+// survives the round trip.
+func encodeFrame(f Frame) []byte {
+	out := make([]byte, frameHeaderSize+len(f.Data))
+	out[0] = f.Type
+	binary.BigEndian.PutUint32(out[1:], f.ID)
+	binary.BigEndian.PutUint32(out[5:], f.Ack)
+	binary.BigEndian.PutUint32(out[9:], uint32(len(f.Data)))
+	copy(out[frameHeaderSize:], f.Data)
+	return out
 }
 
 // nextFrame returns the next complete frame of any type, reading from the socket as

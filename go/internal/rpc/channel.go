@@ -135,6 +135,51 @@ func DecodeResponse(data []byte) (ResponseHeader, any, error) {
 	return header, body, nil
 }
 
+// DecodeRequestHeader reads ONLY the request header of a serialized message and stops there.
+//
+// The gateway needs the channel name (header[2]) to route a frame, and the request id (header[1])
+// to answer a later cancel — and nothing else. The body after the header can be a megabyte of
+// attachment bytes, so decoding it to make a routing decision would make the gateway the most
+// expensive thing in the request path for no benefit. The bytes themselves are never re-encoded
+// on the way upstream; only these few scalars are read.
+//
+// It returns the same RequestHeader DecodeRequest would for the header half, so a caller that needs
+// the body must still call DecodeRequest — this function cannot be used to recover it.
+func DecodeRequestHeader(data []byte) (RequestHeader, error) {
+	headerValue, err := NewReader(data).Deserialize()
+	if err != nil {
+		return RequestHeader{}, err
+	}
+	fields, ok := headerValue.([]any)
+	if !ok || len(fields) < 2 {
+		return RequestHeader{}, fmt.Errorf("rpc: request header must be an array")
+	}
+	header := RequestHeader{Type: int(toInt(fields[0])), ID: int(toInt(fields[1]))}
+	if len(fields) >= 4 {
+		header.ChannelName = toString(fields[2])
+		header.Name = toString(fields[3])
+	}
+	return header, nil
+}
+
+// DecodeResponseHeader reads ONLY the response header. The Initialize filter in the gateway uses
+// it to recognize the 200 it must swallow, without decoding the body behind it.
+func DecodeResponseHeader(data []byte) (ResponseHeader, error) {
+	headerValue, err := NewReader(data).Deserialize()
+	if err != nil {
+		return ResponseHeader{}, err
+	}
+	fields, ok := headerValue.([]any)
+	if !ok || len(fields) < 1 {
+		return ResponseHeader{}, fmt.Errorf("rpc: response header must be an array")
+	}
+	header := ResponseHeader{Type: int(toInt(fields[0]))}
+	if len(fields) >= 2 {
+		header.ID = int(toInt(fields[1]))
+	}
+	return header, nil
+}
+
 // serializeBody writes the body value; `undefined` becomes the Undefined tag, and a nil
 // body (no argument) also becomes Undefined to match the TS `arg?: any` default.
 func serializeBody(w *Writer, body any) error {

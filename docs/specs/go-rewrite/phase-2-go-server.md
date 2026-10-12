@@ -250,6 +250,62 @@ processResourceTelemetry}`, `authRequired` derivation (**note:** the TS reads `N
   - Both client modes through the gateway: `/ws` → Node sees `terminal-client`; `/ws/host` → Node sees `trusted-host-relay`.
 - **Done when:** the above pass, including the real-Node integration.
 
+**Implemented (2026-10-12, step 2.8).** Layout differs from the _Target_ line above in one respect: the read loop belongs to the
+gateway, not to `rpc.Server`. `Serve` owns the socket, and routing has to happen **before** dispatch — a frame for a
+Node-owned channel must never reach a Go handler — so `internal/rpc` grew one seam (`Server.HandleMessage`) and the gateway
+runs the reader, handing Go-owned frames to `rpc.Server` and forwarding the rest verbatim. `rpc.Server` stays the dispatcher;
+it is simply no longer the reader.
+
+- `config.go` — options, the `Logger` seam, `ErrUnknownChannel` / `ErrBadRoutes`, 1013.
+- `router.go` + `rawkeys.go` — the table and its validation (unknown channel, duplicate keys, bad version, unknown field, trailing
+  content), longest-prefix HTTP rules, and the structurally Go-owned routes.
+- `channels/channels.go` — the channel-name list, with a test that re-reads `packages/shared/src/channels.ts` so the copy cannot
+  drift.
+- `upstream.go` — the dialer: same client mode, `?token=` with the Go-generated secret, and for `/ws/host` a capability minted
+  **from Node's own one-shot store** (a Go-side store would be a second implementation of a security primitive).
+- `leg.go` — the open leg, its one reader goroutine, `inspectPayload`, `isInitializeMessage`.
+- `forward.go` — the per-connection gateway: the `id → forwarded` map, both loops, `lockedSocket` (one writer per socket, which
+  is what makes per-id ordering hold across both directions).
+- `gateway.go` — `Handle` (the `server.ConnectionOwner` seam) and the 1013 path.
+- `httpproxy.go` — `httputil.ReverseProxy` with `Rewrite`, chosen over `Director` **because Director auto-adds `X-Forwarded-*`**
+  and nothing in the TypeScript reads them. The client's `?token=` is replaced by the shared secret, never forwarded.
+
+**Deviations from the plan text, and why.**
+
+- _"only the first two values of each client frame are parsed"_: the implementation reads the whole 4-element header array
+  (`[type, id, channel, method]`) and stops before the body. The body is still never decoded, which is the property the cost
+  claim is about; `inspect_test.go` pins that with a body the codec would reject if it were read.
+- _"1 upstream per client connection"_ holds, and is asserted from the upstream's own side: two client connections produce two
+  upstream connections, each seeing only its own.
+- The plan's HTTP list (`/api/pets/*`, `/api/bots/*`, `/api/connect-remote`, `/ws/remote/:id`) is what the **default** routing
+  table produces, but the proxy asks the router rather than carrying a second route table — one statement of ownership instead of
+  two.
+- `internal/gateway` joined `internal/server` in `internal/archcheck`'s I/O allow-list: it dials the upstream, reverse-proxies,
+  and reads the routing table. `channels/` stays pure, and `internal/rpc` remains transport-free.
+
+**Test coverage against the list above.**
+
+- Unit — `router_test.go`, `inspect_test.go`: routing decisions, table validation, prefix precedence, structural routes,
+  header-only decoding, duplicate-key detection.
+- Real-Node integration — `node_test.go`: R01's Initialize **byte for byte** through the Go front; exactly one 200 reaches the
+  client although Node sends its own; Node's own unknown-channel timeout error (R05) forwarded unchanged; a real channel answered
+  by Node with the client's id round-tripped; both client modes; Node killed mid-call; 1013 while Node is down.
+  **R02–R04 and R06–R11 are NOT replayed through the gateway**: their channels (`demo`, `binary`, `nested`, `slow`, …) exist only
+  in the recorder's in-process stub server, not in the real `createLocalServices` collection. That evidence stays where it already
+  is — `internal/rpc`'s replay tests and `scripts/go-rewrite/replay-rpc-go.mjs` — and this step adds only what those cannot: the
+  hop through the gateway to a real Node.
+- Ordering / cross-talk — `forward_test.go`: 200 calls + 20 listeners on each of two concurrent connections, every answer
+  carrying its own upstream's index and no id outside that connection's range.
+- Cancel — forwarded for a forwarded request; **not** forwarded for an id the gateway never forwarded.
+- Failure — upstream down at connection time → 1013; upstream dropped mid-connection → the client socket closes and the gateway
+  leaks no goroutines over 20 drops; the retry after Node is up is served.
+- HTTP proxy — `httpproxy_test.go`: the routing boundary, method/path/query/body preservation, hop-by-hop stripping, no
+  `X-Forwarded-*`, credential replacement, a 4 MiB streamed response, 502 for a dead upstream, status/body passthrough.
+
+**Left to step 2.9:** spawning Node (`go/internal/adapters/node`), generating the secret, and the crash budget. The gateway takes
+its `UpstreamConfig` as input and never spawns anything, which is why every test here can arrange "Node is down" without a
+supervisor.
+
 ### 2.9 Node upstream supervision
 
 - **Source:** `packages/nex-server-cli/src/supervisor/{supervisor.ts,crashBudget.ts}`, `server-core/*` (the existing supervision/lifecycle design), `packages/server/src/{entry-http.ts,seaEntry.ts,stdio-lifecycle.ts}`.

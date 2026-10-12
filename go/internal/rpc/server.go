@@ -175,21 +175,35 @@ func (s *Server) Ready() { s.sendResponse(ResponseInitialize, 0, Undefined, nil)
 // the socket error it produced, so a caller logging it says "the peer stalled" rather than
 // "EOF", which is the difference between an actionable message and a shrug.
 func (s *Server) Serve(ctx context.Context) error {
-	reader := NewMessageReader(s.sock, DefaultMaxFrameBytes)
 	defer s.Close()
+	reader := NewMessageReader(s.sock, DefaultMaxFrameBytes)
 	for {
 		msg, err := reader.Read(ctx)
 		if err != nil {
 			return s.serveError(err)
 		}
-		header, body, err := DecodeRequest(msg)
-		if err != nil {
+		if err := s.HandleMessage(ctx, msg); err != nil {
 			// A malformed message cannot be attributed to a request id, so the connection
 			// cannot be resynchronised: close rather than guess.
 			return err
 		}
-		s.handleRequest(header, body)
 	}
+}
+
+// HandleMessage dispatches one already-framed Regular payload. ctx is used only for the
+// in-flight bookkeeping of the requests it starts; a slow handler keeps running under its own
+// derived context, exactly as in Serve.
+// It exists for the gateway (step 2.8), which owns the read loop so it can route a frame BEFORE
+// dispatch: calling Serve there would double-read the socket. The behavior is identical to what
+// Serve does with each message — a decode failure is returned so the caller can close, everything
+// else is silent.
+func (s *Server) HandleMessage(ctx context.Context, msg []byte) error {
+	header, body, err := DecodeRequest(msg)
+	if err != nil {
+		return err
+	}
+	s.handleRequest(header, body)
+	return nil
 }
 
 // serveError prefers a recorded abort cause over the socket error that ended the loop.
