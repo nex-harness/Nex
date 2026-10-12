@@ -211,7 +211,11 @@ gate2() {
   check G2.7 "host capability + WebSocket endpoints (step 2.7)" bash -c 'cd go && go test -race -count=1 ./internal/server/hostcap/ ./internal/server/ -run "HostCap|WebSocket|Ws|Capability|Connect"'
   check G2.8 "gateway: routing table + upstream forwarding (step 2.8)" bash -c 'cd go && go test -race -count=1 ./internal/gateway/'
   check G2.9 "node upstream supervision (step 2.9)" bash -c 'cd go && go test -race -count=1 ./internal/adapters/node/'
-  todo G2.10 "observability and tracing (step 2.10)"
+  # G2.10 (step 2.10): observability and tracing. The pins here are the level policy
+  # (info/debug/warn/error per AGENTS.md), the connection/trace id minting, the
+  # traceId passthrough into RPC error payloads, and the shared log-format prefix.
+  check G2.10 "observability and tracing (step 2.10)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/server/ -run "Log|Trace|ConnectionID|TraceID|Format|Accepted|Closed|Forwarded|Upstream|InfoLevel|Identifiers|PrefixShape" && go test -race -count=1 ./internal/gateway/ -run "Log|Trace"'
   todo G2.11 "build / packaging / Docker (step 2.11)"
   todo G2.12 "end-to-end with real UI (step 2.12)"
 }

@@ -84,8 +84,14 @@ type registrarOwner struct {
 }
 
 // Handle runs one connection on a fresh rpc.Server.
-func (o registrarOwner) Handle(ctx context.Context, socket rpc.Socket, mode string) error {
-	server := rpc.NewServer(socket, ctx, o.endpoints.rpcOpts)
+//
+// log is the connection's ConnectionLog. Only its traceId is used here — this path forwards
+// nothing, so it has no per-request line to emit — and it is the traceId the connection's error
+// payloads carry.
+func (o registrarOwner) Handle(ctx context.Context, socket rpc.Socket, _ string, log ConnectionLog) error {
+	opts := o.endpoints.rpcOpts
+	opts.TraceID = log.TraceID()
+	server := rpc.NewServer(socket, ctx, opts)
 	var dispose func()
 	if o.endpoints.register != nil {
 		dispose = o.endpoints.register(server)

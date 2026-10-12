@@ -101,10 +101,15 @@ var ErrUpstreamUnavailable = errors.New("server: upstream unavailable")
 // no idea which of the two is installed — which is what keeps step 2.8 a replacement rather than a
 // fork.
 //
+// log is the connection's ConnectionLog, minted by the endpoint before Handle is called. It is a
+// parameter rather than something the owner derives, because there must be exactly ONE id per
+// connection: an owner that minted its own would put two connectionIds on one client's session and
+// make the log impossible to correlate.
+//
 // Handle must NOT close the socket: the caller owns it, because only the caller can close it with
 // the status code the failure semantics call for.
 type ConnectionOwner interface {
-	Handle(ctx context.Context, socket rpc.Socket, mode string) error
+	Handle(ctx context.Context, socket rpc.Socket, mode string, log ConnectionLog) error
 	// CloseTryAgain closes a client socket with WebSocket 1013 ("try again later"). The gateway
 	// uses it when the upstream was not there at connection time. A registrar owner has no
 	// upstream, so it closes plainly — the code never matters to a client that never got one.
@@ -286,22 +291,33 @@ func (s *WebSocket) issueCapability(w http.ResponseWriter, r *http.Request) {
 //     function returns without touching the ResponseWriter. The Node stack refuses the upgrade the
 //     same way (@hono/node-ws ends the socket during its app.request pass), which is why a client
 //     sees the status code, not a body.
+//
+// The connection log is minted HERE, before the owner runs, because this is the only place that
+// sees the upgrade: every line the owner emits for this connection — including the ones the
+// gateway emits on the far side of the forwarding leg — carries the same connectionId and
+// traceId, and the traceId is what ends up in the connection's error payloads.
 func (s *WebSocket) handleWebSocket(w http.ResponseWriter, r *http.Request, mode string) {
 	conn, err := ws.Accept(w, r, ws.Options{})
 	if err != nil {
-		s.logf("websocket upgrade rejected", "path", r.URL.Path, "mode", mode, "error", err)
+		// No connection to attribute it to yet, so this is the one line that carries the path
+		// instead of the identifiers. The path is recorded, never the query string: /ws and
+		// /ws/host accept ?token=, and a credential must not reach a log.
+		Accepted(s.log, mode, r.URL.Path, err)
 		return
 	}
+
+	log := OpenConnection(s.log, mode)
 
 	// The connection context is derived from the request context but NOT cancelled when the
 	// handler returns: net/http cancels r.Context() as soon as ServeHTTP returns, which would kill
 	// a live connection immediately. context.Background() is the correct parent for a hijacked
 	// connection; the socket's own error ends the loop.
 	ctx, cancel := context.WithCancel(context.Background())
+	var handleErr error
 	defer func() {
 		cancel()
 		_ = conn.Close()
-		s.logf("websocket closed", "path", r.URL.Path, "mode", mode)
+		log.Closed(handleErr)
 	}()
 
 	owner := s.owner
@@ -310,25 +326,13 @@ func (s *WebSocket) handleWebSocket(w http.ResponseWriter, r *http.Request, mode
 	}
 	// The owner does not close the socket: only this function can, and only with the status code
 	// the failure semantics call for.
-	handleErr := owner.Handle(ctx, conn, mode)
-	if handleErr != nil {
-		s.logf("websocket ended", "path", r.URL.Path, "mode", mode, "error", handleErr)
-	}
+	handleErr = owner.Handle(ctx, conn, mode, log)
 	// An upstream that was not there at connection time gets 1013 ("try again later"), which tells
 	// the client a retry is worth making — distinct from the plain close of a mid-connection drop,
 	// which the deferred conn.Close() below already produces. errors.Is matches the sentinel the
 	// gateway returns, so a registrar owner (which has no upstream) never reaches this branch.
 	if errors.Is(handleErr, ErrUpstreamUnavailable) {
 		_ = owner.CloseTryAgain(conn, "upstream unavailable")
-	}
-}
-
-// logf emits one lifecycle line at info through the configured logger, or discards it. Step 2.10
-// replaces this with the connectionId/traceId logger; the level (info for open and close) is the
-// one the plan fixes.
-func (s *WebSocket) logf(msg string, args ...any) {
-	if s.log != nil {
-		s.log.Info(msg, args...)
 	}
 }
 
