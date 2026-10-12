@@ -1,0 +1,61 @@
+[
+ {
+  "id": 1,
+  "method": "v4/command",
+  "params": {
+   "commandId": "cmd-0001",
+   "clientId": "rec-client",
+   "sessionId": null,
+   "type": "createSession",
+   "payload": {
+    "workspaceId": "<WS>",
+    "firstInput": {
+     "text": "Say hello",
+     "modelSelection": {
+      "providerId": "mock",
+      "modelId": "mock-model",
+      "options": {
+       "reasoningLevel": "none"
+      }
+     }
+    }
+   },
+   "issuedAt": "<time>"
+  }
+ },
+ {
+  "id": "server-1",
+  "result": {
+   "nativeSearchEnhancementsEnabled": false,
+   "memoryEnabled": false,
+   "toolSearchEnabled": false,
+   "codemodeEnabled": false,
+   "askUserQuestionAutoResolutionEnabled": true,
+   "modelContextBudgetStrategy": "preflight-v1"
+  }
+ },
+ {
+  "id": "server-2",
+  "result": {
+   "nativeSearchEnhancementsEnabled": false,
+   "memoryEnabled": false,
+   "toolSearchEnabled": false,
+   "codemodeEnabled": false,
+   "askUserQuestionAutoResolutionEnabled": true,
+   "modelContextBudgetStrategy": "preflight-v1"
+  }
+ },
+ {
+  "id": 2,
+  "method": "v4/conversation/subscribe",
+  "params": {
+   "topic": "conversation/<id1>",
+   "connectionId": "rec-conn-1",
+   "clientMode": "desktop-continuous",
+   "workspace": {
+    "workspacePath": "<WS>",
+    "workspaceKey": "<WS>"
+   }
+  }
+ }
+]

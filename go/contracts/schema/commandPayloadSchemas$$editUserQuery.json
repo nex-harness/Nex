@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "attachments": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "type": "number"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "previewRef": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "fileName",
+          "mime",
+          "bytes"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "newText": {
+      "type": "string"
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "entityId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "rowId": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rowId",
+        "entityId"
+      ],
+      "type": "object"
+    },
+    "workspaceMode": {
+      "enum": [
+        "preserve",
+        "rewind"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "target",
+    "newText"
+  ],
+  "type": "object"
+}

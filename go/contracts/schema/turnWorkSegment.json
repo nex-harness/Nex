@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "activeMs": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "endedAt": {
+      "type": "number"
+    },
+    "segmentId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "startedAt": {
+      "type": "number"
+    },
+    "triggerEntityId": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "segmentId",
+    "startedAt"
+  ],
+  "type": "object"
+}

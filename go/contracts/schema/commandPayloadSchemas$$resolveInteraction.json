@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "answer": {
+      "properties": {
+        "action": {
+          "enum": [
+            "accept",
+            "decline",
+            "cancel"
+          ],
+          "type": "string"
+        },
+        "content": {
+          "additionalProperties": {},
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "freeText": {
+          "type": "string"
+        },
+        "optionId": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "interactionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "interactionId",
+    "answer"
+  ],
+  "type": "object"
+}

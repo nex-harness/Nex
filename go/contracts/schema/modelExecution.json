@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "memoryExtraction": {
+      "const": "skip",
+      "type": "string"
+    },
+    "requestAuth": {
+      "additionalProperties": false,
+      "properties": {
+        "apiKey": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "headers": {
+          "additionalProperties": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "propertyNames": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "selectionScope": {
+      "const": "execution",
+      "type": "string"
+    },
+    "subagents": {
+      "additionalProperties": false,
+      "properties": {
+        "background": {
+          "const": "deny",
+          "type": "string"
+        },
+        "foregroundModel": {
+          "const": "submission",
+          "type": "string"
+        }
+      },
+      "required": [
+        "foregroundModel",
+        "background"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "selectionScope"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "attempt": {
+      "type": "number"
+    },
+    "maxAttempts": {
+      "type": "number"
+    },
+    "nextRetryAt": {
+      "type": "number"
+    },
+    "reasonCode": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "attempt",
+    "maxAttempts",
+    "nextRetryAt",
+    "reasonCode"
+  ],
+  "type": "object"
+}

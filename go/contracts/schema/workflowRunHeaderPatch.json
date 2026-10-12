@@ -1,0 +1,369 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "artifacts": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "contentType": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "itemCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "file",
+              "markdown",
+              "chart",
+              "table",
+              "metrics",
+              "board"
+            ],
+            "type": "string"
+          },
+          "primary": {
+            "const": true,
+            "type": "boolean"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "version": {
+            "exclusiveMinimum": 0,
+            "maximum": 16,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "version"
+        ],
+        "type": "object"
+      },
+      "maxItems": 32,
+      "type": "array"
+    },
+    "concurrency": {
+      "properties": {
+        "cap": {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "type": "integer"
+        },
+        "ceiling": {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "type": "integer"
+        },
+        "cooldownMs": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "key": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit": {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cap",
+        "ceiling"
+      ],
+      "type": "object"
+    },
+    "concurrencyCeiling": {
+      "exclusiveMinimum": 0,
+      "maximum": 1024,
+      "type": "integer"
+    },
+    "currentPhase": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "error": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "type": "string"
+    },
+    "lastEventSequence": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "pendingQuestions": {
+      "items": {
+        "properties": {
+          "actorName": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "actorOrdinal": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "actorSiteId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "askedAt": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "context": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          },
+          "qid": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "question": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "qid",
+          "question"
+        ],
+        "type": "object"
+      },
+      "maxItems": 32,
+      "type": "array"
+    },
+    "phaseAlongside": {
+      "items": {
+        "items": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "maxItems": 32,
+        "type": "array"
+      },
+      "maxItems": 32,
+      "type": "array"
+    },
+    "phaseNames": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 32,
+      "type": "array"
+    },
+    "phases": {
+      "items": {
+        "properties": {
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "rounds": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "rounds"
+        ],
+        "type": "object"
+      },
+      "maxItems": 32,
+      "type": "array"
+    },
+    "reports": {
+      "items": {
+        "properties": {
+          "artifactId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "ordinal": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "preview": {
+            "maxLength": 2048,
+            "type": "string"
+          },
+          "siteId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "siteId",
+          "ordinal",
+          "preview"
+        ],
+        "type": "object"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "resultPreview": {
+      "maxLength": 2048,
+      "type": "string"
+    },
+    "resumable": {
+      "const": true,
+      "type": "boolean"
+    },
+    "resumedFrom": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "runId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "running",
+        "completed",
+        "errored",
+        "stopped"
+      ],
+      "type": "string"
+    },
+    "stopReason": {
+      "enum": [
+        "user",
+        "model",
+        "provider",
+        "interrupted",
+        "superseded"
+      ],
+      "type": "string"
+    },
+    "subagentModel": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "supersededBy": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "toolCallId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "unlistedByPhase": {
+      "items": {
+        "properties": {
+          "actors": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "actorsFailed": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "actorsSettled": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "phaseName": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "settled": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "actors",
+          "settled"
+        ],
+        "type": "object"
+      },
+      "maxItems": 33,
+      "type": "array"
+    },
+    "usage": {
+      "properties": {
+        "nodesUnlisted": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "nodesUnlistedSettled": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "nodesUsed": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "spentTokens": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "spentTokens",
+        "nodesUsed"
+      ],
+      "type": "object"
+    }
+  },
+  "type": "object"
+}

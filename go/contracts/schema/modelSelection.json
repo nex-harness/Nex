@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "modelId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "reasoningLevel": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "providerId": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "providerId",
+    "modelId"
+  ],
+  "type": "object"
+}

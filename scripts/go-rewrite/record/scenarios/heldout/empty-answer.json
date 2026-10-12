@@ -1,0 +1,44 @@
+{
+  "id": "H-empty-answer",
+  "title": "empty-answer",
+  "model": {
+    "steps": [
+      {
+        "text": ""
+      }
+    ]
+  },
+  "files": {},
+  "script": [
+    {
+      "op": "waitReady"
+    },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "do it",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": {
+              "reasoningLevel": "none"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "subscribe",
+      "sessionFrom": "created",
+      "as": "sub"
+    },
+    {
+      "op": "waitTelemetry",
+      "kind": "turn.terminal"
+    }
+  ]
+}

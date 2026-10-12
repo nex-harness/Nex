@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "contextWindow": {
+      "anyOf": [
+        {
+          "properties": {
+            "autoCompactThresholdTokens": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "breakdown": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "chars": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "source": {
+                    "enum": [
+                      "system_prompt",
+                      "meta_user_context",
+                      "skills",
+                      "tool_prompt",
+                      "system_tool_schemas",
+                      "mcp_tool_schemas",
+                      "messages"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source",
+                  "chars"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "cache": {
+              "additionalProperties": false,
+              "properties": {
+                "cacheReadTokens": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "cacheWriteTokens": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "hitRate": {
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "hitRateRequestCount": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "inputTokens": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "latestHitRate": {
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "totalCacheReadTokens": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "totalCacheWriteTokens": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "totalInputTokens": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "inputTokens",
+                "cacheReadTokens",
+                "cacheWriteTokens",
+                "hitRate"
+              ],
+              "type": "object"
+            },
+            "maxTokens": {
+              "type": "number"
+            },
+            "usedTokens": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "usedTokens",
+            "maxTokens",
+            "autoCompactThresholdTokens"
+          ],
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cumulative": {
+      "properties": {
+        "cacheReadTokens": {
+          "type": "number"
+        },
+        "cacheWriteTokens": {
+          "type": "number"
+        },
+        "inputTokens": {
+          "type": "number"
+        },
+        "outputTokens": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "inputTokens",
+        "outputTokens",
+        "cacheReadTokens",
+        "cacheWriteTokens"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "contextWindow",
+    "cumulative"
+  ],
+  "type": "object"
+}

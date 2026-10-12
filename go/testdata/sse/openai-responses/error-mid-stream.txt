@@ -1,0 +1,11 @@
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"id":"msg_1","type":"message","status":"in_progress","role":"assistant","content":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":2,"item_id":"msg_1","output_index":0,"content_index":0,"delta":"partial"}
+
+event: error
+data: {"type":"error","sequence_number":3,"error":{"type":"rate_limit_error","code":"rate_limit_exceeded","message":"slow down","param":null}}
+
+data: [DONE]
+

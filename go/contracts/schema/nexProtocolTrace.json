@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "parentId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "spanId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "traceId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "traceparent": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "type": "object"
+}

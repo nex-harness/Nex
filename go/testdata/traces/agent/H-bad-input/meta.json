@@ -1,0 +1,9 @@
+{
+ "id": "H-bad-input",
+ "title": "bad-input",
+ "outFrames": 51,
+ "inFrames": 4,
+ "modelRequests": 2,
+ "exitCode": 0,
+ "normalizedOutSha256": "9db6cbbdac5aa647d61a43a4a0541f7f41751933d066229552077ae0b149dcbe"
+}

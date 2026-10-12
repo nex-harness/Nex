@@ -1,0 +1,12 @@
+[
+ {
+  "id": 1,
+  "method": "runtime/capabilities",
+  "params": {}
+ },
+ {
+  "id": 2,
+  "method": "nope/not-a-method",
+  "params": {}
+ }
+]

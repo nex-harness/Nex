@@ -1,0 +1,1027 @@
+{
+  "generatedBy": "scripts/go-rewrite/gen-store-vectors.mts",
+  "description": "Node SqliteSessionStore repository behaviour. Go must write identical rows for identical input.",
+  "fixed": {
+    "session": "sess_00000000-0000-4000-8000-000000000001",
+    "turn": "turn_00000000-0000-4000-8000-000000000002",
+    "trace": "trace-0000-0000-0000-000000000000",
+    "span": "span-0000-0000-00",
+    "directory": "/work/proj",
+    "project": "proj_work-proj",
+    "clock": {
+      "sessionCreate": 1999999980500,
+      "inputAdmit": 1999999981500,
+      "userMessage": 1999999982500,
+      "modelStart": 1999999983500,
+      "firstToken": 1999999984500,
+      "assistantComplete": 1999999985500,
+      "turnComplete": 1999999986500,
+      "title": 1999999987500,
+      "toolStart": 1999999988500,
+      "toolFirstOutput": 1999999989500,
+      "toolComplete": 1999999990500
+    }
+  },
+  "excludedColumns": [
+    "input_history.id"
+  ],
+  "tables": [
+    "session",
+    "message",
+    "part",
+    "session_entry",
+    "session_input",
+    "input_history",
+    "model_usage",
+    "turn_usage",
+    "tool_usage",
+    "todo"
+  ],
+  "scenarios": [
+    {
+      "name": "text-turn",
+      "tables": {
+        "session": [
+          {
+            "directory": "/work/proj",
+            "id": "sess_00000000-0000-4000-8000-000000000001",
+            "parent_id": null,
+            "path": "/work/proj",
+            "permission": "{\"mode\":\"build\"}",
+            "project_id": "proj_work-proj",
+            "revert": null,
+            "share_url": null,
+            "slug": "sess_00000000-0000-4000-8000-000000000001",
+            "summary_additions": null,
+            "summary_deletions": null,
+            "summary_diffs": null,
+            "summary_files": null,
+            "task_type": "interactive",
+            "time_archived": null,
+            "time_compacting": null,
+            "time_created": 1999999980500,
+            "time_title_updated": 2000000000500,
+            "time_updated": 2000000000500,
+            "title": "Say hello",
+            "title_message_id": null,
+            "title_source": "first_input",
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "version": "1.2.3",
+            "workspace_id": null
+          }
+        ],
+        "message": [
+          {
+            "data": "{\"role\":\"user\",\"time\":{\"created\":1999999982500},\"agent\":\"nex-agent\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"contextSnapshot\":{\"envInfo\":{\"cwd\":\"/work/proj\",\"platform\":\"linux\",\"shell\":\"zsh\",\"osVersion\":\"linux 6.8.0 x64\",\"nodeVersion\":\"v24.0.0\",\"isGitRepository\":false,\"gitStatus\":\"not_repo\"}},\"semantics\":{\"origin\":\"real_user\",\"kind\":\"user_prompt\",\"uiVisibility\":\"visible\",\"providerVisibility\":\"visible\",\"transcriptVisibility\":\"visible\"},\"anchor\":{\"turnId\":\"turn_00000000-0000-4000-8000-000000000002\",\"origin\":\"realUser\",\"sourceCommandId\":\"cmd-0001\"},\"tools\":{\"Read\":true,\"Write\":true},\"metadata\":{\"inputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"admissionSeq\":1,\"admittedAt\":1999999981500,\"requestedDelivery\":\"startNow\",\"admittedDelivery\":\"startNow\",\"attachmentRefs\":[]},\"conversationInputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"attachments\":[],\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"delivery\":{\"requested\":\"startNow\",\"admitted\":\"startNow\"},\"order\":{\"admissionSeq\":1},\"steer\":{\"state\":\"notRequested\"},\"dispatch\":{\"state\":\"drained\"},\"admittedAt\":1999999981500},\"inputClientId\":\"vec-client\"},\"model\":{\"providerID\":\"mock\",\"modelID\":\"mock-model\",\"variant\":\"none\"}}",
+            "id": "msg_test_user_1",
+            "sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999982500,
+            "time_updated": 1999999982500
+          },
+          {
+            "data": "{\"role\":\"assistant\",\"parentID\":\"msg_test_user_1\",\"modelId\":\"mock-model\",\"providerId\":\"mock\",\"mode\":\"build\",\"planEnabled\":false,\"agent\":\"nex-agent\",\"path\":{\"cwd\":\"/work/proj\",\"root\":\"/work/proj\"},\"time\":{\"created\":1999999983500,\"completed\":1999999985500},\"cost\":0,\"tokens\":{\"total\":120,\"input\":100,\"output\":20,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}},\"finish\":\"stop\",\"semantics\":{\"origin\":\"agent_runtime\",\"kind\":\"assistant_response\",\"uiVisibility\":\"visible\",\"providerVisibility\":\"visible\",\"transcriptVisibility\":\"visible\"},\"anchor\":{\"turnId\":\"turn_00000000-0000-4000-8000-000000000002\"}}",
+            "id": "msg_test_assistant_1",
+            "sequence": 1,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999983500,
+            "time_updated": 1999999985500
+          }
+        ],
+        "part": [
+          {
+            "data": "{\"type\":\"text\",\"text\":\"Say hello\",\"time\":{\"start\":1999999982500,\"end\":1999999982500}}",
+            "id": "part_test_user_text_1",
+            "message_id": "msg_test_user_1",
+            "sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999982500,
+            "time_updated": 2000000000500
+          },
+          {
+            "data": "{\"type\":\"step-start\"}",
+            "id": "part_test_step_start_1",
+            "message_id": "msg_test_assistant_1",
+            "sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 2000000000500,
+            "time_updated": 2000000000500
+          },
+          {
+            "data": "{\"type\":\"text\",\"text\":\"Hello from the mock model.\",\"time\":{\"start\":1999999983500,\"end\":1999999985500}}",
+            "id": "part_test_step_text_1",
+            "message_id": "msg_test_assistant_1",
+            "sequence": 1,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999983500,
+            "time_updated": 2000000000500
+          },
+          {
+            "data": "{\"type\":\"step-finish\",\"reason\":\"stop\",\"cost\":0,\"tokens\":{\"total\":120,\"input\":100,\"output\":20,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}}}",
+            "id": "part_test_step_finish_1",
+            "message_id": "msg_test_assistant_1",
+            "sequence": 2,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 2000000000500,
+            "time_updated": 2000000000500
+          }
+        ],
+        "session_entry": [
+          {
+            "data": "{\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}}}",
+            "id": "sess_00000000-0000-4000-8000-000000000001:runtime-model-selection",
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999980500,
+            "time_updated": 1999999980500,
+            "type": "runtime/model_selection"
+          },
+          {
+            "data": "{\"mode\":\"build\",\"planEnabled\":false}",
+            "id": "sess_00000000-0000-4000-8000-000000000001:runtime-execution-state",
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999980500,
+            "time_updated": 1999999980500,
+            "type": "runtime/execution_state"
+          }
+        ],
+        "session_input": [
+          {
+            "admitted_sequence": 0,
+            "delivery": "startNow",
+            "id": "queue_cmd-0001",
+            "kind": "sendText",
+            "payload": "{\"text\":\"Say hello\",\"intent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"admissionSeq\":1,\"admittedAt\":1999999981500,\"requestedDelivery\":\"startNow\",\"admittedDelivery\":\"startNow\",\"attachmentRefs\":[]},\"conversationInputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"attachments\":[],\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"delivery\":{\"requested\":\"startNow\",\"admitted\":\"startNow\"},\"order\":{\"admissionSeq\":1},\"steer\":{\"state\":\"notRequested\"},\"dispatch\":{\"state\":\"queued\"},\"admittedAt\":1999999981500},\"attachments\":[],\"sourceCommandType\":\"createSession\"}",
+            "promoted_message_id": "msg_test_user_1",
+            "promoted_sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "status": "promoted",
+            "status_reason": null,
+            "time_created": 2000000000500,
+            "time_updated": 2000000000500
+          }
+        ],
+        "input_history": [
+          {
+            "attachments": null,
+            "id": "<INPUT_HISTORY_ID>",
+            "kind": "prompt",
+            "project_id": "proj_work-proj",
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "text": "Say hello",
+            "time_created": 1999999981500
+          }
+        ],
+        "model_usage": [
+          {
+            "agent": "nex-agent",
+            "assistant_message_id": "msg_test_assistant_1",
+            "attempt_index": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cancelled_by_user": 0,
+            "completed_at": 1999999985500,
+            "computed_total_tokens": 120,
+            "context_exceeded": 0,
+            "duration_ms": 2000,
+            "error_code": null,
+            "error_message": null,
+            "error_type": null,
+            "finish_reason": "stop",
+            "first_token_at": 1999999984500,
+            "id": "usage_model_main_turn_msg_test_assistant_1_0",
+            "input_tokens": 100,
+            "logical_request_id": "msg_test_assistant_1",
+            "mode": "build",
+            "model_id": "mock-model",
+            "output_tokens": 20,
+            "parent_user_message_id": "msg_test_user_1",
+            "provider_id": "mock",
+            "provider_metadata_json": "{\"rawFinishReason\":\"stop\"}",
+            "provider_total_tokens": 120,
+            "query_source": "main_turn",
+            "raw_usage_json": "{\"inputTokens\":100,\"outputTokens\":20,\"totalTokens\":120,\"cacheReadTokens\":0,\"reasoningTokens\":0}",
+            "reasoning_tokens": 0,
+            "retry_count": 0,
+            "retryable": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "span_id": "span-0000-0000-00",
+            "started_at": 1999999983500,
+            "status": "completed",
+            "task_type": "interactive",
+            "time_to_first_token_ms": 1000,
+            "tool_call_count": 0,
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "turn_id": "turn_00000000-0000-4000-8000-000000000002",
+            "variant": "none"
+          }
+        ],
+        "turn_usage": [
+          {
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cancelled_by_user": 0,
+            "completed_at": 1999999986500,
+            "computed_total_tokens": 120,
+            "context_exceeded": 0,
+            "duration_ms": 5000,
+            "error_code": null,
+            "error_type": null,
+            "first_model_start_at": 1999999983500,
+            "first_token_at": 1999999984500,
+            "input_tokens": 100,
+            "model_request_count": 1,
+            "model_retry_count": 0,
+            "output_tokens": 20,
+            "reasoning_tokens": 0,
+            "retryable": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "started_at": 1999999981500,
+            "status": "completed",
+            "time_to_first_token_ms": 3000,
+            "tool_call_count": 0,
+            "tool_error_count": 0,
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "turn_id": "turn_00000000-0000-4000-8000-000000000002",
+            "user_message_id": "msg_test_user_1"
+          }
+        ],
+        "tool_usage": [],
+        "todo": []
+      }
+    },
+    {
+      "name": "tool-turn",
+      "tables": {
+        "session": [
+          {
+            "directory": "/work/proj",
+            "id": "sess_00000000-0000-4000-8000-000000000001",
+            "parent_id": null,
+            "path": "/work/proj",
+            "permission": "{\"mode\":\"build\"}",
+            "project_id": "proj_work-proj",
+            "revert": null,
+            "share_url": null,
+            "slug": "sess_00000000-0000-4000-8000-000000000001",
+            "summary_additions": null,
+            "summary_deletions": null,
+            "summary_diffs": null,
+            "summary_files": null,
+            "task_type": "interactive",
+            "time_archived": null,
+            "time_compacting": null,
+            "time_created": 1999999980500,
+            "time_title_updated": 1999999980500,
+            "time_updated": 2000000000500,
+            "title": "Say hello",
+            "title_message_id": null,
+            "title_source": "first_input",
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "version": "1.2.3",
+            "workspace_id": null
+          }
+        ],
+        "message": [
+          {
+            "data": "{\"role\":\"user\",\"time\":{\"created\":1999999982500},\"agent\":\"nex-agent\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"contextSnapshot\":{\"envInfo\":{\"cwd\":\"/work/proj\",\"platform\":\"linux\",\"shell\":\"zsh\",\"osVersion\":\"linux 6.8.0 x64\",\"nodeVersion\":\"v24.0.0\",\"isGitRepository\":false,\"gitStatus\":\"not_repo\"}},\"semantics\":{\"origin\":\"real_user\",\"kind\":\"user_prompt\",\"uiVisibility\":\"visible\",\"providerVisibility\":\"visible\",\"transcriptVisibility\":\"visible\"},\"anchor\":{\"turnId\":\"turn_00000000-0000-4000-8000-000000000002\",\"origin\":\"realUser\",\"sourceCommandId\":\"cmd-0001\"},\"tools\":{\"Read\":true,\"Write\":true},\"metadata\":{\"inputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"admissionSeq\":1,\"admittedAt\":1999999981500,\"requestedDelivery\":\"startNow\",\"admittedDelivery\":\"startNow\",\"attachmentRefs\":[]},\"conversationInputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"attachments\":[],\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"delivery\":{\"requested\":\"startNow\",\"admitted\":\"startNow\"},\"order\":{\"admissionSeq\":1},\"steer\":{\"state\":\"notRequested\"},\"dispatch\":{\"state\":\"drained\"},\"admittedAt\":1999999981500},\"inputClientId\":\"vec-client\"},\"model\":{\"providerID\":\"mock\",\"modelID\":\"mock-model\",\"variant\":\"none\"}}",
+            "id": "msg_test_user_1",
+            "sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999982500,
+            "time_updated": 1999999982500
+          },
+          {
+            "data": "{\"role\":\"assistant\",\"parentID\":\"msg_test_user_1\",\"modelId\":\"mock-model\",\"providerId\":\"mock\",\"mode\":\"build\",\"planEnabled\":false,\"agent\":\"nex-agent\",\"path\":{\"cwd\":\"/work/proj\",\"root\":\"/work/proj\"},\"time\":{\"created\":1999999983500,\"completed\":1999999990500},\"cost\":0,\"tokens\":{\"total\":120,\"input\":100,\"output\":20,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}},\"finish\":\"tool-calls\",\"semantics\":{\"origin\":\"agent_runtime\",\"kind\":\"assistant_response\",\"uiVisibility\":\"visible\",\"providerVisibility\":\"visible\",\"transcriptVisibility\":\"visible\"},\"anchor\":{\"turnId\":\"turn_00000000-0000-4000-8000-000000000002\"}}",
+            "id": "msg_test_assistant_tool_1",
+            "sequence": 1,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999983500,
+            "time_updated": 1999999990500
+          }
+        ],
+        "part": [
+          {
+            "data": "{\"type\":\"text\",\"text\":\"Say hello\",\"time\":{\"start\":1999999982500,\"end\":1999999982500}}",
+            "id": "part_test_user_text_1",
+            "message_id": "msg_test_user_1",
+            "sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999982500,
+            "time_updated": 2000000000500
+          },
+          {
+            "data": "{\"type\":\"step-start\"}",
+            "id": "part_test_tool_step_start_1",
+            "message_id": "msg_test_assistant_tool_1",
+            "sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 2000000000500,
+            "time_updated": 2000000000500
+          },
+          {
+            "data": "{\"type\":\"tool\",\"callID\":\"call_read_1\",\"declarationIndex\":0,\"tool\":\"Read\",\"state\":{\"status\":\"completed\",\"input\":{\"file_path\":\"/work/proj/hello.txt\"},\"output\":\"1\\thi there\\n2\\t\",\"title\":\"Read\",\"metadata\":{\"schemaVersion\":1,\"serialization\":{\"truncated\":false,\"originalBytes\":13,\"returnedBytes\":13,\"budgetStrategy\":\"truncate\"}},\"time\":{\"start\":1999999988500,\"end\":1999999990500}}}",
+            "id": "part_test_tool_read_1",
+            "message_id": "msg_test_assistant_tool_1",
+            "sequence": 1,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999988500,
+            "time_updated": 2000000000500
+          },
+          {
+            "data": "{\"type\":\"step-finish\",\"reason\":\"tool-calls\",\"cost\":0,\"tokens\":{\"total\":120,\"input\":100,\"output\":20,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}}}",
+            "id": "part_test_tool_step_finish_1",
+            "message_id": "msg_test_assistant_tool_1",
+            "sequence": 2,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 2000000000500,
+            "time_updated": 2000000000500
+          }
+        ],
+        "session_entry": [
+          {
+            "data": "{\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}}}",
+            "id": "sess_00000000-0000-4000-8000-000000000001:runtime-model-selection",
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999980500,
+            "time_updated": 1999999980500,
+            "type": "runtime/model_selection"
+          },
+          {
+            "data": "{\"mode\":\"build\",\"planEnabled\":false}",
+            "id": "sess_00000000-0000-4000-8000-000000000001:runtime-execution-state",
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999980500,
+            "time_updated": 1999999980500,
+            "type": "runtime/execution_state"
+          }
+        ],
+        "session_input": [
+          {
+            "admitted_sequence": 0,
+            "delivery": "startNow",
+            "id": "queue_cmd-0001",
+            "kind": "sendText",
+            "payload": "{\"text\":\"Say hello\",\"intent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"admissionSeq\":1,\"admittedAt\":1999999981500,\"requestedDelivery\":\"startNow\",\"admittedDelivery\":\"startNow\",\"attachmentRefs\":[]},\"conversationInputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"attachments\":[],\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"delivery\":{\"requested\":\"startNow\",\"admitted\":\"startNow\"},\"order\":{\"admissionSeq\":1},\"steer\":{\"state\":\"notRequested\"},\"dispatch\":{\"state\":\"queued\"},\"admittedAt\":1999999981500},\"attachments\":[],\"sourceCommandType\":\"createSession\"}",
+            "promoted_message_id": "msg_test_user_1",
+            "promoted_sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "status": "promoted",
+            "status_reason": null,
+            "time_created": 2000000000500,
+            "time_updated": 2000000000500
+          }
+        ],
+        "input_history": [],
+        "model_usage": [
+          {
+            "agent": "nex-agent",
+            "assistant_message_id": "msg_test_assistant_tool_1",
+            "attempt_index": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cancelled_by_user": 0,
+            "completed_at": 1999999985500,
+            "computed_total_tokens": 120,
+            "context_exceeded": 0,
+            "duration_ms": 2000,
+            "error_code": null,
+            "error_message": null,
+            "error_type": null,
+            "finish_reason": "tool-calls",
+            "first_token_at": 1999999984500,
+            "id": "usage_model_main_turn_msg_test_assistant_tool_1_0",
+            "input_tokens": 100,
+            "logical_request_id": "msg_test_assistant_tool_1",
+            "mode": "build",
+            "model_id": "mock-model",
+            "output_tokens": 20,
+            "parent_user_message_id": "msg_test_user_1",
+            "provider_id": "mock",
+            "provider_metadata_json": "{\"rawFinishReason\":\"stop\"}",
+            "provider_total_tokens": 120,
+            "query_source": "main_turn",
+            "raw_usage_json": "{\"inputTokens\":100,\"outputTokens\":20,\"totalTokens\":120,\"cacheReadTokens\":0,\"reasoningTokens\":0}",
+            "reasoning_tokens": 0,
+            "retry_count": 0,
+            "retryable": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "span_id": "span-0000-0000-00",
+            "started_at": 1999999983500,
+            "status": "completed",
+            "task_type": "interactive",
+            "time_to_first_token_ms": 1000,
+            "tool_call_count": 0,
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "turn_id": "turn_00000000-0000-4000-8000-000000000002",
+            "variant": "none"
+          }
+        ],
+        "turn_usage": [
+          {
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cancelled_by_user": 0,
+            "completed_at": 1999999986500,
+            "computed_total_tokens": 120,
+            "context_exceeded": 0,
+            "duration_ms": 5000,
+            "error_code": null,
+            "error_type": null,
+            "first_model_start_at": 1999999983500,
+            "first_token_at": 1999999984500,
+            "input_tokens": 100,
+            "model_request_count": 1,
+            "model_retry_count": 0,
+            "output_tokens": 20,
+            "reasoning_tokens": 0,
+            "retryable": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "started_at": 1999999981500,
+            "status": "completed",
+            "time_to_first_token_ms": 3000,
+            "tool_call_count": 1,
+            "tool_error_count": 0,
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "turn_id": "turn_00000000-0000-4000-8000-000000000002",
+            "user_message_id": "msg_test_user_1"
+          }
+        ],
+        "tool_usage": [
+          {
+            "approval_status": "none",
+            "cancelled_by_user": 0,
+            "completed_at": 1999999990500,
+            "destructive": 0,
+            "duration_ms": 2000,
+            "error_code": null,
+            "error_message": null,
+            "error_type": null,
+            "exit_code": 0,
+            "first_output_at": 1999999989500,
+            "id": "usage_tool_sess_00000000-0000-4000-8000-000000000001_call_read_1",
+            "output_bytes": 13,
+            "read_only": 1,
+            "retry_count": 0,
+            "retryable": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "side_effect_scope": "none",
+            "started_at": 1999999988500,
+            "status": "completed",
+            "stderr_bytes": 0,
+            "stdout_bytes": 0,
+            "time_to_first_output_ms": 1000,
+            "tool_call_id": "call_read_1",
+            "tool_name": "Read",
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "truncated": 0,
+            "turn_id": "turn_00000000-0000-4000-8000-000000000002"
+          }
+        ],
+        "todo": []
+      }
+    },
+    {
+      "name": "retry",
+      "tables": {
+        "session": [
+          {
+            "directory": "/work/proj",
+            "id": "sess_00000000-0000-4000-8000-000000000001",
+            "parent_id": null,
+            "path": "/work/proj",
+            "permission": "{\"mode\":\"build\"}",
+            "project_id": "proj_work-proj",
+            "revert": null,
+            "share_url": null,
+            "slug": "sess_00000000-0000-4000-8000-000000000001",
+            "summary_additions": null,
+            "summary_deletions": null,
+            "summary_diffs": null,
+            "summary_files": null,
+            "task_type": "interactive",
+            "time_archived": null,
+            "time_compacting": null,
+            "time_created": 1999999980500,
+            "time_title_updated": 1999999980500,
+            "time_updated": 2000000000500,
+            "title": "Say hello",
+            "title_message_id": null,
+            "title_source": "first_input",
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "version": "1.2.3",
+            "workspace_id": null
+          }
+        ],
+        "message": [
+          {
+            "data": "{\"role\":\"user\",\"time\":{\"created\":1999999982500},\"agent\":\"nex-agent\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"contextSnapshot\":{\"envInfo\":{\"cwd\":\"/work/proj\",\"platform\":\"linux\",\"shell\":\"zsh\",\"osVersion\":\"linux 6.8.0 x64\",\"nodeVersion\":\"v24.0.0\",\"isGitRepository\":false,\"gitStatus\":\"not_repo\"}},\"semantics\":{\"origin\":\"real_user\",\"kind\":\"user_prompt\",\"uiVisibility\":\"visible\",\"providerVisibility\":\"visible\",\"transcriptVisibility\":\"visible\"},\"anchor\":{\"turnId\":\"turn_00000000-0000-4000-8000-000000000002\",\"origin\":\"realUser\",\"sourceCommandId\":\"cmd-0001\"},\"tools\":{\"Read\":true,\"Write\":true},\"metadata\":{\"inputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"admissionSeq\":1,\"admittedAt\":1999999981500,\"requestedDelivery\":\"startNow\",\"admittedDelivery\":\"startNow\",\"attachmentRefs\":[]},\"conversationInputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"attachments\":[],\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"delivery\":{\"requested\":\"startNow\",\"admitted\":\"startNow\"},\"order\":{\"admissionSeq\":1},\"steer\":{\"state\":\"notRequested\"},\"dispatch\":{\"state\":\"drained\"},\"admittedAt\":1999999981500},\"inputClientId\":\"vec-client\"},\"model\":{\"providerID\":\"mock\",\"modelID\":\"mock-model\",\"variant\":\"none\"}}",
+            "id": "msg_test_user_1",
+            "sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999982500,
+            "time_updated": 1999999982500
+          },
+          {
+            "data": "{\"role\":\"assistant\",\"parentID\":\"msg_test_user_1\",\"modelId\":\"mock-model\",\"providerId\":\"mock\",\"mode\":\"build\",\"planEnabled\":false,\"agent\":\"nex-agent\",\"path\":{\"cwd\":\"/work/proj\",\"root\":\"/work/proj\"},\"time\":{\"created\":1999999983500,\"completed\":1999999985500},\"cost\":0,\"tokens\":{\"total\":120,\"input\":100,\"output\":20,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}},\"finish\":\"stop\",\"semantics\":{\"origin\":\"agent_runtime\",\"kind\":\"assistant_response\",\"uiVisibility\":\"visible\",\"providerVisibility\":\"visible\",\"transcriptVisibility\":\"visible\"},\"anchor\":{\"turnId\":\"turn_00000000-0000-4000-8000-000000000002\"}}",
+            "id": "msg_test_assistant_1",
+            "sequence": 1,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999983500,
+            "time_updated": 1999999985500
+          }
+        ],
+        "part": [
+          {
+            "data": "{\"type\":\"text\",\"text\":\"Say hello\",\"time\":{\"start\":1999999982500,\"end\":1999999982500}}",
+            "id": "part_test_user_text_1",
+            "message_id": "msg_test_user_1",
+            "sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999982500,
+            "time_updated": 2000000000500
+          },
+          {
+            "data": "{\"type\":\"step-start\"}",
+            "id": "part_test_step_start_1",
+            "message_id": "msg_test_assistant_1",
+            "sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 2000000000500,
+            "time_updated": 2000000000500
+          },
+          {
+            "data": "{\"type\":\"text\",\"text\":\"Hello from the mock model.\",\"time\":{\"start\":1999999983500,\"end\":1999999985500}}",
+            "id": "part_test_step_text_1",
+            "message_id": "msg_test_assistant_1",
+            "sequence": 1,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999983500,
+            "time_updated": 2000000000500
+          },
+          {
+            "data": "{\"type\":\"step-finish\",\"reason\":\"stop\",\"cost\":0,\"tokens\":{\"total\":120,\"input\":100,\"output\":20,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}}}",
+            "id": "part_test_step_finish_1",
+            "message_id": "msg_test_assistant_1",
+            "sequence": 2,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 2000000000500,
+            "time_updated": 2000000000500
+          }
+        ],
+        "session_entry": [
+          {
+            "data": "{\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}}}",
+            "id": "sess_00000000-0000-4000-8000-000000000001:runtime-model-selection",
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999980500,
+            "time_updated": 1999999980500,
+            "type": "runtime/model_selection"
+          },
+          {
+            "data": "{\"mode\":\"build\",\"planEnabled\":false}",
+            "id": "sess_00000000-0000-4000-8000-000000000001:runtime-execution-state",
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999980500,
+            "time_updated": 1999999980500,
+            "type": "runtime/execution_state"
+          }
+        ],
+        "session_input": [
+          {
+            "admitted_sequence": 0,
+            "delivery": "startNow",
+            "id": "queue_cmd-0001",
+            "kind": "sendText",
+            "payload": "{\"text\":\"Say hello\",\"intent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"admissionSeq\":1,\"admittedAt\":1999999981500,\"requestedDelivery\":\"startNow\",\"admittedDelivery\":\"startNow\",\"attachmentRefs\":[]},\"conversationInputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"attachments\":[],\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"delivery\":{\"requested\":\"startNow\",\"admitted\":\"startNow\"},\"order\":{\"admissionSeq\":1},\"steer\":{\"state\":\"notRequested\"},\"dispatch\":{\"state\":\"queued\"},\"admittedAt\":1999999981500},\"attachments\":[],\"sourceCommandType\":\"createSession\"}",
+            "promoted_message_id": "msg_test_user_1",
+            "promoted_sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "status": "promoted",
+            "status_reason": null,
+            "time_created": 2000000000500,
+            "time_updated": 2000000000500
+          }
+        ],
+        "input_history": [],
+        "model_usage": [
+          {
+            "agent": "nex-agent",
+            "assistant_message_id": "msg_test_assistant_1",
+            "attempt_index": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cancelled_by_user": 0,
+            "completed_at": 1999999984500,
+            "computed_total_tokens": 120,
+            "context_exceeded": 0,
+            "duration_ms": 2000,
+            "error_code": null,
+            "error_message": "Provider rate limited the model request.",
+            "error_type": "rate_limited",
+            "finish_reason": "stop",
+            "first_token_at": 1999999984500,
+            "id": "usage_model_main_turn_msg_test_assistant_1_0",
+            "input_tokens": 100,
+            "logical_request_id": "msg_test_assistant_1",
+            "mode": "build",
+            "model_id": "mock-model",
+            "output_tokens": 20,
+            "parent_user_message_id": "msg_test_user_1",
+            "provider_id": "mock",
+            "provider_metadata_json": "{\"rawFinishReason\":\"stop\"}",
+            "provider_total_tokens": 120,
+            "query_source": "main_turn",
+            "raw_usage_json": "{\"inputTokens\":100,\"outputTokens\":20,\"totalTokens\":120,\"cacheReadTokens\":0,\"reasoningTokens\":0}",
+            "reasoning_tokens": 0,
+            "retry_count": 1,
+            "retryable": 1,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "span_id": "span-0000-0000-00",
+            "started_at": 1999999983500,
+            "status": "error",
+            "task_type": "interactive",
+            "time_to_first_token_ms": 1000,
+            "tool_call_count": 0,
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "turn_id": "turn_00000000-0000-4000-8000-000000000002",
+            "variant": "none"
+          },
+          {
+            "agent": "nex-agent",
+            "assistant_message_id": "msg_test_assistant_1",
+            "attempt_index": 1,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cancelled_by_user": 0,
+            "completed_at": 1999999985500,
+            "computed_total_tokens": 120,
+            "context_exceeded": 0,
+            "duration_ms": 2000,
+            "error_code": null,
+            "error_message": null,
+            "error_type": null,
+            "finish_reason": "stop",
+            "first_token_at": 1999999984500,
+            "id": "usage_model_main_turn_msg_test_assistant_1_1",
+            "input_tokens": 100,
+            "logical_request_id": "msg_test_assistant_1",
+            "mode": "build",
+            "model_id": "mock-model",
+            "output_tokens": 20,
+            "parent_user_message_id": "msg_test_user_1",
+            "provider_id": "mock",
+            "provider_metadata_json": "{\"rawFinishReason\":\"stop\"}",
+            "provider_total_tokens": 120,
+            "query_source": "main_turn",
+            "raw_usage_json": "{\"inputTokens\":100,\"outputTokens\":20,\"totalTokens\":120,\"cacheReadTokens\":0,\"reasoningTokens\":0}",
+            "reasoning_tokens": 0,
+            "retry_count": 1,
+            "retryable": 1,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "span_id": "span-0000-0000-00",
+            "started_at": 1999999983500,
+            "status": "completed",
+            "task_type": "interactive",
+            "time_to_first_token_ms": 1000,
+            "tool_call_count": 0,
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "turn_id": "turn_00000000-0000-4000-8000-000000000002",
+            "variant": "none"
+          }
+        ],
+        "turn_usage": [
+          {
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cancelled_by_user": 0,
+            "completed_at": 1999999986500,
+            "computed_total_tokens": 120,
+            "context_exceeded": 0,
+            "duration_ms": 5000,
+            "error_code": null,
+            "error_type": null,
+            "first_model_start_at": 1999999983500,
+            "first_token_at": 1999999984500,
+            "input_tokens": 100,
+            "model_request_count": 1,
+            "model_retry_count": 0,
+            "output_tokens": 20,
+            "reasoning_tokens": 0,
+            "retryable": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "started_at": 1999999981500,
+            "status": "completed",
+            "time_to_first_token_ms": 3000,
+            "tool_call_count": 0,
+            "tool_error_count": 0,
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "turn_id": "turn_00000000-0000-4000-8000-000000000002",
+            "user_message_id": "msg_test_user_1"
+          }
+        ],
+        "tool_usage": [],
+        "todo": []
+      }
+    },
+    {
+      "name": "denied",
+      "tables": {
+        "session": [
+          {
+            "directory": "/work/proj",
+            "id": "sess_00000000-0000-4000-8000-000000000001",
+            "parent_id": null,
+            "path": "/work/proj",
+            "permission": "{\"mode\":\"build\"}",
+            "project_id": "proj_work-proj",
+            "revert": null,
+            "share_url": null,
+            "slug": "sess_00000000-0000-4000-8000-000000000001",
+            "summary_additions": null,
+            "summary_deletions": null,
+            "summary_diffs": null,
+            "summary_files": null,
+            "task_type": "interactive",
+            "time_archived": null,
+            "time_compacting": null,
+            "time_created": 1999999980500,
+            "time_title_updated": 1999999980500,
+            "time_updated": 2000000000500,
+            "title": "Say hello",
+            "title_message_id": null,
+            "title_source": "first_input",
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "version": "1.2.3",
+            "workspace_id": null
+          }
+        ],
+        "message": [
+          {
+            "data": "{\"role\":\"user\",\"time\":{\"created\":1999999982500},\"agent\":\"nex-agent\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"contextSnapshot\":{\"envInfo\":{\"cwd\":\"/work/proj\",\"platform\":\"linux\",\"shell\":\"zsh\",\"osVersion\":\"linux 6.8.0 x64\",\"nodeVersion\":\"v24.0.0\",\"isGitRepository\":false,\"gitStatus\":\"not_repo\"}},\"semantics\":{\"origin\":\"real_user\",\"kind\":\"user_prompt\",\"uiVisibility\":\"visible\",\"providerVisibility\":\"visible\",\"transcriptVisibility\":\"visible\"},\"anchor\":{\"turnId\":\"turn_00000000-0000-4000-8000-000000000002\",\"origin\":\"realUser\",\"sourceCommandId\":\"cmd-0001\"},\"tools\":{\"Read\":true,\"Write\":true},\"metadata\":{\"inputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"admissionSeq\":1,\"admittedAt\":1999999981500,\"requestedDelivery\":\"startNow\",\"admittedDelivery\":\"startNow\",\"attachmentRefs\":[]},\"conversationInputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"attachments\":[],\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"delivery\":{\"requested\":\"startNow\",\"admitted\":\"startNow\"},\"order\":{\"admissionSeq\":1},\"steer\":{\"state\":\"notRequested\"},\"dispatch\":{\"state\":\"drained\"},\"admittedAt\":1999999981500},\"inputClientId\":\"vec-client\"},\"model\":{\"providerID\":\"mock\",\"modelID\":\"mock-model\",\"variant\":\"none\"}}",
+            "id": "msg_test_user_1",
+            "sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999982500,
+            "time_updated": 1999999982500
+          },
+          {
+            "data": "{\"role\":\"assistant\",\"parentID\":\"msg_test_user_1\",\"modelId\":\"mock-model\",\"providerId\":\"mock\",\"mode\":\"build\",\"planEnabled\":false,\"agent\":\"nex-agent\",\"path\":{\"cwd\":\"/work/proj\",\"root\":\"/work/proj\"},\"time\":{\"created\":1999999983500,\"completed\":1999999990500},\"cost\":0,\"tokens\":{\"total\":120,\"input\":100,\"output\":20,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}},\"finish\":\"tool-calls\",\"semantics\":{\"origin\":\"agent_runtime\",\"kind\":\"assistant_response\",\"uiVisibility\":\"visible\",\"providerVisibility\":\"visible\",\"transcriptVisibility\":\"visible\"},\"anchor\":{\"turnId\":\"turn_00000000-0000-4000-8000-000000000002\"}}",
+            "id": "msg_test_assistant_denied_1",
+            "sequence": 1,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999983500,
+            "time_updated": 1999999990500
+          }
+        ],
+        "part": [
+          {
+            "data": "{\"type\":\"text\",\"text\":\"Say hello\",\"time\":{\"start\":1999999982500,\"end\":1999999982500}}",
+            "id": "part_test_user_text_1",
+            "message_id": "msg_test_user_1",
+            "sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999982500,
+            "time_updated": 2000000000500
+          },
+          {
+            "data": "{\"type\":\"step-start\"}",
+            "id": "part_test_denied_step_start_1",
+            "message_id": "msg_test_assistant_denied_1",
+            "sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 2000000000500,
+            "time_updated": 2000000000500
+          },
+          {
+            "data": "{\"type\":\"tool\",\"callID\":\"call_w1\",\"declarationIndex\":0,\"tool\":\"Write\",\"state\":{\"status\":\"error\",\"input\":{\"file_path\":\"/work/proj/notes.txt\",\"content\":\"alpha\\nbeta\\ngamma\\n\"},\"error\":\"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.\",\"metadata\":{},\"time\":{\"start\":1999999990500,\"end\":1999999990500}}}",
+            "id": "part_test_denied_write_1",
+            "message_id": "msg_test_assistant_denied_1",
+            "sequence": 1,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999990500,
+            "time_updated": 2000000000500
+          }
+        ],
+        "session_entry": [
+          {
+            "data": "{\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}}}",
+            "id": "sess_00000000-0000-4000-8000-000000000001:runtime-model-selection",
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999980500,
+            "time_updated": 1999999980500,
+            "type": "runtime/model_selection"
+          },
+          {
+            "data": "{\"mode\":\"build\",\"planEnabled\":false}",
+            "id": "sess_00000000-0000-4000-8000-000000000001:runtime-execution-state",
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999980500,
+            "time_updated": 1999999980500,
+            "type": "runtime/execution_state"
+          }
+        ],
+        "session_input": [
+          {
+            "admitted_sequence": 0,
+            "delivery": "startNow",
+            "id": "queue_cmd-0001",
+            "kind": "sendText",
+            "payload": "{\"text\":\"Say hello\",\"intent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"admissionSeq\":1,\"admittedAt\":1999999981500,\"requestedDelivery\":\"startNow\",\"admittedDelivery\":\"startNow\",\"attachmentRefs\":[]},\"conversationInputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"attachments\":[],\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"delivery\":{\"requested\":\"startNow\",\"admitted\":\"startNow\"},\"order\":{\"admissionSeq\":1},\"steer\":{\"state\":\"notRequested\"},\"dispatch\":{\"state\":\"queued\"},\"admittedAt\":1999999981500},\"attachments\":[],\"sourceCommandType\":\"createSession\"}",
+            "promoted_message_id": "msg_test_user_1",
+            "promoted_sequence": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "status": "promoted",
+            "status_reason": null,
+            "time_created": 2000000000500,
+            "time_updated": 2000000000500
+          }
+        ],
+        "input_history": [],
+        "model_usage": [],
+        "turn_usage": [],
+        "tool_usage": [
+          {
+            "approval_status": "none",
+            "cancelled_by_user": 0,
+            "completed_at": 1999999990500,
+            "destructive": 0,
+            "duration_ms": 0,
+            "error_code": null,
+            "error_message": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.",
+            "error_type": "permission_denied",
+            "exit_code": null,
+            "first_output_at": 1999999989500,
+            "id": "usage_tool_sess_00000000-0000-4000-8000-000000000001_call_w1",
+            "output_bytes": 0,
+            "read_only": 0,
+            "retry_count": 0,
+            "retryable": 0,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "side_effect_scope": "workspace",
+            "started_at": 1999999988500,
+            "status": "error",
+            "stderr_bytes": 0,
+            "stdout_bytes": 0,
+            "time_to_first_output_ms": 0,
+            "tool_call_id": "call_w1",
+            "tool_name": "Write",
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "truncated": 0,
+            "turn_id": "turn_00000000-0000-4000-8000-000000000002"
+          }
+        ],
+        "todo": []
+      }
+    },
+    {
+      "name": "admit-settle-cancelled",
+      "tables": {
+        "session": [
+          {
+            "directory": "/work/proj",
+            "id": "sess_00000000-0000-4000-8000-000000000001",
+            "parent_id": null,
+            "path": "/work/proj",
+            "permission": "{\"mode\":\"build\"}",
+            "project_id": "proj_work-proj",
+            "revert": null,
+            "share_url": null,
+            "slug": "sess_00000000-0000-4000-8000-000000000001",
+            "summary_additions": null,
+            "summary_deletions": null,
+            "summary_diffs": null,
+            "summary_files": null,
+            "task_type": "interactive",
+            "time_archived": null,
+            "time_compacting": null,
+            "time_created": 1999999980500,
+            "time_title_updated": 1999999980500,
+            "time_updated": 1999999980500,
+            "title": "Say hello",
+            "title_message_id": null,
+            "title_source": "first_input",
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "version": "1.2.3",
+            "workspace_id": null
+          }
+        ],
+        "message": [],
+        "part": [],
+        "session_entry": [
+          {
+            "data": "{\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}}}",
+            "id": "sess_00000000-0000-4000-8000-000000000001:runtime-model-selection",
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999980500,
+            "time_updated": 1999999980500,
+            "type": "runtime/model_selection"
+          },
+          {
+            "data": "{\"mode\":\"build\",\"planEnabled\":false}",
+            "id": "sess_00000000-0000-4000-8000-000000000001:runtime-execution-state",
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999980500,
+            "time_updated": 1999999980500,
+            "type": "runtime/execution_state"
+          }
+        ],
+        "session_input": [
+          {
+            "admitted_sequence": 0,
+            "delivery": "startNow",
+            "id": "queue_cmd-0001",
+            "kind": "sendText",
+            "payload": "{\"text\":\"Say hello\",\"intent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"admissionSeq\":1,\"admittedAt\":1999999981500,\"requestedDelivery\":\"startNow\",\"admittedDelivery\":\"startNow\",\"attachmentRefs\":[]},\"conversationInputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Say hello\",\"attachments\":[],\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"delivery\":{\"requested\":\"startNow\",\"admitted\":\"startNow\"},\"order\":{\"admissionSeq\":1},\"steer\":{\"state\":\"notRequested\"},\"dispatch\":{\"state\":\"queued\"},\"admittedAt\":1999999981500},\"attachments\":[],\"sourceCommandType\":\"createSession\"}",
+            "promoted_message_id": null,
+            "promoted_sequence": null,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "status": "cancelled",
+            "status_reason": "user_cancelled",
+            "time_created": 2000000000500,
+            "time_updated": 2000000000500
+          }
+        ],
+        "input_history": [],
+        "model_usage": [],
+        "turn_usage": [],
+        "tool_usage": [],
+        "todo": []
+      }
+    },
+    {
+      "name": "queue-edit",
+      "tables": {
+        "session": [
+          {
+            "directory": "/work/proj",
+            "id": "sess_00000000-0000-4000-8000-000000000001",
+            "parent_id": null,
+            "path": "/work/proj",
+            "permission": "{\"mode\":\"build\"}",
+            "project_id": "proj_work-proj",
+            "revert": null,
+            "share_url": null,
+            "slug": "sess_00000000-0000-4000-8000-000000000001",
+            "summary_additions": null,
+            "summary_deletions": null,
+            "summary_diffs": null,
+            "summary_files": null,
+            "task_type": "interactive",
+            "time_archived": null,
+            "time_compacting": null,
+            "time_created": 1999999980500,
+            "time_title_updated": 1999999980500,
+            "time_updated": 1999999980500,
+            "title": "Say hello",
+            "title_message_id": null,
+            "title_source": "first_input",
+            "trace_id": "trace-0000-0000-0000-000000000000",
+            "version": "1.2.3",
+            "workspace_id": null
+          }
+        ],
+        "message": [],
+        "part": [],
+        "session_entry": [
+          {
+            "data": "{\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}}}",
+            "id": "sess_00000000-0000-4000-8000-000000000001:runtime-model-selection",
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999980500,
+            "time_updated": 1999999980500,
+            "type": "runtime/model_selection"
+          },
+          {
+            "data": "{\"mode\":\"build\",\"planEnabled\":false}",
+            "id": "sess_00000000-0000-4000-8000-000000000001:runtime-execution-state",
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "time_created": 1999999980500,
+            "time_updated": 1999999980500,
+            "type": "runtime/execution_state"
+          }
+        ],
+        "session_input": [
+          {
+            "admitted_sequence": 0,
+            "delivery": "startNow",
+            "id": "queue_cmd-0001",
+            "kind": "sendText",
+            "payload": "{\"text\":\"Edited hello\",\"intent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Edited hello\",\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"admissionSeq\":1,\"admittedAt\":1999999981500,\"requestedDelivery\":\"startNow\",\"admittedDelivery\":\"startNow\",\"attachmentRefs\":[],\"queuePosition\":2},\"conversationInputIntent\":{\"sourceCommandId\":\"cmd-0001\",\"queueItemId\":\"queue_cmd-0001\",\"clientId\":\"vec-client\",\"kind\":\"sendText\",\"text\":\"Edited hello\",\"attachments\":[],\"modelSelection\":{\"providerId\":\"mock\",\"modelId\":\"mock-model\",\"options\":{\"reasoningLevel\":\"none\"}},\"mode\":\"build\",\"planEnabled\":false,\"delivery\":{\"requested\":\"startNow\",\"admitted\":\"startNow\"},\"order\":{\"admissionSeq\":1,\"queuePosition\":2},\"steer\":{\"state\":\"notRequested\"},\"dispatch\":{\"state\":\"queued\"},\"admittedAt\":1999999981500},\"attachments\":[],\"sourceCommandType\":\"createSession\"}",
+            "promoted_message_id": null,
+            "promoted_sequence": null,
+            "session_id": "sess_00000000-0000-4000-8000-000000000001",
+            "status": "admitted",
+            "status_reason": null,
+            "time_created": 2000000000500,
+            "time_updated": 2000000000500
+          }
+        ],
+        "input_history": [],
+        "model_usage": [],
+        "turn_usage": [],
+        "tool_usage": [],
+        "todo": []
+      }
+    }
+  ]
+}

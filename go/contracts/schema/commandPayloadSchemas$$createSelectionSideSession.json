@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "firstInput": {
+      "properties": {
+        "modelSelection": {
+          "additionalProperties": false,
+          "properties": {
+            "modelId": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "options": {
+              "additionalProperties": false,
+              "properties": {
+                "reasoningLevel": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "providerId": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "providerId",
+            "modelId"
+          ],
+          "type": "object"
+        },
+        "text": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    }
+  },
+  "type": "object"
+}

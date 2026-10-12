@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contextId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "shareUrl": {
+          "format": "uri",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "reserved",
+            "attached",
+            "discarded"
+          ],
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "contextId",
+        "title",
+        "shareUrl",
+        "status"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object"
+    }
+  ]
+}

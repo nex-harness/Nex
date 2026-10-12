@@ -1,0 +1,55 @@
+{
+  "id": "H-bad-input",
+  "title": "bad-input",
+  "model": {
+    "steps": [
+      {
+        "toolCalls": [
+          {
+            "id": "c1",
+            "name": "Read",
+            "args": {
+              "file_path": 123
+            }
+          }
+        ]
+      },
+      {
+        "text": "fixed"
+      }
+    ]
+  },
+  "files": {},
+  "script": [
+    {
+      "op": "waitReady"
+    },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "do it",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": {
+              "reasoningLevel": "none"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "subscribe",
+      "sessionFrom": "created",
+      "as": "sub"
+    },
+    {
+      "op": "waitTelemetry",
+      "kind": "turn.terminal"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "id": "H-unicode-text",
+  "title": "unicode-text",
+  "model": {
+    "steps": [
+      {
+        "text": "\u65e5\u672c\u8a9e\u2028\u884c \"quoted\" <b>&amp;</b> \ud83d\ude00"
+      }
+    ]
+  },
+  "files": {},
+  "script": [
+    {
+      "op": "waitReady"
+    },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "Unicode: \u00fc \u00e9 \u4e2d",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": {
+              "reasoningLevel": "none"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "subscribe",
+      "sessionFrom": "created",
+      "as": "sub"
+    },
+    {
+      "op": "waitTelemetry",
+      "kind": "turn.terminal"
+    }
+  ]
+}

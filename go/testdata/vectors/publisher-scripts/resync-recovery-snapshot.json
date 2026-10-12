@@ -1,0 +1,41 @@
+{
+ "name": "resync-recovery-snapshot",
+ "logEpoch": "epochepoch0",
+ "workflowRunDeltas": true,
+ "sessionId": "sess-vector",
+ "steps": [
+  {
+   "seq": 1,
+   "revision": 1,
+   "deltas": [
+    {
+     "op": "row.appended",
+     "row": {
+      "rowId": 1,
+      "kind": "assistantText",
+      "text": "a"
+     }
+    }
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "op": "subscribe",
+   "connectionId": "a",
+   "deliveryProfile": "continuous",
+   "mode": "snapshot",
+   "sub": 0
+  },
+  {
+   "op": "ingest",
+   "step": 0
+  },
+  {
+   "op": "resync",
+   "sub": 0,
+   "base": null,
+   "forceSnapshot": true
+  }
+ ]
+}

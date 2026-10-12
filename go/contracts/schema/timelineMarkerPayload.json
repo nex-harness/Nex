@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "properties": {
+        "origin": {
+          "enum": [
+            "manual",
+            "auto"
+          ],
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "running",
+            "success",
+            "failed",
+            "noop",
+            "cancelled"
+          ],
+          "type": "string"
+        },
+        "summaryRef": {
+          "type": "string"
+        },
+        "tokensAfter": {
+          "type": "number"
+        },
+        "tokensBefore": {
+          "type": "number"
+        },
+        "type": {
+          "const": "compact",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "origin",
+        "status"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "parentRowId": {
+          "type": "number"
+        },
+        "parentSessionId": {
+          "type": "string"
+        },
+        "type": {
+          "const": "forkNotice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "parentSessionId",
+        "parentRowId"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "atRowId": {
+          "type": "number"
+        },
+        "childSessionId": {
+          "type": "string"
+        },
+        "type": {
+          "const": "forkCreated",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "childSessionId",
+        "atRowId"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "fromModel": {
+          "type": "string"
+        },
+        "fromProvider": {
+          "type": "string"
+        },
+        "toModel": {
+          "type": "string"
+        },
+        "toProvider": {
+          "type": "string"
+        },
+        "toThought": {
+          "type": "string"
+        },
+        "type": {
+          "const": "modelChange",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "fromProvider",
+        "fromModel",
+        "toProvider",
+        "toModel",
+        "toThought"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "fromModel": {
+          "not": {}
+        },
+        "fromProvider": {
+          "not": {}
+        },
+        "toModel": {
+          "type": "string"
+        },
+        "toProvider": {
+          "type": "string"
+        },
+        "toThought": {
+          "type": "string"
+        },
+        "type": {
+          "const": "modelChange",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "toProvider",
+        "toModel",
+        "toThought"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "objective": {
+          "type": "string"
+        },
+        "previousObjective": {
+          "type": "string"
+        },
+        "type": {
+          "const": "goalSet",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "objective"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "detail": {
+          "type": "string"
+        },
+        "iteration": {
+          "type": "number"
+        },
+        "outcome": {
+          "enum": [
+            "running",
+            "pass",
+            "notSatisfied",
+            "failed"
+          ],
+          "type": "string"
+        },
+        "type": {
+          "const": "goalVerify",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "iteration",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "attempt": {
+          "type": "number"
+        },
+        "reasonCode": {
+          "type": "string"
+        },
+        "type": {
+          "const": "retryNotice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "attempt",
+        "reasonCode"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "checkpointId": {
+          "type": "string"
+        },
+        "type": {
+          "const": "checkpointRestored",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "checkpointId"
+      ],
+      "type": "object"
+    }
+  ]
+}

@@ -1,0 +1,882 @@
+[
+ {
+  "name": "429-rate-limited",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 429,
+   "responseBody": "{\"error\":{\"message\":\"slow down\"}}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_rate_limited",
+   "message": "Provider rate limited the model request.",
+   "reason": "rate_limited",
+   "retryReason": "rate_limited",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": 429
+  }
+ },
+ {
+  "name": "429-retry-after-seconds",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 429,
+   "responseHeaders": {
+    "retry-after": "2"
+   }
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_rate_limited",
+   "message": "Provider rate limited the model request.",
+   "reason": "rate_limited",
+   "retryReason": "rate_limited",
+   "retryable": true,
+   "retryAfterMs": 2000,
+   "statusCode": 429
+  }
+ },
+ {
+  "name": "429-retry-after-ms",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 429,
+   "responseHeaders": {
+    "retry-after-ms": "1500"
+   }
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_rate_limited",
+   "message": "Provider rate limited the model request.",
+   "reason": "rate_limited",
+   "retryReason": "rate_limited",
+   "retryable": true,
+   "retryAfterMs": 1500,
+   "statusCode": 429
+  }
+ },
+ {
+  "name": "429-x-should-retry-false",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 429,
+   "responseHeaders": {
+    "retry-after": "30",
+    "x-should-retry": "false"
+   }
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_rate_limited",
+   "message": "Provider rate limited the model request.",
+   "reason": "rate_limited",
+   "retryReason": "rate_limited",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": 429
+  }
+ },
+ {
+  "name": "500-server-error",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 500
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Provider returned a server error.",
+   "reason": "server_error",
+   "retryReason": "server_error",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": 500
+  }
+ },
+ {
+  "name": "502-bad-gateway",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 502
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Provider returned a server error.",
+   "reason": "server_error",
+   "retryReason": "server_error",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": 502
+  }
+ },
+ {
+  "name": "503-unavailable",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 503
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Provider returned a server error.",
+   "reason": "server_error",
+   "retryReason": "server_error",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": 503
+  }
+ },
+ {
+  "name": "529-overloaded",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 529
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Provider is overloaded.",
+   "reason": "provider_overloaded",
+   "retryReason": "provider_overloaded",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": 529
+  }
+ },
+ {
+  "name": "401-unauthorized",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 401
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "provider_not_configured",
+   "message": "Provider authentication failed.",
+   "reason": "auth_failed",
+   "retryReason": "auth_refresh",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 401
+  }
+ },
+ {
+  "name": "403-forbidden",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 403
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "provider_not_configured",
+   "message": "Provider authentication failed.",
+   "reason": "auth_failed",
+   "retryReason": "auth_refresh",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 403
+  }
+ },
+ {
+  "name": "404-not-found",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 404
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Model request failed.",
+   "reason": "unknown",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 404
+  }
+ },
+ {
+  "name": "400-bad-request",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 400
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "invalid_model_request",
+   "message": "Provider rejected the model request.",
+   "reason": "invalid_request",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 400
+  }
+ },
+ {
+  "name": "422-unprocessable",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 422
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "invalid_model_request",
+   "message": "Provider rejected the model request.",
+   "reason": "invalid_request",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 422
+  }
+ },
+ {
+  "name": "400-context-code",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 400,
+   "responseBody": "{\"error\":{\"code\":\"context_length_exceeded\",\"message\":\"too long\"}}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_context_exceeded",
+   "message": "Model request exceeded the provider context window.",
+   "reason": "context_exceeded",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 400
+  }
+ },
+ {
+  "name": "400-context-message",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 400,
+   "responseBody": "{\"error\":{\"message\":\"This model's maximum context length is 128000 tokens, however you requested 200000\"}}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_context_exceeded",
+   "message": "Model request exceeded the provider context window.",
+   "reason": "context_exceeded",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 400
+  }
+ },
+ {
+  "name": "400-prompt-too-long",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 400,
+   "responseBody": "{\"error\":{\"message\":\"prompt is too long\"}}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_context_exceeded",
+   "message": "Model request exceeded the provider context window.",
+   "reason": "context_exceeded",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 400
+  }
+ },
+ {
+  "name": "403-business-3007",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 403,
+   "responseBody": "{\"error\":{\"code\":\"3007\",\"message\":\"plan required\"}}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "invalid_model_request",
+   "message": "plan required",
+   "reason": "auth_failed",
+   "retryReason": "auth_refresh",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 403
+  }
+ },
+ {
+  "name": "200-business-code-body",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 200,
+   "responseBody": "{\"providerCode\":\"3002\",\"message\":\"concurrency\"}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_rate_limited",
+   "message": "concurrency",
+   "reason": "rate_limited",
+   "retryReason": "rate_limited",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "429-terminal-business-1304",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 429,
+   "responseBody": "{\"code\":\"1304\",\"message\":\"quota\"}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_rate_limited",
+   "message": "quota",
+   "reason": "rate_limited",
+   "retryReason": "rate_limited",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 429
+  }
+ },
+ {
+  "name": "429-retryable-business-1302",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 429,
+   "responseBody": "{\"code\":\"1302\",\"message\":\"busy\"}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_rate_limited",
+   "message": "busy",
+   "reason": "rate_limited",
+   "retryReason": "rate_limited",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": 429
+  }
+ },
+ {
+  "name": "400-context-business-1261",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 400,
+   "responseBody": "{\"code\":\"1261\",\"message\":\"context\"}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_context_exceeded",
+   "message": "context",
+   "reason": "context_exceeded",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 400
+  }
+ },
+ {
+  "name": "500-business-500",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 500,
+   "responseBody": "{\"code\":\"500\"}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Provider returned a business error.",
+   "reason": "server_error",
+   "retryReason": "server_error",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": 500
+  }
+ },
+ {
+  "name": "404-business-3006",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 404,
+   "responseBody": "{\"code\":\"3006\"}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_not_found",
+   "message": "Provider returned a business error.",
+   "reason": "invalid_request",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 404
+  }
+ },
+ {
+  "name": "403-business-1006",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 403,
+   "responseBody": "{\"code\":\"1006\"}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "provider_not_configured",
+   "message": "Provider returned a business error.",
+   "reason": "auth_failed",
+   "retryReason": "auth_refresh",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 403
+  }
+ },
+ {
+  "name": "insufficient-quota",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 429,
+   "data": {
+    "error": {
+     "code": "insufficient_quota",
+     "message": "out of quota"
+    }
+   }
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_rate_limited",
+   "message": "out of quota",
+   "reason": "rate_limited",
+   "retryReason": "rate_limited",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 429
+  }
+ },
+ {
+  "name": "organization-spend-limit",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 429,
+   "data": {
+    "error": {
+     "code": "organization_spend_limit_exceeded",
+     "type": "insufficient_quota"
+    }
+   }
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_rate_limited",
+   "message": "Provider returned a business error.",
+   "reason": "rate_limited",
+   "retryReason": "rate_limited",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 429
+  }
+ },
+ {
+  "name": "overloaded-error-type",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 500,
+   "data": {
+    "error": {
+     "type": "overloaded_error",
+     "message": "overloaded"
+    }
+   }
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "overloaded",
+   "reason": "provider_overloaded",
+   "retryReason": "provider_overloaded",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": 500
+  }
+ },
+ {
+  "name": "rate-limit-error-type",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 429,
+   "data": {
+    "error": {
+     "type": "rate_limit_error",
+     "code": "rate_limit_reached_error"
+    }
+   }
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_rate_limited",
+   "message": "Provider returned a business error.",
+   "reason": "rate_limited",
+   "retryReason": "rate_limited",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": 429
+  }
+ },
+ {
+  "name": "network-econnreset",
+  "error": {
+   "kind": "plain",
+   "code": "ECONNRESET",
+   "message": "socket hang up"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Network connection failed for the provider request.",
+   "reason": "network_error",
+   "retryReason": "network_error",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "network-econnrefused",
+  "error": {
+   "kind": "plain",
+   "code": "ECONNREFUSED",
+   "message": "connect refused"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Network connection failed for the provider request.",
+   "reason": "network_error",
+   "retryReason": "network_error",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "network-und-err-socket",
+  "error": {
+   "kind": "plain",
+   "code": "UND_ERR_SOCKET",
+   "message": "socket"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Network connection failed for the provider request.",
+   "reason": "network_error",
+   "retryReason": "network_error",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "timeout-etimedout",
+  "error": {
+   "kind": "plain",
+   "code": "ETIMEDOUT",
+   "message": "timeout"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_timeout",
+   "message": "Model request timed out.",
+   "reason": "timeout",
+   "retryReason": "timeout",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "timeout-und-headers",
+  "error": {
+   "kind": "plain",
+   "code": "UND_ERR_HEADERS_TIMEOUT",
+   "message": "headers timeout"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_timeout",
+   "message": "Model request timed out.",
+   "reason": "timeout",
+   "retryReason": "timeout",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "408-status",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 408
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_timeout",
+   "message": "Model request timed out.",
+   "reason": "timeout",
+   "retryReason": "timeout",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": 408
+  }
+ },
+ {
+  "name": "abort-error",
+  "error": {
+   "kind": "plain",
+   "name": "AbortError",
+   "message": "aborted"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_cancelled",
+   "message": "Model request was cancelled.",
+   "reason": "cancelled",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "abort-signal",
+  "error": {
+   "kind": "plain",
+   "message": "whatever"
+  },
+  "abortSignal": true,
+  "result": {
+   "code": "model_request_cancelled",
+   "message": "Model request was cancelled.",
+   "reason": "cancelled",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "idle-timeout",
+  "error": {
+   "kind": "idleTimeout"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_timeout",
+   "message": "Model stream stalled: no event received for 600000ms.",
+   "reason": "stream_idle_timeout",
+   "retryReason": "stream_idle_timeout",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "tls-cert",
+  "error": {
+   "kind": "plain",
+   "code": "CERT_HAS_EXPIRED",
+   "message": "cert"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "TLS validation failed for the provider request.",
+   "reason": "tls_error",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "tls-unable-verify",
+  "error": {
+   "kind": "plain",
+   "code": "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+   "message": "tls"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "TLS validation failed for the provider request.",
+   "reason": "tls_error",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "proxy-econn",
+  "error": {
+   "kind": "plain",
+   "code": "ERR_PROXY_CONNECTION_FAILED",
+   "message": "proxy"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Proxy connection failed for the provider request.",
+   "reason": "proxy_error",
+   "retryReason": "network_error",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "cause-network",
+  "error": {
+   "kind": "cause",
+   "outer": {
+    "kind": "apiCall",
+    "statusCode": 502
+   },
+   "code": "ECONNRESET"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Provider returned a server error.",
+   "reason": "server_error",
+   "retryReason": "server_error",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": 502
+  }
+ },
+ {
+  "name": "retryable-flag-true",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 418,
+   "isRetryable": true
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Provider marked the model request as retryable.",
+   "reason": "server_error",
+   "retryReason": "server_error",
+   "retryable": true,
+   "retryAfterMs": null,
+   "statusCode": 418
+  }
+ },
+ {
+  "name": "retryable-flag-false",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 418,
+   "isRetryable": false
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Model request failed.",
+   "reason": "unknown",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 418
+  }
+ },
+ {
+  "name": "unknown-plain",
+  "error": {
+   "kind": "plain",
+   "message": "something odd"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "model_request_failed",
+   "message": "Model request failed.",
+   "reason": "unknown",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "invalid-response-code",
+  "error": {
+   "kind": "plain",
+   "code": "invalid_model_response",
+   "message": "bad response"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "invalid_model_response",
+   "message": "bad response",
+   "reason": "invalid_request",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "invalid-request-code",
+  "error": {
+   "kind": "plain",
+   "code": "invalid_model_request",
+   "message": "bad request"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "invalid_model_request",
+   "message": "bad request",
+   "reason": "invalid_request",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": null
+  }
+ },
+ {
+  "name": "401-business-1006-body",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 401,
+   "responseBody": "{\"providerCode\":\"1006\"}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "provider_not_configured",
+   "message": "Provider returned a business error.",
+   "reason": "auth_failed",
+   "retryReason": "auth_refresh",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 401
+  }
+ },
+ {
+  "name": "400-invalid-request-code-body",
+  "error": {
+   "kind": "apiCall",
+   "statusCode": 400,
+   "responseBody": "{\"error_code\":\"3001\"}"
+  },
+  "abortSignal": false,
+  "result": {
+   "code": "invalid_model_request",
+   "message": "Provider returned a business error.",
+   "reason": "invalid_request",
+   "retryReason": "network_error",
+   "retryable": false,
+   "retryAfterMs": null,
+   "statusCode": 400
+  }
+ }
+]

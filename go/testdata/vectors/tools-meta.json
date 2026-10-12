@@ -1,0 +1,479 @@
+{
+ "metadata": {
+  "read": {
+   "name": "Read",
+   "description": "Reads a file from the local filesystem.\n\n- `file_path` must be an absolute path.\n- Reads up to 2000 lines by default.\n- You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters\n- Results are returned using cat -n format, with line numbers starting at 1\n- Reads images (PNG, JPG, …) and presents them visually.\n- Reads videos (MP4, MOV, WEBM, …) and presents them as video input (subject to Nex's video input limit).\n- Reading a directory, a missing file, or an empty file returns an error or system reminder rather than content.\n- Do NOT re-read a file you just edited to verify — Edit/Write would have errored if the change failed, and the harness tracks file state for you.",
+   "readOnly": true,
+   "destructive": false,
+   "concurrentSafe": true,
+   "timeoutMs": 30000,
+   "maxOutputBytes": 262144,
+   "sideEffectScope": "none",
+   "riskLevel": "low",
+   "needsApproval": false
+  },
+  "write": {
+   "name": "Write",
+   "description": "Writes a file to the local filesystem, overwriting if one exists.\n\nWhen to use: creating a new file, or fully replacing one you've already Read. Overwriting an existing file you haven't Read will fail. For partial changes, use Edit instead.",
+   "readOnly": false,
+   "destructive": false,
+   "concurrentSafe": false,
+   "timeoutMs": 30000,
+   "maxOutputBytes": 1000000,
+   "sideEffectScope": "workspace",
+   "riskLevel": "medium",
+   "needsApproval": true
+  },
+  "edit": {
+   "name": "Edit",
+   "description": "Performs exact string replacement in a file.\n\n- You must Read the file in this conversation before editing, or the call will fail.\n- `old_string` must match the file exactly, including indentation, and be unique — the edit fails otherwise. Strip the Read line prefix (line number + tab) before matching.\n- `replace_all: true` replaces every occurrence instead.",
+   "readOnly": false,
+   "destructive": false,
+   "concurrentSafe": false,
+   "timeoutMs": 30000,
+   "maxOutputBytes": 1000000,
+   "sideEffectScope": "workspace",
+   "riskLevel": "medium",
+   "needsApproval": true
+  }
+ },
+ "permissionSpec": {
+  "read": {
+   "permission": "read",
+   "reason": "Read only inspects file content and has no external side effects",
+   "riskLevel": "low",
+   "sideEffectScope": "none",
+   "needsApproval": false,
+   "patternSources": [
+    "path"
+   ],
+   "alwaysAllowPatternSources": [
+    "path"
+   ],
+   "denyPriority": "beforeAsk"
+  },
+  "write": {
+   "permission": "edit",
+   "reason": "Write creates or overwrites files through the file-system adapter",
+   "riskLevel": "medium",
+   "sideEffectScope": "workspace",
+   "needsApproval": true,
+   "patternSources": [
+    "path"
+   ],
+   "alwaysAllowPatternSources": [
+    "path"
+   ],
+   "denyPriority": "beforeAsk"
+  },
+  "edit": {
+   "permission": "edit",
+   "reason": "Edit modifies file contents through the file-system adapter",
+   "riskLevel": "medium",
+   "sideEffectScope": "workspace",
+   "needsApproval": true,
+   "patternSources": [
+    "path"
+   ],
+   "alwaysAllowPatternSources": [
+    "path"
+   ],
+   "denyPriority": "beforeAsk"
+  }
+ },
+ "resultBudget": {
+  "read": {
+   "maxInlineBytes": 262144,
+   "maxModelBytes": 262144,
+   "strategy": "truncate",
+   "preview": {
+    "maxBytes": 262144,
+    "direction": "head"
+   }
+  },
+  "write": {
+   "maxInlineBytes": 1000000,
+   "maxModelBytes": 100000,
+   "strategy": "truncate",
+   "preview": {
+    "maxBytes": 100000,
+    "direction": "head"
+   }
+  },
+  "edit": {
+   "maxInlineBytes": 1000000,
+   "maxModelBytes": 100000,
+   "strategy": "truncate",
+   "preview": {
+    "maxBytes": 100000,
+    "direction": "head"
+   }
+  }
+ },
+ "timeout": {
+  "read": {
+   "defaultMs": 30000,
+   "maxMs": 150000,
+   "allowCallOverride": false
+  },
+  "write": {
+   "defaultMs": 30000,
+   "maxMs": 30000,
+   "allowCallOverride": false
+  },
+  "edit": {
+   "defaultMs": 30000,
+   "maxMs": 30000,
+   "allowCallOverride": false
+  }
+ },
+ "readStateKeys": [
+  {
+   "path": "f.txt",
+   "input": {
+    "file_path": "f.txt",
+    "offset": 2,
+    "limit": 3
+   },
+   "key": "<WS>/f.txt\u00002\u00003"
+  }
+ ],
+ "matcher": [
+  {
+   "content": "alpha\nbeta\ngamma\n",
+   "search": "beta",
+   "replaceAll": false,
+   "result": {
+    "status": "matched",
+    "actualString": "beta",
+    "strategy": "exact",
+    "candidateCount": 1
+   }
+  },
+  {
+   "content": "alpha\nbeta\ngamma\n",
+   "search": "a",
+   "replaceAll": false,
+   "result": {
+    "status": "matched",
+    "actualString": "a",
+    "strategy": "exact",
+    "candidateCount": 5
+   }
+  },
+  {
+   "content": "alpha\nbeta\ngamma\n",
+   "search": "a",
+   "replaceAll": true,
+   "result": {
+    "status": "matched",
+    "actualString": "a",
+    "strategy": "exact",
+    "candidateCount": 5
+   }
+  },
+  {
+   "content": "say “hi”\n",
+   "search": "say \"hi\"",
+   "replaceAll": false,
+   "result": {
+    "status": "matched",
+    "actualString": "say “hi”",
+    "strategy": "quote_normalized",
+    "candidateCount": 1
+   }
+  },
+  {
+   "content": "x\nx\n",
+   "search": "x",
+   "replaceAll": false,
+   "result": {
+    "status": "matched",
+    "actualString": "x",
+    "strategy": "exact",
+    "candidateCount": 2
+   }
+  },
+  {
+   "content": "  indented\n",
+   "search": "indented",
+   "replaceAll": false,
+   "result": {
+    "status": "matched",
+    "actualString": "indented",
+    "strategy": "exact",
+    "candidateCount": 1
+   }
+  },
+  {
+   "content": "ab\ncd\n",
+   "search": "1\tab\n2\tcd",
+   "replaceAll": false,
+   "result": {
+    "status": "matched",
+    "actualString": "ab\ncd",
+    "strategy": "line_number_prefix_stripped",
+    "candidateCount": 1
+   }
+  },
+  {
+   "content": "café\n",
+   "search": "caf\\u00e9",
+   "replaceAll": false,
+   "result": {
+    "status": "matched",
+    "actualString": "café",
+    "strategy": "unicode_escape_normalized",
+    "candidateCount": 1
+   }
+  },
+  {
+   "content": "def f():\n    a\n    b\n",
+   "search": "def f():\n  a\n  b",
+   "replaceAll": false,
+   "result": {
+    "status": "matched",
+    "actualString": "def f():\n    a\n    b",
+    "strategy": "line_trimmed",
+    "candidateCount": 1
+   }
+  },
+  {
+   "content": "line1\nline2\n",
+   "search": "missing",
+   "replaceAll": false,
+   "result": {
+    "status": "not_found"
+   }
+  },
+  {
+   "content": "tab\there\n",
+   "search": "tab\\there",
+   "replaceAll": false,
+   "result": {
+    "status": "matched",
+    "actualString": "tab\there",
+    "strategy": "escape_normalized",
+    "candidateCount": 1
+   }
+  },
+  {
+   "content": "no match here\n",
+   "search": "",
+   "replaceAll": false,
+   "result": {
+    "status": "matched",
+    "actualString": "",
+    "strategy": "quote_normalized",
+    "candidateCount": 15
+   }
+  }
+ ],
+ "diff": [
+  {
+   "old": "alpha\nbeta\ngamma\n",
+   "new": "alpha\nBETA\ngamma\n",
+   "hunks": [
+    {
+     "oldStart": 1,
+     "oldLines": 3,
+     "newStart": 1,
+     "newLines": 3,
+     "lines": [
+      " alpha",
+      "-beta",
+      "+BETA",
+      " gamma"
+     ]
+    }
+   ]
+  },
+  {
+   "old": "a\nb\nc\n",
+   "new": "a\nc\n",
+   "hunks": [
+    {
+     "oldStart": 1,
+     "oldLines": 3,
+     "newStart": 1,
+     "newLines": 2,
+     "lines": [
+      " a",
+      "-b",
+      " c"
+     ]
+    }
+   ]
+  },
+  {
+   "old": "line1\n",
+   "new": "line1\nline2\n",
+   "hunks": [
+    {
+     "oldStart": 1,
+     "oldLines": 1,
+     "newStart": 1,
+     "newLines": 2,
+     "lines": [
+      " line1",
+      "+line2"
+     ]
+    }
+   ]
+  },
+  {
+   "old": "",
+   "new": "brand new\n",
+   "hunks": [
+    {
+     "oldStart": 1,
+     "oldLines": 0,
+     "newStart": 1,
+     "newLines": 1,
+     "lines": [
+      "+brand new"
+     ]
+    }
+   ]
+  },
+  {
+   "old": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
+   "new": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nTEN\n",
+   "hunks": [
+    {
+     "oldStart": 7,
+     "oldLines": 4,
+     "newStart": 7,
+     "newLines": 4,
+     "lines": [
+      " seven",
+      " eight",
+      " nine",
+      "-ten",
+      "+TEN"
+     ]
+    }
+   ]
+  },
+  {
+   "old": "x",
+   "new": "y",
+   "hunks": [
+    {
+     "oldStart": 1,
+     "oldLines": 1,
+     "newStart": 1,
+     "newLines": 1,
+     "lines": [
+      "-x",
+      "\\ No newline at end of file",
+      "+y",
+      "\\ No newline at end of file"
+     ]
+    }
+   ]
+  },
+  {
+   "old": "a\nb\n",
+   "new": "a\nb\n",
+   "hunks": []
+  },
+  {
+   "old": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n",
+   "new": "1\n2\nTHREE\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n",
+   "hunks": [
+    {
+     "oldStart": 1,
+     "oldLines": 6,
+     "newStart": 1,
+     "newLines": 6,
+     "lines": [
+      " 1",
+      " 2",
+      "-3",
+      "+THREE",
+      " 4",
+      " 5",
+      " 6"
+     ]
+    }
+   ]
+  },
+  {
+   "old": "keep\ndelete me\nkeep2\n",
+   "new": "keep\nkeep2\n",
+   "hunks": [
+    {
+     "oldStart": 1,
+     "oldLines": 3,
+     "newStart": 1,
+     "newLines": 2,
+     "lines": [
+      " keep",
+      "-delete me",
+      " keep2"
+     ]
+    }
+   ]
+  },
+  {
+   "old": "a\nCHANGED\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\np\n",
+   "new": "a\nNEW\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\np\n",
+   "hunks": [
+    {
+     "oldStart": 1,
+     "oldLines": 5,
+     "newStart": 1,
+     "newLines": 5,
+     "lines": [
+      " a",
+      "-CHANGED",
+      "+NEW",
+      " c",
+      " d",
+      " e"
+     ]
+    }
+   ]
+  },
+  {
+   "old": "a\nb\nc\nd\ne\nf\ng\nOLD\ni\n",
+   "new": "a\nb\nc\nd\ne\nf\ng\nNEW\ni\n",
+   "hunks": [
+    {
+     "oldStart": 5,
+     "oldLines": 5,
+     "newStart": 5,
+     "newLines": 5,
+     "lines": [
+      " e",
+      " f",
+      " g",
+      "-OLD",
+      "+NEW",
+      " i"
+     ]
+    }
+   ]
+  },
+  {
+   "old": "HEAD\nb\nc\nd\ne\nf\ng\nh\n",
+   "new": "TOP\nb\nc\nd\ne\nf\ng\nh\n",
+   "hunks": [
+    {
+     "oldStart": 1,
+     "oldLines": 4,
+     "newStart": 1,
+     "newLines": 4,
+     "lines": [
+      "-HEAD",
+      "+TOP",
+      " b",
+      " c",
+      " d"
+     ]
+    }
+   ]
+  }
+ ]
+}

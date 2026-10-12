@@ -1,0 +1,280 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "autoDrain": {
+      "type": "boolean"
+    },
+    "items": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "admittedAt": {
+            "type": "number"
+          },
+          "attachments": {
+            "default": [],
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "bytes": {
+                  "type": "number"
+                },
+                "fileName": {
+                  "type": "string"
+                },
+                "mime": {
+                  "type": "string"
+                },
+                "previewRef": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "ref",
+                "fileName",
+                "mime",
+                "bytes"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "clientId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "delivery": {
+            "additionalProperties": false,
+            "properties": {
+              "admitted": {
+                "enum": [
+                  "startNow",
+                  "queue",
+                  "guide"
+                ],
+                "type": "string"
+              },
+              "fallbackReasonCode": {
+                "type": "string"
+              },
+              "requested": {
+                "enum": [
+                  "auto",
+                  "startNow",
+                  "queue",
+                  "guide"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "requested",
+              "admitted"
+            ],
+            "type": "object"
+          },
+          "dispatch": {
+            "additionalProperties": false,
+            "properties": {
+              "reservationId": {
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "queued",
+                  "reserved",
+                  "promoting"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "sendText",
+              "sendGoalCommand",
+              "compact"
+            ],
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "build",
+              "edit",
+              "plan",
+              "yolo"
+            ],
+            "type": "string"
+          },
+          "modelSelection": {
+            "additionalProperties": false,
+            "properties": {
+              "modelId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "options": {
+                "additionalProperties": false,
+                "properties": {
+                  "reasoningLevel": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "providerId": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "providerId",
+              "modelId"
+            ],
+            "type": "object"
+          },
+          "order": {
+            "additionalProperties": false,
+            "properties": {
+              "admissionSeq": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "queuePosition": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "admissionSeq"
+            ],
+            "type": "object"
+          },
+          "planEnabled": {
+            "type": "boolean"
+          },
+          "provenance": {
+            "additionalProperties": false,
+            "properties": {
+              "clientId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "queueItemId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "sourceCommandId": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "sourceCommandId"
+            ],
+            "type": "object"
+          },
+          "queueItemId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sharedContextRefs": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "context_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
+                  "const": "shared_context_import",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "context_id"
+              ],
+              "type": "object"
+            },
+            "maxItems": 1,
+            "type": "array"
+          },
+          "sourceCommandId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "steer": {
+            "additionalProperties": false,
+            "properties": {
+              "reasonCode": {
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "notRequested",
+                  "submitting",
+                  "steering",
+                  "guided",
+                  "fellBack"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          "text": {
+            "type": "string"
+          },
+          "toolDisallowlist": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sourceCommandId",
+          "queueItemId",
+          "clientId",
+          "kind",
+          "text",
+          "delivery",
+          "order",
+          "steer",
+          "dispatch",
+          "admittedAt"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "pauseReason": {
+      "enum": [
+        "stopped",
+        "manual",
+        "error"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "items",
+    "autoDrain"
+  ],
+  "type": "object"
+}

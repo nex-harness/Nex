@@ -1,0 +1,1157 @@
+[
+ {
+  "name": "text-basic",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "Hel"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "lo "
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "world"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 10,
+     "completion_tokens": 3,
+     "total_tokens": 13
+    }
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "Hel"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "lo "
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "world"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 10,
+     "completion_tokens": 3,
+     "total_tokens": 13
+    }
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "tool-call-split-args",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "call_1",
+    "toolName": "Read"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "call_1",
+    "delta": "{\"file_p"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "call_1",
+    "delta": "ath\":\"/tmp/x.txt\"}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "call_1"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "call_1",
+    "toolName": "Read",
+    "input": "{\"file_path\":\"/tmp/x.txt\"}"
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": {
+     "prompt_tokens": 20,
+     "completion_tokens": 15,
+     "total_tokens": 35
+    }
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "call_1",
+    "toolName": "Read"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "call_1",
+    "delta": "{\"file_p"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "call_1",
+    "delta": "ath\":\"/tmp/x.txt\"}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "call_1"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "call_1",
+    "toolName": "Read",
+    "input": {
+     "file_path": "/tmp/x.txt"
+    }
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": {
+     "prompt_tokens": 20,
+     "completion_tokens": 15,
+     "total_tokens": 35
+    }
+   }
+  ],
+  "snapshot": [
+   {
+    "id": "call_1",
+    "name": "Read",
+    "input": {
+     "file_path": "/tmp/x.txt"
+    }
+   }
+  ]
+ },
+ {
+  "name": "tool-call-id-name-later",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "call_late",
+    "toolName": "Write"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "call_late",
+    "delta": "{\"a\":1}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "call_late"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "call_late",
+    "toolName": "Write",
+    "input": "{\"a\":1}"
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": null
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "call_late",
+    "toolName": "Write"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "call_late",
+    "delta": "{\"a\":1}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "call_late"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "call_late",
+    "toolName": "Write",
+    "input": {
+     "a": 1
+    }
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": null
+   }
+  ],
+  "snapshot": [
+   {
+    "id": "call_late",
+    "name": "Write",
+    "input": {
+     "a": 1
+    }
+   }
+  ]
+ },
+ {
+  "name": "tool-call-two-indices",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "c0",
+    "toolName": "Read"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "c0",
+    "delta": "{}"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "c1",
+    "toolName": "Glob"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "c1",
+    "delta": "{\"p"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "c1",
+    "delta": "attern\":\"*.go\"}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "c0"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "c0",
+    "toolName": "Read",
+    "input": "{}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "c1"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "c1",
+    "toolName": "Glob",
+    "input": "{\"pattern\":\"*.go\"}"
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": null
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "c0",
+    "toolName": "Read"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "c0",
+    "delta": "{}"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "c1",
+    "toolName": "Glob"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "c1",
+    "delta": "{\"p"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "c1",
+    "delta": "attern\":\"*.go\"}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "c0"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "c0",
+    "toolName": "Read",
+    "input": {}
+   },
+   {
+    "type": "tool_input_end",
+    "id": "c1"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "c1",
+    "toolName": "Glob",
+    "input": {
+     "pattern": "*.go"
+    }
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": null
+   }
+  ],
+  "snapshot": [
+   {
+    "id": "c0",
+    "name": "Read",
+    "input": {}
+   },
+   {
+    "id": "c1",
+    "name": "Glob",
+    "input": {
+     "pattern": "*.go"
+    }
+   }
+  ]
+ },
+ {
+  "name": "usage-only-last-chunk",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "hi"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 100,
+     "completion_tokens": 20,
+     "total_tokens": 120
+    }
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "hi"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 100,
+     "completion_tokens": 20,
+     "total_tokens": 120
+    }
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "reasoning-then-text",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "reasoning_start",
+    "id": "reasoning-0"
+   },
+   {
+    "type": "reasoning_delta",
+    "id": "reasoning-0",
+    "text": "think"
+   },
+   {
+    "type": "reasoning_delta",
+    "id": "reasoning-0",
+    "text": "ing..."
+   },
+   {
+    "type": "reasoning_end",
+    "id": "reasoning-0"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "answer"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 5,
+     "completion_tokens": 5,
+     "total_tokens": 10
+    }
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "reasoning_start",
+    "id": "reasoning-0"
+   },
+   {
+    "type": "reasoning_delta",
+    "id": "reasoning-0",
+    "text": "think"
+   },
+   {
+    "type": "reasoning_delta",
+    "id": "reasoning-0",
+    "text": "ing..."
+   },
+   {
+    "type": "reasoning_end",
+    "id": "reasoning-0"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "answer"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 5,
+     "completion_tokens": 5,
+     "total_tokens": 10
+    }
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "utf8-split",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "你"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "好🙂"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 1,
+     "completion_tokens": 3,
+     "total_tokens": 4
+    }
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "你"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "好🙂"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 1,
+     "completion_tokens": 3,
+     "total_tokens": 4
+    }
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "no-done",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "no done marker"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 2,
+     "completion_tokens": 3,
+     "total_tokens": 5
+    }
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "no done marker"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 2,
+     "completion_tokens": 3,
+     "total_tokens": 5
+    }
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "empty-completion",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": null
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": null
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "crlf-and-comments",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "crlf"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 4,
+     "completion_tokens": 1,
+     "total_tokens": 5
+    }
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "crlf"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 4,
+     "completion_tokens": 1,
+     "total_tokens": 5
+    }
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "multiline-data",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "finish",
+    "finishReason": "other",
+    "usage": null
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "finish",
+    "finishReason": "other",
+    "usage": null
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "finish-length",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "truncated"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "length",
+    "usage": {
+     "prompt_tokens": 9,
+     "completion_tokens": 9,
+     "total_tokens": 18
+    }
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "truncated"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "length",
+    "usage": {
+     "prompt_tokens": 9,
+     "completion_tokens": 9,
+     "total_tokens": 18
+    }
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "content-filter",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "x"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "content-filter",
+    "usage": null
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "x"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "content-filter",
+    "usage": null
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "unknown-finish-reason",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "x"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "other",
+    "usage": null
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "x"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "other",
+    "usage": null
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "function-call-finish",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "x"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": null
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "x"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": null
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "leading-bom",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "bom"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": null
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "bom"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": null
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "invalid-json",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "error",
+    "error": {
+     "name": "AI_JSONParseError",
+     "cause": {},
+     "text": "{not json}"
+    }
+   },
+   {
+    "type": "finish",
+    "finishReason": "error",
+    "usage": null
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "error"
+   },
+   {
+    "type": "finish",
+    "finishReason": "error",
+    "usage": null
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "sse-error-object",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "error",
+    "error": "rate limited"
+   },
+   {
+    "type": "finish",
+    "finishReason": "error",
+    "usage": null
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "error"
+   },
+   {
+    "type": "finish",
+    "finishReason": "error",
+    "usage": null
+   }
+  ],
+  "snapshot": []
+ },
+ {
+  "name": "empty-args-then-name",
+  "input": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "c",
+    "toolName": "Read"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "c",
+    "delta": "{\"a\":1}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "c"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "c",
+    "toolName": "Read",
+    "input": "{\"a\":1}"
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": null
+   }
+  ],
+  "output": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "c",
+    "toolName": "Read"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "c",
+    "delta": "{\"a\":1}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "c"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "c",
+    "toolName": "Read",
+    "input": {
+     "a": 1
+    }
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": null
+   }
+  ],
+  "snapshot": [
+   {
+    "id": "c",
+    "name": "Read",
+    "input": {
+     "a": 1
+    }
+   }
+  ]
+ }
+]

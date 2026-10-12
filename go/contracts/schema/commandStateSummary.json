@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "at": {
+      "type": "number"
+    },
+    "clientId": {
+      "type": "string"
+    },
+    "commandId": {
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "accepted",
+        "executing"
+      ],
+      "type": "string"
+    },
+    "type": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "commandId",
+    "clientId",
+    "type",
+    "state",
+    "at"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "properties": {
+        "artifacts": {
+          "items": {
+            "properties": {
+              "contentType": {
+                "maxLength": 255,
+                "type": "string"
+              },
+              "description": {
+                "maxLength": 500,
+                "type": "string"
+              },
+              "id": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "file",
+                  "markdown",
+                  "chart",
+                  "table",
+                  "metrics",
+                  "board"
+                ],
+                "type": "string"
+              },
+              "primary": {
+                "const": true,
+                "type": "boolean"
+              },
+              "title": {
+                "maxLength": 120,
+                "type": "string"
+              },
+              "version": {
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version"
+            ],
+            "type": "object"
+          },
+          "maxItems": 8,
+          "type": "array"
+        },
+        "artifactsTruncated": {
+          "const": true,
+          "type": "boolean"
+        },
+        "durationMs": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "error": {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        "kind": {
+          "const": "terminal",
+          "type": "string"
+        },
+        "reports": {
+          "properties": {
+            "count": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "preview": {
+              "items": {
+                "maxLength": 500,
+                "type": "string"
+              },
+              "maxItems": 8,
+              "type": "array"
+            },
+            "shown": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "count",
+            "shown",
+            "preview"
+          ],
+          "type": "object"
+        },
+        "result": {
+          "maxLength": 4000,
+          "type": "string"
+        },
+        "resultForm": {
+          "enum": [
+            "prose",
+            "json"
+          ],
+          "type": "string"
+        },
+        "resultTruncated": {
+          "const": true,
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "errored",
+            "stopped"
+          ],
+          "type": "string"
+        },
+        "stopReason": {
+          "enum": [
+            "user",
+            "model",
+            "provider",
+            "interrupted",
+            "superseded"
+          ],
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 500,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "actor": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "askedAt": {
+          "type": "number"
+        },
+        "context": {
+          "maxLength": 4000,
+          "type": "string"
+        },
+        "kind": {
+          "const": "escalation",
+          "type": "string"
+        },
+        "qid": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "question": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "qid",
+        "actor",
+        "question"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "cap": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "stall",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 64,
+          "type": "string"
+        },
+        "sinceMs": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "sinceMs"
+      ],
+      "type": "object"
+    }
+  ]
+}

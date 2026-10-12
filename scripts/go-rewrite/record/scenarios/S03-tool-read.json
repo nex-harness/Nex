@@ -1,0 +1,36 @@
+{
+  "id": "S03",
+  "title": "model calls Read on a workspace file, then answers",
+  "model": {
+    "steps": [
+      {
+        "toolCalls": [
+          { "id": "call_read_1", "name": "Read", "args": { "file_path": "$WS/hello.txt" } }
+        ]
+      },
+      { "text": "The file says: hi there." }
+    ]
+  },
+  "files": { "hello.txt": "hi there\n" },
+  "script": [
+    { "op": "waitReady" },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "Read hello.txt",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": { "reasoningLevel": "none" }
+          }
+        }
+      }
+    },
+    { "op": "subscribe", "sessionFrom": "created", "as": "sub" },
+    { "op": "waitTelemetry", "kind": "turn.terminal" }
+  ]
+}

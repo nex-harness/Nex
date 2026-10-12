@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "bytes": {
+      "type": "number"
+    },
+    "fileName": {
+      "type": "string"
+    },
+    "mime": {
+      "type": "string"
+    },
+    "previewRef": {
+      "type": "string"
+    },
+    "ref": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "ref",
+    "fileName",
+    "mime",
+    "bytes"
+  ],
+  "type": "object"
+}

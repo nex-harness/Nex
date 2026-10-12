@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "compact": {
+      "oneOf": [
+        {
+          "properties": {
+            "allowed": {
+              "const": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "allowed"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "allowed": {
+              "const": false,
+              "type": "boolean"
+            },
+            "reasonCode": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "allowed",
+            "reasonCode"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "fork": {
+      "oneOf": [
+        {
+          "properties": {
+            "allowed": {
+              "const": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "allowed"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "allowed": {
+              "const": false,
+              "type": "boolean"
+            },
+            "reasonCode": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "allowed",
+            "reasonCode"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "pauseGoal": {
+      "oneOf": [
+        {
+          "properties": {
+            "allowed": {
+              "const": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "allowed"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "allowed": {
+              "const": false,
+              "type": "boolean"
+            },
+            "reasonCode": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "allowed",
+            "reasonCode"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "queueEdit": {
+      "oneOf": [
+        {
+          "properties": {
+            "allowed": {
+              "const": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "allowed"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "allowed": {
+              "const": false,
+              "type": "boolean"
+            },
+            "reasonCode": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "allowed",
+            "reasonCode"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "resumeGoal": {
+      "oneOf": [
+        {
+          "properties": {
+            "allowed": {
+              "const": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "allowed"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "allowed": {
+              "const": false,
+              "type": "boolean"
+            },
+            "reasonCode": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "allowed",
+            "reasonCode"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "sendQueuedNow": {
+      "oneOf": [
+        {
+          "properties": {
+            "allowed": {
+              "const": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "allowed"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "allowed": {
+              "const": false,
+              "type": "boolean"
+            },
+            "reasonCode": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "allowed",
+            "reasonCode"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "setFollowupMode": {
+      "oneOf": [
+        {
+          "properties": {
+            "allowed": {
+              "const": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "allowed"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "allowed": {
+              "const": false,
+              "type": "boolean"
+            },
+            "reasonCode": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "allowed",
+            "reasonCode"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "switchModelConfig": {
+      "oneOf": [
+        {
+          "properties": {
+            "allowed": {
+              "const": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "allowed"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "allowed": {
+              "const": false,
+              "type": "boolean"
+            },
+            "reasonCode": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "allowed",
+            "reasonCode"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "fork",
+    "compact",
+    "switchModelConfig",
+    "setFollowupMode",
+    "queueEdit",
+    "sendQueuedNow",
+    "pauseGoal",
+    "resumeGoal"
+  ],
+  "type": "object"
+}

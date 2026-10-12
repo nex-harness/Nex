@@ -1,0 +1,73 @@
+{
+  "id": "H-edit-no-match",
+  "title": "edit-no-match",
+  "model": {
+    "steps": [
+      {
+        "toolCalls": [
+          {
+            "id": "c1",
+            "name": "Read",
+            "args": {
+              "file_path": "$WS/f.txt"
+            }
+          }
+        ]
+      },
+      {
+        "toolCalls": [
+          {
+            "id": "c2",
+            "name": "Edit",
+            "args": {
+              "file_path": "$WS/f.txt",
+              "old_string": "zzz",
+              "new_string": "y"
+            }
+          }
+        ]
+      },
+      {
+        "text": "no match"
+      }
+    ]
+  },
+  "files": {
+    "f.txt": "abc\n"
+  },
+  "script": [
+    {
+      "op": "waitReady"
+    },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "do it",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": {
+              "reasoningLevel": "none"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "subscribe",
+      "sessionFrom": "created",
+      "as": "sub"
+    },
+    {
+      "op": "waitTelemetry",
+      "kind": "turn.terminal"
+    }
+  ],
+  "host": {
+    "permission": "allow_once"
+  }
+}

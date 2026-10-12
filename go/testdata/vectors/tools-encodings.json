@@ -1,0 +1,105 @@
+[
+ {
+  "name": "utf8",
+  "bytes": [
+   104,
+   105,
+   10
+  ],
+  "encoding": "utf8",
+  "lineEndings": "LF",
+  "content": "hi\n",
+  "failed": false
+ },
+ {
+  "name": "utf8-bom",
+  "bytes": [
+   239,
+   187,
+   191,
+   104,
+   105,
+   10
+  ],
+  "encoding": "utf8",
+  "lineEndings": "LF",
+  "content": "﻿hi\n",
+  "failed": false
+ },
+ {
+  "name": "utf16le-bom",
+  "bytes": [
+   255,
+   254,
+   104,
+   0,
+   105,
+   0,
+   10,
+   0
+  ],
+  "encoding": "utf16le",
+  "lineEndings": "LF",
+  "content": "﻿hi\n",
+  "failed": false
+ },
+ {
+  "name": "gbk-legacy",
+  "bytes": [
+   214,
+   208,
+   206,
+   196,
+   178,
+   226,
+   202,
+   212,
+   10
+  ],
+  "encoding": "gb2312",
+  "lineEndings": "LF",
+  "content": "中文测试\n",
+  "failed": false
+ },
+ {
+  "name": "gb18030-only",
+  "bytes": [
+   129,
+   57,
+   238,
+   57,
+   10
+  ],
+  "encoding": "gb18030",
+  "lineEndings": "LF",
+  "content": "㐀\n",
+  "failed": false
+ },
+ {
+  "name": "binary-nul",
+  "bytes": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "failed": true,
+  "errorName": "FileSystemPortError",
+  "errorMessage": "Unsupported or binary text encoding: <WS>/binary-nul.dat"
+ },
+ {
+  "name": "crlf",
+  "bytes": [
+   97,
+   13,
+   10,
+   98,
+   13,
+   10
+  ],
+  "encoding": "utf8",
+  "lineEndings": "CRLF",
+  "content": "a\nb\n",
+  "failed": false
+ }
+]

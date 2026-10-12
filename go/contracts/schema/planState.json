@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "items": {
+      "items": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "inProgress",
+              "completed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "content",
+          "status"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "updatedAt": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "items",
+    "updatedAt"
+  ],
+  "type": "object"
+}

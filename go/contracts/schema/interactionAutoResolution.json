@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "properties": {
+        "deadlineAt": {
+          "type": "number"
+        },
+        "startedAt": {
+          "type": "number"
+        },
+        "state": {
+          "enum": [
+            "hiddenGrace",
+            "visibleCountdown"
+          ],
+          "type": "string"
+        },
+        "visibleAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "state",
+        "startedAt",
+        "visibleAt",
+        "deadlineAt"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "snoozedAt": {
+          "type": "number"
+        },
+        "startedAt": {
+          "type": "number"
+        },
+        "state": {
+          "const": "snoozed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "startedAt",
+        "snoozedAt"
+      ],
+      "type": "object"
+    }
+  ]
+}

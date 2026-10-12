@@ -1,0 +1,571 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "key": {
+      "additionalProperties": false,
+      "properties": {
+        "commandId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "sessionId",
+        "commandId"
+      ],
+      "type": "object"
+    },
+    "result": {
+      "anyOf": [
+        {
+          "properties": {
+            "commandId": {
+              "type": "string"
+            },
+            "memoryEnabled": {
+              "type": "boolean"
+            },
+            "message": {
+              "type": "string"
+            },
+            "reasonCode": {
+              "type": "string"
+            },
+            "result": {
+              "oneOf": [
+                {
+                  "properties": {
+                    "input": {
+                      "properties": {
+                        "delivery": {
+                          "enum": [
+                            "startNow",
+                            "queue",
+                            "guide"
+                          ],
+                          "type": "string"
+                        },
+                        "inputId": {
+                          "type": "string"
+                        },
+                        "messageId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "delivery",
+                        "inputId"
+                      ],
+                      "type": "object"
+                    },
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "createSession",
+                        "createSelectionSideSession",
+                        "forkAssistant"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "sessionId"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "resolvedBy": {
+                      "properties": {
+                        "clientId": {
+                          "type": "string"
+                        },
+                        "optionId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "clientId"
+                      ],
+                      "type": "object"
+                    },
+                    "type": {
+                      "const": "resolveInteraction",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "resolvedBy"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "applied": {
+                      "type": "boolean"
+                    },
+                    "preview": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "canApply": {
+                          "type": "boolean"
+                        },
+                        "ignoredFiles": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "operationCount": {
+                                "maximum": 9007199254740991,
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "path": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "reason": {
+                                "const": "bash_ignored",
+                                "type": "string"
+                              },
+                              "toolNames": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "operationCount",
+                              "path",
+                              "reason",
+                              "toolNames"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "safeFiles": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "action": {
+                                "enum": [
+                                  "restore",
+                                  "delete"
+                                ],
+                                "type": "string"
+                              },
+                              "operationCount": {
+                                "maximum": 9007199254740991,
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "path": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "toolNames": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "action",
+                              "operationCount",
+                              "path",
+                              "toolNames"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "unsafeFiles": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "currentHash": {
+                                "type": "string"
+                              },
+                              "expectedHash": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "operationCount": {
+                                "maximum": 9007199254740991,
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "path": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "checkpoint_missing",
+                                  "checkpoint_unreadable",
+                                  "external_modified",
+                                  "file_read_failed",
+                                  "unsupported_checkpoint"
+                                ],
+                                "type": "string"
+                              },
+                              "toolNames": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "operationCount",
+                              "path",
+                              "reason",
+                              "toolNames"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "canApply",
+                        "ignoredFiles",
+                        "safeFiles",
+                        "unsafeFiles"
+                      ],
+                      "type": "object"
+                    },
+                    "response": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "applyFileRewind",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "applied",
+                    "preview",
+                    "response"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "disposition": {
+                      "enum": [
+                        "rewind",
+                        "fork",
+                        "blocked"
+                      ],
+                      "type": "string"
+                    },
+                    "preview": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "canApply": {
+                          "type": "boolean"
+                        },
+                        "ignoredFiles": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "operationCount": {
+                                "maximum": 9007199254740991,
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "path": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "reason": {
+                                "const": "bash_ignored",
+                                "type": "string"
+                              },
+                              "toolNames": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "operationCount",
+                              "path",
+                              "reason",
+                              "toolNames"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "safeFiles": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "action": {
+                                "enum": [
+                                  "restore",
+                                  "delete"
+                                ],
+                                "type": "string"
+                              },
+                              "operationCount": {
+                                "maximum": 9007199254740991,
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "path": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "toolNames": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "action",
+                              "operationCount",
+                              "path",
+                              "toolNames"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "unsafeFiles": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "currentHash": {
+                                "type": "string"
+                              },
+                              "expectedHash": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "operationCount": {
+                                "maximum": 9007199254740991,
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "path": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "checkpoint_missing",
+                                  "checkpoint_unreadable",
+                                  "external_modified",
+                                  "file_read_failed",
+                                  "unsupported_checkpoint"
+                                ],
+                                "type": "string"
+                              },
+                              "toolNames": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "operationCount",
+                              "path",
+                              "reason",
+                              "toolNames"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "canApply",
+                        "ignoredFiles",
+                        "safeFiles",
+                        "unsafeFiles"
+                      ],
+                      "type": "object"
+                    },
+                    "reasonCode": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "sessionId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "editUserQuery",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "disposition",
+                    "sessionId"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "runId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "toolCallId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "startSavedWorkflow",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "runId",
+                    "toolCallId"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "runId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "supersededRunId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "toolCallId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "amendWorkflowRunSettings",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "runId",
+                    "toolCallId"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "delivery": {
+                      "enum": [
+                        "startNow",
+                        "queue",
+                        "guide"
+                      ],
+                      "type": "string"
+                    },
+                    "inputId": {
+                      "type": "string"
+                    },
+                    "messageId": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "inputAccepted",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "delivery",
+                    "inputId"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "delivery": {
+                      "enum": [
+                        "startNow",
+                        "queue",
+                        "guide"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "inputDisposition",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "delivery"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "revisionAtDecision": {
+              "type": "number"
+            },
+            "status": {
+              "enum": [
+                "accepted",
+                "rejected",
+                "stale",
+                "duplicate",
+                "noop",
+                "failed"
+              ],
+              "type": "string"
+            },
+            "ttftExcluded": {
+              "const": "capacity",
+              "type": "string"
+            }
+          },
+          "required": [
+            "commandId",
+            "status",
+            "revisionAtDecision"
+          ],
+          "type": "object"
+        },
+        {
+          "const": "unknown",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "required": [
+    "key",
+    "result"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,837 @@
+{
+  "generatedFrom": "scripts/go-rewrite/make-schema-corpus.mts",
+  "schemas": 138,
+  "instances": 11891,
+  "valid": 1931,
+  "invalid": 9960,
+  "perSchema": [
+    {
+      "id": "actionAvailability",
+      "valid": 4,
+      "invalid": 6,
+      "frames": 0
+    },
+    {
+      "id": "activeWorkSummary",
+      "valid": 15,
+      "invalid": 34,
+      "frames": 0
+    },
+    {
+      "id": "apiRetryState",
+      "valid": 44,
+      "invalid": 27,
+      "frames": 0
+    },
+    {
+      "id": "artifactRow",
+      "valid": 0,
+      "invalid": 182,
+      "frames": 0
+    },
+    {
+      "id": "assistantTextRow",
+      "valid": 1,
+      "invalid": 124,
+      "frames": 0
+    },
+    {
+      "id": "attachmentRef",
+      "valid": 44,
+      "invalid": 35,
+      "frames": 0
+    },
+    {
+      "id": "backgroundResultOriginMeta",
+      "valid": 0,
+      "invalid": 36,
+      "frames": 0
+    },
+    {
+      "id": "backgroundWorkSummary",
+      "valid": 87,
+      "invalid": 45,
+      "frames": 0
+    },
+    {
+      "id": "clientHello",
+      "valid": 33,
+      "invalid": 35,
+      "frames": 0
+    },
+    {
+      "id": "commandAck",
+      "valid": 75,
+      "invalid": 28,
+      "frames": 0
+    },
+    {
+      "id": "commandEnvelope",
+      "valid": 1,
+      "invalid": 131,
+      "frames": 5
+    },
+    {
+      "id": "commandKey",
+      "valid": 10,
+      "invalid": 25,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$amendWorkflowRunSettings",
+      "valid": 31,
+      "invalid": 16,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$applyFileRewind",
+      "valid": 12,
+      "invalid": 24,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$cancelBackgroundWork",
+      "valid": 15,
+      "invalid": 4,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$compact",
+      "valid": 5,
+      "invalid": 1,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$createSelectionSideSession",
+      "valid": 2,
+      "invalid": 61,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$createSession",
+      "valid": 6,
+      "invalid": 169,
+      "frames": 5
+    },
+    {
+      "id": "commandPayloadSchemas$$deleteQueueItem",
+      "valid": 15,
+      "invalid": 4,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$deleteSession",
+      "valid": 5,
+      "invalid": 1,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$discardSharedContext",
+      "valid": 10,
+      "invalid": 10,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$editQueueItem",
+      "valid": 22,
+      "invalid": 12,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$editUserQuery",
+      "valid": 9,
+      "invalid": 39,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$forkAssistant",
+      "valid": 12,
+      "invalid": 24,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$pauseGoal",
+      "valid": 5,
+      "invalid": 1,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$renameSession",
+      "valid": 15,
+      "invalid": 4,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$reorderQueueItem",
+      "valid": 23,
+      "invalid": 11,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$requestWorkspaceHookReview",
+      "valid": 0,
+      "invalid": 50,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$resolveInteraction",
+      "valid": 32,
+      "invalid": 17,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$respondWorkspaceHookReview",
+      "valid": 0,
+      "invalid": 121,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$resumeGoal",
+      "valid": 5,
+      "invalid": 1,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$resumeWorkflowRun",
+      "valid": 23,
+      "invalid": 11,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$retryTurn",
+      "valid": 12,
+      "invalid": 24,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$revokeWorkspaceHookTrust",
+      "valid": 0,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$sendGoalCommand",
+      "valid": 1,
+      "invalid": 75,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$sendQueuedNow",
+      "valid": 15,
+      "invalid": 4,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$sendText",
+      "valid": 1,
+      "invalid": 195,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$setAssistantFeedback",
+      "valid": 9,
+      "invalid": 28,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$setAutoDrain",
+      "valid": 6,
+      "invalid": 6,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$setFollowupMode",
+      "valid": 6,
+      "invalid": 6,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$snoozeInteractionAutoResolution",
+      "valid": 15,
+      "invalid": 4,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$startSavedWorkflow",
+      "valid": 15,
+      "invalid": 14,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$stop",
+      "valid": 16,
+      "invalid": 5,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$switchCollaborationMode",
+      "valid": 9,
+      "invalid": 4,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$switchModelConfig",
+      "valid": 29,
+      "invalid": 19,
+      "frames": 0
+    },
+    {
+      "id": "commandPayloadSchemas$$toggleWorkspaceHookReviewItem",
+      "valid": 0,
+      "invalid": 126,
+      "frames": 0
+    },
+    {
+      "id": "commandQueryItem",
+      "valid": 9,
+      "invalid": 31,
+      "frames": 0
+    },
+    {
+      "id": "commandResult",
+      "valid": 9,
+      "invalid": 15,
+      "frames": 0
+    },
+    {
+      "id": "commandStateSummary",
+      "valid": 39,
+      "invalid": 33,
+      "frames": 0
+    },
+    {
+      "id": "commandType",
+      "valid": 34,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "commandsQueryParams",
+      "valid": 0,
+      "invalid": 10,
+      "frames": 0
+    },
+    {
+      "id": "commandsQueryResult",
+      "valid": 0,
+      "invalid": 50,
+      "frames": 0
+    },
+    {
+      "id": "conversationArtifactType",
+      "valid": 8,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "conversationDelta",
+      "valid": 5,
+      "invalid": 13,
+      "frames": 0
+    },
+    {
+      "id": "conversationOpenTiming",
+      "valid": 80,
+      "invalid": 61,
+      "frames": 0
+    },
+    {
+      "id": "conversationRow",
+      "valid": 0,
+      "invalid": 10,
+      "frames": 0
+    },
+    {
+      "id": "conversationRowTarget",
+      "valid": 10,
+      "invalid": 28,
+      "frames": 0
+    },
+    {
+      "id": "conversationSnapshot",
+      "valid": 0,
+      "invalid": 1061,
+      "frames": 0
+    },
+    {
+      "id": "conversationTopicFrame",
+      "valid": 0,
+      "invalid": 303,
+      "frames": 0
+    },
+    {
+      "id": "conversationTopicWireFrame",
+      "valid": 0,
+      "invalid": 8,
+      "frames": 5
+    },
+    {
+      "id": "cuaAppIdentity",
+      "valid": 0,
+      "invalid": 41,
+      "frames": 0
+    },
+    {
+      "id": "errorAttribution",
+      "valid": 1,
+      "invalid": 101,
+      "frames": 0
+    },
+    {
+      "id": "goalIterationState",
+      "valid": 7,
+      "invalid": 30,
+      "frames": 0
+    },
+    {
+      "id": "goalState",
+      "valid": 70,
+      "invalid": 38,
+      "frames": 0
+    },
+    {
+      "id": "helloMessage",
+      "valid": 36,
+      "invalid": 71,
+      "frames": 0
+    },
+    {
+      "id": "hookExecutionProjection",
+      "valid": 0,
+      "invalid": 124,
+      "frames": 0
+    },
+    {
+      "id": "hookInvocationRow",
+      "valid": 0,
+      "invalid": 178,
+      "frames": 0
+    },
+    {
+      "id": "hostCapabilities",
+      "valid": 22,
+      "invalid": 21,
+      "frames": 0
+    },
+    {
+      "id": "inputRouting",
+      "valid": 23,
+      "invalid": 7,
+      "frames": 0
+    },
+    {
+      "id": "interactionAutoResolution",
+      "valid": 4,
+      "invalid": 10,
+      "frames": 0
+    },
+    {
+      "id": "localTtftClock",
+      "valid": 10,
+      "invalid": 45,
+      "frames": 0
+    },
+    {
+      "id": "localTtftContext",
+      "valid": 0,
+      "invalid": 16,
+      "frames": 0
+    },
+    {
+      "id": "localTtftDetail",
+      "valid": 0,
+      "invalid": 84,
+      "frames": 0
+    },
+    {
+      "id": "localTtftFacts",
+      "valid": 0,
+      "invalid": 235,
+      "frames": 0
+    },
+    {
+      "id": "localTtftOutputKind",
+      "valid": 3,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "modelExecution",
+      "valid": 18,
+      "invalid": 29,
+      "frames": 0
+    },
+    {
+      "id": "modelSelection",
+      "valid": 0,
+      "invalid": 43,
+      "frames": 0
+    },
+    {
+      "id": "nexBrowserAmbientContext",
+      "valid": 0,
+      "invalid": 32,
+      "frames": 0
+    },
+    {
+      "id": "nexProtocolError",
+      "valid": 9,
+      "invalid": 33,
+      "frames": 0
+    },
+    {
+      "id": "nexProtocolMcpServer",
+      "valid": 0,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "nexProtocolMessage",
+      "valid": 2,
+      "invalid": 7,
+      "frames": 0
+    },
+    {
+      "id": "nexProtocolNotification",
+      "valid": 0,
+      "invalid": 69,
+      "frames": 0
+    },
+    {
+      "id": "nexProtocolRequest",
+      "valid": 0,
+      "invalid": 72,
+      "frames": 0
+    },
+    {
+      "id": "nexProtocolRequestId",
+      "valid": 5,
+      "invalid": 0,
+      "frames": 0
+    },
+    {
+      "id": "nexProtocolResponse",
+      "valid": 11,
+      "invalid": 14,
+      "frames": 0
+    },
+    {
+      "id": "nexProtocolTrace",
+      "valid": 1,
+      "invalid": 48,
+      "frames": 0
+    },
+    {
+      "id": "nexStorageStartupState",
+      "valid": 27,
+      "invalid": 176,
+      "frames": 27
+    },
+    {
+      "id": "pendingInteraction",
+      "valid": 0,
+      "invalid": 52,
+      "frames": 0
+    },
+    {
+      "id": "permissionRequestPayload",
+      "valid": 1,
+      "invalid": 191,
+      "frames": 0
+    },
+    {
+      "id": "planItem",
+      "valid": 24,
+      "invalid": 18,
+      "frames": 0
+    },
+    {
+      "id": "planState",
+      "valid": 17,
+      "invalid": 13,
+      "frames": 0
+    },
+    {
+      "id": "queueItem",
+      "valid": 0,
+      "invalid": 252,
+      "frames": 0
+    },
+    {
+      "id": "queueState",
+      "valid": 9,
+      "invalid": 10,
+      "frames": 0
+    },
+    {
+      "id": "reasoningRow",
+      "valid": 1,
+      "invalid": 124,
+      "frames": 0
+    },
+    {
+      "id": "rowActions",
+      "valid": 11,
+      "invalid": 8,
+      "frames": 0
+    },
+    {
+      "id": "rowsWindow",
+      "valid": 28,
+      "invalid": 20,
+      "frames": 0
+    },
+    {
+      "id": "runningSubagentSummary",
+      "valid": 79,
+      "invalid": 37,
+      "frames": 0
+    },
+    {
+      "id": "sessionActionAvailability",
+      "valid": 13,
+      "invalid": 34,
+      "frames": 0
+    },
+    {
+      "id": "sessionConfigState",
+      "valid": 1,
+      "invalid": 122,
+      "frames": 0
+    },
+    {
+      "id": "sessionControl",
+      "valid": 62,
+      "invalid": 220,
+      "frames": 0
+    },
+    {
+      "id": "sessionErrorInfo",
+      "valid": 2,
+      "invalid": 180,
+      "frames": 0
+    },
+    {
+      "id": "sessionMetaState",
+      "valid": 17,
+      "invalid": 11,
+      "frames": 0
+    },
+    {
+      "id": "sessionModelTransition",
+      "valid": 14,
+      "invalid": 69,
+      "frames": 0
+    },
+    {
+      "id": "sessionPhase",
+      "valid": 6,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "sessionUsageState",
+      "valid": 143,
+      "invalid": 91,
+      "frames": 0
+    },
+    {
+      "id": "sharedContextImportState",
+      "valid": 0,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "statePatch",
+      "valid": 2,
+      "invalid": 978,
+      "frames": 0
+    },
+    {
+      "id": "stopTargetKind",
+      "valid": 9,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "streamablePath",
+      "valid": 4,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "subagentProjectionState",
+      "valid": 19,
+      "invalid": 28,
+      "frames": 0
+    },
+    {
+      "id": "subagentRow",
+      "valid": 1,
+      "invalid": 164,
+      "frames": 0
+    },
+    {
+      "id": "submissionMode",
+      "valid": 4,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "subscribeAck",
+      "valid": 23,
+      "invalid": 18,
+      "frames": 0
+    },
+    {
+      "id": "subscribeParams",
+      "valid": 33,
+      "invalid": 23,
+      "frames": 0
+    },
+    {
+      "id": "timelineMarkerLane",
+      "valid": 3,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "timelineMarkerPayload",
+      "valid": 19,
+      "invalid": 22,
+      "frames": 0
+    },
+    {
+      "id": "timelineMarkerRow",
+      "valid": 1,
+      "invalid": 109,
+      "frames": 0
+    },
+    {
+      "id": "timestamp",
+      "valid": 11,
+      "invalid": 2,
+      "frames": 0
+    },
+    {
+      "id": "toolCallRow",
+      "valid": 1,
+      "invalid": 387,
+      "frames": 0
+    },
+    {
+      "id": "turnHeaderRow",
+      "valid": 1,
+      "invalid": 395,
+      "frames": 0
+    },
+    {
+      "id": "turnWorkSegment",
+      "valid": 0,
+      "invalid": 65,
+      "frames": 0
+    },
+    {
+      "id": "userInputOptionPayload",
+      "valid": 43,
+      "invalid": 20,
+      "frames": 0
+    },
+    {
+      "id": "userInputQuestionPayload",
+      "valid": 29,
+      "invalid": 19,
+      "frames": 0
+    },
+    {
+      "id": "userInputRequestPayload",
+      "valid": 1,
+      "invalid": 172,
+      "frames": 0
+    },
+    {
+      "id": "userInputRow",
+      "valid": 1,
+      "invalid": 334,
+      "frames": 0
+    },
+    {
+      "id": "v4ConnectionFlowParams",
+      "valid": 10,
+      "invalid": 19,
+      "frames": 0
+    },
+    {
+      "id": "v4ConnectionFlowResult",
+      "valid": 1,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "v4ConnectionFlowState",
+      "valid": 3,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "v4ConversationFileRewindPreviewResult",
+      "valid": 2,
+      "invalid": 20,
+      "frames": 0
+    },
+    {
+      "id": "v4ConversationSubscribeParams",
+      "valid": 2,
+      "invalid": 120,
+      "frames": 1
+    },
+    {
+      "id": "v4ConversationSubscribeResult",
+      "valid": 69,
+      "invalid": 73,
+      "frames": 0
+    },
+    {
+      "id": "workflowLaunchMeta",
+      "valid": 0,
+      "invalid": 156,
+      "frames": 0
+    },
+    {
+      "id": "workflowNotificationMeta",
+      "valid": 4,
+      "invalid": 6,
+      "frames": 0
+    },
+    {
+      "id": "workflowRunEntryRef",
+      "valid": 9,
+      "invalid": 20,
+      "frames": 0
+    },
+    {
+      "id": "workflowRunHeaderKey",
+      "valid": 23,
+      "invalid": 3,
+      "frames": 0
+    },
+    {
+      "id": "workflowRunHeaderPatch",
+      "valid": 2,
+      "invalid": 274,
+      "frames": 0
+    },
+    {
+      "id": "workflowSettingsAmendMeta",
+      "valid": 2,
+      "invalid": 78,
+      "frames": 0
+    },
+    {
+      "id": "workspaceHookAdmissionState",
+      "valid": 33,
+      "invalid": 18,
+      "frames": 0
+    }
+  ]
+}

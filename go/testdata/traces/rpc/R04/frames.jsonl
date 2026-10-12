@@ -1,0 +1,3 @@
+{"direction":"server-to-client","hex":"040106c80100","decoded":{"header":[200],"body":{"__undefined":true}}}
+{"direction":"client-to-server","hex":"0404066406000104736c6f7701047761697400","decoded":{"header":[100,0,"slow","wait"],"body":{"__undefined":true}}}
+{"direction":"client-to-server","hex":"04020665060000","decoded":{"header":[101,0],"body":{"__undefined":true}}}

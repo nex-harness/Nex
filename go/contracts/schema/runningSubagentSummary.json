@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "agentId": {
+      "type": "string"
+    },
+    "childSessionId": {
+      "type": "string"
+    },
+    "startedAt": {
+      "type": "number"
+    },
+    "status": {
+      "enum": [
+        "running",
+        "waiting",
+        "blocked"
+      ],
+      "type": "string"
+    },
+    "subagentType": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "toolCallId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "childSessionId",
+    "subagentType",
+    "title",
+    "status"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "bundleDigest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "generation": {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "type": "integer"
+        },
+        "interactionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "remoteSessionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reviewFlowId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reviewItemIds": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "runId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sessionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "taskId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "workspaceIdentity": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "taskId",
+        "runId",
+        "workspaceIdentity",
+        "bundleDigest",
+        "reviewFlowId",
+        "generation",
+        "interactionId",
+        "reviewItemIds"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "bundleDigest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "hookDeclarationDigests": {
+          "items": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "remoteSessionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sessionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "workspaceIdentity": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "workspaceIdentity",
+        "bundleDigest",
+        "hookDeclarationDigests"
+      ],
+      "type": "object"
+    }
+  ]
+}

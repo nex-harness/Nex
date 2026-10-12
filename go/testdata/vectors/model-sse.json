@@ -1,0 +1,2344 @@
+[
+ {
+  "name": "text-basic",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hel\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"lo \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"world\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":3,\"total_tokens\":13}}\n\ndata: [DONE]\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "Hel"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "lo "
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "world"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 10,
+     "completion_tokens": 3,
+     "total_tokens": 13
+    }
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "Hel"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "lo "
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "world"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 10,
+       "completion_tokens": 3,
+       "total_tokens": 13
+      }
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "Hel"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "lo "
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "world"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 10,
+       "completion_tokens": 3,
+       "total_tokens": 13
+      }
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "Hel"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "lo "
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "world"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 10,
+       "completion_tokens": 3,
+       "total_tokens": 13
+      }
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "tool-call-split-args",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"Read\",\"arguments\":\"{\\\"file_p\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"ath\\\":\\\"/tmp/x.txt\\\"}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":15,\"total_tokens\":35}}\n\ndata: [DONE]\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "call_1",
+    "toolName": "Read"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "call_1",
+    "delta": "{\"file_p"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "call_1",
+    "delta": "ath\":\"/tmp/x.txt\"}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "call_1"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "call_1",
+    "toolName": "Read",
+    "input": "{\"file_path\":\"/tmp/x.txt\"}"
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": {
+     "prompt_tokens": 20,
+     "completion_tokens": 15,
+     "total_tokens": 35
+    }
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "call_1",
+      "toolName": "Read"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "call_1",
+      "delta": "{\"file_p"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "call_1",
+      "delta": "ath\":\"/tmp/x.txt\"}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "call_1"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "call_1",
+      "toolName": "Read",
+      "input": "{\"file_path\":\"/tmp/x.txt\"}"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": {
+       "prompt_tokens": 20,
+       "completion_tokens": 15,
+       "total_tokens": 35
+      }
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "call_1",
+      "toolName": "Read"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "call_1",
+      "delta": "{\"file_p"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "call_1",
+      "delta": "ath\":\"/tmp/x.txt\"}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "call_1"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "call_1",
+      "toolName": "Read",
+      "input": "{\"file_path\":\"/tmp/x.txt\"}"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": {
+       "prompt_tokens": 20,
+       "completion_tokens": 15,
+       "total_tokens": 35
+      }
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "call_1",
+      "toolName": "Read"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "call_1",
+      "delta": "{\"file_p"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "call_1",
+      "delta": "ath\":\"/tmp/x.txt\"}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "call_1"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "call_1",
+      "toolName": "Read",
+      "input": "{\"file_path\":\"/tmp/x.txt\"}"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": {
+       "prompt_tokens": 20,
+       "completion_tokens": 15,
+       "total_tokens": 35
+      }
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "tool-call-id-name-later",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"a\\\":\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_late\",\"type\":\"function\",\"function\":{\"name\":\"Write\",\"arguments\":\"1}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "call_late",
+    "toolName": "Write"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "call_late",
+    "delta": "{\"a\":1}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "call_late"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "call_late",
+    "toolName": "Write",
+    "input": "{\"a\":1}"
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": null
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "call_late",
+      "toolName": "Write"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "call_late",
+      "delta": "{\"a\":1}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "call_late"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "call_late",
+      "toolName": "Write",
+      "input": "{\"a\":1}"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": null
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "call_late",
+      "toolName": "Write"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "call_late",
+      "delta": "{\"a\":1}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "call_late"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "call_late",
+      "toolName": "Write",
+      "input": "{\"a\":1}"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": null
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "call_late",
+      "toolName": "Write"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "call_late",
+      "delta": "{\"a\":1}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "call_late"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "call_late",
+      "toolName": "Write",
+      "input": "{\"a\":1}"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": null
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "tool-call-two-indices",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"c0\",\"type\":\"function\",\"function\":{\"name\":\"Read\",\"arguments\":\"{}\"}},{\"index\":1,\"id\":\"c1\",\"type\":\"function\",\"function\":{\"name\":\"Glob\",\"arguments\":\"{\\\"p\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":1,\"function\":{\"arguments\":\"attern\\\":\\\"*.go\\\"}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "c0",
+    "toolName": "Read"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "c0",
+    "delta": "{}"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "c1",
+    "toolName": "Glob"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "c1",
+    "delta": "{\"p"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "c1",
+    "delta": "attern\":\"*.go\"}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "c0"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "c0",
+    "toolName": "Read",
+    "input": "{}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "c1"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "c1",
+    "toolName": "Glob",
+    "input": "{\"pattern\":\"*.go\"}"
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": null
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "c0",
+      "toolName": "Read"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "c0",
+      "delta": "{}"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "c1",
+      "toolName": "Glob"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "c1",
+      "delta": "{\"p"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "c1",
+      "delta": "attern\":\"*.go\"}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "c0"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "c0",
+      "toolName": "Read",
+      "input": "{}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "c1"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "c1",
+      "toolName": "Glob",
+      "input": "{\"pattern\":\"*.go\"}"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": null
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "c0",
+      "toolName": "Read"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "c0",
+      "delta": "{}"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "c1",
+      "toolName": "Glob"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "c1",
+      "delta": "{\"p"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "c1",
+      "delta": "attern\":\"*.go\"}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "c0"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "c0",
+      "toolName": "Read",
+      "input": "{}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "c1"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "c1",
+      "toolName": "Glob",
+      "input": "{\"pattern\":\"*.go\"}"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": null
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "c0",
+      "toolName": "Read"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "c0",
+      "delta": "{}"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "c1",
+      "toolName": "Glob"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "c1",
+      "delta": "{\"p"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "c1",
+      "delta": "attern\":\"*.go\"}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "c0"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "c0",
+      "toolName": "Read",
+      "input": "{}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "c1"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "c1",
+      "toolName": "Glob",
+      "input": "{\"pattern\":\"*.go\"}"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": null
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "usage-only-last-chunk",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20,\"total_tokens\":120}}\n\ndata: [DONE]\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "hi"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 100,
+     "completion_tokens": 20,
+     "total_tokens": 120
+    }
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "hi"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 100,
+       "completion_tokens": 20,
+       "total_tokens": 120
+      }
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "hi"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 100,
+       "completion_tokens": 20,
+       "total_tokens": 120
+      }
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "hi"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 100,
+       "completion_tokens": 20,
+       "total_tokens": 120
+      }
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "reasoning-then-text",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"think\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"ing...\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"answer\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":5,\"total_tokens\":10}}\n\ndata: [DONE]\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "reasoning_start",
+    "id": "reasoning-0"
+   },
+   {
+    "type": "reasoning_delta",
+    "id": "reasoning-0",
+    "text": "think"
+   },
+   {
+    "type": "reasoning_delta",
+    "id": "reasoning-0",
+    "text": "ing..."
+   },
+   {
+    "type": "reasoning_end",
+    "id": "reasoning-0"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "answer"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 5,
+     "completion_tokens": 5,
+     "total_tokens": 10
+    }
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "reasoning_start",
+      "id": "reasoning-0"
+     },
+     {
+      "type": "reasoning_delta",
+      "id": "reasoning-0",
+      "text": "think"
+     },
+     {
+      "type": "reasoning_delta",
+      "id": "reasoning-0",
+      "text": "ing..."
+     },
+     {
+      "type": "reasoning_end",
+      "id": "reasoning-0"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "answer"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 5,
+       "completion_tokens": 5,
+       "total_tokens": 10
+      }
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "reasoning_start",
+      "id": "reasoning-0"
+     },
+     {
+      "type": "reasoning_delta",
+      "id": "reasoning-0",
+      "text": "think"
+     },
+     {
+      "type": "reasoning_delta",
+      "id": "reasoning-0",
+      "text": "ing..."
+     },
+     {
+      "type": "reasoning_end",
+      "id": "reasoning-0"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "answer"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 5,
+       "completion_tokens": 5,
+       "total_tokens": 10
+      }
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "reasoning_start",
+      "id": "reasoning-0"
+     },
+     {
+      "type": "reasoning_delta",
+      "id": "reasoning-0",
+      "text": "think"
+     },
+     {
+      "type": "reasoning_delta",
+      "id": "reasoning-0",
+      "text": "ing..."
+     },
+     {
+      "type": "reasoning_end",
+      "id": "reasoning-0"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "answer"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 5,
+       "completion_tokens": 5,
+       "total_tokens": 10
+      }
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "utf8-split",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"你\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"好🙂\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":3,\"total_tokens\":4}}\n\ndata: [DONE]\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "你"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "好🙂"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 1,
+     "completion_tokens": 3,
+     "total_tokens": 4
+    }
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "你"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "好🙂"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 1,
+       "completion_tokens": 3,
+       "total_tokens": 4
+      }
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "你"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "好🙂"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 1,
+       "completion_tokens": 3,
+       "total_tokens": 4
+      }
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "你"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "好🙂"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 1,
+       "completion_tokens": 3,
+       "total_tokens": 4
+      }
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "no-done",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"no done marker\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3,\"total_tokens\":5}}\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "no done marker"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 2,
+     "completion_tokens": 3,
+     "total_tokens": 5
+    }
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "no done marker"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 2,
+       "completion_tokens": 3,
+       "total_tokens": 5
+      }
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "no done marker"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 2,
+       "completion_tokens": 3,
+       "total_tokens": 5
+      }
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "no done marker"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 2,
+       "completion_tokens": 3,
+       "total_tokens": 5
+      }
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "empty-completion",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": null
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": null
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": null
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": null
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "crlf-and-comments",
+  "text": ": keep-alive comment\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"crlf\"},\"finish_reason\":null}]}\r\n\r\n\n: another comment\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":1,\"total_tokens\":5}}\r\n\r\n\ndata: [DONE]\r\n\r\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "crlf"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": {
+     "prompt_tokens": 4,
+     "completion_tokens": 1,
+     "total_tokens": 5
+    }
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "crlf"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 4,
+       "completion_tokens": 1,
+       "total_tokens": 5
+      }
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "crlf"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 4,
+       "completion_tokens": 1,
+       "total_tokens": 5
+      }
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "crlf"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": {
+       "prompt_tokens": 4,
+       "completion_tokens": 1,
+       "total_tokens": 5
+      }
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "multiline-data",
+  "text": "data: {\"choices\":\ndata: []}\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "finish",
+    "finishReason": "other",
+    "usage": null
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "finish",
+      "finishReason": "other",
+      "usage": null
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "finish",
+      "finishReason": "other",
+      "usage": null
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "finish",
+      "finishReason": "other",
+      "usage": null
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "finish-length",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"truncated\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":9,\"total_tokens\":18}}\n\ndata: [DONE]\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "truncated"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "length",
+    "usage": {
+     "prompt_tokens": 9,
+     "completion_tokens": 9,
+     "total_tokens": 18
+    }
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "truncated"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "length",
+      "usage": {
+       "prompt_tokens": 9,
+       "completion_tokens": 9,
+       "total_tokens": 18
+      }
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "truncated"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "length",
+      "usage": {
+       "prompt_tokens": 9,
+       "completion_tokens": 9,
+       "total_tokens": 18
+      }
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "truncated"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "length",
+      "usage": {
+       "prompt_tokens": 9,
+       "completion_tokens": 9,
+       "total_tokens": 18
+      }
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "content-filter",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"x\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"content_filter\"}]}\n\ndata: [DONE]\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "x"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "content-filter",
+    "usage": null
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "x"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "content-filter",
+      "usage": null
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "x"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "content-filter",
+      "usage": null
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "x"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "content-filter",
+      "usage": null
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "unknown-finish-reason",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"x\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"weird_reason\"}]}\n\ndata: [DONE]\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "x"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "other",
+    "usage": null
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "x"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "other",
+      "usage": null
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "x"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "other",
+      "usage": null
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "x"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "other",
+      "usage": null
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "function-call-finish",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"x\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"function_call\"}]}\n\ndata: [DONE]\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "x"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": null
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "x"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": null
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "x"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": null
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "x"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": null
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "leading-bom",
+  "text": "﻿data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"bom\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "text_start",
+    "id": "txt-0"
+   },
+   {
+    "type": "text_delta",
+    "id": "txt-0",
+    "text": "bom"
+   },
+   {
+    "type": "text_end",
+    "id": "txt-0"
+   },
+   {
+    "type": "finish",
+    "finishReason": "stop",
+    "usage": null
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "bom"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": null
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "bom"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": null
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "text_start",
+      "id": "txt-0"
+     },
+     {
+      "type": "text_delta",
+      "id": "txt-0",
+      "text": "bom"
+     },
+     {
+      "type": "text_end",
+      "id": "txt-0"
+     },
+     {
+      "type": "finish",
+      "finishReason": "stop",
+      "usage": null
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "invalid-json",
+  "text": "data: {not json}\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "error",
+    "error": {
+     "name": "AI_JSONParseError",
+     "cause": {},
+     "text": "{not json}"
+    }
+   },
+   {
+    "type": "finish",
+    "finishReason": "error",
+    "usage": null
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "error",
+      "error": {
+       "name": "AI_JSONParseError",
+       "cause": {},
+       "text": "{not json}"
+      }
+     },
+     {
+      "type": "finish",
+      "finishReason": "error",
+      "usage": null
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "error",
+      "error": {
+       "name": "AI_JSONParseError",
+       "cause": {},
+       "text": "{not json}"
+      }
+     },
+     {
+      "type": "finish",
+      "finishReason": "error",
+      "usage": null
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "error",
+      "error": {
+       "name": "AI_JSONParseError",
+       "cause": {},
+       "text": "{not json}"
+      }
+     },
+     {
+      "type": "finish",
+      "finishReason": "error",
+      "usage": null
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "sse-error-object",
+  "text": "data: {\"error\":{\"message\":\"rate limited\",\"type\":\"rate_limit_error\",\"code\":\"1302\"}}\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "error",
+    "error": "rate limited"
+   },
+   {
+    "type": "finish",
+    "finishReason": "error",
+    "usage": null
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "error",
+      "error": "rate limited"
+     },
+     {
+      "type": "finish",
+      "finishReason": "error",
+      "usage": null
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "error",
+      "error": "rate limited"
+     },
+     {
+      "type": "finish",
+      "finishReason": "error",
+      "usage": null
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "error",
+      "error": "rate limited"
+     },
+     {
+      "type": "finish",
+      "finishReason": "error",
+      "usage": null
+     }
+    ]
+   }
+  }
+ },
+ {
+  "name": "missing-function-name",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_x\",\"type\":\"function\",\"function\":{\"arguments\":\"{}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n",
+  "terminalError": {
+   "name": "AI_InvalidResponseDataError",
+   "message": "Expected 'function.name' to be a string."
+  },
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     }
+    ],
+    "error": "Expected 'function.name' to be a string."
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     }
+    ],
+    "error": "Expected 'function.name' to be a string."
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     }
+    ],
+    "error": "Expected 'function.name' to be a string."
+   }
+  }
+ },
+ {
+  "name": "empty-args-then-name",
+  "text": "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"c\",\"type\":\"function\",\"function\":{\"name\":\"Read\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"a\\\":1}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n",
+  "events": [
+   {
+    "type": "start"
+   },
+   {
+    "type": "tool_input_start",
+    "id": "c",
+    "toolName": "Read"
+   },
+   {
+    "type": "tool_input_delta",
+    "id": "c",
+    "delta": "{\"a\":1}"
+   },
+   {
+    "type": "tool_input_end",
+    "id": "c"
+   },
+   {
+    "type": "tool_call",
+    "toolCallId": "c",
+    "toolName": "Read",
+    "input": "{\"a\":1}"
+   },
+   {
+    "type": "finish",
+    "finishReason": "tool-calls",
+    "usage": null
+   }
+  ],
+  "split": {
+   "1": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "c",
+      "toolName": "Read"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "c",
+      "delta": "{\"a\":1}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "c"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "c",
+      "toolName": "Read",
+      "input": "{\"a\":1}"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": null
+     }
+    ]
+   },
+   "2": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "c",
+      "toolName": "Read"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "c",
+      "delta": "{\"a\":1}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "c"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "c",
+      "toolName": "Read",
+      "input": "{\"a\":1}"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": null
+     }
+    ]
+   },
+   "3": {
+    "events": [
+     {
+      "type": "start"
+     },
+     {
+      "type": "tool_input_start",
+      "id": "c",
+      "toolName": "Read"
+     },
+     {
+      "type": "tool_input_delta",
+      "id": "c",
+      "delta": "{\"a\":1}"
+     },
+     {
+      "type": "tool_input_end",
+      "id": "c"
+     },
+     {
+      "type": "tool_call",
+      "toolCallId": "c",
+      "toolName": "Read",
+      "input": "{\"a\":1}"
+     },
+     {
+      "type": "finish",
+      "finishReason": "tool-calls",
+      "usage": null
+     }
+    ]
+   }
+  }
+ }
+]

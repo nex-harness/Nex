@@ -1,0 +1,757 @@
+[
+ {
+  "tool": "Read",
+  "name": "val/read-missing-file-path",
+  "input": {
+   "offset": 1
+  },
+  "normalizedInput": {
+   "offset": 1
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "invalid_type",
+    "expected": "string",
+    "received": "undefined",
+    "path": [
+     "file_path"
+    ],
+    "message": "Required"
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Read failed due to the following issue:\nThe required parameter `file_path` is missing</tool_use_error>"
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-wrong-type",
+  "input": {
+   "file_path": 42
+  },
+  "normalizedInput": {
+   "file_path": 42
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "invalid_type",
+    "expected": "string",
+    "received": "number",
+    "path": [
+     "file_path"
+    ],
+    "message": "Expected string, received number"
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Read failed due to the following issue:\nThe parameter `file_path` type is expected as `string` but provided as `number`</tool_use_error>"
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-extra-key",
+  "input": {
+   "file_path": "a.txt",
+   "bogus": 1
+  },
+  "normalizedInput": {
+   "file_path": "a.txt"
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-limit-zero",
+  "input": {
+   "file_path": "a.txt",
+   "limit": 0
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "limit": 0
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "too_small",
+    "minimum": 0,
+    "type": "number",
+    "inclusive": false,
+    "exact": false,
+    "message": "Number must be greater than 0",
+    "path": [
+     "limit"
+    ]
+   }
+  ],
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-limit-float",
+  "input": {
+   "file_path": "a.txt",
+   "limit": 1.5
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "limit": 1.5
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "invalid_type",
+    "expected": "integer",
+    "received": "float",
+    "message": "Expected integer, received float",
+    "path": [
+     "limit"
+    ]
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Read failed due to the following issue:\nThe parameter `limit` type is expected as `int` but provided as `number`</tool_use_error>"
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-offset-negative",
+  "input": {
+   "file_path": "a.txt",
+   "offset": -1
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "offset": -1
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "too_small",
+    "minimum": 0,
+    "type": "number",
+    "inclusive": true,
+    "exact": false,
+    "message": "Number must be greater than or equal to 0",
+    "path": [
+     "offset"
+    ]
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: [\n  {\n    \"origin\": \"number\",\n    \"code\": \"too_small\",\n    \"minimum\": 0,\n    \"inclusive\": true,\n    \"path\": [\n      \"offset\"\n    ],\n    \"message\": \"Too small: expected number to be >=0\"\n  }\n]</tool_use_error>"
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-valid",
+  "input": {
+   "file_path": "a.txt"
+  },
+  "normalizedInput": {
+   "file_path": "a.txt"
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-not-object",
+  "input": "nope",
+  "normalizedInput": "nope",
+  "runtimeValidationIssues": [
+   {
+    "code": "invalid_type",
+    "expected": "object",
+    "received": "string",
+    "path": [],
+    "message": "Expected object, received string"
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Read failed due to the following issue:\nThe parameter `` type is expected as `object` but provided as `string`</tool_use_error>"
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-binary-ext",
+  "input": {
+   "file_path": "a.exe"
+  },
+  "normalizedInput": {
+   "file_path": "a.exe"
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "custom",
+    "path": [
+     "file_path"
+    ],
+    "message": "This tool cannot read binary files. The file appears to be a binary .exe file. Please use appropriate tools for binary file analysis."
+   }
+  ],
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-device",
+  "input": {
+   "file_path": "/dev/zero"
+  },
+  "normalizedInput": {
+   "file_path": "/dev/zero"
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "custom",
+    "path": [
+     "file_path"
+    ],
+    "message": "Cannot read '/dev/zero': this device file would block or produce infinite output."
+   }
+  ],
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-pages-bad",
+  "input": {
+   "file_path": "a.pdf",
+   "pages": "abc"
+  },
+  "normalizedInput": {
+   "file_path": "a.pdf",
+   "pages": "abc"
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "custom",
+    "path": [
+     "pages"
+    ],
+    "message": "Invalid pages parameter: \"abc\". Use formats like \"1-5\", \"3\", or \"10-20\". Pages are 1-indexed."
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Read failed due to the following issue:\nAn unexpected parameter `pages` was provided</tool_use_error>"
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-pages-open-range",
+  "input": {
+   "file_path": "a.pdf",
+   "pages": "5-"
+  },
+  "normalizedInput": {
+   "file_path": "a.pdf",
+   "pages": "5-"
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "custom",
+    "path": [
+     "pages"
+    ],
+    "message": "Page range \"5-\" exceeds maximum of 20 pages per request. Please use a smaller range."
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Read failed due to the following issue:\nAn unexpected parameter `pages` was provided</tool_use_error>"
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-pages-open-range-bad",
+  "input": {
+   "file_path": "a.pdf",
+   "pages": "-"
+  },
+  "normalizedInput": {
+   "file_path": "a.pdf",
+   "pages": "-"
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "custom",
+    "path": [
+     "pages"
+    ],
+    "message": "Invalid pages parameter: \"-\". Use formats like \"1-5\", \"3\", or \"10-20\". Pages are 1-indexed."
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Read failed due to the following issue:\nAn unexpected parameter `pages` was provided</tool_use_error>"
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-pages-too-large",
+  "input": {
+   "file_path": "a.pdf",
+   "pages": "1-50"
+  },
+  "normalizedInput": {
+   "file_path": "a.pdf",
+   "pages": "1-50"
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "custom",
+    "path": [
+     "pages"
+    ],
+    "message": "Page range \"1-50\" exceeds maximum of 20 pages per request. Please use a smaller range."
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Read failed due to the following issue:\nAn unexpected parameter `pages` was provided</tool_use_error>"
+ },
+ {
+  "tool": "Read",
+  "name": "val/read-pages-ok",
+  "input": {
+   "file_path": "a.pdf",
+   "pages": "1-5"
+  },
+  "normalizedInput": {
+   "file_path": "a.pdf",
+   "pages": "1-5"
+  },
+  "runtimeValidationIssues": null,
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Read failed due to the following issue:\nAn unexpected parameter `pages` was provided</tool_use_error>"
+ },
+ {
+  "tool": "Write",
+  "name": "val/write-missing-content",
+  "input": {
+   "file_path": "a.txt"
+  },
+  "normalizedInput": {
+   "file_path": "a.txt"
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "invalid_type",
+    "expected": "string",
+    "received": "undefined",
+    "path": [
+     "content"
+    ],
+    "message": "Required"
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Write failed due to the following issue:\nThe required parameter `content` is missing</tool_use_error>"
+ },
+ {
+  "tool": "Write",
+  "name": "val/write-missing-path",
+  "input": {
+   "content": "x"
+  },
+  "normalizedInput": {
+   "content": "x"
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "invalid_type",
+    "expected": "string",
+    "received": "undefined",
+    "path": [
+     "file_path"
+    ],
+    "message": "Required"
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Write failed due to the following issue:\nThe required parameter `file_path` is missing</tool_use_error>"
+ },
+ {
+  "tool": "Write",
+  "name": "val/write-wrong-type",
+  "input": {
+   "file_path": "a.txt",
+   "content": 5
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "content": 5
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "invalid_type",
+    "expected": "string",
+    "received": "number",
+    "path": [
+     "content"
+    ],
+    "message": "Expected string, received number"
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Write failed due to the following issue:\nThe parameter `content` type is expected as `string` but provided as `number`</tool_use_error>"
+ },
+ {
+  "tool": "Write",
+  "name": "val/write-extra-key",
+  "input": {
+   "file_path": "a.txt",
+   "content": "x",
+   "z": 1
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "content": "x"
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Write",
+  "name": "val/write-valid",
+  "input": {
+   "file_path": "a.txt",
+   "content": "x"
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "content": "x"
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Write",
+  "name": "val/write-not-object",
+  "input": [
+   1,
+   2
+  ],
+  "normalizedInput": [
+   1,
+   2
+  ],
+  "runtimeValidationIssues": [
+   {
+    "code": "invalid_type",
+    "expected": "object",
+    "received": "array",
+    "path": [],
+    "message": "Expected object, received array"
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Write failed due to the following issue:\nThe parameter `` type is expected as `object` but provided as `array`</tool_use_error>"
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-missing-old",
+  "input": {
+   "file_path": "a.txt",
+   "new_string": "b"
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "new_string": "b"
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "invalid_type",
+    "expected": "string",
+    "received": "undefined",
+    "path": [
+     "old_string"
+    ],
+    "message": "Required"
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Edit failed due to the following issue:\nThe required parameter `old_string` is missing</tool_use_error>"
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-missing-path",
+  "input": {
+   "old_string": "a",
+   "new_string": "b"
+  },
+  "normalizedInput": {
+   "old_string": "a",
+   "new_string": "b"
+  },
+  "runtimeValidationIssues": [
+   {
+    "code": "invalid_type",
+    "expected": "string",
+    "received": "undefined",
+    "path": [
+     "file_path"
+    ],
+    "message": "Required"
+   }
+  ],
+  "valid": false,
+  "errorMessage": "Tool input failed inputSchema validation",
+  "modelContent": "<tool_use_error>InputValidationError: Edit failed due to the following issue:\nThe required parameter `file_path` is missing</tool_use_error>"
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-replace-all-string",
+  "input": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": "true"
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": true
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-replace-all-number",
+  "input": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": 1
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": true
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-replace-all-str-1",
+  "input": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": "1"
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": true
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-replace-all-str-yes",
+  "input": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": "YES"
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": true
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-replace-all-str-on",
+  "input": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": " on "
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": true
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-replace-all-str-false",
+  "input": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": "false"
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": false
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-replace-all-str-0",
+  "input": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": "0"
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": false
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-replace-all-str-off",
+  "input": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": "off"
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": false
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-replace-all-bool-false",
+  "input": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": false
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": false
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-replace-all-number-0",
+  "input": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": 0
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": false
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-extra-key",
+  "input": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "q": 1
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": false
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ },
+ {
+  "tool": "Edit",
+  "name": "val/edit-valid",
+  "input": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b"
+  },
+  "normalizedInput": {
+   "file_path": "a.txt",
+   "old_string": "a",
+   "new_string": "b",
+   "replace_all": false
+  },
+  "runtimeValidationIssues": null,
+  "valid": true,
+  "errorMessage": "",
+  "modelContent": null
+ }
+]

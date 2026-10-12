@@ -1,0 +1,57 @@
+{
+ "name": "html-characters-in-text",
+ "logEpoch": "epochepoch0",
+ "workflowRunDeltas": true,
+ "sessionId": "sess-vector",
+ "steps": [
+  {
+   "seq": 1,
+   "revision": 1,
+   "deltas": [
+    {
+     "op": "row.appended",
+     "row": {
+      "rowId": 1,
+      "kind": "assistantText",
+      "text": "<b>&amp;</b>     😀 \\ \" ' \b\t"
+     }
+    },
+    {
+     "op": "row.delta",
+     "rowId": 1,
+     "path": "text",
+     "append": "<i>a</i>\n\\p"
+    },
+    {
+     "op": "row.delta",
+     "rowId": 1,
+     "path": "text",
+     "append": "\t\\q\b"
+    },
+    {
+     "op": "row.delta",
+     "rowId": 1,
+     "path": "text",
+     "append": "\u0001\u001f"
+    }
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "op": "subscribe",
+   "connectionId": "a",
+   "deliveryProfile": "continuous",
+   "mode": "snapshot",
+   "sub": 0
+  },
+  {
+   "op": "ingest",
+   "step": 0
+  },
+  {
+   "op": "flush",
+   "sub": 0
+  }
+ ]
+}

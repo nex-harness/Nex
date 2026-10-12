@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "displayText": {
+      "type": "string"
+    },
+    "expectedHeldQueueItemIds": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "heldQueueDisposition": {
+      "enum": [
+        "clearQueueAndSend",
+        "keepQueueAndSend"
+      ],
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "build",
+        "edit",
+        "plan",
+        "yolo"
+      ],
+      "type": "string"
+    },
+    "modelSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "modelId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "options": {
+          "additionalProperties": false,
+          "properties": {
+            "reasoningLevel": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "providerId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerId",
+        "modelId"
+      ],
+      "type": "object"
+    },
+    "planEnabled": {
+      "type": "boolean"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "type": "object"
+}

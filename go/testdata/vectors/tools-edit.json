@@ -1,0 +1,2764 @@
+{
+ "tool": "edit",
+ "cases": [
+  {
+   "name": "edit/exact",
+   "files": [
+    {
+     "path": "n.txt",
+     "content": "alpha\nbeta\ngamma\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "n.txt",
+     "input": {
+      "file_path": "n.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "n.txt",
+    "old_string": "beta",
+    "new_string": "BETA"
+   },
+   "result": {
+    "modelContent": "The file <WS>/n.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/n.txt",
+     "oldString": "beta",
+     "newString": "BETA",
+     "originalFile": "alpha\nbeta\ngamma\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 3,
+       "newStart": 1,
+       "newLines": 3,
+       "lines": [
+        " alpha",
+        "-beta",
+        "+BETA",
+        " gamma"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/n.txt\u00001\u0000",
+      "path": "<WS>/n.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "n.txt": {
+      "content": "alpha\nBETA\ngamma\n",
+      "bytesBase64": "YWxwaGEKQkVUQQpnYW1tYQo=",
+      "sizeBytes": 17,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/exact-replace-all",
+   "files": [
+    {
+     "path": "n.txt",
+     "content": "aa\nbb\naa\ncc\naa\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "n.txt",
+     "input": {
+      "file_path": "n.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "n.txt",
+    "old_string": "aa",
+    "new_string": "AA",
+    "replace_all": true
+   },
+   "result": {
+    "modelContent": "The file <WS>/n.txt has been updated. All occurrences were successfully replaced. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/n.txt",
+     "oldString": "aa",
+     "newString": "AA",
+     "originalFile": "aa\nbb\naa\ncc\naa\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 5,
+       "newStart": 1,
+       "newLines": 5,
+       "lines": [
+        "-aa",
+        "+AA",
+        " bb",
+        "-aa",
+        "+AA",
+        " cc",
+        "-aa",
+        "+AA"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": true,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 3
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/n.txt\u00001\u0000",
+      "path": "<WS>/n.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "n.txt": {
+      "content": "AA\nbb\nAA\ncc\nAA\n",
+      "bytesBase64": "QUEKYmIKQUEKY2MKQUEK",
+      "sizeBytes": 15,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/ambiguous",
+   "files": [
+    {
+     "path": "n.txt",
+     "content": "aa\nbb\naa\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "n.txt",
+     "input": {
+      "file_path": "n.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "n.txt",
+    "old_string": "aa",
+    "new_string": "AA"
+   },
+   "result": {
+    "modelContent": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: aa",
+    "output": {
+     "result": false,
+     "errorCode": 9,
+     "message": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: aa"
+    },
+    "failed": true,
+    "failureMessage": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: aa",
+    "readStateAfter": [
+     {
+      "key": "<WS>/n.txt\u00001\u0000",
+      "path": "<WS>/n.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "n.txt": {
+      "content": "aa\nbb\naa\n",
+      "bytesBase64": "YWEKYmIKYWEK",
+      "sizeBytes": 9,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/not-found",
+   "files": [
+    {
+     "path": "n.txt",
+     "content": "alpha\nbeta\ngamma\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "n.txt",
+     "input": {
+      "file_path": "n.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "n.txt",
+    "old_string": "nope",
+    "new_string": "x"
+   },
+   "result": {
+    "modelContent": "String to replace not found in file.\nString: nope",
+    "output": {
+     "result": false,
+     "errorCode": 8,
+     "message": "String to replace not found in file.\nString: nope"
+    },
+    "failed": true,
+    "failureMessage": "String to replace not found in file.\nString: nope",
+    "readStateAfter": [
+     {
+      "key": "<WS>/n.txt\u00001\u0000",
+      "path": "<WS>/n.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "n.txt": {
+      "content": "alpha\nbeta\ngamma\n",
+      "bytesBase64": "YWxwaGEKYmV0YQpnYW1tYQo=",
+      "sizeBytes": 17,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/no-op",
+   "files": [
+    {
+     "path": "n.txt",
+     "content": "alpha\nbeta\ngamma\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "n.txt",
+     "input": {
+      "file_path": "n.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "n.txt",
+    "old_string": "beta",
+    "new_string": "beta"
+   },
+   "result": {
+    "modelContent": "No changes to make: old_string and new_string are exactly the same.",
+    "output": {
+     "result": false,
+     "errorCode": 1,
+     "message": "No changes to make: old_string and new_string are exactly the same."
+    },
+    "failed": true,
+    "failureMessage": "No changes to make: old_string and new_string are exactly the same.",
+    "readStateAfter": [
+     {
+      "key": "<WS>/n.txt\u00001\u0000",
+      "path": "<WS>/n.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "n.txt": {
+      "content": "alpha\nbeta\ngamma\n",
+      "bytesBase64": "YWxwaGEKYmV0YQpnYW1tYQo=",
+      "sizeBytes": 17,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/not-read",
+   "files": [
+    {
+     "path": "n.txt",
+     "content": "alpha\nbeta\ngamma\n"
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "n.txt",
+    "old_string": "beta",
+    "new_string": "BETA"
+   },
+   "result": {
+    "modelContent": "File has not been read yet. Read it first before writing to it.",
+    "output": {
+     "result": false,
+     "errorCode": 6,
+     "message": "File has not been read yet. Read it first before writing to it."
+    },
+    "failed": true,
+    "failureMessage": "File has not been read yet. Read it first before writing to it.",
+    "readStateAfter": [],
+    "treeAfter": {
+     "n.txt": {
+      "content": "alpha\nbeta\ngamma\n",
+      "bytesBase64": "YWxwaGEKYmV0YQpnYW1tYQo=",
+      "sizeBytes": 17,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/stale",
+   "files": [
+    {
+     "path": "n.txt",
+     "content": "alpha\nbeta\ngamma\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "n.txt",
+     "input": {
+      "file_path": "n.txt"
+     }
+    }
+   ],
+   "bumpMtime": true,
+   "input": {
+    "file_path": "n.txt",
+    "old_string": "beta",
+    "new_string": "BETA"
+   },
+   "result": {
+    "modelContent": "The file <WS>/n.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/n.txt",
+     "oldString": "beta",
+     "newString": "BETA",
+     "originalFile": "alpha\nbeta\ngamma\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 3,
+       "newStart": 1,
+       "newLines": 3,
+       "lines": [
+        " alpha",
+        "-beta",
+        "+BETA",
+        " gamma"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/n.txt\u00001\u0000",
+      "path": "<WS>/n.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "n.txt": {
+      "content": "alpha\nBETA\ngamma\n",
+      "bytesBase64": "YWxwaGEKQkVUQQpnYW1tYQo=",
+      "sizeBytes": 17,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/partial-read-rejected",
+   "files": [
+    {
+     "path": "m.txt",
+     "content": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "m.txt",
+     "input": {
+      "file_path": "m.txt",
+      "offset": 1,
+      "limit": 2
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "m.txt",
+    "old_string": "two",
+    "new_string": "TWO"
+   },
+   "result": {
+    "modelContent": "The file <WS>/m.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/m.txt",
+     "oldString": "two",
+     "newString": "TWO",
+     "originalFile": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 5,
+       "newStart": 1,
+       "newLines": 5,
+       "lines": [
+        " one",
+        "-two",
+        "+TWO",
+        " three",
+        " four",
+        " five"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/m.txt\u00001\u00002",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     },
+     {
+      "key": "<WS>/m.txt\u00001\u0000",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "m.txt": {
+      "content": "one\nTWO\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
+      "bytesBase64": "b25lClRXTwp0aHJlZQpmb3VyCmZpdmUKc2l4CnNldmVuCmVpZ2h0Cm5pbmUKdGVuCg==",
+      "sizeBytes": 49,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/missing-file",
+   "files": [
+    {
+     "path": "other.txt",
+     "content": "x\n"
+    }
+   ],
+   "preRead": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "nope.txt",
+    "old_string": "a",
+    "new_string": "b"
+   },
+   "result": {
+    "modelContent": "File does not exist. Note: your current working directory is <WS>.",
+    "output": {
+     "result": false,
+     "errorCode": 4,
+     "message": "File does not exist. Note: your current working directory is <WS>."
+    },
+    "failed": true,
+    "failureMessage": "File does not exist. Note: your current working directory is <WS>.",
+    "readStateAfter": [],
+    "treeAfter": {
+     "other.txt": {
+      "content": "x\n",
+      "bytesBase64": "eAo=",
+      "sizeBytes": 2,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/create-with-empty-old-string",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "new.txt",
+    "old_string": "",
+    "new_string": "brand new\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/new.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/new.txt",
+     "oldString": "",
+     "newString": "brand new\n",
+     "originalFile": "",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 0,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "+brand new"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/new.txt\u00001\u0000",
+      "path": "<WS>/new.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "new.txt": {
+      "content": "brand new\n",
+      "bytesBase64": "YnJhbmQgbmV3Cg==",
+      "sizeBytes": 10,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/empty-old-string-existing-nonempty",
+   "files": [
+    {
+     "path": "e.txt",
+     "content": "content\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "e.txt",
+     "input": {
+      "file_path": "e.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "e.txt",
+    "old_string": "",
+    "new_string": "new\n"
+   },
+   "result": {
+    "modelContent": "Cannot create new file - file already exists.",
+    "output": {
+     "result": false,
+     "errorCode": 3,
+     "message": "Cannot create new file - file already exists."
+    },
+    "failed": true,
+    "failureMessage": "Cannot create new file - file already exists.",
+    "readStateAfter": [
+     {
+      "key": "<WS>/e.txt\u00001\u0000",
+      "path": "<WS>/e.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "e.txt": {
+      "content": "content\n",
+      "bytesBase64": "Y29udGVudAo=",
+      "sizeBytes": 8,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/multiline-exact",
+   "files": [
+    {
+     "path": "m.txt",
+     "content": "one\ntwo\nthree\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "m.txt",
+     "input": {
+      "file_path": "m.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "m.txt",
+    "old_string": "one\ntwo",
+    "new_string": "ONE\nTWO"
+   },
+   "result": {
+    "modelContent": "The file <WS>/m.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/m.txt",
+     "oldString": "one\ntwo",
+     "newString": "ONE\nTWO",
+     "originalFile": "one\ntwo\nthree\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 3,
+       "newStart": 1,
+       "newLines": 3,
+       "lines": [
+        "-one",
+        "-two",
+        "+ONE",
+        "+TWO",
+        " three"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/m.txt\u00001\u0000",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "m.txt": {
+      "content": "ONE\nTWO\nthree\n",
+      "bytesBase64": "T05FClRXTwp0aHJlZQo=",
+      "sizeBytes": 14,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/quote-normalized",
+   "files": [
+    {
+     "path": "q.txt",
+     "content": "say “hello”\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "q.txt",
+     "input": {
+      "file_path": "q.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "q.txt",
+    "old_string": "say \"hello\"",
+    "new_string": "said hi"
+   },
+   "result": {
+    "modelContent": "The file <WS>/q.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/q.txt",
+     "oldString": "say “hello”",
+     "newString": "said hi",
+     "originalFile": "say “hello”\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-say “hello”",
+        "+said hi"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "quote_normalized",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/q.txt\u00001\u0000",
+      "path": "<WS>/q.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "q.txt": {
+      "content": "said hi\n",
+      "bytesBase64": "c2FpZCBoaQo=",
+      "sizeBytes": 8,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/line-number-prefix-stripped",
+   "files": [
+    {
+     "path": "p.txt",
+     "content": "alpha\nbeta\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "p.txt",
+     "input": {
+      "file_path": "p.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "p.txt",
+    "old_string": "2\tbeta",
+    "new_string": "BETA"
+   },
+   "result": {
+    "modelContent": "The file <WS>/p.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/p.txt",
+     "oldString": "beta",
+     "newString": "BETA",
+     "originalFile": "alpha\nbeta\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 2,
+       "newStart": 1,
+       "newLines": 2,
+       "lines": [
+        " alpha",
+        "-beta",
+        "+BETA"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "line_number_prefix_stripped",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/p.txt\u00001\u0000",
+      "path": "<WS>/p.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "p.txt": {
+      "content": "alpha\nBETA\n",
+      "bytesBase64": "YWxwaGEKQkVUQQo=",
+      "sizeBytes": 11,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/escape-normalized",
+   "files": [
+    {
+     "path": "e.txt",
+     "content": "tab\there\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "e.txt",
+     "input": {
+      "file_path": "e.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "e.txt",
+    "old_string": "tab\\there",
+    "new_string": "TAB"
+   },
+   "result": {
+    "modelContent": "The file <WS>/e.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/e.txt",
+     "oldString": "tab\there",
+     "newString": "TAB",
+     "originalFile": "tab\there\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-tab\there",
+        "+TAB"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "escape_normalized",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/e.txt\u00001\u0000",
+      "path": "<WS>/e.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "e.txt": {
+      "content": "TAB\n",
+      "bytesBase64": "VEFCCg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/line-trimmed",
+   "files": [
+    {
+     "path": "t.txt",
+     "content": "  indented line\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "t.txt",
+     "input": {
+      "file_path": "t.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "t.txt",
+    "old_string": "indented line",
+    "new_string": "flat line"
+   },
+   "result": {
+    "modelContent": "The file <WS>/t.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/t.txt",
+     "oldString": "indented line",
+     "newString": "flat line",
+     "originalFile": "  indented line\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-  indented line",
+        "+  flat line"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/t.txt\u00001\u0000",
+      "path": "<WS>/t.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "t.txt": {
+      "content": "  flat line\n",
+      "bytesBase64": "ICBmbGF0IGxpbmUK",
+      "sizeBytes": 12,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/indentation-flexible",
+   "files": [
+    {
+     "path": "i.txt",
+     "content": "def f():\n    return 1\n    return 2\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "i.txt",
+     "input": {
+      "file_path": "i.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "i.txt",
+    "old_string": "def f():\n  return 1\n  return 2",
+    "new_string": "def g():\n    return 3\n    return 4"
+   },
+   "result": {
+    "modelContent": "The file <WS>/i.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/i.txt",
+     "oldString": "def f():\n    return 1\n    return 2",
+     "newString": "def g():\n    return 3\n    return 4",
+     "originalFile": "def f():\n    return 1\n    return 2\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 3,
+       "newStart": 1,
+       "newLines": 3,
+       "lines": [
+        "-def f():",
+        "-    return 1",
+        "-    return 2",
+        "+def g():",
+        "+    return 3",
+        "+    return 4"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "line_trimmed",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/i.txt\u00001\u0000",
+      "path": "<WS>/i.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "i.txt": {
+      "content": "def g():\n    return 3\n    return 4\n",
+      "bytesBase64": "ZGVmIGcoKToKICAgIHJldHVybiAzCiAgICByZXR1cm4gNAo=",
+      "sizeBytes": 35,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/replace-all-false-multi",
+   "files": [
+    {
+     "path": "m.txt",
+     "content": "x\nx\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "m.txt",
+     "input": {
+      "file_path": "m.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "m.txt",
+    "old_string": "x",
+    "new_string": "y"
+   },
+   "result": {
+    "modelContent": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: x",
+    "output": {
+     "result": false,
+     "errorCode": 9,
+     "message": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: x"
+    },
+    "failed": true,
+    "failureMessage": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: x",
+    "readStateAfter": [
+     {
+      "key": "<WS>/m.txt\u00001\u0000",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "m.txt": {
+      "content": "x\nx\n",
+      "bytesBase64": "eAp4Cg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/replace-all-string-true",
+   "files": [
+    {
+     "path": "m.txt",
+     "content": "x\nx\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "m.txt",
+     "input": {
+      "file_path": "m.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "m.txt",
+    "old_string": "x",
+    "new_string": "y",
+    "replace_all": "true"
+   },
+   "result": {
+    "modelContent": "The file <WS>/m.txt has been updated. All occurrences were successfully replaced. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/m.txt",
+     "oldString": "x",
+     "newString": "y",
+     "originalFile": "x\nx\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 2,
+       "newStart": 1,
+       "newLines": 2,
+       "lines": [
+        "-x",
+        "-x",
+        "+y",
+        "+y"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": true,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 2
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/m.txt\u00001\u0000",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "m.txt": {
+      "content": "y\ny\n",
+      "bytesBase64": "eQp5Cg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/replace-all-string-one",
+   "files": [
+    {
+     "path": "m.txt",
+     "content": "x\nx\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "m.txt",
+     "input": {
+      "file_path": "m.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "m.txt",
+    "old_string": "x",
+    "new_string": "y",
+    "replace_all": "1"
+   },
+   "result": {
+    "modelContent": "The file <WS>/m.txt has been updated. All occurrences were successfully replaced. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/m.txt",
+     "oldString": "x",
+     "newString": "y",
+     "originalFile": "x\nx\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 2,
+       "newStart": 1,
+       "newLines": 2,
+       "lines": [
+        "-x",
+        "-x",
+        "+y",
+        "+y"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": true,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 2
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/m.txt\u00001\u0000",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "m.txt": {
+      "content": "y\ny\n",
+      "bytesBase64": "eQp5Cg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/replace-all-string-on",
+   "files": [
+    {
+     "path": "m.txt",
+     "content": "x\nx\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "m.txt",
+     "input": {
+      "file_path": "m.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "m.txt",
+    "old_string": "x",
+    "new_string": "y",
+    "replace_all": "yes"
+   },
+   "result": {
+    "modelContent": "The file <WS>/m.txt has been updated. All occurrences were successfully replaced. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/m.txt",
+     "oldString": "x",
+     "newString": "y",
+     "originalFile": "x\nx\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 2,
+       "newStart": 1,
+       "newLines": 2,
+       "lines": [
+        "-x",
+        "-x",
+        "+y",
+        "+y"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": true,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 2
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/m.txt\u00001\u0000",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "m.txt": {
+      "content": "y\ny\n",
+      "bytesBase64": "eQp5Cg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/replace-all-string-off",
+   "files": [
+    {
+     "path": "m.txt",
+     "content": "x\nx\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "m.txt",
+     "input": {
+      "file_path": "m.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "m.txt",
+    "old_string": "x",
+    "new_string": "y",
+    "replace_all": "off"
+   },
+   "result": {
+    "modelContent": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: x",
+    "output": {
+     "result": false,
+     "errorCode": 9,
+     "message": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: x"
+    },
+    "failed": true,
+    "failureMessage": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: x",
+    "readStateAfter": [
+     {
+      "key": "<WS>/m.txt\u00001\u0000",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "m.txt": {
+      "content": "x\nx\n",
+      "bytesBase64": "eAp4Cg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/crlf-normalized",
+   "files": [
+    {
+     "path": "c.txt",
+     "content": "a\r\nb\r\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "c.txt",
+     "input": {
+      "file_path": "c.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "c.txt",
+    "old_string": "a\nb",
+    "new_string": "A\nB"
+   },
+   "result": {
+    "modelContent": "The file <WS>/c.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/c.txt",
+     "oldString": "a\nb",
+     "newString": "A\nB",
+     "originalFile": "a\nb\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 2,
+       "newStart": 1,
+       "newLines": 2,
+       "lines": [
+        "-a",
+        "-b",
+        "+A",
+        "+B"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/c.txt\u00001\u0000",
+      "path": "<WS>/c.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "c.txt": {
+      "content": "A\r\nB\r\n",
+      "bytesBase64": "QQ0KQg0K",
+      "sizeBytes": 6,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/ipynb-refused",
+   "files": [
+    {
+     "path": "n.ipynb",
+     "content": "{}\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "n.ipynb",
+     "input": {
+      "file_path": "n.ipynb"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "n.ipynb",
+    "old_string": "{}",
+    "new_string": "x"
+   },
+   "result": {
+    "modelContent": "File is a Jupyter Notebook. Use the NotebookEdit to edit this file.",
+    "output": {
+     "result": false,
+     "errorCode": 5,
+     "message": "File is a Jupyter Notebook. Use the NotebookEdit to edit this file."
+    },
+    "failed": true,
+    "failureMessage": "File is a Jupyter Notebook. Use the NotebookEdit to edit this file.",
+    "readStateAfter": [
+     {
+      "key": "<WS>/n.ipynb\u00001\u0000",
+      "path": "<WS>/n.ipynb",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "n.ipynb": {
+      "content": "{}\n",
+      "bytesBase64": "e30K",
+      "sizeBytes": 3,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/no-file-path",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "old_string": "a",
+    "new_string": "b"
+   },
+   "result": {
+    "modelContent": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"undefined\",\n    \"path\": [\n      \"file_path\"\n    ],\n    \"message\": \"Required\"\n  }\n]",
+    "failed": true,
+    "errorName": "ZodError",
+    "errorMessage": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"undefined\",\n    \"path\": [\n      \"file_path\"\n    ],\n    \"message\": \"Required\"\n  }\n]",
+    "readStateAfter": [],
+    "treeAfter": {}
+   }
+  },
+  {
+   "name": "edit/empty-path",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "",
+    "old_string": "a",
+    "new_string": "b"
+   },
+   "result": {
+    "modelContent": "Tool path must not be empty",
+    "output": {
+     "result": false,
+     "errorCode": 13,
+     "message": "Tool path must not be empty"
+    },
+    "failed": true,
+    "failureMessage": "Tool path must not be empty",
+    "readStateAfter": [],
+    "treeAfter": {}
+   }
+  },
+  {
+   "name": "edit/no-old-string",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "x.txt",
+    "new_string": "b"
+   },
+   "result": {
+    "modelContent": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"undefined\",\n    \"path\": [\n      \"old_string\"\n    ],\n    \"message\": \"Required\"\n  }\n]",
+    "failed": true,
+    "errorName": "ZodError",
+    "errorMessage": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"undefined\",\n    \"path\": [\n      \"old_string\"\n    ],\n    \"message\": \"Required\"\n  }\n]",
+    "readStateAfter": [],
+    "treeAfter": {}
+   }
+  },
+  {
+   "name": "edit/no-new-string",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "x.txt",
+    "old_string": "a"
+   },
+   "result": {
+    "modelContent": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"undefined\",\n    \"path\": [\n      \"new_string\"\n    ],\n    \"message\": \"Required\"\n  }\n]",
+    "failed": true,
+    "errorName": "ZodError",
+    "errorMessage": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"undefined\",\n    \"path\": [\n      \"new_string\"\n    ],\n    \"message\": \"Required\"\n  }\n]",
+    "readStateAfter": [],
+    "treeAfter": {}
+   }
+  },
+  {
+   "name": "edit/extra-key",
+   "files": [
+    {
+     "path": "n.txt",
+     "content": "alpha\nbeta\ngamma\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "n.txt",
+     "input": {
+      "file_path": "n.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "n.txt",
+    "old_string": "beta",
+    "new_string": "BETA",
+    "bogus": 1
+   },
+   "result": {
+    "modelContent": "The file <WS>/n.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/n.txt",
+     "oldString": "beta",
+     "newString": "BETA",
+     "originalFile": "alpha\nbeta\ngamma\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 3,
+       "newStart": 1,
+       "newLines": 3,
+       "lines": [
+        " alpha",
+        "-beta",
+        "+BETA",
+        " gamma"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/n.txt\u00001\u0000",
+      "path": "<WS>/n.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "n.txt": {
+      "content": "alpha\nBETA\ngamma\n",
+      "bytesBase64": "YWxwaGEKQkVUQQpnYW1tYQo=",
+      "sizeBytes": 17,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/delete-line",
+   "files": [
+    {
+     "path": "d.txt",
+     "content": "keep\ndelete me\nkeep2\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "d.txt",
+     "input": {
+      "file_path": "d.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "d.txt",
+    "old_string": "delete me\n",
+    "new_string": ""
+   },
+   "result": {
+    "modelContent": "The file <WS>/d.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/d.txt",
+     "oldString": "delete me\n",
+     "newString": "",
+     "originalFile": "keep\ndelete me\nkeep2\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 3,
+       "newStart": 1,
+       "newLines": 2,
+       "lines": [
+        " keep",
+        "-delete me",
+        " keep2"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/d.txt\u00001\u0000",
+      "path": "<WS>/d.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "d.txt": {
+      "content": "keep\nkeep2\n",
+      "bytesBase64": "a2VlcAprZWVwMgo=",
+      "sizeBytes": 11,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/replace-with-empty",
+   "files": [
+    {
+     "path": "d.txt",
+     "content": "a\nb\nc\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "d.txt",
+     "input": {
+      "file_path": "d.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "d.txt",
+    "old_string": "b\n",
+    "new_string": ""
+   },
+   "result": {
+    "modelContent": "The file <WS>/d.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/d.txt",
+     "oldString": "b\n",
+     "newString": "",
+     "originalFile": "a\nb\nc\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 3,
+       "newStart": 1,
+       "newLines": 2,
+       "lines": [
+        " a",
+        "-b",
+        " c"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/d.txt\u00001\u0000",
+      "path": "<WS>/d.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "d.txt": {
+      "content": "a\nc\n",
+      "bytesBase64": "YQpjCg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/ambiguous-digit",
+   "files": [
+    {
+     "path": "h.txt",
+     "content": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "h.txt",
+     "input": {
+      "file_path": "h.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "h.txt",
+    "old_string": "2",
+    "new_string": "TWO"
+   },
+   "result": {
+    "modelContent": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: 2",
+    "output": {
+     "result": false,
+     "errorCode": 9,
+     "message": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: 2"
+    },
+    "failed": true,
+    "failureMessage": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: 2",
+    "readStateAfter": [
+     {
+      "key": "<WS>/h.txt\u00001\u0000",
+      "path": "<WS>/h.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "h.txt": {
+      "content": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n",
+      "bytesBase64": "MQoyCjMKNAo1CjYKNwo4CjkKMTAKMTEKMTIKMTMKMTQKMTUKMTYK",
+      "sizeBytes": 39,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/stale-content-changed",
+   "files": [
+    {
+     "path": "n.txt",
+     "content": "old\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "n.txt",
+     "input": {
+      "file_path": "n.txt"
+     }
+    }
+   ],
+   "bumpMtime": true,
+   "mutateAfterPreRead": {
+    "path": "n.txt",
+    "content": "changed by user\n"
+   },
+   "input": {
+    "file_path": "n.txt",
+    "old_string": "old",
+    "new_string": "NEW"
+   },
+   "result": {
+    "modelContent": "File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.",
+    "output": {
+     "result": false,
+     "errorCode": 7,
+     "message": "File has been modified since read, either by the user or by a linter. Read it again before attempting to write it."
+    },
+    "failed": true,
+    "failureMessage": "File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.",
+    "readStateAfter": [
+     {
+      "key": "<WS>/n.txt\u00001\u0000",
+      "path": "<WS>/n.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "n.txt": {
+      "content": "changed by user\n",
+      "bytesBase64": "Y2hhbmdlZCBieSB1c2VyCg==",
+      "sizeBytes": 16,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/spans-newline-hunk",
+   "files": [
+    {
+     "path": "s.txt",
+     "content": "a\nb\nc\nd\ne\nf\ng\nh\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "s.txt",
+     "input": {
+      "file_path": "s.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "s.txt",
+    "old_string": "b\nc",
+    "new_string": "b\nNEW1\nNEW2\nc"
+   },
+   "result": {
+    "modelContent": "The file <WS>/s.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/s.txt",
+     "oldString": "b\nc",
+     "newString": "b\nNEW1\nNEW2\nc",
+     "originalFile": "a\nb\nc\nd\ne\nf\ng\nh\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 5,
+       "newStart": 1,
+       "newLines": 7,
+       "lines": [
+        " a",
+        " b",
+        "+NEW1",
+        "+NEW2",
+        " c",
+        " d",
+        " e"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/s.txt\u00001\u0000",
+      "path": "<WS>/s.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "s.txt": {
+      "content": "a\nb\nNEW1\nNEW2\nc\nd\ne\nf\ng\nh\n",
+      "bytesBase64": "YQpiCk5FVzEKTkVXMgpjCmQKZQpmCmcKaAo=",
+      "sizeBytes": 26,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/append-at-eof-no-newline",
+   "files": [
+    {
+     "path": "e.txt",
+     "content": "line1\nline2"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "e.txt",
+     "input": {
+      "file_path": "e.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "e.txt",
+    "old_string": "line2",
+    "new_string": "line2\nline3"
+   },
+   "result": {
+    "modelContent": "The file <WS>/e.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/e.txt",
+     "oldString": "line2",
+     "newString": "line2\nline3",
+     "originalFile": "line1\nline2",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 2,
+       "newStart": 1,
+       "newLines": 3,
+       "lines": [
+        " line1",
+        "-line2",
+        "\\ No newline at end of file",
+        "+line2",
+        "+line3",
+        "\\ No newline at end of file"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/e.txt\u00001\u0000",
+      "path": "<WS>/e.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "e.txt": {
+      "content": "line1\nline2\nline3",
+      "bytesBase64": "bGluZTEKbGluZTIKbGluZTM=",
+      "sizeBytes": 17,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/unicode-escape",
+   "files": [
+    {
+     "path": "u.txt",
+     "content": "café\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "u.txt",
+     "input": {
+      "file_path": "u.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "u.txt",
+    "old_string": "caf\\u00e9",
+    "new_string": "tea"
+   },
+   "result": {
+    "modelContent": "The file <WS>/u.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/u.txt",
+     "oldString": "café",
+     "newString": "tea",
+     "originalFile": "café\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-café",
+        "+tea"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "unicode_escape_normalized",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/u.txt\u00001\u0000",
+      "path": "<WS>/u.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "u.txt": {
+      "content": "tea\n",
+      "bytesBase64": "dGVhCg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/replace-all-true-broad-matcher-skipped",
+   "files": [
+    {
+     "path": "b.txt",
+     "content": "  x\n  x\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "b.txt",
+     "input": {
+      "file_path": "b.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "b.txt",
+    "old_string": "x",
+    "new_string": "y",
+    "replace_all": true
+   },
+   "result": {
+    "modelContent": "The file <WS>/b.txt has been updated. All occurrences were successfully replaced. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/b.txt",
+     "oldString": "x",
+     "newString": "y",
+     "originalFile": "  x\n  x\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 2,
+       "newStart": 1,
+       "newLines": 2,
+       "lines": [
+        "-  x",
+        "-  x",
+        "+  y",
+        "+  y"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": true,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 2
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/b.txt\u00001\u0000",
+      "path": "<WS>/b.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "b.txt": {
+      "content": "  y\n  y\n",
+      "bytesBase64": "ICB5CiAgeQo=",
+      "sizeBytes": 8,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/dollar-signs-in-replacement",
+   "files": [
+    {
+     "path": "d.txt",
+     "content": "cost\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "d.txt",
+     "input": {
+      "file_path": "d.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "d.txt",
+    "old_string": "cost",
+    "new_string": "$100 & $$"
+   },
+   "result": {
+    "modelContent": "The file <WS>/d.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/d.txt",
+     "oldString": "cost",
+     "newString": "$100 & $$",
+     "originalFile": "cost\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-cost",
+        "+$100 & $$"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/d.txt\u00001\u0000",
+      "path": "<WS>/d.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "d.txt": {
+      "content": "$100 & $$\n",
+      "bytesBase64": "JDEwMCAmICQkCg==",
+      "sizeBytes": 10,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/case-sensitive",
+   "files": [
+    {
+     "path": "c.txt",
+     "content": "ABC\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "c.txt",
+     "input": {
+      "file_path": "c.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "c.txt",
+    "old_string": "abc",
+    "new_string": "xyz"
+   },
+   "result": {
+    "modelContent": "String to replace not found in file.\nString: abc",
+    "output": {
+     "result": false,
+     "errorCode": 8,
+     "message": "String to replace not found in file.\nString: abc"
+    },
+    "failed": true,
+    "failureMessage": "String to replace not found in file.\nString: abc",
+    "readStateAfter": [
+     {
+      "key": "<WS>/c.txt\u00001\u0000",
+      "path": "<WS>/c.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "c.txt": {
+      "content": "ABC\n",
+      "bytesBase64": "QUJDCg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/block-anchor-match",
+   "files": [
+    {
+     "path": "a.txt",
+     "content": "function a() {\n  const alpha = 1;\n  const beta = 2;\n  return alpha + beta;\n}\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "a.txt",
+     "input": {
+      "file_path": "a.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "a.txt",
+    "old_string": "function a() {\n  const alpha = 1;\n  const beta = 3;\n  return alpha + beta;\n}",
+    "new_string": "function a() {\n  return 0;\n}"
+   },
+   "result": {
+    "modelContent": "The file <WS>/a.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/a.txt",
+     "oldString": "function a() {\n  const alpha = 1;\n  const beta = 2;\n  return alpha + beta;\n}",
+     "newString": "function a() {\n  return 0;\n}",
+     "originalFile": "function a() {\n  const alpha = 1;\n  const beta = 2;\n  return alpha + beta;\n}\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 5,
+       "newStart": 1,
+       "newLines": 3,
+       "lines": [
+        " function a() {",
+        "-  const alpha = 1;",
+        "-  const beta = 2;",
+        "-  return alpha + beta;",
+        "+  return 0;",
+        " }"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "block_anchor",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/a.txt\u00001\u0000",
+      "path": "<WS>/a.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "a.txt": {
+      "content": "function a() {\n  return 0;\n}\n",
+      "bytesBase64": "ZnVuY3Rpb24gYSgpIHsKICByZXR1cm4gMDsKfQo=",
+      "sizeBytes": 29,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/block-anchor-ambiguous",
+   "files": [
+    {
+     "path": "a.txt",
+     "content": "function a() {\n  const alpha = 1;\n  const beta = 2;\n  return alpha;\n}\n\nfunction a() {\n  const alpha = 9;\n  const beta = 8;\n  return alpha;\n}\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "a.txt",
+     "input": {
+      "file_path": "a.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "a.txt",
+    "old_string": "function a() {\n  const alpha = 7;\n  const beta = 6;\n  return alpha;\n}",
+    "new_string": "function a() { return 0; }"
+   },
+   "result": {
+    "modelContent": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: function a() {\n  const alpha = 7;\n  const beta = 6;\n  return alpha;\n}",
+    "output": {
+     "result": false,
+     "errorCode": 9,
+     "message": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: function a() {\n  const alpha = 7;\n  const beta = 6;\n  return alpha;\n}"
+    },
+    "failed": true,
+    "failureMessage": "Found 2 matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: function a() {\n  const alpha = 7;\n  const beta = 6;\n  return alpha;\n}",
+    "readStateAfter": [
+     {
+      "key": "<WS>/a.txt\u00001\u0000",
+      "path": "<WS>/a.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "a.txt": {
+      "content": "function a() {\n  const alpha = 1;\n  const beta = 2;\n  return alpha;\n}\n\nfunction a() {\n  const alpha = 9;\n  const beta = 8;\n  return alpha;\n}\n",
+      "bytesBase64": "ZnVuY3Rpb24gYSgpIHsKICBjb25zdCBhbHBoYSA9IDE7CiAgY29uc3QgYmV0YSA9IDI7CiAgcmV0dXJuIGFscGhhOwp9CgpmdW5jdGlvbiBhKCkgewogIGNvbnN0IGFscGhhID0gOTsKICBjb25zdCBiZXRhID0gODsKICByZXR1cm4gYWxwaGE7Cn0K",
+      "sizeBytes": 141,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/replace-all-skips-block-anchor",
+   "files": [
+    {
+     "path": "a.txt",
+     "content": "x = 1\ny = 2\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "a.txt",
+     "input": {
+      "file_path": "a.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "a.txt",
+    "old_string": "x = 1",
+    "new_string": "x = 9",
+    "replace_all": true
+   },
+   "result": {
+    "modelContent": "The file <WS>/a.txt has been updated. All occurrences were successfully replaced. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/a.txt",
+     "oldString": "x = 1",
+     "newString": "x = 9",
+     "originalFile": "x = 1\ny = 2\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 2,
+       "newStart": 1,
+       "newLines": 2,
+       "lines": [
+        "-x = 1",
+        "+x = 9",
+        " y = 2"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": true,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/a.txt\u00001\u0000",
+      "path": "<WS>/a.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "a.txt": {
+      "content": "x = 9\ny = 2\n",
+      "bytesBase64": "eCA9IDkKeSA9IDIK",
+      "sizeBytes": 12,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/curly-quote-preserved",
+   "files": [
+    {
+     "path": "q.txt",
+     "content": "say “hello” now\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "q.txt",
+     "input": {
+      "file_path": "q.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "q.txt",
+    "old_string": "say \"hello\"",
+    "new_string": "say \"goodbye\""
+   },
+   "result": {
+    "modelContent": "The file <WS>/q.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/q.txt",
+     "oldString": "say “hello”",
+     "newString": "say “goodbye”",
+     "originalFile": "say “hello” now\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-say “hello” now",
+        "+say “goodbye” now"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "quote_normalized",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/q.txt\u00001\u0000",
+      "path": "<WS>/q.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "q.txt": {
+      "content": "say “goodbye” now\n",
+      "bytesBase64": "c2F5IOKAnGdvb2RieWXigJ0gbm93Cg==",
+      "sizeBytes": 22,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/empty-old-string-whitespace-file",
+   "files": [
+    {
+     "path": "w.txt",
+     "content": "   \n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "w.txt",
+     "input": {
+      "file_path": "w.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "w.txt",
+    "old_string": "",
+    "new_string": "content\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/w.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/w.txt",
+     "oldString": "",
+     "newString": "content\n",
+     "originalFile": "   \n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-   ",
+        "+content"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/w.txt\u00001\u0000",
+      "path": "<WS>/w.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "w.txt": {
+      "content": "content\n",
+      "bytesBase64": "Y29udGVudAo=",
+      "sizeBytes": 8,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/target-is-directory",
+   "files": [
+    {
+     "path": "dir/inner.txt",
+     "content": "alpha\nbeta\ngamma\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "dir/inner.txt",
+     "input": {
+      "file_path": "dir/inner.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "dir",
+    "old_string": "alpha",
+    "new_string": "beta"
+   },
+   "result": {
+    "modelContent": "Cannot read directory as text file: <WS>/dir",
+    "failed": true,
+    "errorName": "FileSystemPortError",
+    "errorMessage": "Cannot read directory as text file: <WS>/dir",
+    "readStateAfter": [
+     {
+      "key": "<WS>/dir/inner.txt\u00001\u0000",
+      "path": "<WS>/dir/inner.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "dir/inner.txt": {
+      "content": "alpha\nbeta\ngamma\n",
+      "bytesBase64": "YWxwaGEKYmV0YQpnYW1tYQo=",
+      "sizeBytes": 17,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/multiline-delete",
+   "files": [
+    {
+     "path": "m.txt",
+     "content": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "m.txt",
+     "input": {
+      "file_path": "m.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "m.txt",
+    "old_string": "three\nfour\nfive",
+    "new_string": ""
+   },
+   "result": {
+    "modelContent": "The file <WS>/m.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/m.txt",
+     "oldString": "three\nfour\nfive",
+     "newString": "",
+     "originalFile": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 8,
+       "newStart": 1,
+       "newLines": 5,
+       "lines": [
+        " one",
+        " two",
+        "-three",
+        "-four",
+        "-five",
+        " six",
+        " seven",
+        " eight"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/m.txt\u00001\u0000",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "m.txt": {
+      "content": "one\ntwo\nsix\nseven\neight\nnine\nten\n",
+      "bytesBase64": "b25lCnR3bwpzaXgKc2V2ZW4KZWlnaHQKbmluZQp0ZW4K",
+      "sizeBytes": 33,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/touched-but-identical",
+   "files": [
+    {
+     "path": "n.txt",
+     "content": "alpha\nbeta\ngamma\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "n.txt",
+     "input": {
+      "file_path": "n.txt"
+     }
+    }
+   ],
+   "bumpMtime": true,
+   "input": {
+    "file_path": "n.txt",
+    "old_string": "beta",
+    "new_string": "BETA"
+   },
+   "result": {
+    "modelContent": "The file <WS>/n.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/n.txt",
+     "oldString": "beta",
+     "newString": "BETA",
+     "originalFile": "alpha\nbeta\ngamma\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 3,
+       "newStart": 1,
+       "newLines": 3,
+       "lines": [
+        " alpha",
+        "-beta",
+        "+BETA",
+        " gamma"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/n.txt\u00001\u0000",
+      "path": "<WS>/n.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "n.txt": {
+      "content": "alpha\nBETA\ngamma\n",
+      "bytesBase64": "YWxwaGEKQkVUQQpnYW1tYQo=",
+      "sizeBytes": 17,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/line-trimmed-trailing-space",
+   "files": [
+    {
+     "path": "t.txt",
+     "content": "keep\n  value here  \nkeep\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "t.txt",
+     "input": {
+      "file_path": "t.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "t.txt",
+    "old_string": "value here",
+    "new_string": "value there"
+   },
+   "result": {
+    "modelContent": "The file <WS>/t.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/t.txt",
+     "oldString": "value here",
+     "newString": "value there",
+     "originalFile": "keep\n  value here  \nkeep\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 3,
+       "newStart": 1,
+       "newLines": 3,
+       "lines": [
+        " keep",
+        "-  value here  ",
+        "+  value there  ",
+        " keep"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/t.txt\u00001\u0000",
+      "path": "<WS>/t.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "t.txt": {
+      "content": "keep\n  value there  \nkeep\n",
+      "bytesBase64": "a2VlcAogIHZhbHVlIHRoZXJlICAKa2VlcAo=",
+      "sizeBytes": 26,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "edit/exact-keeps-escape-literal",
+   "files": [
+    {
+     "path": "e.txt",
+     "content": "value = 1\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "e.txt",
+     "input": {
+      "file_path": "e.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "e.txt",
+    "old_string": "value = 1",
+    "new_string": "value = \\t2"
+   },
+   "result": {
+    "modelContent": "The file <WS>/e.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "filePath": "<WS>/e.txt",
+     "oldString": "value = 1",
+     "newString": "value = \\t2",
+     "originalFile": "value = 1\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-value = 1",
+        "+value = \\t2"
+       ]
+      }
+     ],
+     "userModified": false,
+     "replaceAll": false,
+     "matchStrategy": "exact",
+     "matchCandidateCount": 1
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/e.txt\u00001\u0000",
+      "path": "<WS>/e.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "e.txt": {
+      "content": "value = \\t2\n",
+      "bytesBase64": "dmFsdWUgPSBcdDIK",
+      "sizeBytes": 12,
+      "mode": "644"
+     }
+    }
+   }
+  }
+ ]
+}

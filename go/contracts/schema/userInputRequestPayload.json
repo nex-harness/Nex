@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "answerDrafts": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "propertyNames": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "currentQuestionIndex": {
+      "type": "number"
+    },
+    "freeText": {
+      "type": "boolean"
+    },
+    "input": {},
+    "kind": {
+      "const": "userInput",
+      "type": "string"
+    },
+    "options": {
+      "items": {
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "optionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "optionId",
+          "label"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "origin": {
+      "additionalProperties": false,
+      "properties": {
+        "agentId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "agentType": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "childSessionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "childTurnId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "subagent",
+          "type": "string"
+        },
+        "parentSessionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "parentToolCallId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "parentTurnId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "agentId",
+        "agentType",
+        "childSessionId",
+        "parentSessionId"
+      ],
+      "type": "object"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "questions": {
+      "items": {
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "multiSelect": {
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "preview": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "value",
+                "label"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "header",
+          "options"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "schema": {},
+    "sensitive": {
+      "type": "boolean"
+    },
+    "toolCallId": {
+      "type": "string"
+    },
+    "toolName": {
+      "type": "string"
+    },
+    "traceId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "prompt",
+    "freeText"
+  ],
+  "type": "object"
+}

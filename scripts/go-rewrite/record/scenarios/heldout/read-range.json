@@ -1,0 +1,59 @@
+{
+  "id": "H-read-range",
+  "title": "read-range",
+  "model": {
+    "steps": [
+      {
+        "toolCalls": [
+          {
+            "id": "c1",
+            "name": "Read",
+            "args": {
+              "file_path": "$WS/big.txt",
+              "offset": 3,
+              "limit": 2
+            }
+          }
+        ]
+      },
+      {
+        "text": "Got lines."
+      }
+    ]
+  },
+  "files": {
+    "big.txt": "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n"
+  },
+  "script": [
+    {
+      "op": "waitReady"
+    },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "do it",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": {
+              "reasoningLevel": "none"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "subscribe",
+      "sessionFrom": "created",
+      "as": "sub"
+    },
+    {
+      "op": "waitTelemetry",
+      "kind": "turn.terminal"
+    }
+  ]
+}

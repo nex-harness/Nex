@@ -1,0 +1,9 @@
+{
+ "id": "H-write-without-read",
+ "title": "write-without-read",
+ "outFrames": 56,
+ "inFrames": 5,
+ "modelRequests": 2,
+ "exitCode": 0,
+ "normalizedOutSha256": "1148907f51a3d4adc537a74ef22dd3a568571b9ba81b35e98f668ec93a0aaff0"
+}

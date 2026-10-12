@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "newText": {
+      "type": "string"
+    },
+    "queueItemId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "queueItemId",
+    "newText"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,5 @@
+{
+  "id": "R03",
+  "transport": "in-process-queue-pair",
+  "note": "same codec as the WebSocket transport, without the 13-byte framing"
+}

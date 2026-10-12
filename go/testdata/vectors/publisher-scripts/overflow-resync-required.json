@@ -1,0 +1,74 @@
+{
+ "name": "overflow-resync-required",
+ "logEpoch": "epochepoch0",
+ "workflowRunDeltas": true,
+ "sessionId": "sess-vector",
+ "subscriberBufferMaxOps": 2,
+ "steps": [
+  {
+   "seq": 1,
+   "revision": 1,
+   "deltas": [
+    {
+     "op": "row.appended",
+     "row": {
+      "rowId": 1,
+      "kind": "assistantText",
+      "text": "a"
+     }
+    },
+    {
+     "op": "row.appended",
+     "row": {
+      "rowId": 2,
+      "kind": "assistantText",
+      "text": "b"
+     }
+    },
+    {
+     "op": "row.appended",
+     "row": {
+      "rowId": 3,
+      "kind": "assistantText",
+      "text": "c"
+     }
+    }
+   ]
+  },
+  {
+   "seq": 2,
+   "revision": 2,
+   "deltas": [
+    {
+     "op": "row.appended",
+     "row": {
+      "rowId": 4,
+      "kind": "assistantText",
+      "text": "d"
+     }
+    }
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "op": "subscribe",
+   "connectionId": "a",
+   "deliveryProfile": "continuous",
+   "mode": "snapshot",
+   "sub": 0
+  },
+  {
+   "op": "ingest",
+   "step": 0
+  },
+  {
+   "op": "ingest",
+   "step": 1
+  },
+  {
+   "op": "flush",
+   "sub": 0
+  }
+ ]
+}

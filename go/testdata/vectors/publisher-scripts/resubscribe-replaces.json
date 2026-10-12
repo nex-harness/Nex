@@ -1,0 +1,68 @@
+{
+ "name": "resubscribe-replaces",
+ "logEpoch": "epochepoch0",
+ "workflowRunDeltas": true,
+ "sessionId": "sess-vector",
+ "steps": [
+  {
+   "seq": 1,
+   "revision": 1,
+   "deltas": [
+    {
+     "op": "row.appended",
+     "row": {
+      "rowId": 1,
+      "kind": "assistantText",
+      "text": "a"
+     }
+    }
+   ]
+  },
+  {
+   "seq": 2,
+   "revision": 2,
+   "deltas": [
+    {
+     "op": "row.appended",
+     "row": {
+      "rowId": 2,
+      "kind": "assistantText",
+      "text": "b"
+     }
+    }
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "op": "subscribe",
+   "connectionId": "a",
+   "deliveryProfile": "continuous",
+   "mode": "snapshot",
+   "sub": 0
+  },
+  {
+   "op": "ingest",
+   "step": 0
+  },
+  {
+   "op": "resubscribe",
+   "connectionId": "a",
+   "deliveryProfile": "continuous",
+   "mode": "snapshot",
+   "sub": 1
+  },
+  {
+   "op": "ingest",
+   "step": 1
+  },
+  {
+   "op": "flush",
+   "sub": 0
+  },
+  {
+   "op": "flush",
+   "sub": 1
+  }
+ ]
+}

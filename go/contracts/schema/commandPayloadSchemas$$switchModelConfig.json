@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "model": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "string"
+    },
+    "thought": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "provider",
+    "model",
+    "thought"
+  ],
+  "type": "object"
+}

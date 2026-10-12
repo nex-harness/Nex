@@ -1,0 +1,71 @@
+{
+  "id": "S04",
+  "title": "model creates a file with Write, edits it with Edit, answers",
+  "model": {
+    "steps": [
+      {
+        "toolCalls": [
+          {
+            "id": "call_w1",
+            "name": "Write",
+            "args": {
+              "file_path": "$WS/notes.txt",
+              "content": "alpha\nbeta\ngamma\n"
+            }
+          }
+        ]
+      },
+      {
+        "toolCalls": [
+          {
+            "id": "call_e1",
+            "name": "Edit",
+            "args": {
+              "file_path": "$WS/notes.txt",
+              "old_string": "beta",
+              "new_string": "BETA"
+            }
+          }
+        ]
+      },
+      {
+        "text": "Done: notes.txt created and edited."
+      }
+    ]
+  },
+  "script": [
+    {
+      "op": "waitReady"
+    },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "Create notes.txt then edit it",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": {
+              "reasoningLevel": "none"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "subscribe",
+      "sessionFrom": "created",
+      "as": "sub"
+    },
+    {
+      "op": "waitTelemetry",
+      "kind": "turn.terminal"
+    }
+  ],
+  "host": {
+    "permission": "allow_once"
+  }
+}

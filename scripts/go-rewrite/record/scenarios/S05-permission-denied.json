@@ -1,0 +1,58 @@
+{
+  "id": "S05",
+  "title": "permission denied: Write is refused and the model is told so",
+  "model": {
+    "steps": [
+      {
+        "toolCalls": [
+          {
+            "id": "call_w1",
+            "name": "Write",
+            "args": {
+              "file_path": "$WS/notes.txt",
+              "content": "alpha\nbeta\ngamma\n"
+            }
+          }
+        ]
+      },
+      {
+        "text": "The write was denied, so I stopped."
+      }
+    ]
+  },
+  "script": [
+    {
+      "op": "waitReady"
+    },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "Create notes.txt then edit it",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": {
+              "reasoningLevel": "none"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "subscribe",
+      "sessionFrom": "created",
+      "as": "sub"
+    },
+    {
+      "op": "waitTelemetry",
+      "kind": "turn.terminal"
+    }
+  ],
+  "host": {
+    "permission": "deny"
+  }
+}

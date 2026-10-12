@@ -1,0 +1,61 @@
+{
+  "id": "H-write-without-read",
+  "title": "write-without-read",
+  "model": {
+    "steps": [
+      {
+        "toolCalls": [
+          {
+            "id": "c1",
+            "name": "Write",
+            "args": {
+              "file_path": "$WS/exists.txt",
+              "content": "new\n"
+            }
+          }
+        ]
+      },
+      {
+        "text": "blocked"
+      }
+    ]
+  },
+  "files": {
+    "exists.txt": "old\n"
+  },
+  "script": [
+    {
+      "op": "waitReady"
+    },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "do it",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": {
+              "reasoningLevel": "none"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "subscribe",
+      "sessionFrom": "created",
+      "as": "sub"
+    },
+    {
+      "op": "waitTelemetry",
+      "kind": "turn.terminal"
+    }
+  ],
+  "host": {
+    "permission": "allow_once"
+  }
+}

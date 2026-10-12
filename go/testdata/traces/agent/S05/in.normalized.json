@@ -1,0 +1,68 @@
+[
+ {
+  "id": 1,
+  "method": "v4/command",
+  "params": {
+   "commandId": "cmd-0001",
+   "clientId": "rec-client",
+   "sessionId": null,
+   "type": "createSession",
+   "payload": {
+    "workspaceId": "<WS>",
+    "firstInput": {
+     "text": "Create notes.txt then edit it",
+     "modelSelection": {
+      "providerId": "mock",
+      "modelId": "mock-model",
+      "options": {
+       "reasoningLevel": "none"
+      }
+     }
+    }
+   },
+   "issuedAt": "<time>"
+  }
+ },
+ {
+  "id": "server-1",
+  "result": {
+   "nativeSearchEnhancementsEnabled": false,
+   "memoryEnabled": false,
+   "toolSearchEnabled": false,
+   "codemodeEnabled": false,
+   "askUserQuestionAutoResolutionEnabled": true,
+   "modelContextBudgetStrategy": "preflight-v1"
+  }
+ },
+ {
+  "id": "server-2",
+  "result": {
+   "nativeSearchEnhancementsEnabled": false,
+   "memoryEnabled": false,
+   "toolSearchEnabled": false,
+   "codemodeEnabled": false,
+   "askUserQuestionAutoResolutionEnabled": true,
+   "modelContextBudgetStrategy": "preflight-v1"
+  }
+ },
+ {
+  "id": 2,
+  "method": "v4/conversation/subscribe",
+  "params": {
+   "topic": "conversation/<id1>",
+   "connectionId": "rec-conn-1",
+   "clientMode": "desktop-continuous",
+   "workspace": {
+    "workspacePath": "<WS>",
+    "workspaceKey": "<WS>"
+   }
+  }
+ },
+ {
+  "id": "server-3",
+  "result": {
+   "decision": "deny",
+   "reason": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+  }
+ }
+]

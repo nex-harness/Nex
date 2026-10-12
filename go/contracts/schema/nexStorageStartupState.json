@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "attemptId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "completed": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "databaseId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "databaseKind": {
+      "enum": [
+        "session",
+        "tasks-index"
+      ],
+      "type": "string"
+    },
+    "elapsedMs": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "errorCode": {
+      "enum": [
+        "storage_full",
+        "permission_denied",
+        "io_error",
+        "out_of_memory",
+        "corrupt",
+        "open_failed",
+        "lock_timeout",
+        "checksum_mismatch",
+        "sql_failed",
+        "startup_status_timeout",
+        "transport_closed",
+        "unsupported_runtime"
+      ],
+      "type": "string"
+    },
+    "migration": {
+      "additionalProperties": false,
+      "properties": {
+        "committedCount": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "executedCount": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "none",
+            "initialize",
+            "upgrade"
+          ],
+          "type": "string"
+        },
+        "lastAppliedMigrationId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z_0-9-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "executedCount",
+        "committedCount"
+      ],
+      "type": "object"
+    },
+    "migrationId": {
+      "maxLength": 128,
+      "type": "string"
+    },
+    "phase": {
+      "enum": [
+        "checking",
+        "waiting_for_lock",
+        "migrating",
+        "committing",
+        "ready",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "type": "number"
+    },
+    "sequence": {
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+    },
+    "sqliteCode": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "systemCode": {
+      "maxLength": 64,
+      "type": "string"
+    },
+    "total": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "attemptId",
+    "sequence",
+    "databaseId",
+    "databaseKind",
+    "phase",
+    "elapsedMs"
+  ],
+  "type": "object"
+}

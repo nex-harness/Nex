@@ -1,0 +1,10 @@
+{
+  "id": "S01",
+  "title": "agent startup: storage migrations, runtime/capabilities, unknown method",
+  "model": { "steps": [{ "text": "unused" }] },
+  "script": [
+    { "op": "waitReady" },
+    { "op": "request", "method": "runtime/capabilities", "params": {}, "as": "caps" },
+    { "op": "request", "method": "nope/not-a-method", "params": {}, "as": "unknown" }
+  ]
+}

@@ -1,0 +1,785 @@
+{
+ "generatedBy": "gen-eventseq-vectors.mts",
+ "scenarios": [
+  {
+   "scenario": "S02",
+   "events": [
+    {
+     "seq": 1,
+     "type": "session_title_updated"
+    },
+    {
+     "seq": 2,
+     "type": "turn_started"
+    },
+    {
+     "seq": 3,
+     "type": "session_input_promoted"
+    },
+    {
+     "seq": 4,
+     "type": "model_request"
+    },
+    {
+     "seq": 5,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 6,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 7,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 8,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 9,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 10,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 11,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 12,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 13,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 14,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 15,
+     "type": "model_complete"
+    },
+    {
+     "seq": 16,
+     "type": "turn_complete"
+    }
+   ],
+   "normalizedOutSha256": "5cadb49df4dd021beb1dc8070c559ceb0c616cc2e6024da58f7bdda3e66f235d",
+   "transientTypes": [
+    "model_streaming",
+    "tool_call_progress",
+    "streaming_tool_ledger_updated",
+    "model_network_status"
+   ]
+  },
+  {
+   "scenario": "S03",
+   "events": [
+    {
+     "seq": 1,
+     "type": "session_title_updated"
+    },
+    {
+     "seq": 2,
+     "type": "turn_started"
+    },
+    {
+     "seq": 3,
+     "type": "session_input_promoted"
+    },
+    {
+     "seq": 4,
+     "type": "model_request"
+    },
+    {
+     "seq": 5,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 6,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 7,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 8,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 9,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 10,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 11,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 12,
+     "type": "tool_call_scheduled"
+    },
+    {
+     "seq": 13,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 14,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 15,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 16,
+     "type": "tool_call_started"
+    },
+    {
+     "seq": 17,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 18,
+     "type": "model_complete"
+    },
+    {
+     "seq": 19,
+     "type": "tool_call_result"
+    },
+    {
+     "seq": 20,
+     "type": "tool_batch_complete"
+    },
+    {
+     "seq": 21,
+     "type": "stream_recovery_anchor_created"
+    },
+    {
+     "seq": 22,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 23,
+     "type": "model_request"
+    },
+    {
+     "seq": 24,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 25,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 26,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 27,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 28,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 29,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 30,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 31,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 32,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 33,
+     "type": "model_complete"
+    },
+    {
+     "seq": 34,
+     "type": "turn_complete"
+    },
+    {
+     "seq": 35,
+     "type": "model_request"
+    },
+    {
+     "seq": 36,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 37,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 38,
+     "type": "model_complete"
+    },
+    {
+     "seq": 39,
+     "type": "session_title_updated"
+    }
+   ],
+   "normalizedOutSha256": "c647db08b79a0db297ddcc55938817624f1448b681767d04447e9af4717b1a67",
+   "transientTypes": [
+    "model_streaming",
+    "tool_call_progress",
+    "streaming_tool_ledger_updated",
+    "model_network_status"
+   ]
+  },
+  {
+   "scenario": "S04",
+   "events": [
+    {
+     "seq": 1,
+     "type": "session_title_updated"
+    },
+    {
+     "seq": 2,
+     "type": "turn_started"
+    },
+    {
+     "seq": 3,
+     "type": "session_input_promoted"
+    },
+    {
+     "seq": 4,
+     "type": "model_request"
+    },
+    {
+     "seq": 5,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 6,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 7,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 8,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 9,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 10,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 11,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 12,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 13,
+     "type": "model_complete"
+    },
+    {
+     "seq": 14,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 15,
+     "type": "tool_call_scheduled"
+    },
+    {
+     "seq": 16,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 17,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 18,
+     "type": "permission_requested"
+    },
+    {
+     "seq": 19,
+     "type": "permission_resolved"
+    },
+    {
+     "seq": 20,
+     "type": "tool_call_started"
+    },
+    {
+     "seq": 21,
+     "type": "tool_call_result"
+    },
+    {
+     "seq": 22,
+     "type": "tool_batch_complete"
+    },
+    {
+     "seq": 23,
+     "type": "checkpoint_created"
+    },
+    {
+     "seq": 24,
+     "type": "stream_recovery_anchor_created"
+    },
+    {
+     "seq": 25,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 26,
+     "type": "model_request"
+    },
+    {
+     "seq": 27,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 28,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 29,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 30,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 31,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 32,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 33,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 34,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 35,
+     "type": "model_complete"
+    },
+    {
+     "seq": 36,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 37,
+     "type": "tool_call_scheduled"
+    },
+    {
+     "seq": 38,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 39,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 40,
+     "type": "permission_requested"
+    },
+    {
+     "seq": 41,
+     "type": "permission_resolved"
+    },
+    {
+     "seq": 42,
+     "type": "tool_call_started"
+    },
+    {
+     "seq": 43,
+     "type": "tool_call_result"
+    },
+    {
+     "seq": 44,
+     "type": "tool_batch_complete"
+    },
+    {
+     "seq": 45,
+     "type": "checkpoint_created"
+    },
+    {
+     "seq": 46,
+     "type": "stream_recovery_anchor_created"
+    },
+    {
+     "seq": 47,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 48,
+     "type": "model_request"
+    },
+    {
+     "seq": 49,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 50,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 51,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 52,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 53,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 54,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 55,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 56,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 57,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 58,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 59,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 60,
+     "type": "model_complete"
+    },
+    {
+     "seq": 61,
+     "type": "turn_complete"
+    },
+    {
+     "seq": 62,
+     "type": "model_request"
+    },
+    {
+     "seq": 63,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 64,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 65,
+     "type": "model_complete"
+    },
+    {
+     "seq": 66,
+     "type": "session_title_updated"
+    }
+   ],
+   "normalizedOutSha256": "ea8402d82b36f3cf5066004547298c88a5b569bc25f8412b81b7f4cabebfaa7d",
+   "transientTypes": [
+    "model_streaming",
+    "tool_call_progress",
+    "streaming_tool_ledger_updated",
+    "model_network_status"
+   ]
+  },
+  {
+   "scenario": "S05",
+   "events": [
+    {
+     "seq": 1,
+     "type": "session_title_updated"
+    },
+    {
+     "seq": 2,
+     "type": "turn_started"
+    },
+    {
+     "seq": 3,
+     "type": "session_input_promoted"
+    },
+    {
+     "seq": 4,
+     "type": "model_request"
+    },
+    {
+     "seq": 5,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 6,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 7,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 8,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 9,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 10,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 11,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 12,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 13,
+     "type": "model_complete"
+    },
+    {
+     "seq": 14,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 15,
+     "type": "tool_call_scheduled"
+    },
+    {
+     "seq": 16,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 17,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 18,
+     "type": "permission_requested"
+    },
+    {
+     "seq": 19,
+     "type": "permission_resolved"
+    },
+    {
+     "seq": 20,
+     "type": "tool_batch_complete"
+    },
+    {
+     "seq": 21,
+     "type": "stream_recovery_anchor_created"
+    },
+    {
+     "seq": 22,
+     "type": "streaming_tool_ledger_updated"
+    },
+    {
+     "seq": 23,
+     "type": "model_request"
+    },
+    {
+     "seq": 24,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 25,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 26,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 27,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 28,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 29,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 30,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 31,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 32,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 33,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 34,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 35,
+     "type": "model_complete"
+    },
+    {
+     "seq": 36,
+     "type": "turn_complete"
+    },
+    {
+     "seq": 37,
+     "type": "model_request"
+    },
+    {
+     "seq": 38,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 39,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 40,
+     "type": "model_complete"
+    },
+    {
+     "seq": 41,
+     "type": "session_title_updated"
+    }
+   ],
+   "normalizedOutSha256": "99c4afd2be20be3c8b7c2ec5077d8b4d6fcdf8d5de494a7f641556ea49d35720",
+   "transientTypes": [
+    "model_streaming",
+    "tool_call_progress",
+    "streaming_tool_ledger_updated",
+    "model_network_status"
+   ]
+  },
+  {
+   "scenario": "S13",
+   "events": [
+    {
+     "seq": 1,
+     "type": "session_title_updated"
+    },
+    {
+     "seq": 2,
+     "type": "turn_started"
+    },
+    {
+     "seq": 3,
+     "type": "session_input_promoted"
+    },
+    {
+     "seq": 4,
+     "type": "model_request"
+    },
+    {
+     "seq": 5,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 6,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 7,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 8,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 9,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 10,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 11,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 12,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 13,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 14,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 15,
+     "type": "model_streaming"
+    },
+    {
+     "seq": 16,
+     "type": "model_network_status"
+    },
+    {
+     "seq": 17,
+     "type": "model_complete"
+    },
+    {
+     "seq": 18,
+     "type": "turn_complete"
+    }
+   ],
+   "normalizedOutSha256": "6d609b1ed1119cf00ebe0cdbc80ee0004ec67f96f3b1e70f77d0ca53b37653ee",
+   "transientTypes": [
+    "model_streaming",
+    "tool_call_progress",
+    "streaming_tool_ledger_updated",
+    "model_network_status"
+   ]
+  }
+ ]
+}

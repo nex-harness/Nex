@@ -1,0 +1,9 @@
+{
+ "id": "H-unicode-text",
+ "title": "unicode-text",
+ "outFrames": 50,
+ "inFrames": 4,
+ "modelRequests": 2,
+ "exitCode": 0,
+ "normalizedOutSha256": "c4d1b3093e0270bf4efb30873a6481d54c49c8ea34b6fd50b710b80702836440"
+}

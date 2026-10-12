@@ -1,0 +1,65 @@
+{
+  "id": "H-read-two-files",
+  "title": "read-two-files",
+  "model": {
+    "steps": [
+      {
+        "toolCalls": [
+          {
+            "id": "c1",
+            "name": "Read",
+            "args": {
+              "file_path": "$WS/a.txt"
+            }
+          },
+          {
+            "id": "c2",
+            "name": "Read",
+            "args": {
+              "file_path": "$WS/b.txt"
+            }
+          }
+        ]
+      },
+      {
+        "text": "Read both."
+      }
+    ]
+  },
+  "files": {
+    "a.txt": "A\n",
+    "b.txt": "B\n"
+  },
+  "script": [
+    {
+      "op": "waitReady"
+    },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "do it",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": {
+              "reasoningLevel": "none"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "subscribe",
+      "sessionFrom": "created",
+      "as": "sub"
+    },
+    {
+      "op": "waitTelemetry",
+      "kind": "turn.terminal"
+    }
+  ]
+}

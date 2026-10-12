@@ -1,0 +1,49 @@
+{
+  "id": "H-500-then-ok",
+  "title": "500-then-ok",
+  "model": {
+    "steps": [
+      {
+        "error": {
+          "status": 500
+        }
+      },
+      {
+        "text": "after 500"
+      }
+    ]
+  },
+  "files": {},
+  "script": [
+    {
+      "op": "waitReady"
+    },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "do it",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": {
+              "reasoningLevel": "none"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "subscribe",
+      "sessionFrom": "created",
+      "as": "sub"
+    },
+    {
+      "op": "waitTelemetry",
+      "kind": "turn.terminal"
+    }
+  ]
+}

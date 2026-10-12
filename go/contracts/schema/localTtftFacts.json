@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "admittedAt": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "cliVersion": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "clockInvalid": {
+      "type": "boolean"
+    },
+    "commandId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "details": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "logicalCallId": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "completed",
+              "failed",
+              "cancelled",
+              "first_output"
+            ],
+            "type": "string"
+          },
+          "requestId": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "response",
+              "preparation"
+            ],
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "renderer",
+              "cli"
+            ],
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "context",
+              "hooks",
+              "persistence",
+              "compaction",
+              "mcp",
+              "tools",
+              "request_assembly",
+              "attempt",
+              "retry_wait",
+              "user_confirmation"
+            ],
+            "type": "string"
+          },
+          "start": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "stage",
+          "start",
+          "source"
+        ],
+        "type": "object"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "excluded": {
+      "enum": [
+        "busy",
+        "retry",
+        "unsupported",
+        "failed",
+        "capacity"
+      ],
+      "type": "string"
+    },
+    "executionAt": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "instanceId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "logicalCallId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "model": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "observationId": {
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+      "type": "string"
+    },
+    "outputAt": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "outputKind": {
+      "enum": [
+        "text",
+        "reasoning",
+        "tool"
+      ],
+      "type": "string"
+    },
+    "productTurnId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "provider": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "queryId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "receivedAt": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "requestAt": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "requestId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "revision": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "sendMode": {
+      "enum": [
+        "idle",
+        "queued",
+        "guided"
+      ],
+      "type": "string"
+    },
+    "sessionId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "terminal": {
+      "enum": [
+        "completed",
+        "failed",
+        "cancelled",
+        "rejected",
+        "interrupted"
+      ],
+      "type": "string"
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "turnId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "type": "number"
+    }
+  },
+  "required": [
+    "version",
+    "observationId",
+    "instanceId",
+    "commandId",
+    "receivedAt"
+  ],
+  "type": "object"
+}

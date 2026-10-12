@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "actions": {
+      "properties": {
+        "canEdit": {
+          "const": true,
+          "type": "boolean"
+        },
+        "canFork": {
+          "const": true,
+          "type": "boolean"
+        },
+        "canRetry": {
+          "const": true,
+          "type": "boolean"
+        },
+        "canRewindFiles": {
+          "const": true,
+          "type": "boolean"
+        },
+        "editDisposition": {
+          "enum": [
+            "rewind",
+            "fork"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "assistantResponseId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "number"
+    },
+    "createdAtSeq": {
+      "type": "number"
+    },
+    "durationMs": {
+      "type": "number"
+    },
+    "entityId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "kind": {
+      "const": "reasoning",
+      "type": "string"
+    },
+    "productTurnId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "rowId": {
+      "type": "number"
+    },
+    "state": {
+      "enum": [
+        "streaming",
+        "complete",
+        "interrupted"
+      ],
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "visibility": {
+      "const": "visible",
+      "type": "string"
+    }
+  },
+  "required": [
+    "rowId",
+    "turnId",
+    "createdAt",
+    "createdAtSeq",
+    "kind",
+    "text",
+    "state"
+  ],
+  "type": "object"
+}

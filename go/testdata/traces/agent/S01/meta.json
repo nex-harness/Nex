@@ -1,0 +1,9 @@
+{
+ "id": "S01",
+ "title": "agent startup: storage migrations, runtime/capabilities, unknown method",
+ "outFrames": 29,
+ "inFrames": 2,
+ "modelRequests": 0,
+ "exitCode": 0,
+ "normalizedOutSha256": "9e23ebc9c50ccab0e68bbd2c7a080927749b6669b4ffd5c36d824c428ee07182"
+}

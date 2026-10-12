@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "bundleDigest": {
+      "type": "string"
+    },
+    "pendingCount": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "workspaceIdentity": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "pendingCount",
+    "bundleDigest"
+  ],
+  "type": "object"
+}

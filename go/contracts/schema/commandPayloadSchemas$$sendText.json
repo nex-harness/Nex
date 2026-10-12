@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "attachments": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "type": "number"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "previewRef": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "fileName",
+          "mime",
+          "bytes"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "automationId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "botDeliveryTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "botId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "chatType": {
+          "enum": [
+            "private",
+            "group"
+          ],
+          "type": "string"
+        },
+        "provider": {
+          "enum": [
+            "feishu",
+            "lark",
+            "weixin"
+          ],
+          "type": "string"
+        },
+        "providerUserId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "botId",
+        "providerUserId",
+        "chatType"
+      ],
+      "type": "object"
+    },
+    "browserAmbientContext": {
+      "additionalProperties": false,
+      "properties": {
+        "currentUrl": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "tabCount": {
+          "exclusiveMinimum": 0,
+          "maximum": 100,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tabCount"
+      ],
+      "type": "object"
+    },
+    "context_refs": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "context_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "const": "shared_context_import",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "context_id"
+        ],
+        "type": "object"
+      },
+      "maxItems": 1,
+      "type": "array"
+    },
+    "expectedHeldQueueItemIds": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "heldQueueDisposition": {
+      "enum": [
+        "clearQueueAndSend",
+        "keepQueueAndSend"
+      ],
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "build",
+        "edit",
+        "plan",
+        "yolo"
+      ],
+      "type": "string"
+    },
+    "modelExecution": {
+      "additionalProperties": false,
+      "properties": {
+        "memoryExtraction": {
+          "const": "skip",
+          "type": "string"
+        },
+        "requestAuth": {
+          "additionalProperties": false,
+          "properties": {
+            "apiKey": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "headers": {
+              "additionalProperties": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "propertyNames": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "selectionScope": {
+          "const": "execution",
+          "type": "string"
+        },
+        "subagents": {
+          "additionalProperties": false,
+          "properties": {
+            "background": {
+              "const": "deny",
+              "type": "string"
+            },
+            "foregroundModel": {
+              "const": "submission",
+              "type": "string"
+            }
+          },
+          "required": [
+            "foregroundModel",
+            "background"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "selectionScope"
+      ],
+      "type": "object"
+    },
+    "modelSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "modelId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "options": {
+          "additionalProperties": false,
+          "properties": {
+            "reasoningLevel": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "providerId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerId",
+        "modelId"
+      ],
+      "type": "object"
+    },
+    "offPeakRunType": {
+      "enum": [
+        "init",
+        "resume"
+      ],
+      "type": "string"
+    },
+    "offPeakTaskId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "planEnabled": {
+      "type": "boolean"
+    },
+    "requestedDelivery": {
+      "enum": [
+        "startNow",
+        "queue",
+        "guide"
+      ],
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "toolDisallowlist": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "type": "object"
+}

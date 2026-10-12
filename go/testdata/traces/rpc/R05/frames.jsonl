@@ -1,0 +1,3 @@
+{"direction":"server-to-client","hex":"040106c80100","decoded":{"header":[200],"body":{"__undefined":true}}}
+{"direction":"client-to-server","hex":"040406640600010c756e7265676973746572656401046e6f706500","decoded":{"header":[100,0,"unregistered","nope"],"body":{"__undefined":true}}}
+{"direction":"server-to-client","hex":"040206ca01060005587b226e616d65223a22556e6b6e6f776e206368616e6e656c222c226d657373616765223a224368616e6e656c206e616d652027756e72656769737465726564272074696d6564206f7574206166746572203330306d73227d","decoded":{"header":[202,0],"body":{"name":"Unknown channel","message":"Channel name 'unregistered' timed out after 300ms"}}}

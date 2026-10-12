@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "assistant",
+    "tool",
+    "subagent",
+    "compact",
+    "goalVerifier",
+    "goalContinuation",
+    "turnSteer",
+    "mixed",
+    "unknown"
+  ],
+  "type": "string"
+}

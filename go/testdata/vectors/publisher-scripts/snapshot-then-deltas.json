@@ -1,0 +1,39 @@
+{
+ "name": "snapshot-then-deltas",
+ "logEpoch": "epochepoch0",
+ "workflowRunDeltas": true,
+ "sessionId": "sess-vector",
+ "steps": [
+  {
+   "seq": 1,
+   "revision": 1,
+   "deltas": [
+    {
+     "op": "row.appended",
+     "row": {
+      "rowId": 1,
+      "kind": "assistantText",
+      "text": "hi"
+     }
+    }
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "op": "subscribe",
+   "connectionId": "c1",
+   "deliveryProfile": "continuous",
+   "mode": "snapshot",
+   "sub": 0
+  },
+  {
+   "op": "ingest",
+   "step": 0
+  },
+  {
+   "op": "flush",
+   "sub": 0
+  }
+ ]
+}

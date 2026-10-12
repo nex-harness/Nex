@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "end": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "logicalCallId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "outcome": {
+      "enum": [
+        "completed",
+        "failed",
+        "cancelled",
+        "first_output"
+      ],
+      "type": "string"
+    },
+    "requestId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "role": {
+      "enum": [
+        "response",
+        "preparation"
+      ],
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "renderer",
+        "cli"
+      ],
+      "type": "string"
+    },
+    "stage": {
+      "enum": [
+        "context",
+        "hooks",
+        "persistence",
+        "compaction",
+        "mcp",
+        "tools",
+        "request_assembly",
+        "attempt",
+        "retry_wait",
+        "user_confirmation"
+      ],
+      "type": "string"
+    },
+    "start": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [
+    "id",
+    "stage",
+    "start",
+    "source"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "properties": {
+        "allowed": {
+          "const": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "allowed"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "allowed": {
+          "const": false,
+          "type": "boolean"
+        },
+        "reasonCode": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "allowed",
+        "reasonCode"
+      ],
+      "type": "object"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "logEpoch": {
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "snapshot",
+        "resume"
+      ],
+      "type": "string"
+    },
+    "subscriptionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "subscriptionId",
+    "mode",
+    "logEpoch"
+  ],
+  "type": "object"
+}

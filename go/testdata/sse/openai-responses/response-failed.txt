@@ -1,0 +1,8 @@
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"id":"msg_1","type":"message","status":"in_progress","role":"assistant","content":[]}}
+
+event: response.failed
+data: {"type":"response.failed","sequence_number":2,"response":{"id":"resp_mock","object":"response","created_at":1700000000,"status":"failed","model":"deepseek-flash","output":[],"error":{"code":"rate_limit_exceeded","message":"slow down"},"incomplete_details":null,"usage":null}}
+
+data: [DONE]
+

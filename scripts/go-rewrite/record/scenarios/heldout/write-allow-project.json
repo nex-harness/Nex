@@ -1,0 +1,59 @@
+{
+  "id": "H-write-allow-project",
+  "title": "write-allow-project",
+  "model": {
+    "steps": [
+      {
+        "toolCalls": [
+          {
+            "id": "c1",
+            "name": "Write",
+            "args": {
+              "file_path": "$WS/p.txt",
+              "content": "x\n"
+            }
+          }
+        ]
+      },
+      {
+        "text": "ok"
+      }
+    ]
+  },
+  "files": {},
+  "script": [
+    {
+      "op": "waitReady"
+    },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "do it",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": {
+              "reasoningLevel": "none"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "subscribe",
+      "sessionFrom": "created",
+      "as": "sub"
+    },
+    {
+      "op": "waitTelemetry",
+      "kind": "turn.terminal"
+    }
+  ],
+  "host": {
+    "permission": "allow_project"
+  }
+}

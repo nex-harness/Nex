@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "eventId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "from": {
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model"
+      ],
+      "type": "object"
+    },
+    "origin": {
+      "const": "registryFallback",
+      "type": "string"
+    },
+    "to": {
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "eventId",
+    "origin",
+    "from",
+    "to"
+  ],
+  "type": "object"
+}

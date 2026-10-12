@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "blockReason": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "didExecute": {
+      "type": "boolean"
+    },
+    "displayName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "durationMs": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "endedAt": {
+      "type": "number"
+    },
+    "hookIndex": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "hookRunId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "outcome": {
+      "enum": [
+        "success",
+        "blocked",
+        "failed",
+        "cancelled",
+        "timed_out"
+      ],
+      "type": "string"
+    },
+    "pluginName": {
+      "type": "string"
+    },
+    "sourceKind": {
+      "enum": [
+        "user",
+        "plugin",
+        "project"
+      ],
+      "type": "string"
+    },
+    "startedAt": {
+      "type": "number"
+    },
+    "state": {
+      "enum": [
+        "running",
+        "completed",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "toolName": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "hookRunId",
+    "hookIndex",
+    "didExecute",
+    "state",
+    "startedAt",
+    "displayName",
+    "sourceKind"
+  ],
+  "type": "object"
+}

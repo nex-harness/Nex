@@ -1,0 +1,9 @@
+{
+ "id": "S04",
+ "title": "model creates a file with Write, edits it with Edit, answers",
+ "outFrames": 75,
+ "inFrames": 6,
+ "modelRequests": 4,
+ "exitCode": 0,
+ "normalizedOutSha256": "ea8402d82b36f3cf5066004547298c88a5b569bc25f8412b81b7f4cabebfaa7d"
+}

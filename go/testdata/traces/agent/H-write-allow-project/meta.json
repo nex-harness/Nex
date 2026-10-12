@@ -1,0 +1,9 @@
+{
+ "id": "H-write-allow-project",
+ "title": "write-allow-project",
+ "outFrames": 56,
+ "inFrames": 5,
+ "modelRequests": 2,
+ "exitCode": 0,
+ "normalizedOutSha256": "db9006bc78f165d9598b248691109e7d323e99b59f04e023a5600f82a4652fcc"
+}

@@ -1,0 +1,9 @@
+{
+ "id": "S13",
+ "title": "model returns HTTP 429 then succeeds (retry classification)",
+ "outFrames": 49,
+ "inFrames": 4,
+ "modelRequests": 2,
+ "exitCode": 0,
+ "normalizedOutSha256": "6d609b1ed1119cf00ebe0cdbc80ee0004ec67f96f3b1e70f77d0ca53b37653ee"
+}

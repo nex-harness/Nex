@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "anchorRowId": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "blocked": {
+      "type": "boolean"
+    },
+    "cancellable": {
+      "type": "boolean"
+    },
+    "childSessionId": {
+      "type": "string"
+    },
+    "endedAt": {
+      "type": "number"
+    },
+    "kind": {
+      "enum": [
+        "bash",
+        "subagent",
+        "workflow"
+      ],
+      "type": "string"
+    },
+    "startedAt": {
+      "type": "number"
+    },
+    "status": {
+      "enum": [
+        "running",
+        "resultPending",
+        "failed",
+        "cancelled"
+      ],
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "workId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "workId",
+    "kind",
+    "title",
+    "status",
+    "startedAt",
+    "anchorRowId"
+  ],
+  "type": "object"
+}

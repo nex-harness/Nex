@@ -1,0 +1,62 @@
+{
+ "name": "two-subscribers-profiles",
+ "logEpoch": "epochepoch0",
+ "workflowRunDeltas": true,
+ "sessionId": "sess-vector",
+ "steps": [
+  {
+   "seq": 1,
+   "revision": 1,
+   "deltas": [
+    {
+     "op": "row.appended",
+     "row": {
+      "rowId": 1,
+      "kind": "assistantText",
+      "text": ""
+     }
+    },
+    {
+     "op": "row.delta",
+     "rowId": 1,
+     "path": "text",
+     "append": "hello"
+    },
+    {
+     "op": "row.delta",
+     "rowId": 1,
+     "path": "inputText",
+     "append": "tool"
+    }
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "op": "subscribe",
+   "connectionId": "a",
+   "deliveryProfile": "continuous",
+   "mode": "snapshot",
+   "sub": 0
+  },
+  {
+   "op": "subscribe",
+   "connectionId": "b",
+   "deliveryProfile": "replayable",
+   "mode": "snapshot",
+   "sub": 1
+  },
+  {
+   "op": "ingest",
+   "step": 0
+  },
+  {
+   "op": "flush",
+   "sub": 0
+  },
+  {
+   "op": "flush",
+   "sub": 1
+  }
+ ]
+}

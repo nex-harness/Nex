@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "bundleDigest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "generation": {
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+    },
+    "interactionId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "remoteSessionId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "reviewFlowId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "reviewItemId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "runId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "sessionId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "taskId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "workspaceIdentity": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "sessionId",
+    "taskId",
+    "runId",
+    "workspaceIdentity",
+    "bundleDigest",
+    "reviewFlowId",
+    "generation",
+    "interactionId",
+    "reviewItemId",
+    "enabled"
+  ],
+  "type": "object"
+}

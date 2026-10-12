@@ -1,0 +1,3927 @@
+{
+  "generatedBy": "scripts/go-rewrite/gen-emitter-vectors.mts",
+  "note": "non-conversation frames: v4 telemetry facts + computer-use operation events, from the real normalizers",
+  "session": "sess_emit_fixture",
+  "scenarios": [
+    {
+      "id": "S02",
+      "factCount": 9,
+      "telemetry": [
+        {
+          "input": {
+            "id": "ev_001",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s02",
+            "type": "turn_started",
+            "timestampMs": 1700000000002,
+            "traceId": "tr_001",
+            "sequenceNumber": 2,
+            "payload": {
+              "turnNumber": 1,
+              "input": "Say hello",
+              "messageId": "msg_turn_s02",
+              "inputId": "cmd-0001",
+              "foregroundExecutionId": "runtime_command_1",
+              "intent": {
+                "sourceCommandId": "cmd-0001",
+                "clientId": "rec-client",
+                "provenance": {
+                  "sourceCommandId": "cmd-0001"
+                }
+              }
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_001",
+            "eventSeq": 2,
+            "occurredAt": 1700000000002,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s02",
+            "kind": "turn.started"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_002",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s02",
+            "type": "model_network_status",
+            "timestampMs": 1700000000005,
+            "traceId": "tr_002",
+            "sequenceNumber": 5,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.005Z",
+              "traceId": "tr_net",
+              "requestId": "req_s02_1",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_started"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_002",
+            "eventSeq": 5,
+            "occurredAt": 1700000000005,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s02",
+            "kind": "model.request.status",
+            "requestId": "req_s02_1",
+            "status": "model_request_started",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11
+          }
+        },
+        {
+          "input": {
+            "id": "ev_005",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s02",
+            "type": "model_streaming",
+            "timestampMs": 1700000000008,
+            "traceId": "tr_005",
+            "sequenceNumber": 8,
+            "payload": {
+              "assistantMessageId": "msg_assist_s02",
+              "delta": "Hello fr",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_005",
+            "eventSeq": 8,
+            "occurredAt": 1700000000008,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s02",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": true,
+            "assistantMessageId": "msg_assist_s02"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_006",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s02",
+            "type": "model_streaming",
+            "timestampMs": 1700000000009,
+            "traceId": "tr_006",
+            "sequenceNumber": 9,
+            "payload": {
+              "assistantMessageId": "msg_assist_s02",
+              "delta": "om the m",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_006",
+            "eventSeq": 9,
+            "occurredAt": 1700000000009,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s02",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s02"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_007",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s02",
+            "type": "model_streaming",
+            "timestampMs": 1700000000010,
+            "traceId": "tr_007",
+            "sequenceNumber": 10,
+            "payload": {
+              "assistantMessageId": "msg_assist_s02",
+              "delta": "ock mode",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_007",
+            "eventSeq": 10,
+            "occurredAt": 1700000000010,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s02",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s02"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_008",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s02",
+            "type": "model_streaming",
+            "timestampMs": 1700000000011,
+            "traceId": "tr_008",
+            "sequenceNumber": 11,
+            "payload": {
+              "assistantMessageId": "msg_assist_s02",
+              "delta": "l.",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_008",
+            "eventSeq": 11,
+            "occurredAt": 1700000000011,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s02",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 2,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s02"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_011",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s02",
+            "type": "model_network_status",
+            "timestampMs": 1700000000014,
+            "traceId": "tr_011",
+            "sequenceNumber": 14,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.014Z",
+              "traceId": "tr_net",
+              "requestId": "req_s02_1",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_completed",
+              "durationMs": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_011",
+            "eventSeq": 14,
+            "occurredAt": 1700000000014,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s02",
+            "kind": "model.request.status",
+            "requestId": "req_s02_1",
+            "status": "model_request_completed",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11,
+            "durationMs": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_012",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s02",
+            "type": "model_complete",
+            "timestampMs": 1700000000015,
+            "traceId": "tr_012",
+            "sequenceNumber": 15,
+            "payload": {
+              "content": "Hello from the mock model.",
+              "querySource": "main_turn",
+              "stopReason": "stop",
+              "usage": {
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "contextWindow": 100000,
+              "toolCallCount": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_012",
+            "eventSeq": 15,
+            "occurredAt": 1700000000015,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s02",
+            "kind": "usage.delta",
+            "requestId": "req_s02_1",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "inputTokens": 100,
+            "outputTokens": 20,
+            "totalTokens": 120,
+            "reasoningTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_013",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s02",
+            "type": "turn_complete",
+            "timestampMs": 1700000000016,
+            "traceId": "tr_013",
+            "sequenceNumber": 16,
+            "payload": {
+              "response": "Hello from the mock model.",
+              "tokenCount": 120,
+              "toolCallCount": 0,
+              "duration": 0,
+              "resultType": "success",
+              "historyRoundCount": 1,
+              "inputId": "cmd-0001"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_013",
+            "eventSeq": 16,
+            "occurredAt": 1700000000016,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s02",
+            "kind": "turn.terminal",
+            "status": "success",
+            "resultType": "success",
+            "durationMs": 0,
+            "tokenCount": 120,
+            "toolCallCount": 0
+          }
+        }
+      ],
+      "operations": [
+        {
+          "input": {
+            "id": "ev_001",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s02",
+            "type": "turn_started",
+            "timestampMs": 1700000000002,
+            "traceId": "tr_001",
+            "sequenceNumber": 2,
+            "payload": {
+              "turnNumber": 1,
+              "input": "Say hello",
+              "messageId": "msg_turn_s02",
+              "inputId": "cmd-0001",
+              "foregroundExecutionId": "runtime_command_1",
+              "intent": {
+                "sourceCommandId": "cmd-0001",
+                "clientId": "rec-client",
+                "provenance": {
+                  "sourceCommandId": "cmd-0001"
+                }
+              }
+            }
+          },
+          "event": {
+            "eventId": "ev_001",
+            "sequenceNumber": 2,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000002,
+            "kind": "turn-started",
+            "turnId": "msg_turn_s02"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_013",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s02",
+            "type": "turn_complete",
+            "timestampMs": 1700000000016,
+            "traceId": "tr_013",
+            "sequenceNumber": 16,
+            "payload": {
+              "response": "Hello from the mock model.",
+              "tokenCount": 120,
+              "toolCallCount": 0,
+              "duration": 0,
+              "resultType": "success",
+              "historyRoundCount": 1,
+              "inputId": "cmd-0001"
+            }
+          },
+          "event": {
+            "eventId": "ev_013",
+            "sequenceNumber": 16,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000016,
+            "kind": "turn-completed",
+            "turnId": "msg_turn_s02"
+          }
+        }
+      ]
+    },
+    {
+      "id": "S03",
+      "factCount": 16,
+      "telemetry": [
+        {
+          "input": {
+            "id": "ev_014",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "turn_started",
+            "timestampMs": 1700000000002,
+            "traceId": "tr_014",
+            "sequenceNumber": 2,
+            "payload": {
+              "turnNumber": 1,
+              "input": "Read hello.txt",
+              "messageId": "msg_turn_s03",
+              "inputId": "cmd-0001",
+              "foregroundExecutionId": "runtime_command_1"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_014",
+            "eventSeq": 2,
+            "occurredAt": 1700000000002,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "turn.started"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_015",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "model_network_status",
+            "timestampMs": 1700000000005,
+            "traceId": "tr_015",
+            "sequenceNumber": 5,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.005Z",
+              "traceId": "tr_net",
+              "requestId": "req_s03_1",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_started"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_015",
+            "eventSeq": 5,
+            "occurredAt": 1700000000005,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "model.request.status",
+            "requestId": "req_s03_1",
+            "status": "model_request_started",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11
+          }
+        },
+        {
+          "input": {
+            "id": "ev_023",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "tool_call_scheduled",
+            "timestampMs": 1700000000012,
+            "traceId": "tr_023",
+            "sequenceNumber": 12,
+            "payload": {
+              "toolCallId": "call_read_1",
+              "assistantMessageId": "msg_assist_s03a",
+              "toolName": "Read",
+              "input": {
+                "file_path": "/work/proj/hello.txt"
+              },
+              "parallelGroupIndex": 0,
+              "canRunParallel": false,
+              "schedule": {
+                "parallelGroups": [
+                  [
+                    "call_read_1"
+                  ]
+                ],
+                "executionOrder": [
+                  "call_read_1"
+                ]
+              }
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_023",
+            "eventSeq": 12,
+            "occurredAt": 1700000000012,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "tool.lifecycle",
+            "phase": "scheduled",
+            "toolCallId": "call_read_1",
+            "toolName": "Read"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_024",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "tool_call_started",
+            "timestampMs": 1700000000016,
+            "traceId": "tr_024",
+            "sequenceNumber": 16,
+            "payload": {
+              "toolCallId": "call_read_1",
+              "toolName": "Read",
+              "startedAt": "2023-11-14T22:13:20.016Z",
+              "readOnly": true
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_024",
+            "eventSeq": 16,
+            "occurredAt": 1700000000016,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "tool.lifecycle",
+            "phase": "started",
+            "toolCallId": "call_read_1",
+            "toolName": "Read"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_025",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "model_network_status",
+            "timestampMs": 1700000000017,
+            "traceId": "tr_025",
+            "sequenceNumber": 17,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.017Z",
+              "traceId": "tr_net",
+              "requestId": "req_s03_1",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_completed",
+              "durationMs": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_025",
+            "eventSeq": 17,
+            "occurredAt": 1700000000017,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "model.request.status",
+            "requestId": "req_s03_1",
+            "status": "model_request_completed",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11,
+            "durationMs": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_026",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "model_complete",
+            "timestampMs": 1700000000018,
+            "traceId": "tr_026",
+            "sequenceNumber": 18,
+            "payload": {
+              "content": "",
+              "querySource": "main_turn",
+              "stopReason": "stop",
+              "usage": {
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "contextWindow": 100000,
+              "toolCallCount": 1
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_026",
+            "eventSeq": 18,
+            "occurredAt": 1700000000018,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "usage.delta",
+            "requestId": "req_s03_1",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "inputTokens": 100,
+            "outputTokens": 20,
+            "totalTokens": 120,
+            "reasoningTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_027",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "tool_call_result",
+            "timestampMs": 1700000000019,
+            "traceId": "tr_027",
+            "sequenceNumber": 19,
+            "payload": {
+              "toolCallId": "call_read_1",
+              "result": {
+                "success": true,
+                "content": "1\thi there\n2\t",
+                "perf": {
+                  "totalMs": 0
+                }
+              },
+              "duration": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_027",
+            "eventSeq": 19,
+            "occurredAt": 1700000000019,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "tool.lifecycle",
+            "phase": "completed",
+            "toolCallId": "call_read_1",
+            "toolName": "Read",
+            "durationMs": 0,
+            "performance": {
+              "totalMs": 0
+            }
+          }
+        },
+        {
+          "input": {
+            "id": "ev_028",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "model_network_status",
+            "timestampMs": 1700000000024,
+            "traceId": "tr_028",
+            "sequenceNumber": 24,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.024Z",
+              "traceId": "tr_net",
+              "requestId": "req_s03_2",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_started"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_028",
+            "eventSeq": 24,
+            "occurredAt": 1700000000024,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "model.request.status",
+            "requestId": "req_s03_2",
+            "status": "model_request_started",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11
+          }
+        },
+        {
+          "input": {
+            "id": "ev_031",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "model_streaming",
+            "timestampMs": 1700000000027,
+            "traceId": "tr_031",
+            "sequenceNumber": 27,
+            "payload": {
+              "assistantMessageId": "msg_assist_s03b",
+              "delta": "The file",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_031",
+            "eventSeq": 27,
+            "occurredAt": 1700000000027,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": true,
+            "assistantMessageId": "msg_assist_s03b"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_032",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "model_streaming",
+            "timestampMs": 1700000000028,
+            "traceId": "tr_032",
+            "sequenceNumber": 28,
+            "payload": {
+              "assistantMessageId": "msg_assist_s03b",
+              "delta": " says: h",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_032",
+            "eventSeq": 28,
+            "occurredAt": 1700000000028,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s03b"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_033",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "model_streaming",
+            "timestampMs": 1700000000029,
+            "traceId": "tr_033",
+            "sequenceNumber": 29,
+            "payload": {
+              "assistantMessageId": "msg_assist_s03b",
+              "delta": "i there.",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_033",
+            "eventSeq": 29,
+            "occurredAt": 1700000000029,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s03b"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_036",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "model_network_status",
+            "timestampMs": 1700000000032,
+            "traceId": "tr_036",
+            "sequenceNumber": 32,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.032Z",
+              "traceId": "tr_net",
+              "requestId": "req_s03_2",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_completed",
+              "durationMs": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_036",
+            "eventSeq": 32,
+            "occurredAt": 1700000000032,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "model.request.status",
+            "requestId": "req_s03_2",
+            "status": "model_request_completed",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11,
+            "durationMs": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_037",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "model_complete",
+            "timestampMs": 1700000000033,
+            "traceId": "tr_037",
+            "sequenceNumber": 33,
+            "payload": {
+              "content": "The file says: hi there.",
+              "querySource": "main_turn",
+              "stopReason": "stop",
+              "usage": {
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "contextWindow": 100000,
+              "toolCallCount": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_037",
+            "eventSeq": 33,
+            "occurredAt": 1700000000033,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "usage.delta",
+            "requestId": "req_s03_2",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "inputTokens": 100,
+            "outputTokens": 20,
+            "totalTokens": 120,
+            "reasoningTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_038",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "turn_complete",
+            "timestampMs": 1700000000034,
+            "traceId": "tr_038",
+            "sequenceNumber": 34,
+            "payload": {
+              "response": "The file says: hi there.",
+              "tokenCount": 240,
+              "toolCallCount": 1,
+              "duration": 0,
+              "resultType": "success",
+              "historyRoundCount": 2,
+              "inputId": "cmd-0001"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_038",
+            "eventSeq": 34,
+            "occurredAt": 1700000000034,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s03",
+            "kind": "turn.terminal",
+            "status": "success",
+            "resultType": "success",
+            "durationMs": 0,
+            "tokenCount": 240,
+            "toolCallCount": 1
+          }
+        },
+        {
+          "input": {
+            "id": "ev_039",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "model_network_status",
+            "timestampMs": 1700000000036,
+            "traceId": "tr_039",
+            "sequenceNumber": 36,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.036Z",
+              "traceId": "tr_net",
+              "requestId": "req_s03_title",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "http",
+              "querySource": "session_title",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_started"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_039",
+            "eventSeq": 36,
+            "occurredAt": 1700000000036,
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "kind": "model.request.status",
+            "requestId": "req_s03_title",
+            "status": "model_request_started",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "http",
+            "querySource": "session_title",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11
+          }
+        },
+        {
+          "input": {
+            "id": "ev_040",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "model_network_status",
+            "timestampMs": 1700000000037,
+            "traceId": "tr_040",
+            "sequenceNumber": 37,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.037Z",
+              "traceId": "tr_net",
+              "requestId": "req_s03_title",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "http",
+              "querySource": "session_title",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_completed",
+              "durationMs": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_040",
+            "eventSeq": 37,
+            "occurredAt": 1700000000037,
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "kind": "model.request.status",
+            "requestId": "req_s03_title",
+            "status": "model_request_completed",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "http",
+            "querySource": "session_title",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11,
+            "durationMs": 0
+          }
+        }
+      ],
+      "operations": [
+        {
+          "input": {
+            "id": "ev_014",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "turn_started",
+            "timestampMs": 1700000000002,
+            "traceId": "tr_014",
+            "sequenceNumber": 2,
+            "payload": {
+              "turnNumber": 1,
+              "input": "Read hello.txt",
+              "messageId": "msg_turn_s03",
+              "inputId": "cmd-0001",
+              "foregroundExecutionId": "runtime_command_1"
+            }
+          },
+          "event": {
+            "eventId": "ev_014",
+            "sequenceNumber": 2,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000002,
+            "kind": "turn-started",
+            "turnId": "msg_turn_s03"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_023",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "tool_call_scheduled",
+            "timestampMs": 1700000000012,
+            "traceId": "tr_023",
+            "sequenceNumber": 12,
+            "payload": {
+              "toolCallId": "call_read_1",
+              "assistantMessageId": "msg_assist_s03a",
+              "toolName": "Read",
+              "input": {
+                "file_path": "/work/proj/hello.txt"
+              },
+              "parallelGroupIndex": 0,
+              "canRunParallel": false,
+              "schedule": {
+                "parallelGroups": [
+                  [
+                    "call_read_1"
+                  ]
+                ],
+                "executionOrder": [
+                  "call_read_1"
+                ]
+              }
+            }
+          },
+          "event": {
+            "eventId": "ev_023",
+            "sequenceNumber": 12,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000012,
+            "kind": "tool-scheduled",
+            "turnId": "msg_turn_s03",
+            "toolCallId": "call_read_1",
+            "toolName": "Read"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_024",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "tool_call_started",
+            "timestampMs": 1700000000016,
+            "traceId": "tr_024",
+            "sequenceNumber": 16,
+            "payload": {
+              "toolCallId": "call_read_1",
+              "toolName": "Read",
+              "startedAt": "2023-11-14T22:13:20.016Z",
+              "readOnly": true
+            }
+          },
+          "event": {
+            "eventId": "ev_024",
+            "sequenceNumber": 16,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000016,
+            "kind": "tool-started",
+            "turnId": "msg_turn_s03",
+            "toolCallId": "call_read_1",
+            "toolName": "Read"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_038",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s03",
+            "type": "turn_complete",
+            "timestampMs": 1700000000034,
+            "traceId": "tr_038",
+            "sequenceNumber": 34,
+            "payload": {
+              "response": "The file says: hi there.",
+              "tokenCount": 240,
+              "toolCallCount": 1,
+              "duration": 0,
+              "resultType": "success",
+              "historyRoundCount": 2,
+              "inputId": "cmd-0001"
+            }
+          },
+          "event": {
+            "eventId": "ev_038",
+            "sequenceNumber": 34,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000034,
+            "kind": "turn-completed",
+            "turnId": "msg_turn_s03"
+          }
+        }
+      ]
+    },
+    {
+      "id": "S04",
+      "factCount": 28,
+      "telemetry": [
+        {
+          "input": {
+            "id": "ev_042",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "turn_started",
+            "timestampMs": 1700000000002,
+            "traceId": "tr_042",
+            "sequenceNumber": 2,
+            "payload": {
+              "turnNumber": 1,
+              "input": "Create notes.txt then edit it",
+              "messageId": "msg_turn_s04",
+              "inputId": "cmd-0001",
+              "foregroundExecutionId": "runtime_command_1"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_042",
+            "eventSeq": 2,
+            "occurredAt": 1700000000002,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "turn.started"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_043",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_network_status",
+            "timestampMs": 1700000000005,
+            "traceId": "tr_043",
+            "sequenceNumber": 5,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.005Z",
+              "traceId": "tr_net",
+              "requestId": "req_s04_1",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_started"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_043",
+            "eventSeq": 5,
+            "occurredAt": 1700000000005,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "model.request.status",
+            "requestId": "req_s04_1",
+            "status": "model_request_started",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11
+          }
+        },
+        {
+          "input": {
+            "id": "ev_051",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_network_status",
+            "timestampMs": 1700000000012,
+            "traceId": "tr_051",
+            "sequenceNumber": 12,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.012Z",
+              "traceId": "tr_net",
+              "requestId": "req_s04_1",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_completed",
+              "durationMs": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_051",
+            "eventSeq": 12,
+            "occurredAt": 1700000000012,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "model.request.status",
+            "requestId": "req_s04_1",
+            "status": "model_request_completed",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11,
+            "durationMs": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_052",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_complete",
+            "timestampMs": 1700000000013,
+            "traceId": "tr_052",
+            "sequenceNumber": 13,
+            "payload": {
+              "content": "",
+              "querySource": "main_turn",
+              "stopReason": "stop",
+              "usage": {
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "contextWindow": 100000,
+              "toolCallCount": 1
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_052",
+            "eventSeq": 13,
+            "occurredAt": 1700000000013,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "usage.delta",
+            "requestId": "req_s04_1",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "inputTokens": 100,
+            "outputTokens": 20,
+            "totalTokens": 120,
+            "reasoningTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_053",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "tool_call_scheduled",
+            "timestampMs": 1700000000015,
+            "traceId": "tr_053",
+            "sequenceNumber": 15,
+            "payload": {
+              "toolCallId": "call_w1",
+              "assistantMessageId": "msg_assist_s04a",
+              "toolName": "Write",
+              "input": {
+                "file_path": "/work/proj/notes.txt",
+                "content": "alpha\nbeta\ngamma\n"
+              },
+              "parallelGroupIndex": 0,
+              "canRunParallel": false,
+              "schedule": {
+                "parallelGroups": [
+                  [
+                    "call_w1"
+                  ]
+                ],
+                "executionOrder": [
+                  "call_w1"
+                ]
+              }
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_053",
+            "eventSeq": 15,
+            "occurredAt": 1700000000015,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "tool.lifecycle",
+            "phase": "scheduled",
+            "toolCallId": "call_w1",
+            "toolName": "Write"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_054",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "permission_requested",
+            "timestampMs": 1700000000018,
+            "traceId": "tr_054",
+            "sequenceNumber": 18,
+            "payload": {
+              "toolCallId": "call_w1",
+              "toolName": "Write",
+              "riskLevel": "medium",
+              "reason": "Tool Write requires approval",
+              "input": {
+                "file_path": "/work/proj/notes.txt",
+                "content": "alpha\nbeta\ngamma\n"
+              }
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_054",
+            "eventSeq": 18,
+            "occurredAt": 1700000000018,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "permission.lifecycle",
+            "phase": "requested",
+            "toolCallId": "call_w1",
+            "toolName": "Write"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_055",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "permission_resolved",
+            "timestampMs": 1700000000019,
+            "traceId": "tr_055",
+            "sequenceNumber": 19,
+            "payload": {
+              "toolCallId": "call_w1",
+              "decision": "allow"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_055",
+            "eventSeq": 19,
+            "occurredAt": 1700000000019,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "permission.lifecycle",
+            "phase": "resolved",
+            "toolCallId": "call_w1",
+            "decision": "allow"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_056",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "tool_call_started",
+            "timestampMs": 1700000000020,
+            "traceId": "tr_056",
+            "sequenceNumber": 20,
+            "payload": {
+              "toolCallId": "call_w1",
+              "toolName": "Write",
+              "startedAt": "2023-11-14T22:13:20.020Z",
+              "readOnly": true
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_056",
+            "eventSeq": 20,
+            "occurredAt": 1700000000020,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "tool.lifecycle",
+            "phase": "started",
+            "toolCallId": "call_w1",
+            "toolName": "Write"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_057",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "tool_call_result",
+            "timestampMs": 1700000000021,
+            "traceId": "tr_057",
+            "sequenceNumber": 21,
+            "payload": {
+              "toolCallId": "call_w1",
+              "result": {
+                "success": true,
+                "content": "File created successfully at: /work/proj/notes.txt",
+                "perf": {
+                  "totalMs": 0,
+                  "permissionWaitMs": 0,
+                  "detail": {
+                    "kind": "filesystem",
+                    "filesystem": {
+                      "readMs": 0,
+                      "writeMs": 0,
+                      "fileCount": 1,
+                      "totalBytes": 17,
+                      "maxFileBytes": 17,
+                      "workspaceKind": "local"
+                    }
+                  }
+                }
+              },
+              "duration": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_057",
+            "eventSeq": 21,
+            "occurredAt": 1700000000021,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "tool.lifecycle",
+            "phase": "completed",
+            "toolCallId": "call_w1",
+            "toolName": "Write",
+            "durationMs": 0,
+            "performance": {
+              "totalMs": 0,
+              "permissionWaitMs": 0,
+              "fsReadMs": 0,
+              "fsWriteMs": 0,
+              "fileCount": 1,
+              "totalBytes": 17,
+              "maxFileBytes": 17,
+              "workspaceKind": "local"
+            }
+          }
+        },
+        {
+          "input": {
+            "id": "ev_058",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_network_status",
+            "timestampMs": 1700000000027,
+            "traceId": "tr_058",
+            "sequenceNumber": 27,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.027Z",
+              "traceId": "tr_net",
+              "requestId": "req_s04_2",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_started"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_058",
+            "eventSeq": 27,
+            "occurredAt": 1700000000027,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "model.request.status",
+            "requestId": "req_s04_2",
+            "status": "model_request_started",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11
+          }
+        },
+        {
+          "input": {
+            "id": "ev_066",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_network_status",
+            "timestampMs": 1700000000034,
+            "traceId": "tr_066",
+            "sequenceNumber": 34,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.034Z",
+              "traceId": "tr_net",
+              "requestId": "req_s04_2",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_completed",
+              "durationMs": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_066",
+            "eventSeq": 34,
+            "occurredAt": 1700000000034,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "model.request.status",
+            "requestId": "req_s04_2",
+            "status": "model_request_completed",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11,
+            "durationMs": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_067",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_complete",
+            "timestampMs": 1700000000035,
+            "traceId": "tr_067",
+            "sequenceNumber": 35,
+            "payload": {
+              "content": "",
+              "querySource": "main_turn",
+              "stopReason": "stop",
+              "usage": {
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "contextWindow": 100000,
+              "toolCallCount": 1
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_067",
+            "eventSeq": 35,
+            "occurredAt": 1700000000035,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "usage.delta",
+            "requestId": "req_s04_2",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "inputTokens": 100,
+            "outputTokens": 20,
+            "totalTokens": 120,
+            "reasoningTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_068",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "tool_call_scheduled",
+            "timestampMs": 1700000000037,
+            "traceId": "tr_068",
+            "sequenceNumber": 37,
+            "payload": {
+              "toolCallId": "call_e1",
+              "assistantMessageId": "msg_assist_s04b",
+              "toolName": "Edit",
+              "input": {
+                "file_path": "/work/proj/notes.txt",
+                "old_string": "beta",
+                "new_string": "BETA"
+              },
+              "parallelGroupIndex": 0,
+              "canRunParallel": false,
+              "schedule": {
+                "parallelGroups": [
+                  [
+                    "call_e1"
+                  ]
+                ],
+                "executionOrder": [
+                  "call_e1"
+                ]
+              }
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_068",
+            "eventSeq": 37,
+            "occurredAt": 1700000000037,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "tool.lifecycle",
+            "phase": "scheduled",
+            "toolCallId": "call_e1",
+            "toolName": "Edit"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_069",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "permission_requested",
+            "timestampMs": 1700000000040,
+            "traceId": "tr_069",
+            "sequenceNumber": 40,
+            "payload": {
+              "toolCallId": "call_e1",
+              "toolName": "Edit",
+              "riskLevel": "medium",
+              "reason": "Tool Edit requires approval",
+              "input": {
+                "file_path": "/work/proj/notes.txt",
+                "old_string": "beta",
+                "new_string": "BETA"
+              }
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_069",
+            "eventSeq": 40,
+            "occurredAt": 1700000000040,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "permission.lifecycle",
+            "phase": "requested",
+            "toolCallId": "call_e1",
+            "toolName": "Edit"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_070",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "permission_resolved",
+            "timestampMs": 1700000000041,
+            "traceId": "tr_070",
+            "sequenceNumber": 41,
+            "payload": {
+              "toolCallId": "call_e1",
+              "decision": "allow"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_070",
+            "eventSeq": 41,
+            "occurredAt": 1700000000041,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "permission.lifecycle",
+            "phase": "resolved",
+            "toolCallId": "call_e1",
+            "decision": "allow"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_071",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "tool_call_started",
+            "timestampMs": 1700000000042,
+            "traceId": "tr_071",
+            "sequenceNumber": 42,
+            "payload": {
+              "toolCallId": "call_e1",
+              "toolName": "Edit",
+              "startedAt": "2023-11-14T22:13:20.042Z",
+              "readOnly": true
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_071",
+            "eventSeq": 42,
+            "occurredAt": 1700000000042,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "tool.lifecycle",
+            "phase": "started",
+            "toolCallId": "call_e1",
+            "toolName": "Edit"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_072",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "tool_call_result",
+            "timestampMs": 1700000000043,
+            "traceId": "tr_072",
+            "sequenceNumber": 43,
+            "payload": {
+              "toolCallId": "call_e1",
+              "result": {
+                "success": true,
+                "content": "The file /work/proj/notes.txt has been updated successfully.",
+                "perf": {
+                  "totalMs": 0,
+                  "permissionWaitMs": 0,
+                  "detail": {
+                    "kind": "patch",
+                    "filesystem": {
+                      "readMs": 0,
+                      "writeMs": 0,
+                      "fileCount": 1,
+                      "totalBytes": 17,
+                      "maxFileBytes": 17,
+                      "workspaceKind": "local"
+                    },
+                    "patch": {
+                      "matchMs": 0,
+                      "hunkCount": 1,
+                      "matchAttempts": 1
+                    }
+                  }
+                }
+              },
+              "duration": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_072",
+            "eventSeq": 43,
+            "occurredAt": 1700000000043,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "tool.lifecycle",
+            "phase": "completed",
+            "toolCallId": "call_e1",
+            "toolName": "Edit",
+            "durationMs": 0,
+            "performance": {
+              "totalMs": 0,
+              "permissionWaitMs": 0,
+              "fsReadMs": 0,
+              "fsWriteMs": 0,
+              "patchMatchMs": 0,
+              "fileCount": 1,
+              "totalBytes": 17,
+              "maxFileBytes": 17,
+              "hunkCount": 1,
+              "matchAttempts": 1,
+              "workspaceKind": "local"
+            }
+          }
+        },
+        {
+          "input": {
+            "id": "ev_073",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_network_status",
+            "timestampMs": 1700000000049,
+            "traceId": "tr_073",
+            "sequenceNumber": 49,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.049Z",
+              "traceId": "tr_net",
+              "requestId": "req_s04_3",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_started"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_073",
+            "eventSeq": 49,
+            "occurredAt": 1700000000049,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "model.request.status",
+            "requestId": "req_s04_3",
+            "status": "model_request_started",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11
+          }
+        },
+        {
+          "input": {
+            "id": "ev_076",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_streaming",
+            "timestampMs": 1700000000052,
+            "traceId": "tr_076",
+            "sequenceNumber": 52,
+            "payload": {
+              "assistantMessageId": "msg_assist_s04c",
+              "delta": "Done: no",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_076",
+            "eventSeq": 52,
+            "occurredAt": 1700000000052,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": true,
+            "assistantMessageId": "msg_assist_s04c"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_077",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_streaming",
+            "timestampMs": 1700000000053,
+            "traceId": "tr_077",
+            "sequenceNumber": 53,
+            "payload": {
+              "assistantMessageId": "msg_assist_s04c",
+              "delta": "tes.txt ",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_077",
+            "eventSeq": 53,
+            "occurredAt": 1700000000053,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s04c"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_078",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_streaming",
+            "timestampMs": 1700000000054,
+            "traceId": "tr_078",
+            "sequenceNumber": 54,
+            "payload": {
+              "assistantMessageId": "msg_assist_s04c",
+              "delta": "created ",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_078",
+            "eventSeq": 54,
+            "occurredAt": 1700000000054,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s04c"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_079",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_streaming",
+            "timestampMs": 1700000000055,
+            "traceId": "tr_079",
+            "sequenceNumber": 55,
+            "payload": {
+              "assistantMessageId": "msg_assist_s04c",
+              "delta": "and edit",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_079",
+            "eventSeq": 55,
+            "occurredAt": 1700000000055,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s04c"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_080",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_streaming",
+            "timestampMs": 1700000000056,
+            "traceId": "tr_080",
+            "sequenceNumber": 56,
+            "payload": {
+              "assistantMessageId": "msg_assist_s04c",
+              "delta": "ed.",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_080",
+            "eventSeq": 56,
+            "occurredAt": 1700000000056,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 3,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s04c"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_083",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_network_status",
+            "timestampMs": 1700000000059,
+            "traceId": "tr_083",
+            "sequenceNumber": 59,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.059Z",
+              "traceId": "tr_net",
+              "requestId": "req_s04_3",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_completed",
+              "durationMs": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_083",
+            "eventSeq": 59,
+            "occurredAt": 1700000000059,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "model.request.status",
+            "requestId": "req_s04_3",
+            "status": "model_request_completed",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11,
+            "durationMs": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_084",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_complete",
+            "timestampMs": 1700000000060,
+            "traceId": "tr_084",
+            "sequenceNumber": 60,
+            "payload": {
+              "content": "Done: notes.txt created and edited.",
+              "querySource": "main_turn",
+              "stopReason": "stop",
+              "usage": {
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "contextWindow": 100000,
+              "toolCallCount": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_084",
+            "eventSeq": 60,
+            "occurredAt": 1700000000060,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "usage.delta",
+            "requestId": "req_s04_3",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "inputTokens": 100,
+            "outputTokens": 20,
+            "totalTokens": 120,
+            "reasoningTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_085",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "turn_complete",
+            "timestampMs": 1700000000061,
+            "traceId": "tr_085",
+            "sequenceNumber": 61,
+            "payload": {
+              "response": "Done: notes.txt created and edited.",
+              "tokenCount": 360,
+              "toolCallCount": 2,
+              "duration": 0,
+              "resultType": "success",
+              "historyRoundCount": 3,
+              "inputId": "cmd-0001"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_085",
+            "eventSeq": 61,
+            "occurredAt": 1700000000061,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s04",
+            "kind": "turn.terminal",
+            "status": "success",
+            "resultType": "success",
+            "durationMs": 0,
+            "tokenCount": 360,
+            "toolCallCount": 2
+          }
+        },
+        {
+          "input": {
+            "id": "ev_086",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_network_status",
+            "timestampMs": 1700000000063,
+            "traceId": "tr_086",
+            "sequenceNumber": 63,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.063Z",
+              "traceId": "tr_net",
+              "requestId": "req_s04_title",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "http",
+              "querySource": "session_title",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_started"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_086",
+            "eventSeq": 63,
+            "occurredAt": 1700000000063,
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "kind": "model.request.status",
+            "requestId": "req_s04_title",
+            "status": "model_request_started",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "http",
+            "querySource": "session_title",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11
+          }
+        },
+        {
+          "input": {
+            "id": "ev_087",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "model_network_status",
+            "timestampMs": 1700000000064,
+            "traceId": "tr_087",
+            "sequenceNumber": 64,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.064Z",
+              "traceId": "tr_net",
+              "requestId": "req_s04_title",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "http",
+              "querySource": "session_title",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_completed",
+              "durationMs": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_087",
+            "eventSeq": 64,
+            "occurredAt": 1700000000064,
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "kind": "model.request.status",
+            "requestId": "req_s04_title",
+            "status": "model_request_completed",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "http",
+            "querySource": "session_title",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11,
+            "durationMs": 0
+          }
+        }
+      ],
+      "operations": [
+        {
+          "input": {
+            "id": "ev_042",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "turn_started",
+            "timestampMs": 1700000000002,
+            "traceId": "tr_042",
+            "sequenceNumber": 2,
+            "payload": {
+              "turnNumber": 1,
+              "input": "Create notes.txt then edit it",
+              "messageId": "msg_turn_s04",
+              "inputId": "cmd-0001",
+              "foregroundExecutionId": "runtime_command_1"
+            }
+          },
+          "event": {
+            "eventId": "ev_042",
+            "sequenceNumber": 2,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000002,
+            "kind": "turn-started",
+            "turnId": "msg_turn_s04"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_053",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "tool_call_scheduled",
+            "timestampMs": 1700000000015,
+            "traceId": "tr_053",
+            "sequenceNumber": 15,
+            "payload": {
+              "toolCallId": "call_w1",
+              "assistantMessageId": "msg_assist_s04a",
+              "toolName": "Write",
+              "input": {
+                "file_path": "/work/proj/notes.txt",
+                "content": "alpha\nbeta\ngamma\n"
+              },
+              "parallelGroupIndex": 0,
+              "canRunParallel": false,
+              "schedule": {
+                "parallelGroups": [
+                  [
+                    "call_w1"
+                  ]
+                ],
+                "executionOrder": [
+                  "call_w1"
+                ]
+              }
+            }
+          },
+          "event": {
+            "eventId": "ev_053",
+            "sequenceNumber": 15,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000015,
+            "kind": "tool-scheduled",
+            "turnId": "msg_turn_s04",
+            "toolCallId": "call_w1",
+            "toolName": "Write"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_056",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "tool_call_started",
+            "timestampMs": 1700000000020,
+            "traceId": "tr_056",
+            "sequenceNumber": 20,
+            "payload": {
+              "toolCallId": "call_w1",
+              "toolName": "Write",
+              "startedAt": "2023-11-14T22:13:20.020Z",
+              "readOnly": true
+            }
+          },
+          "event": {
+            "eventId": "ev_056",
+            "sequenceNumber": 20,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000020,
+            "kind": "tool-started",
+            "turnId": "msg_turn_s04",
+            "toolCallId": "call_w1",
+            "toolName": "Write"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_068",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "tool_call_scheduled",
+            "timestampMs": 1700000000037,
+            "traceId": "tr_068",
+            "sequenceNumber": 37,
+            "payload": {
+              "toolCallId": "call_e1",
+              "assistantMessageId": "msg_assist_s04b",
+              "toolName": "Edit",
+              "input": {
+                "file_path": "/work/proj/notes.txt",
+                "old_string": "beta",
+                "new_string": "BETA"
+              },
+              "parallelGroupIndex": 0,
+              "canRunParallel": false,
+              "schedule": {
+                "parallelGroups": [
+                  [
+                    "call_e1"
+                  ]
+                ],
+                "executionOrder": [
+                  "call_e1"
+                ]
+              }
+            }
+          },
+          "event": {
+            "eventId": "ev_068",
+            "sequenceNumber": 37,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000037,
+            "kind": "tool-scheduled",
+            "turnId": "msg_turn_s04",
+            "toolCallId": "call_e1",
+            "toolName": "Edit"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_071",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "tool_call_started",
+            "timestampMs": 1700000000042,
+            "traceId": "tr_071",
+            "sequenceNumber": 42,
+            "payload": {
+              "toolCallId": "call_e1",
+              "toolName": "Edit",
+              "startedAt": "2023-11-14T22:13:20.042Z",
+              "readOnly": true
+            }
+          },
+          "event": {
+            "eventId": "ev_071",
+            "sequenceNumber": 42,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000042,
+            "kind": "tool-started",
+            "turnId": "msg_turn_s04",
+            "toolCallId": "call_e1",
+            "toolName": "Edit"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_085",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s04",
+            "type": "turn_complete",
+            "timestampMs": 1700000000061,
+            "traceId": "tr_085",
+            "sequenceNumber": 61,
+            "payload": {
+              "response": "Done: notes.txt created and edited.",
+              "tokenCount": 360,
+              "toolCallCount": 2,
+              "duration": 0,
+              "resultType": "success",
+              "historyRoundCount": 3,
+              "inputId": "cmd-0001"
+            }
+          },
+          "event": {
+            "eventId": "ev_085",
+            "sequenceNumber": 61,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000061,
+            "kind": "turn-completed",
+            "turnId": "msg_turn_s04"
+          }
+        }
+      ]
+    },
+    {
+      "id": "S05",
+      "factCount": 18,
+      "telemetry": [
+        {
+          "input": {
+            "id": "ev_089",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "turn_started",
+            "timestampMs": 1700000000002,
+            "traceId": "tr_089",
+            "sequenceNumber": 2,
+            "payload": {
+              "turnNumber": 1,
+              "input": "Create notes.txt then edit it",
+              "messageId": "msg_turn_s05",
+              "inputId": "cmd-0001",
+              "foregroundExecutionId": "runtime_command_1"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_089",
+            "eventSeq": 2,
+            "occurredAt": 1700000000002,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "turn.started"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_090",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "model_network_status",
+            "timestampMs": 1700000000005,
+            "traceId": "tr_090",
+            "sequenceNumber": 5,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.005Z",
+              "traceId": "tr_net",
+              "requestId": "req_s05_1",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_started"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_090",
+            "eventSeq": 5,
+            "occurredAt": 1700000000005,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "model.request.status",
+            "requestId": "req_s05_1",
+            "status": "model_request_started",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11
+          }
+        },
+        {
+          "input": {
+            "id": "ev_098",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "model_network_status",
+            "timestampMs": 1700000000012,
+            "traceId": "tr_098",
+            "sequenceNumber": 12,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.012Z",
+              "traceId": "tr_net",
+              "requestId": "req_s05_1",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_completed",
+              "durationMs": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_098",
+            "eventSeq": 12,
+            "occurredAt": 1700000000012,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "model.request.status",
+            "requestId": "req_s05_1",
+            "status": "model_request_completed",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11,
+            "durationMs": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_099",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "model_complete",
+            "timestampMs": 1700000000013,
+            "traceId": "tr_099",
+            "sequenceNumber": 13,
+            "payload": {
+              "content": "",
+              "querySource": "main_turn",
+              "stopReason": "stop",
+              "usage": {
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "contextWindow": 100000,
+              "toolCallCount": 1
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_099",
+            "eventSeq": 13,
+            "occurredAt": 1700000000013,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "usage.delta",
+            "requestId": "req_s05_1",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "inputTokens": 100,
+            "outputTokens": 20,
+            "totalTokens": 120,
+            "reasoningTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_100",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "tool_call_scheduled",
+            "timestampMs": 1700000000015,
+            "traceId": "tr_100",
+            "sequenceNumber": 15,
+            "payload": {
+              "toolCallId": "call_w1",
+              "assistantMessageId": "msg_assist_s05a",
+              "toolName": "Write",
+              "input": {
+                "file_path": "/work/proj/notes.txt",
+                "content": "alpha\nbeta\ngamma\n"
+              },
+              "parallelGroupIndex": 0,
+              "canRunParallel": false,
+              "schedule": {
+                "parallelGroups": [
+                  [
+                    "call_w1"
+                  ]
+                ],
+                "executionOrder": [
+                  "call_w1"
+                ]
+              }
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_100",
+            "eventSeq": 15,
+            "occurredAt": 1700000000015,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "tool.lifecycle",
+            "phase": "scheduled",
+            "toolCallId": "call_w1",
+            "toolName": "Write"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_101",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "permission_requested",
+            "timestampMs": 1700000000018,
+            "traceId": "tr_101",
+            "sequenceNumber": 18,
+            "payload": {
+              "toolCallId": "call_w1",
+              "toolName": "Write",
+              "riskLevel": "medium",
+              "reason": "Tool Write requires approval",
+              "input": {
+                "file_path": "/work/proj/notes.txt",
+                "content": "alpha\nbeta\ngamma\n"
+              }
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_101",
+            "eventSeq": 18,
+            "occurredAt": 1700000000018,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "permission.lifecycle",
+            "phase": "requested",
+            "toolCallId": "call_w1",
+            "toolName": "Write"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_102",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "permission_resolved",
+            "timestampMs": 1700000000019,
+            "traceId": "tr_102",
+            "sequenceNumber": 19,
+            "payload": {
+              "toolCallId": "call_w1",
+              "decision": "deny"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_102",
+            "eventSeq": 19,
+            "occurredAt": 1700000000019,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "permission.lifecycle",
+            "phase": "resolved",
+            "toolCallId": "call_w1",
+            "decision": "deny"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_103",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "model_network_status",
+            "timestampMs": 1700000000024,
+            "traceId": "tr_103",
+            "sequenceNumber": 24,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.024Z",
+              "traceId": "tr_net",
+              "requestId": "req_s05_2",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_started"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_103",
+            "eventSeq": 24,
+            "occurredAt": 1700000000024,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "model.request.status",
+            "requestId": "req_s05_2",
+            "status": "model_request_started",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11
+          }
+        },
+        {
+          "input": {
+            "id": "ev_106",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "model_streaming",
+            "timestampMs": 1700000000027,
+            "traceId": "tr_106",
+            "sequenceNumber": 27,
+            "payload": {
+              "assistantMessageId": "msg_assist_s05b",
+              "delta": "The writ",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_106",
+            "eventSeq": 27,
+            "occurredAt": 1700000000027,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": true,
+            "assistantMessageId": "msg_assist_s05b"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_107",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "model_streaming",
+            "timestampMs": 1700000000028,
+            "traceId": "tr_107",
+            "sequenceNumber": 28,
+            "payload": {
+              "assistantMessageId": "msg_assist_s05b",
+              "delta": "e was de",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_107",
+            "eventSeq": 28,
+            "occurredAt": 1700000000028,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s05b"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_108",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "model_streaming",
+            "timestampMs": 1700000000029,
+            "traceId": "tr_108",
+            "sequenceNumber": 29,
+            "payload": {
+              "assistantMessageId": "msg_assist_s05b",
+              "delta": "nied, so",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_108",
+            "eventSeq": 29,
+            "occurredAt": 1700000000029,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s05b"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_109",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "model_streaming",
+            "timestampMs": 1700000000030,
+            "traceId": "tr_109",
+            "sequenceNumber": 30,
+            "payload": {
+              "assistantMessageId": "msg_assist_s05b",
+              "delta": " I stopp",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_109",
+            "eventSeq": 30,
+            "occurredAt": 1700000000030,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s05b"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_110",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "model_streaming",
+            "timestampMs": 1700000000031,
+            "traceId": "tr_110",
+            "sequenceNumber": 31,
+            "payload": {
+              "assistantMessageId": "msg_assist_s05b",
+              "delta": "ed.",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_110",
+            "eventSeq": 31,
+            "occurredAt": 1700000000031,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 3,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s05b"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_113",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "model_network_status",
+            "timestampMs": 1700000000034,
+            "traceId": "tr_113",
+            "sequenceNumber": 34,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.034Z",
+              "traceId": "tr_net",
+              "requestId": "req_s05_2",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_completed",
+              "durationMs": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_113",
+            "eventSeq": 34,
+            "occurredAt": 1700000000034,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "model.request.status",
+            "requestId": "req_s05_2",
+            "status": "model_request_completed",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11,
+            "durationMs": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_114",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "model_complete",
+            "timestampMs": 1700000000035,
+            "traceId": "tr_114",
+            "sequenceNumber": 35,
+            "payload": {
+              "content": "The write was denied, so I stopped.",
+              "querySource": "main_turn",
+              "stopReason": "stop",
+              "usage": {
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "contextWindow": 100000,
+              "toolCallCount": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_114",
+            "eventSeq": 35,
+            "occurredAt": 1700000000035,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "usage.delta",
+            "requestId": "req_s05_2",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "inputTokens": 100,
+            "outputTokens": 20,
+            "totalTokens": 120,
+            "reasoningTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_115",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "turn_complete",
+            "timestampMs": 1700000000036,
+            "traceId": "tr_115",
+            "sequenceNumber": 36,
+            "payload": {
+              "response": "The write was denied, so I stopped.",
+              "tokenCount": 240,
+              "toolCallCount": 1,
+              "duration": 0,
+              "resultType": "success",
+              "historyRoundCount": 1,
+              "inputId": "cmd-0001"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_115",
+            "eventSeq": 36,
+            "occurredAt": 1700000000036,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s05",
+            "kind": "turn.terminal",
+            "status": "success",
+            "resultType": "success",
+            "durationMs": 0,
+            "tokenCount": 240,
+            "toolCallCount": 1
+          }
+        },
+        {
+          "input": {
+            "id": "ev_116",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "model_network_status",
+            "timestampMs": 1700000000038,
+            "traceId": "tr_116",
+            "sequenceNumber": 38,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.038Z",
+              "traceId": "tr_net",
+              "requestId": "req_s05_title",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "http",
+              "querySource": "session_title",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_started"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_116",
+            "eventSeq": 38,
+            "occurredAt": 1700000000038,
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "kind": "model.request.status",
+            "requestId": "req_s05_title",
+            "status": "model_request_started",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "http",
+            "querySource": "session_title",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11
+          }
+        },
+        {
+          "input": {
+            "id": "ev_117",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "model_network_status",
+            "timestampMs": 1700000000039,
+            "traceId": "tr_117",
+            "sequenceNumber": 39,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.039Z",
+              "traceId": "tr_net",
+              "requestId": "req_s05_title",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "http",
+              "querySource": "session_title",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_completed",
+              "durationMs": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_117",
+            "eventSeq": 39,
+            "occurredAt": 1700000000039,
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "kind": "model.request.status",
+            "requestId": "req_s05_title",
+            "status": "model_request_completed",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "http",
+            "querySource": "session_title",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11,
+            "durationMs": 0
+          }
+        }
+      ],
+      "operations": [
+        {
+          "input": {
+            "id": "ev_089",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "turn_started",
+            "timestampMs": 1700000000002,
+            "traceId": "tr_089",
+            "sequenceNumber": 2,
+            "payload": {
+              "turnNumber": 1,
+              "input": "Create notes.txt then edit it",
+              "messageId": "msg_turn_s05",
+              "inputId": "cmd-0001",
+              "foregroundExecutionId": "runtime_command_1"
+            }
+          },
+          "event": {
+            "eventId": "ev_089",
+            "sequenceNumber": 2,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000002,
+            "kind": "turn-started",
+            "turnId": "msg_turn_s05"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_100",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "tool_call_scheduled",
+            "timestampMs": 1700000000015,
+            "traceId": "tr_100",
+            "sequenceNumber": 15,
+            "payload": {
+              "toolCallId": "call_w1",
+              "assistantMessageId": "msg_assist_s05a",
+              "toolName": "Write",
+              "input": {
+                "file_path": "/work/proj/notes.txt",
+                "content": "alpha\nbeta\ngamma\n"
+              },
+              "parallelGroupIndex": 0,
+              "canRunParallel": false,
+              "schedule": {
+                "parallelGroups": [
+                  [
+                    "call_w1"
+                  ]
+                ],
+                "executionOrder": [
+                  "call_w1"
+                ]
+              }
+            }
+          },
+          "event": {
+            "eventId": "ev_100",
+            "sequenceNumber": 15,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000015,
+            "kind": "tool-scheduled",
+            "turnId": "msg_turn_s05",
+            "toolCallId": "call_w1",
+            "toolName": "Write"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_115",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s05",
+            "type": "turn_complete",
+            "timestampMs": 1700000000036,
+            "traceId": "tr_115",
+            "sequenceNumber": 36,
+            "payload": {
+              "response": "The write was denied, so I stopped.",
+              "tokenCount": 240,
+              "toolCallCount": 1,
+              "duration": 0,
+              "resultType": "success",
+              "historyRoundCount": 1,
+              "inputId": "cmd-0001"
+            }
+          },
+          "event": {
+            "eventId": "ev_115",
+            "sequenceNumber": 36,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000036,
+            "kind": "turn-completed",
+            "turnId": "msg_turn_s05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "S13",
+      "factCount": 11,
+      "telemetry": [
+        {
+          "input": {
+            "id": "ev_119",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s13",
+            "type": "turn_started",
+            "timestampMs": 1700000000002,
+            "traceId": "tr_119",
+            "sequenceNumber": 2,
+            "payload": {
+              "turnNumber": 1,
+              "input": "Say hello",
+              "messageId": "msg_turn_s13",
+              "inputId": "cmd-0001",
+              "foregroundExecutionId": "runtime_command_1"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_119",
+            "eventSeq": 2,
+            "occurredAt": 1700000000002,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s13",
+            "kind": "turn.started"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_120",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s13",
+            "type": "model_network_status",
+            "timestampMs": 1700000000005,
+            "traceId": "tr_120",
+            "sequenceNumber": 5,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.005Z",
+              "traceId": "tr_net",
+              "requestId": "req_s13_1",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_started"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_120",
+            "eventSeq": 5,
+            "occurredAt": 1700000000005,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s13",
+            "kind": "model.request.status",
+            "requestId": "req_s13_1",
+            "status": "model_request_started",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11
+          }
+        },
+        {
+          "input": {
+            "id": "ev_121",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s13",
+            "type": "model_network_status",
+            "timestampMs": 1700000000006,
+            "traceId": "tr_121",
+            "sequenceNumber": 6,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.006Z",
+              "traceId": "tr_net",
+              "requestId": "req_s13_1",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_request_failed",
+              "reason": "rate_limited",
+              "retryable": true,
+              "message": "Rate limited",
+              "statusCode": 429,
+              "durationMs": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_121",
+            "eventSeq": 6,
+            "occurredAt": 1700000000006,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s13",
+            "kind": "model.request.status",
+            "requestId": "req_s13_1",
+            "status": "model_request_failed",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11,
+            "durationMs": 0,
+            "reason": "rate_limited",
+            "retryable": true,
+            "statusCode": 429
+          }
+        },
+        {
+          "input": {
+            "id": "ev_122",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s13",
+            "type": "model_network_status",
+            "timestampMs": 1700000000007,
+            "traceId": "tr_122",
+            "sequenceNumber": 7,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.007Z",
+              "traceId": "tr_net",
+              "requestId": "req_s13_1",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 1,
+              "maxAttempts": 11,
+              "type": "model_retry_scheduled",
+              "delayMs": 0,
+              "nextAttempt": 2,
+              "reason": "rate_limited",
+              "message": "Rate limited",
+              "statusCode": 429
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_122",
+            "eventSeq": 7,
+            "occurredAt": 1700000000007,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s13",
+            "kind": "model.request.status",
+            "requestId": "req_s13_1",
+            "status": "model_retry_scheduled",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 1,
+            "maxAttempts": 11,
+            "reason": "rate_limited",
+            "statusCode": 429,
+            "delayMs": 0,
+            "nextAttempt": 2
+          }
+        },
+        {
+          "input": {
+            "id": "ev_123",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s13",
+            "type": "model_network_status",
+            "timestampMs": 1700000000008,
+            "traceId": "tr_123",
+            "sequenceNumber": 8,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.008Z",
+              "traceId": "tr_net",
+              "requestId": "req_s13_2",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 2,
+              "maxAttempts": 11,
+              "type": "model_request_started"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_123",
+            "eventSeq": 8,
+            "occurredAt": 1700000000008,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s13",
+            "kind": "model.request.status",
+            "requestId": "req_s13_2",
+            "status": "model_request_started",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 2,
+            "maxAttempts": 11
+          }
+        },
+        {
+          "input": {
+            "id": "ev_126",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s13",
+            "type": "model_streaming",
+            "timestampMs": 1700000000011,
+            "traceId": "tr_126",
+            "sequenceNumber": 11,
+            "payload": {
+              "assistantMessageId": "msg_assist_s13",
+              "delta": "Recovere",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_126",
+            "eventSeq": 11,
+            "occurredAt": 1700000000011,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s13",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": true,
+            "assistantMessageId": "msg_assist_s13"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_127",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s13",
+            "type": "model_streaming",
+            "timestampMs": 1700000000012,
+            "traceId": "tr_127",
+            "sequenceNumber": 12,
+            "payload": {
+              "assistantMessageId": "msg_assist_s13",
+              "delta": "d after ",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_127",
+            "eventSeq": 12,
+            "occurredAt": 1700000000012,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s13",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s13"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_128",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s13",
+            "type": "model_streaming",
+            "timestampMs": 1700000000013,
+            "traceId": "tr_128",
+            "sequenceNumber": 13,
+            "payload": {
+              "assistantMessageId": "msg_assist_s13",
+              "delta": "a retry.",
+              "done": false,
+              "kind": "text_delta"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_128",
+            "eventSeq": 13,
+            "occurredAt": 1700000000013,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s13",
+            "kind": "stream.chunk",
+            "channel": "text",
+            "chunkLength": 8,
+            "firstChunk": false,
+            "assistantMessageId": "msg_assist_s13"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_131",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s13",
+            "type": "model_network_status",
+            "timestampMs": 1700000000016,
+            "traceId": "tr_131",
+            "sequenceNumber": 16,
+            "payload": {
+              "timestamp": "2023-11-14T22:13:20.016Z",
+              "traceId": "tr_net",
+              "requestId": "req_s13_2",
+              "providerId": "mock",
+              "modelId": "mock-model",
+              "baseURL": "http://127.0.0.1:1/v1",
+              "providerKind": "openai-compatible",
+              "transport": "sse",
+              "querySource": "main_turn",
+              "queryId": "cmd-0001",
+              "attempt": 2,
+              "maxAttempts": 11,
+              "type": "model_request_completed",
+              "durationMs": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_131",
+            "eventSeq": 16,
+            "occurredAt": 1700000000016,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s13",
+            "kind": "model.request.status",
+            "requestId": "req_s13_2",
+            "status": "model_request_completed",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "transport": "sse",
+            "querySource": "main_turn",
+            "queryId": "cmd-0001",
+            "attempt": 2,
+            "maxAttempts": 11,
+            "durationMs": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_132",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s13",
+            "type": "model_complete",
+            "timestampMs": 1700000000017,
+            "traceId": "tr_132",
+            "sequenceNumber": 17,
+            "payload": {
+              "content": "Recovered after a retry.",
+              "querySource": "main_turn",
+              "stopReason": "stop",
+              "usage": {
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "contextWindow": 100000,
+              "toolCallCount": 0
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_132",
+            "eventSeq": 17,
+            "occurredAt": 1700000000017,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s13",
+            "kind": "usage.delta",
+            "requestId": "req_s13_2",
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "providerKind": "openai-compatible",
+            "providerHostname": "127.0.0.1",
+            "inputTokens": 100,
+            "outputTokens": 20,
+            "totalTokens": 120,
+            "reasoningTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          }
+        },
+        {
+          "input": {
+            "id": "ev_133",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s13",
+            "type": "turn_complete",
+            "timestampMs": 1700000000018,
+            "traceId": "tr_133",
+            "sequenceNumber": 18,
+            "payload": {
+              "response": "Recovered after a retry.",
+              "tokenCount": 120,
+              "toolCallCount": 0,
+              "duration": 0,
+              "resultType": "success",
+              "historyRoundCount": 1,
+              "inputId": "cmd-0001"
+            }
+          },
+          "fact": {
+            "memoryEnabled": false,
+            "version": 1,
+            "eventId": "ev_133",
+            "eventSeq": 18,
+            "occurredAt": 1700000000018,
+            "sessionId": "sess_emit_fixture",
+            "sourceCommandId": "cmd-0001",
+            "turnId": "msg_turn_s13",
+            "kind": "turn.terminal",
+            "status": "success",
+            "resultType": "success",
+            "durationMs": 0,
+            "tokenCount": 120,
+            "toolCallCount": 0
+          }
+        }
+      ],
+      "operations": [
+        {
+          "input": {
+            "id": "ev_119",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s13",
+            "type": "turn_started",
+            "timestampMs": 1700000000002,
+            "traceId": "tr_119",
+            "sequenceNumber": 2,
+            "payload": {
+              "turnNumber": 1,
+              "input": "Say hello",
+              "messageId": "msg_turn_s13",
+              "inputId": "cmd-0001",
+              "foregroundExecutionId": "runtime_command_1"
+            }
+          },
+          "event": {
+            "eventId": "ev_119",
+            "sequenceNumber": 2,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000002,
+            "kind": "turn-started",
+            "turnId": "msg_turn_s13"
+          }
+        },
+        {
+          "input": {
+            "id": "ev_133",
+            "sessionId": "sess_emit_fixture",
+            "turnId": "msg_turn_s13",
+            "type": "turn_complete",
+            "timestampMs": 1700000000018,
+            "traceId": "tr_133",
+            "sequenceNumber": 18,
+            "payload": {
+              "response": "Recovered after a retry.",
+              "tokenCount": 120,
+              "toolCallCount": 0,
+              "duration": 0,
+              "resultType": "success",
+              "historyRoundCount": 1,
+              "inputId": "cmd-0001"
+            }
+          },
+          "event": {
+            "eventId": "ev_133",
+            "sequenceNumber": 18,
+            "sessionId": "sess_emit_fixture",
+            "timestamp": 1700000000018,
+            "kind": "turn-completed",
+            "turnId": "msg_turn_s13"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "ceiling": {
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+    },
+    "maxConcurrency": {
+      "properties": {
+        "from": {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "type": "integer"
+        },
+        "to": {
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "predecessorRunId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "subagentModel": {
+      "properties": {
+        "from": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "to": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "type": "object"
+}

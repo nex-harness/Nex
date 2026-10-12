@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "canEdit": {
+      "const": true,
+      "type": "boolean"
+    },
+    "canFork": {
+      "const": true,
+      "type": "boolean"
+    },
+    "canRetry": {
+      "const": true,
+      "type": "boolean"
+    },
+    "canRewindFiles": {
+      "const": true,
+      "type": "boolean"
+    },
+    "editDisposition": {
+      "enum": [
+        "rewind",
+        "fork"
+      ],
+      "type": "string"
+    }
+  },
+  "type": "object"
+}

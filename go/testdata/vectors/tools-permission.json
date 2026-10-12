@@ -1,0 +1,764 @@
+{
+ "decisions": [
+  {
+   "name": "perm/read-build",
+   "tool": "Read",
+   "mode": "build",
+   "input": {
+    "file_path": "/ws/a.txt"
+   },
+   "projectRules": null,
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Build mode allows read-only tools",
+    "ruleId": "mode.build.readOnly",
+    "riskLevel": "low",
+    "sideEffectScope": "none"
+   }
+  },
+  {
+   "name": "perm/write-build",
+   "tool": "Write",
+   "mode": "build",
+   "input": {
+    "file_path": "/ws/a.txt",
+    "content": "x"
+   },
+   "projectRules": null,
+   "decision": {
+    "decision": "ask",
+    "allowed": false,
+    "escalated": true,
+    "reason": "Tool has side effects and requires approval",
+    "ruleId": "mode.build.sideEffect",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/edit-build",
+   "tool": "Edit",
+   "mode": "build",
+   "input": {
+    "file_path": "/ws/a.txt"
+   },
+   "projectRules": null,
+   "decision": {
+    "decision": "ask",
+    "allowed": false,
+    "escalated": true,
+    "reason": "Tool has side effects and requires approval",
+    "ruleId": "mode.build.sideEffect",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/write-edit-mode",
+   "tool": "Write",
+   "mode": "edit",
+   "input": {
+    "file_path": "/ws/a.txt",
+    "content": "x"
+   },
+   "projectRules": null,
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Edit mode allows file edit tools",
+    "ruleId": "mode.edit.fileEdit",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/edit-edit-mode",
+   "tool": "Edit",
+   "mode": "edit",
+   "input": {
+    "file_path": "/ws/a.txt"
+   },
+   "projectRules": null,
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Edit mode allows file edit tools",
+    "ruleId": "mode.edit.fileEdit",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/read-edit-mode",
+   "tool": "Read",
+   "mode": "edit",
+   "input": {
+    "file_path": "/ws/a.txt"
+   },
+   "projectRules": null,
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Build mode allows read-only tools",
+    "ruleId": "mode.build.readOnly",
+    "riskLevel": "low",
+    "sideEffectScope": "none"
+   }
+  },
+  {
+   "name": "perm/read-plan",
+   "tool": "Read",
+   "mode": "plan",
+   "input": {
+    "file_path": "/ws/a.txt"
+   },
+   "projectRules": null,
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Plan mode allows read-only tool execution",
+    "ruleId": "mode.plan.readOnly",
+    "riskLevel": "low",
+    "sideEffectScope": "none"
+   }
+  },
+  {
+   "name": "perm/write-plan",
+   "tool": "Write",
+   "mode": "plan",
+   "input": {
+    "file_path": "/ws/a.txt",
+    "content": "x"
+   },
+   "projectRules": null,
+   "decision": {
+    "decision": "deny",
+    "allowed": false,
+    "escalated": false,
+    "reason": "Plan mode only allows read-only, non-destructive tools",
+    "ruleId": "mode.plan.nonReadOnly",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/edit-plan",
+   "tool": "Edit",
+   "mode": "plan",
+   "input": {
+    "file_path": "/ws/a.txt"
+   },
+   "projectRules": null,
+   "decision": {
+    "decision": "deny",
+    "allowed": false,
+    "escalated": false,
+    "reason": "Plan mode only allows read-only, non-destructive tools",
+    "ruleId": "mode.plan.nonReadOnly",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/write-yolo",
+   "tool": "Write",
+   "mode": "yolo",
+   "input": {
+    "file_path": "/ws/a.txt",
+    "content": "x"
+   },
+   "projectRules": null,
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Yolo mode bypasses permission prompts",
+    "ruleId": "mode.yolo",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/edit-yolo",
+   "tool": "Edit",
+   "mode": "yolo",
+   "input": {
+    "file_path": "/ws/a.txt"
+   },
+   "projectRules": null,
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Yolo mode bypasses permission prompts",
+    "ruleId": "mode.yolo",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/read-yolo",
+   "tool": "Read",
+   "mode": "yolo",
+   "input": {
+    "file_path": "/ws/a.txt"
+   },
+   "projectRules": null,
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Yolo mode bypasses permission prompts",
+    "ruleId": "mode.yolo",
+    "riskLevel": "low",
+    "sideEffectScope": "none"
+   }
+  },
+  {
+   "name": "perm/write-project-allow-exact",
+   "tool": "Write",
+   "mode": "build",
+   "input": {
+    "file_path": "/ws/a.txt",
+    "content": "x"
+   },
+   "projectRules": {
+    "version": 1,
+    "allow": [
+     {
+      "toolName": "Write",
+      "ruleContent": "/ws/a.txt"
+     }
+    ]
+   },
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Tool Write is allowed by project permission rules",
+    "ruleId": "rule.project.allow",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/write-project-allow-nomatch",
+   "tool": "Write",
+   "mode": "build",
+   "input": {
+    "file_path": "/ws/other.txt",
+    "content": "x"
+   },
+   "projectRules": {
+    "version": 1,
+    "allow": [
+     {
+      "toolName": "Write",
+      "ruleContent": "/ws/a.txt"
+     }
+    ]
+   },
+   "decision": {
+    "decision": "ask",
+    "allowed": false,
+    "escalated": true,
+    "reason": "Tool has side effects and requires approval",
+    "ruleId": "mode.build.sideEffect",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/edit-allowed-by-write-rule",
+   "tool": "Edit",
+   "mode": "build",
+   "input": {
+    "file_path": "/ws/a.txt"
+   },
+   "projectRules": {
+    "version": 1,
+    "allow": [
+     {
+      "toolName": "Write",
+      "ruleContent": "/ws/a.txt"
+     }
+    ]
+   },
+   "decision": {
+    "decision": "ask",
+    "allowed": false,
+    "escalated": true,
+    "reason": "Tool has side effects and requires approval",
+    "ruleId": "mode.build.sideEffect",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/write-project-deny-wildcard",
+   "tool": "Write",
+   "mode": "build",
+   "input": {
+    "file_path": "/ws/a.txt",
+    "content": "x"
+   },
+   "projectRules": {
+    "version": 1,
+    "deny": [
+     {
+      "toolName": "Write",
+      "ruleContent": "/ws/*"
+     }
+    ]
+   },
+   "decision": {
+    "decision": "deny",
+    "allowed": false,
+    "escalated": false,
+    "reason": "Tool Write is denied by project permission rules",
+    "ruleId": "rule.project.deny",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/write-yolo-deny-priority",
+   "tool": "Write",
+   "mode": "yolo",
+   "input": {
+    "file_path": "/ws/a.txt",
+    "content": "x"
+   },
+   "projectRules": {
+    "version": 1,
+    "deny": [
+     {
+      "toolName": "Write"
+     }
+    ]
+   },
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Yolo mode bypasses permission prompts",
+    "ruleId": "mode.yolo",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/write-project-allow-no-content",
+   "tool": "Write",
+   "mode": "build",
+   "input": {
+    "file_path": "/ws/a.txt",
+    "content": "x"
+   },
+   "projectRules": {
+    "version": 1,
+    "allow": [
+     {
+      "toolName": "Write"
+     }
+    ]
+   },
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Tool Write is allowed by project permission rules",
+    "ruleId": "rule.project.allow",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/edit-project-ask-wildcard",
+   "tool": "Edit",
+   "mode": "build",
+   "input": {
+    "file_path": "/ws/sub/a.txt"
+   },
+   "projectRules": {
+    "version": 1,
+    "ask": [
+     {
+      "toolName": "Edit",
+      "ruleContent": "/ws/*"
+     }
+    ]
+   },
+   "decision": {
+    "decision": "ask",
+    "allowed": false,
+    "escalated": true,
+    "reason": "Tool Edit requires approval by project permission rules",
+    "ruleId": "rule.project.ask",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/write-wildcard-tail-anchor-nomatch",
+   "tool": "Write",
+   "mode": "build",
+   "input": {
+    "file_path": "/ws/a.txtX",
+    "content": "x"
+   },
+   "projectRules": {
+    "version": 1,
+    "allow": [
+     {
+      "toolName": "Write",
+      "ruleContent": "/ws/a.txt*"
+     }
+    ]
+   },
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Tool Write is allowed by project permission rules",
+    "ruleId": "rule.project.allow",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/write-wildcard-prefix-match",
+   "tool": "Write",
+   "mode": "build",
+   "input": {
+    "file_path": "/ws/a.txt.bak",
+    "content": "x"
+   },
+   "projectRules": {
+    "version": 1,
+    "allow": [
+     {
+      "toolName": "Write",
+      "ruleContent": "/ws/a.txt*"
+     }
+    ]
+   },
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Tool Write is allowed by project permission rules",
+    "ruleId": "rule.project.allow",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/write-wildcard-mid-tail-anchor-nomatch",
+   "tool": "Write",
+   "mode": "build",
+   "input": {
+    "file_path": "/ws/x/a/b",
+    "content": "x"
+   },
+   "projectRules": {
+    "version": 1,
+    "allow": [
+     {
+      "toolName": "Write",
+      "ruleContent": "/ws/*/a"
+     }
+    ]
+   },
+   "decision": {
+    "decision": "ask",
+    "allowed": false,
+    "escalated": true,
+    "reason": "Tool has side effects and requires approval",
+    "ruleId": "mode.build.sideEffect",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/write-wildcard-mid-tail-anchor-match",
+   "tool": "Write",
+   "mode": "build",
+   "input": {
+    "file_path": "/ws/x/a",
+    "content": "x"
+   },
+   "projectRules": {
+    "version": 1,
+    "allow": [
+     {
+      "toolName": "Write",
+      "ruleContent": "/ws/*/a"
+     }
+    ]
+   },
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Tool Write is allowed by project permission rules",
+    "ruleId": "rule.project.allow",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  },
+  {
+   "name": "perm/write-colon-star-prefix",
+   "tool": "Write",
+   "mode": "build",
+   "input": {
+    "command": "git status",
+    "file_path": "/ws/a"
+   },
+   "projectRules": {
+    "version": 1,
+    "allow": [
+     {
+      "toolName": "Write",
+      "ruleContent": "git:*"
+     }
+    ]
+   },
+   "decision": {
+    "decision": "allow",
+    "allowed": true,
+    "escalated": false,
+    "reason": "Tool Write is allowed by project permission rules",
+    "ruleId": "rule.project.allow",
+    "riskLevel": "medium",
+    "sideEffectScope": "workspace"
+   }
+  }
+ ],
+ "options": [
+  {
+   "name": "opts/write-path-rule",
+   "toolName": "Write",
+   "input": {
+    "file_path": "/ws/notes.txt",
+    "content": "x"
+   },
+   "optionsPolicy": null,
+   "options": [
+    {
+     "kind": "allow_once",
+     "name": "Allow once",
+     "optionId": "allow_once",
+     "response": {
+      "decision": "allow",
+      "reason": "Approved once"
+     }
+    },
+    {
+     "description": "Do not ask again for matching requests in this project",
+     "kind": "allow_always",
+     "name": "Always allow in this project",
+     "optionId": "allow_project",
+     "response": {
+      "decision": "allow",
+      "permissionUpdates": [
+       {
+        "behavior": "allow",
+        "rules": [
+         {
+          "toolName": "Write",
+          "ruleContent": "/ws/notes.txt"
+         }
+        ],
+        "type": "addRules"
+       }
+      ],
+      "reason": "Approved for this project"
+     }
+    },
+    {
+     "kind": "deny",
+     "name": "Deny",
+     "optionId": "deny",
+     "response": {
+      "decision": "deny",
+      "reason": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+     }
+    }
+   ]
+  },
+  {
+   "name": "opts/edit-path-rule",
+   "toolName": "Edit",
+   "input": {
+    "file_path": "/ws/notes.txt",
+    "old_string": "a",
+    "new_string": "b"
+   },
+   "optionsPolicy": null,
+   "options": [
+    {
+     "kind": "allow_once",
+     "name": "Allow once",
+     "optionId": "allow_once",
+     "response": {
+      "decision": "allow",
+      "reason": "Approved once"
+     }
+    },
+    {
+     "description": "Do not ask again for matching requests in this project",
+     "kind": "allow_always",
+     "name": "Always allow in this project",
+     "optionId": "allow_project",
+     "response": {
+      "decision": "allow",
+      "permissionUpdates": [
+       {
+        "behavior": "allow",
+        "rules": [
+         {
+          "toolName": "Edit",
+          "ruleContent": "/ws/notes.txt"
+         }
+        ],
+        "type": "addRules"
+       }
+      ],
+      "reason": "Approved for this project"
+     }
+    },
+    {
+     "kind": "deny",
+     "name": "Deny",
+     "optionId": "deny",
+     "response": {
+      "decision": "deny",
+      "reason": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+     }
+    }
+   ]
+  },
+  {
+   "name": "opts/no-always-allow",
+   "toolName": "Write",
+   "input": {
+    "file_path": "/ws/x.txt"
+   },
+   "optionsPolicy": "no-always-allow",
+   "options": [
+    {
+     "kind": "allow_once",
+     "name": "Allow once",
+     "optionId": "allow_once",
+     "response": {
+      "decision": "allow",
+      "reason": "Approved once"
+     }
+    },
+    {
+     "kind": "deny",
+     "name": "Deny",
+     "optionId": "deny",
+     "response": {
+      "decision": "deny",
+      "reason": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+     }
+    }
+   ]
+  },
+  {
+   "name": "opts/session-always-allow",
+   "toolName": "Write",
+   "input": {
+    "file_path": "/ws/x.txt"
+   },
+   "optionsPolicy": "session-always-allow",
+   "options": [
+    {
+     "kind": "allow_once",
+     "name": "Allow once",
+     "optionId": "allow_once",
+     "response": {
+      "decision": "allow",
+      "reason": "Approved once"
+     }
+    },
+    {
+     "description": "Do not ask again for this tool in this session",
+     "kind": "allow_session",
+     "name": "Always allow in this session",
+     "optionId": "allowSession",
+     "response": {
+      "decision": "allow",
+      "reason": "Approved for this session"
+     }
+    },
+    {
+     "kind": "deny",
+     "name": "Deny",
+     "optionId": "deny",
+     "response": {
+      "decision": "deny",
+      "reason": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+     }
+    }
+   ]
+  },
+  {
+   "name": "opts/no-rule-content",
+   "toolName": "Write",
+   "input": {
+    "content": "x"
+   },
+   "optionsPolicy": null,
+   "options": [
+    {
+     "kind": "allow_once",
+     "name": "Allow once",
+     "optionId": "allow_once",
+     "response": {
+      "decision": "allow",
+      "reason": "Approved once"
+     }
+    },
+    {
+     "description": "Do not ask again for matching requests in this project",
+     "kind": "allow_always",
+     "name": "Always allow in this project",
+     "optionId": "allow_project",
+     "response": {
+      "decision": "allow",
+      "permissionUpdates": [
+       {
+        "behavior": "allow",
+        "rules": [
+         {
+          "toolName": "Write"
+         }
+        ],
+        "type": "addRules"
+       }
+      ],
+      "reason": "Approved for this project"
+     }
+    },
+    {
+     "kind": "deny",
+     "name": "Deny",
+     "optionId": "deny",
+     "response": {
+      "decision": "deny",
+      "reason": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+     }
+    }
+   ]
+  }
+ ]
+}

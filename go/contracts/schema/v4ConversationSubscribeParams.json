@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "base": {
+      "properties": {
+        "logEpoch": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "logEpoch",
+        "seq"
+      ],
+      "type": "object"
+    },
+    "clientMode": {
+      "enum": [
+        "desktop-continuous",
+        "web-remote-replayable"
+      ],
+      "type": "string"
+    },
+    "connectionId": {
+      "type": "string"
+    },
+    "legacyTaskIds": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 200,
+      "type": "array"
+    },
+    "resumeThoughtLevel": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "topic": {
+      "type": "string"
+    },
+    "visibility": {
+      "enum": [
+        "foreground",
+        "background"
+      ],
+      "type": "string"
+    },
+    "workflowRunDeltas": {
+      "type": "boolean"
+    },
+    "workspace": {
+      "additionalProperties": false,
+      "properties": {
+        "remoteSessionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "workspaceIdentity": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "workspaceKey": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "workspacePath": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspacePath",
+        "workspaceKey"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "topic",
+    "connectionId",
+    "clientMode"
+  ],
+  "type": "object"
+}

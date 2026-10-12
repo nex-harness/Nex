@@ -1,0 +1,9 @@
+{
+ "id": "S03",
+ "title": "model calls Read on a workspace file, then answers",
+ "outFrames": 58,
+ "inFrames": 4,
+ "modelRequests": 3,
+ "exitCode": 0,
+ "normalizedOutSha256": "c647db08b79a0db297ddcc55938817624f1448b681767d04447e9af4717b1a67"
+}

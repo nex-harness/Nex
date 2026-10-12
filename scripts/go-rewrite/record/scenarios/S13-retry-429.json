@@ -1,0 +1,31 @@
+{
+  "id": "S13",
+  "title": "model returns HTTP 429 then succeeds (retry classification)",
+  "model": {
+    "steps": [
+      { "error": { "status": 429, "headers": { "retry-after": "0" } } },
+      { "text": "Recovered after a retry." }
+    ]
+  },
+  "script": [
+    { "op": "waitReady" },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "Say hello",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": { "reasoningLevel": "none" }
+          }
+        }
+      }
+    },
+    { "op": "subscribe", "sessionFrom": "created", "as": "sub" },
+    { "op": "waitTelemetry", "kind": "turn.terminal" }
+  ]
+}

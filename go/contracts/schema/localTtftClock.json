@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "instanceId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "receivedAt": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "sentAt": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [
+    "instanceId",
+    "receivedAt",
+    "sentAt"
+  ],
+  "type": "object"
+}

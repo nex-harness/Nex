@@ -1,0 +1,417 @@
+[
+ {
+  "input": "{\"id\":1,\"method\":\"session/create\"}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":\"abc\",\"method\":\"session/create\",\"params\":{\"a\":1}}",
+  "accept": true,
+  "normalizedId": "abc"
+ },
+ {
+  "input": "{\"method\":\"v4/conversation/frame\",\"params\":{\"x\":[1,2,3]}}",
+  "accept": true,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":7,\"result\":{\"ok\":true}}",
+  "accept": true,
+  "normalizedId": 7
+ },
+ {
+  "input": "{\"id\":7,\"result\":null}",
+  "accept": true,
+  "normalizedId": 7
+ },
+ {
+  "input": "{\"id\":\"s\",\"error\":{\"code\":-32601,\"message\":\"Method not found: x\"}}",
+  "accept": true,
+  "normalizedId": "s"
+ },
+ {
+  "input": "{\"id\":2,\"error\":{\"code\":1,\"message\":\"m\",\"data\":{\"k\":\"v\"}}}",
+  "accept": true,
+  "normalizedId": 2
+ },
+ {
+  "input": "{\"id\":1.0,\"method\":\"a\"}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":1e3,\"method\":\"a\"}",
+  "accept": true,
+  "normalizedId": 1000
+ },
+ {
+  "input": "{\"id\":-5,\"method\":\"a\"}",
+  "accept": true,
+  "normalizedId": -5
+ },
+ {
+  "input": "{\"id\":0,\"method\":\"a\"}",
+  "accept": true,
+  "normalizedId": 0
+ },
+ {
+  "input": "{\"id\":9007199254740991,\"method\":\"a\"}",
+  "accept": true,
+  "normalizedId": 9007199254740991
+ },
+ {
+  "input": "{\"id\":9007199254740992,\"method\":\"a\"}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1.5,\"method\":\"a\"}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":true,\"method\":\"a\"}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":null,\"method\":\"a\"}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":[1],\"method\":\"a\"}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":\"\",\"method\":\"a\"}",
+  "accept": true,
+  "normalizedId": ""
+ },
+ {
+  "input": "{\"method\":\"\"}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"method\":\"   \"}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"method\":1}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":null}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"extra\":1}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"method\":\"a\",\"id2\":1}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"result\":1,\"extra\":1}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"error\":{\"code\":1,\"message\":\"m\"},\"extra\":1}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"error\":{\"code\":1,\"message\":\"m\",\"extra\":1}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"result\":1,\"error\":{\"code\":1,\"message\":\"m\"}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"result\":1}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "[]",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "null",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "1",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "\"s\"",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"error\":{\"code\":1.5,\"message\":\"m\"}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"error\":{\"code\":\"1\",\"message\":\"m\"}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"error\":{\"code\":1,\"message\":\"\"}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"error\":{\"code\":1,\"message\":\" \"}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"error\":{\"code\":1}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"error\":{\"message\":\"m\"}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"error\":null}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"error\":\"x\"}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"trace\":{\"traceId\":\"t\"}}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"trace\":{\"traceparent\":\"00-abc-def-01\",\"traceId\":\"t\",\"parentId\":\"p\",\"spanId\":\"s\"}}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"trace\":{\"traceId\":\"\"}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"trace\":{\"traceId\":\" \"}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"trace\":{\"unknown\":\"t\"}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"trace\":null}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"trace\":[]}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"trace\":{}}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"params\":null}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"params\":[]}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"params\":\"s\"}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":1,\"id\":2,\"method\":\"a\"}",
+  "accept": true,
+  "normalizedId": 2
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"method\":\"\"}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"params\":{\"t\":\"\\u2028\\u2029\"}}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a b\"}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"\\u00e9\"}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":1,\"result\":null,\"x\":null}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":null,\"result\":1}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":null,\"error\":{\"code\":1,\"message\":\"m\"}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"error\":{\"code\":null,\"message\":\"m\"}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"error\":{\"code\":1,\"message\":null}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"error\":{\"code\":1,\"message\":\"m\",\"data\":null}}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":1,\"error\":{\"code\":-1e2,\"message\":\"m\"}}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":1,\"error\":{\"code\":1e400,\"message\":\"m\"}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1e400,\"method\":\"a\"}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":-0,\"method\":\"a\"}",
+  "accept": true,
+  "normalizedId": 0
+ },
+ {
+  "input": "{\"id\":\"1\",\"method\":\"a\"}",
+  "accept": true,
+  "normalizedId": "1"
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"params\":{\"deep\":{\"deeper\":[null,true,1.5,\"s\"]}}}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"method\":\"a\",\"params\":undefined}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1 \"method\":\"a\"}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": " ",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\"} trailing",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"\\ud800\"}",
+  "accept": true,
+  "normalizedId": 1
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"trace\":{\"traceId\":1}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"trace\":{\"traceId\":null}}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"__proto__\":1,\"id\":1,\"method\":\"a\"}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"a\",\"constructor\":1}",
+  "accept": false,
+  "normalizedId": null
+ },
+ {
+  "input": "{\"id\":1,\"method\":\"toString\"}",
+  "accept": true,
+  "normalizedId": 1
+ }
+]

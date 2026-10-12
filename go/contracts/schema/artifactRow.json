@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "actions": {
+      "properties": {
+        "canEdit": {
+          "const": true,
+          "type": "boolean"
+        },
+        "canFork": {
+          "const": true,
+          "type": "boolean"
+        },
+        "canRetry": {
+          "const": true,
+          "type": "boolean"
+        },
+        "canRewindFiles": {
+          "const": true,
+          "type": "boolean"
+        },
+        "editDisposition": {
+          "enum": [
+            "rewind",
+            "fork"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "artifactType": {
+      "enum": [
+        "pdf",
+        "pptx",
+        "docx",
+        "xlsx",
+        "image",
+        "html",
+        "md",
+        "text"
+      ],
+      "type": "string"
+    },
+    "artifactVersionId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "number"
+    },
+    "createdAtSeq": {
+      "type": "number"
+    },
+    "displayName": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "entityId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "kind": {
+      "const": "artifact",
+      "type": "string"
+    },
+    "logicalArtifactKey": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "mimeType": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "productTurnId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "ref": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "rowId": {
+      "type": "number"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "sizeBytes": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "state": {
+      "const": "current",
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "visibility": {
+      "const": "visible",
+      "type": "string"
+    }
+  },
+  "required": [
+    "rowId",
+    "turnId",
+    "createdAt",
+    "createdAtSeq",
+    "kind",
+    "artifactVersionId",
+    "logicalArtifactKey",
+    "displayName",
+    "artifactType",
+    "mimeType",
+    "sizeBytes",
+    "sha256",
+    "ref",
+    "state"
+  ],
+  "type": "object"
+}

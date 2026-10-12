@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "base": {
+      "properties": {
+        "logEpoch": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "logEpoch",
+        "seq"
+      ],
+      "type": "object"
+    },
+    "topic": {
+      "type": "string"
+    },
+    "visibility": {
+      "enum": [
+        "foreground",
+        "background"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "topic"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,27 @@
+[
+ {
+  "id": "S03",
+  "toolMessages": [
+   "1\thi there\n2\t"
+  ],
+  "files": {
+   "hello.txt": "hi there\n"
+  }
+ },
+ {
+  "id": "S04",
+  "toolMessages": [
+   "File created successfully at: <WS>/notes.txt (file state is current in your context — no need to Read it back)",
+   "File created successfully at: <WS>/notes.txt (file state is current in your context — no need to Read it back)",
+   "The file <WS>/notes.txt has been updated successfully. (file state is current in your context — no need to Read it back)"
+  ],
+  "files": {}
+ },
+ {
+  "id": "S05",
+  "toolMessages": [
+   "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+  ],
+  "files": {}
+ }
+]

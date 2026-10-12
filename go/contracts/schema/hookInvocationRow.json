@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "actions": {
+      "properties": {
+        "canEdit": {
+          "const": true,
+          "type": "boolean"
+        },
+        "canFork": {
+          "const": true,
+          "type": "boolean"
+        },
+        "canRetry": {
+          "const": true,
+          "type": "boolean"
+        },
+        "canRewindFiles": {
+          "const": true,
+          "type": "boolean"
+        },
+        "editDisposition": {
+          "enum": [
+            "rewind",
+            "fork"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "anchorToolCallId": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "number"
+    },
+    "createdAtSeq": {
+      "type": "number"
+    },
+    "durationMs": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "endedAt": {
+      "type": "number"
+    },
+    "entityId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "executions": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "blockReason": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "didExecute": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "durationMs": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "endedAt": {
+            "type": "number"
+          },
+          "hookIndex": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "hookRunId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "success",
+              "blocked",
+              "failed",
+              "cancelled",
+              "timed_out"
+            ],
+            "type": "string"
+          },
+          "pluginName": {
+            "type": "string"
+          },
+          "sourceKind": {
+            "enum": [
+              "user",
+              "plugin",
+              "project"
+            ],
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "completed",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "toolName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hookRunId",
+          "hookIndex",
+          "didExecute",
+          "state",
+          "startedAt",
+          "displayName",
+          "sourceKind"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "hookCount": {
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+    },
+    "hookEventName": {
+      "enum": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PermissionRequest",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "Stop"
+      ],
+      "type": "string"
+    },
+    "hookInvocationId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "kind": {
+      "const": "hookInvocation",
+      "type": "string"
+    },
+    "lane": {
+      "enum": [
+        "assistantWork",
+        "toolBefore",
+        "toolAfter"
+      ],
+      "type": "string"
+    },
+    "productTurnId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "rowId": {
+      "type": "number"
+    },
+    "startedAt": {
+      "type": "number"
+    },
+    "state": {
+      "enum": [
+        "running",
+        "completed",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "visibility": {
+      "const": "visible",
+      "type": "string"
+    }
+  },
+  "required": [
+    "rowId",
+    "turnId",
+    "createdAt",
+    "createdAtSeq",
+    "kind",
+    "hookInvocationId",
+    "hookEventName",
+    "hookCount",
+    "state",
+    "startedAt",
+    "lane",
+    "executions"
+  ],
+  "type": "object"
+}

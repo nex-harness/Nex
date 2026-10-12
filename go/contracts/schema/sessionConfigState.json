@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "followupMode": {
+      "enum": [
+        "queue",
+        "guide"
+      ],
+      "type": "string"
+    },
+    "mode": {
+      "default": "build",
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "modelSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "modelId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "options": {
+          "additionalProperties": false,
+          "properties": {
+            "reasoningLevel": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "providerId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerId",
+        "modelId"
+      ],
+      "type": "object"
+    },
+    "permissionGrant": {
+      "properties": {
+        "interactionId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "interactionId"
+      ],
+      "type": "object"
+    },
+    "planEnabled": {
+      "type": "boolean"
+    },
+    "planTransition": {
+      "properties": {
+        "planEnabled": {
+          "type": "boolean"
+        },
+        "toolCallId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "toolCallId",
+        "planEnabled"
+      ],
+      "type": "object"
+    },
+    "provider": {
+      "type": "string"
+    },
+    "thought": {
+      "type": "string"
+    },
+    "thoughtLevels": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "provider",
+    "model",
+    "thought",
+    "followupMode"
+  ],
+  "type": "object"
+}

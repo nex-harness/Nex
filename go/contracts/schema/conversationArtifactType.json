@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "pdf",
+    "pptx",
+    "docx",
+    "xlsx",
+    "image",
+    "html",
+    "md",
+    "text"
+  ],
+  "type": "string"
+}

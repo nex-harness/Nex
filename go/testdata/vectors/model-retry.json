@@ -1,0 +1,276 @@
+{
+ "delays": [
+  {
+   "attempt": 1,
+   "baseDelayMs": 2000,
+   "backoffFactor": 2,
+   "maxDelayMs": 60000,
+   "jitter": false,
+   "retryAfterMs": null,
+   "delayMs": 2000
+  },
+  {
+   "attempt": 2,
+   "baseDelayMs": 2000,
+   "backoffFactor": 2,
+   "maxDelayMs": 60000,
+   "jitter": false,
+   "retryAfterMs": null,
+   "delayMs": 4000
+  },
+  {
+   "attempt": 3,
+   "baseDelayMs": 2000,
+   "backoffFactor": 2,
+   "maxDelayMs": 60000,
+   "jitter": false,
+   "retryAfterMs": null,
+   "delayMs": 8000
+  },
+  {
+   "attempt": 10,
+   "baseDelayMs": 2000,
+   "backoffFactor": 2,
+   "maxDelayMs": 60000,
+   "jitter": false,
+   "retryAfterMs": null,
+   "delayMs": 60000
+  },
+  {
+   "attempt": 1,
+   "baseDelayMs": 2000,
+   "backoffFactor": 2,
+   "maxDelayMs": 60000,
+   "jitter": false,
+   "retryAfterMs": 0,
+   "delayMs": 0
+  },
+  {
+   "attempt": 1,
+   "baseDelayMs": 2000,
+   "backoffFactor": 2,
+   "maxDelayMs": 60000,
+   "jitter": false,
+   "retryAfterMs": 1500,
+   "delayMs": 1500
+  },
+  {
+   "attempt": 1,
+   "baseDelayMs": 2000,
+   "backoffFactor": 2,
+   "maxDelayMs": 60000,
+   "jitter": false,
+   "retryAfterMs": 600000,
+   "delayMs": 2000
+  },
+  {
+   "attempt": 1,
+   "baseDelayMs": 2000,
+   "backoffFactor": 2,
+   "maxDelayMs": 60000,
+   "jitter": false,
+   "retryAfterMs": 300001,
+   "delayMs": 2000
+  },
+  {
+   "attempt": 1,
+   "baseDelayMs": 0,
+   "backoffFactor": 2,
+   "maxDelayMs": 60000,
+   "jitter": false,
+   "retryAfterMs": null,
+   "delayMs": 0
+  },
+  {
+   "attempt": 1,
+   "baseDelayMs": 2000,
+   "backoffFactor": 2,
+   "maxDelayMs": 0,
+   "jitter": false,
+   "retryAfterMs": null,
+   "delayMs": 0
+  }
+ ],
+ "options": [
+  {
+   "env": {},
+   "resolved": {
+    "backoffFactor": 2,
+    "baseDelayMs": 2000,
+    "jitter": true,
+    "maxAttempts": 11,
+    "maxDelayMs": 60000
+   }
+  },
+  {
+   "options": {},
+   "env": {},
+   "resolved": {
+    "backoffFactor": 2,
+    "baseDelayMs": 2000,
+    "jitter": true,
+    "maxAttempts": 11,
+    "maxDelayMs": 60000
+   }
+  },
+  {
+   "options": {
+    "maxAttempts": 3
+   },
+   "env": {},
+   "resolved": {
+    "backoffFactor": 2,
+    "baseDelayMs": 2000,
+    "jitter": true,
+    "maxAttempts": 3,
+    "maxDelayMs": 60000
+   }
+  },
+  {
+   "env": {
+    "NEX_MODEL_RETRY_MAX_RETRIES": "5"
+   },
+   "resolved": {
+    "backoffFactor": 2,
+    "baseDelayMs": 2000,
+    "jitter": true,
+    "maxAttempts": 6,
+    "maxDelayMs": 60000
+   }
+  },
+  {
+   "env": {
+    "NEX_MODEL_RETRY_MAX_RETRIES": "0"
+   },
+   "resolved": {
+    "backoffFactor": 2,
+    "baseDelayMs": 2000,
+    "jitter": true,
+    "maxAttempts": 1,
+    "maxDelayMs": 60000
+   }
+  },
+  {
+   "env": {
+    "NEX_MODEL_RETRY_BASE_DELAY_MS": "500",
+    "NEX_MODEL_RETRY_MAX_DELAY_MS": "4000"
+   },
+   "resolved": {
+    "backoffFactor": 2,
+    "baseDelayMs": 500,
+    "jitter": true,
+    "maxAttempts": 11,
+    "maxDelayMs": 4000
+   }
+  },
+  {
+   "env": {
+    "NEX_MODEL_RETRY_BACKOFF_FACTOR": "3"
+   },
+   "resolved": {
+    "backoffFactor": 3,
+    "baseDelayMs": 2000,
+    "jitter": true,
+    "maxAttempts": 11,
+    "maxDelayMs": 60000
+   }
+  },
+  {
+   "options": {
+    "baseDelayMs": 100
+   },
+   "env": {
+    "NEX_MODEL_RETRY_BASE_DELAY_MS": "500"
+   },
+   "resolved": {
+    "backoffFactor": 2,
+    "baseDelayMs": 100,
+    "jitter": true,
+    "maxAttempts": 11,
+    "maxDelayMs": 60000
+   }
+  },
+  {
+   "options": {
+    "jitter": false
+   },
+   "env": {},
+   "resolved": {
+    "backoffFactor": 2,
+    "baseDelayMs": 2000,
+    "jitter": false,
+    "maxAttempts": 11,
+    "maxDelayMs": 60000
+   }
+  },
+  {
+   "env": {
+    "NEX_MODEL_RETRY_MAX_RETRIES": "-1"
+   },
+   "resolved": {
+    "backoffFactor": 2,
+    "baseDelayMs": 2000,
+    "jitter": true,
+    "maxAttempts": 11,
+    "maxDelayMs": 60000
+   }
+  },
+  {
+   "options": {
+    "backoffFactor": 0
+   },
+   "env": {},
+   "resolved": {
+    "backoffFactor": 2,
+    "baseDelayMs": 2000,
+    "jitter": true,
+    "maxAttempts": 11,
+    "maxDelayMs": 60000
+   }
+  },
+  {
+   "options": {
+    "maxAttempts": 0
+   },
+   "env": {},
+   "resolved": {
+    "backoffFactor": 2,
+    "baseDelayMs": 2000,
+    "jitter": true,
+    "maxAttempts": 1,
+    "maxDelayMs": 60000
+   }
+  }
+ ],
+ "idle": [
+  {
+   "resolved": 600000
+  },
+  {
+   "baseTimeoutMs": 600000,
+   "resolved": 600000
+  },
+  {
+   "baseTimeoutMs": 600000,
+   "retryNumber": 1,
+   "resolved": 630000
+  },
+  {
+   "baseTimeoutMs": 600000,
+   "retryNumber": 3,
+   "resolved": 690000
+  },
+  {
+   "baseTimeoutMs": 0,
+   "resolved": 0
+  },
+  {
+   "baseTimeoutMs": -5,
+   "resolved": -5
+  },
+  {
+   "retryNumber": 2,
+   "resolved": 660000
+  }
+ ]
+}

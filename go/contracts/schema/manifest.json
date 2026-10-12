@@ -1,0 +1,749 @@
+{
+  "converter": "z.toJSONSchema (zod 4)",
+  "count": 138,
+  "generatedFrom": "scripts/go-rewrite/export-schemas.mts",
+  "legacySource": "packages/shared/src/nex-protocol/index.ts",
+  "refinements": [
+    {
+      "count": 1,
+      "id": "commandPayloadSchemas$$sendText",
+      "note": "refinements are not expressible in JSON Schema; the Go validator must re-implement them",
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "count": 1,
+      "id": "commandsQueryParams",
+      "note": "refinements are not expressible in JSON Schema; the Go validator must re-implement them",
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "count": 1,
+      "id": "conversationTopicFrame",
+      "note": "refinements are not expressible in JSON Schema; the Go validator must re-implement them",
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "count": 2,
+      "id": "conversationTopicWireFrame",
+      "note": "refinements are not expressible in JSON Schema; the Go validator must re-implement them",
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "count": 1,
+      "id": "helloMessage",
+      "note": "refinements are not expressible in JSON Schema; the Go validator must re-implement them",
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "count": 1,
+      "id": "localTtftDetail",
+      "note": "refinements are not expressible in JSON Schema; the Go validator must re-implement them",
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "count": 1,
+      "id": "nexStorageStartupState",
+      "note": "refinements are not expressible in JSON Schema; the Go validator must re-implement them",
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "count": 1,
+      "id": "pendingInteraction",
+      "note": "refinements are not expressible in JSON Schema; the Go validator must re-implement them",
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    }
+  ],
+  "schemas": [
+    {
+      "id": "actionAvailability",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "activeWorkSummary",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "apiRetryState",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "artifactRow",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "assistantTextRow",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "attachmentRef",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/attachment-ref.ts"
+    },
+    {
+      "id": "backgroundResultOriginMeta",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "backgroundWorkSummary",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "clientHello",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "commandAck",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandEnvelope",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandKey",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$amendWorkflowRunSettings",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$applyFileRewind",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$cancelBackgroundWork",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$compact",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$createSelectionSideSession",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$createSession",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$deleteQueueItem",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$deleteSession",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$discardSharedContext",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$editQueueItem",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$editUserQuery",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$forkAssistant",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$pauseGoal",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$renameSession",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$reorderQueueItem",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$requestWorkspaceHookReview",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$resolveInteraction",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$respondWorkspaceHookReview",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$resumeGoal",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$resumeWorkflowRun",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$retryTurn",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$revokeWorkspaceHookTrust",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$sendGoalCommand",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$sendQueuedNow",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$sendText",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$setAssistantFeedback",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$setAutoDrain",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$setFollowupMode",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$snoozeInteractionAutoResolution",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$startSavedWorkflow",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$stop",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$switchCollaborationMode",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$switchModelConfig",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandPayloadSchemas$$toggleWorkspaceHookReviewItem",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandQueryItem",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandResult",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandStateSummary",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "commandType",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandsQueryParams",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "commandsQueryResult",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/command.ts"
+    },
+    {
+      "id": "conversationArtifactType",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "conversationDelta",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/delta.ts"
+    },
+    {
+      "id": "conversationOpenTiming",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "conversationRow",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "conversationRowTarget",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/core.ts"
+    },
+    {
+      "id": "conversationSnapshot",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "conversationTopicFrame",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "conversationTopicWireFrame",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "cuaAppIdentity",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "errorAttribution",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "goalIterationState",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "goalState",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "helloMessage",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "hookExecutionProjection",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "hookInvocationRow",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "hostCapabilities",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "inputRouting",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "interactionAutoResolution",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "localTtftClock",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "localTtftContext",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "localTtftDetail",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "localTtftFacts",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "localTtftOutputKind",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "modelExecution",
+      "root": false,
+      "source": "packages/shared/src/model-execution.ts"
+    },
+    {
+      "id": "modelSelection",
+      "root": false,
+      "source": "packages/shared/src/model-selection.ts"
+    },
+    {
+      "id": "nexBrowserAmbientContext",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "nexProtocolError",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "nexProtocolMcpServer",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "nexProtocolMessage",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "nexProtocolNotification",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "nexProtocolRequest",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "nexProtocolRequestId",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "nexProtocolResponse",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "nexProtocolTrace",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "nexStorageStartupState",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol/index.ts"
+    },
+    {
+      "id": "pendingInteraction",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "permissionRequestPayload",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "planItem",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "planState",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "queueItem",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "queueState",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "reasoningRow",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "rowActions",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "rowsWindow",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "runningSubagentSummary",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "sessionActionAvailability",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "sessionConfigState",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "sessionControl",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "sessionErrorInfo",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "sessionMetaState",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "sessionModelTransition",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "sessionPhase",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "sessionUsageState",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "sharedContextImportState",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "statePatch",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/delta.ts"
+    },
+    {
+      "id": "stopTargetKind",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "streamablePath",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/core.ts"
+    },
+    {
+      "id": "subagentProjectionState",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "subagentRow",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "submissionMode",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/submission.ts"
+    },
+    {
+      "id": "subscribeAck",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "subscribeParams",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "timelineMarkerLane",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "timelineMarkerPayload",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "timelineMarkerRow",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "timestamp",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/core.ts"
+    },
+    {
+      "id": "toolCallRow",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "turnHeaderRow",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "turnWorkSegment",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "userInputOptionPayload",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "userInputQuestionPayload",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "userInputRequestPayload",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    },
+    {
+      "id": "userInputRow",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "v4ConnectionFlowParams",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "v4ConnectionFlowResult",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "v4ConnectionFlowState",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "v4ConversationFileRewindPreviewResult",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "v4ConversationSubscribeParams",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "v4ConversationSubscribeResult",
+      "root": true,
+      "source": "packages/shared/src/nex-protocol-v4/transport.ts"
+    },
+    {
+      "id": "workflowLaunchMeta",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "workflowNotificationMeta",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "workflowRunEntryRef",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/delta.ts"
+    },
+    {
+      "id": "workflowRunHeaderKey",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/delta.ts"
+    },
+    {
+      "id": "workflowRunHeaderPatch",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/delta.ts"
+    },
+    {
+      "id": "workflowSettingsAmendMeta",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/rows.ts"
+    },
+    {
+      "id": "workspaceHookAdmissionState",
+      "root": false,
+      "source": "packages/shared/src/nex-protocol-v4/snapshot.ts"
+    }
+  ],
+  "unsupported": []
+}

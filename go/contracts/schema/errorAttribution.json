@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "errorPhase": {
+      "enum": [
+        "prepare",
+        "configuration",
+        "connect",
+        "response",
+        "stream",
+        "parse",
+        "validation",
+        "unhandled"
+      ],
+      "type": "string"
+    },
+    "exceptionKind": {
+      "enum": [
+        "api_call",
+        "generic",
+        "protocol",
+        "provider_business",
+        "transport",
+        "type_error",
+        "validation"
+      ],
+      "type": "string"
+    },
+    "modelId": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "providerErrorCode": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "providerId": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "providerKind": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "retryable": {
+      "type": "boolean"
+    },
+    "source": {
+      "enum": [
+        "provider",
+        "runtime",
+        "tool",
+        "network"
+      ],
+      "type": "string"
+    },
+    "statusCode": {
+      "maximum": 599,
+      "minimum": 100,
+      "type": "integer"
+    },
+    "transport": {
+      "enum": [
+        "http",
+        "sse",
+        "websocket"
+      ],
+      "type": "string"
+    }
+  },
+  "type": "object"
+}

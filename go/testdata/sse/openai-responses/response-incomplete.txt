@@ -1,0 +1,11 @@
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"id":"msg_1","type":"message","status":"in_progress","role":"assistant","content":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":2,"item_id":"msg_1","output_index":0,"content_index":0,"delta":"truncated"}
+
+event: response.incomplete
+data: {"type":"response.incomplete","sequence_number":3,"response":{"id":"resp_mock","object":"response","created_at":1700000000,"status":"incomplete","model":"deepseek-flash","output":[],"error":null,"incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":9,"output_tokens":9,"total_tokens":18,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}}}}
+
+data: [DONE]
+

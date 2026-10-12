@@ -1,0 +1,9 @@
+{
+ "id": "S02",
+ "title": "v4 createSession with first input, subscribe, streamed text answer",
+ "outFrames": 47,
+ "inFrames": 4,
+ "modelRequests": 1,
+ "exitCode": 0,
+ "normalizedOutSha256": "5cadb49df4dd021beb1dc8070c559ceb0c616cc2e6024da58f7bdda3e66f235d"
+}

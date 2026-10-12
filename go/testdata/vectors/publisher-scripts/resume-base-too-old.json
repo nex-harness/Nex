@@ -1,0 +1,76 @@
+{
+ "name": "resume-base-too-old",
+ "logEpoch": "epochepoch0",
+ "workflowRunDeltas": true,
+ "sessionId": "sess-vector",
+ "retention": 2,
+ "steps": [
+  {
+   "seq": 1,
+   "revision": 1,
+   "deltas": [
+    {
+     "op": "row.appended",
+     "row": {
+      "rowId": 1,
+      "kind": "assistantText",
+      "text": "a"
+     }
+    }
+   ]
+  },
+  {
+   "seq": 2,
+   "revision": 2,
+   "deltas": [
+    {
+     "op": "row.appended",
+     "row": {
+      "rowId": 2,
+      "kind": "assistantText",
+      "text": "b"
+     }
+    }
+   ]
+  },
+  {
+   "seq": 3,
+   "revision": 3,
+   "deltas": [
+    {
+     "op": "row.appended",
+     "row": {
+      "rowId": 3,
+      "kind": "assistantText",
+      "text": "c"
+     }
+    }
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "op": "ingest",
+   "step": 0
+  },
+  {
+   "op": "ingest",
+   "step": 1
+  },
+  {
+   "op": "ingest",
+   "step": 2
+  },
+  {
+   "op": "subscribe",
+   "connectionId": "a",
+   "deliveryProfile": "continuous",
+   "base": {
+    "logEpoch": "epochepoch0",
+    "seq": 0
+   },
+   "mode": "snapshot",
+   "sub": 0
+  }
+ ]
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "appVersion": {
+      "type": "string"
+    },
+    "capabilities": {
+      "additionalProperties": false,
+      "properties": {
+        "workflowRunDeltas": {
+          "type": "boolean"
+        },
+        "workspaceHookReviewUi": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "clientId": {
+      "type": "string"
+    },
+    "clientKind": {
+      "enum": [
+        "desktop",
+        "web",
+        "mobileRemote",
+        "mobileApp"
+      ],
+      "type": "string"
+    },
+    "kind": {
+      "const": "clientHello",
+      "type": "string"
+    },
+    "protocolVersion": {
+      "const": 3,
+      "type": "number"
+    }
+  },
+  "required": [
+    "kind",
+    "protocolVersion",
+    "clientId",
+    "appVersion"
+  ],
+  "type": "object"
+}

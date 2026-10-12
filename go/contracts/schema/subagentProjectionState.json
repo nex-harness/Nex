@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "childSessionIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "endedTotal": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "revision": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "running": {
+      "items": {
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "childSessionId": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "waiting",
+              "blocked"
+            ],
+            "type": "string"
+          },
+          "subagentType": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "childSessionId",
+          "subagentType",
+          "title",
+          "status"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "revision",
+    "childSessionIds",
+    "running",
+    "endedTotal"
+  ],
+  "type": "object"
+}

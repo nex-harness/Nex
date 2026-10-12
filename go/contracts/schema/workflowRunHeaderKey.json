@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "runId",
+    "toolCallId",
+    "status",
+    "stopReason",
+    "resumedFrom",
+    "supersededBy",
+    "usage",
+    "error",
+    "resumable",
+    "resultPreview",
+    "reports",
+    "pendingQuestions",
+    "concurrency",
+    "concurrencyCeiling",
+    "subagentModel",
+    "artifacts",
+    "phases",
+    "currentPhase",
+    "phaseNames",
+    "phaseAlongside",
+    "unlistedByPhase",
+    "truncated",
+    "lastEventSequence"
+  ],
+  "type": "string"
+}

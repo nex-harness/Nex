@@ -1,0 +1,9 @@
+{
+ "id": "H-write-new",
+ "title": "write-new",
+ "outFrames": 56,
+ "inFrames": 5,
+ "modelRequests": 2,
+ "exitCode": 0,
+ "normalizedOutSha256": "e3232559c6572ef8d7182acc19c5a88356e463cf7f1a5e302ca2b9ea1a5a8387"
+}

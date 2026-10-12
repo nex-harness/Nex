@@ -1,0 +1,60 @@
+{
+  "id": "H-429-twice",
+  "title": "429-twice",
+  "model": {
+    "steps": [
+      {
+        "error": {
+          "status": 429,
+          "headers": {
+            "retry-after": "0"
+          }
+        }
+      },
+      {
+        "error": {
+          "status": 429,
+          "headers": {
+            "retry-after": "0"
+          }
+        }
+      },
+      {
+        "text": "third time"
+      }
+    ]
+  },
+  "files": {},
+  "script": [
+    {
+      "op": "waitReady"
+    },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "do it",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": {
+              "reasoningLevel": "none"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "subscribe",
+      "sessionFrom": "created",
+      "as": "sub"
+    },
+    {
+      "op": "waitTelemetry",
+      "kind": "turn.terminal"
+    }
+  ]
+}

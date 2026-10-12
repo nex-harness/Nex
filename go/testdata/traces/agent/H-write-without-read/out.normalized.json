@@ -1,0 +1,1842 @@
+[
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 1,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "checking",
+   "elapsedMs": 0
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 2,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "checking",
+   "elapsedMs": 0
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 3,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "checking",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 0,
+    "committedCount": 0
+   },
+   "elapsedMs": 0
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 4,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 0,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 0,
+   "total": 22,
+   "migrationId": "0001_base_session_store"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 5,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 1,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 1,
+   "total": 22,
+   "migrationId": "0002_local_setting"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 6,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 2,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 2,
+   "total": 22,
+   "migrationId": "0003_backfill_permission_local_setting"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 7,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 3,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 3,
+   "total": 22,
+   "migrationId": "0004_session_target"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 8,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 4,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 4,
+   "total": 22,
+   "migrationId": "0005_session_target_accounting"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 9,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 5,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 5,
+   "total": 22,
+   "migrationId": "0006_input_history_attachments"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 10,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 6,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 6,
+   "total": 22,
+   "migrationId": "0007_workflow_script_runtime"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 11,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 7,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 7,
+   "total": 22,
+   "migrationId": "0008_workflow_definition_scope"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 12,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 8,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 8,
+   "total": 22,
+   "migrationId": "0009_session_title_metadata"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 13,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 9,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 9,
+   "total": 22,
+   "migrationId": "0010_usage_observability"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 14,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 10,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 10,
+   "total": 22,
+   "migrationId": "0011_session_target_summary_title"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 15,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 11,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 11,
+   "total": 22,
+   "migrationId": "0012_session_trace_id"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 16,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 12,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 12,
+   "total": 22,
+   "migrationId": "0013_session_target_active_run_accounting"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 17,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 13,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 13,
+   "total": 22,
+   "migrationId": "0014_message_part_sequence"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 18,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 14,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 14,
+   "total": 22,
+   "migrationId": "0015_message_part_sequence_backfill_and_guard"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 19,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 15,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 15,
+   "total": 22,
+   "migrationId": "0016_session_input_ledger"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 20,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 16,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 16,
+   "total": 22,
+   "migrationId": "0017_session_input_start_now_delivery"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 21,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 17,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 17,
+   "total": 22,
+   "migrationId": "0018_session_input_failed_status"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 22,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 18,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 18,
+   "total": 22,
+   "migrationId": "0019_dwf_journal"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 23,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 19,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 19,
+   "total": 22,
+   "migrationId": "0020_provider_model_selection"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 24,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 20,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 20,
+   "total": 22,
+   "migrationId": "0021_official_glm_selection"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 25,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "migrating",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 21,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0,
+   "completed": 21,
+   "total": 22,
+   "migrationId": "0022_backfilled_session_reasoning"
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 26,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "committing",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 22,
+    "committedCount": 0,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0
+  }
+ },
+ {
+  "method": "startup/storageState",
+  "params": {
+   "schemaVersion": 1,
+   "attemptId": "<uuid1>",
+   "sequence": 27,
+   "databaseId": "<hash1>",
+   "databaseKind": "session",
+   "phase": "ready",
+   "migration": {
+    "kind": "initialize",
+    "executedCount": 22,
+    "committedCount": 22,
+    "lastAppliedMigrationId": null
+   },
+   "elapsedMs": 0
+  }
+ },
+ {
+  "id": "server-1",
+  "method": "session/requestRuntimePreferences",
+  "params": {
+   "sessionId": "<id1>",
+   "scope": "runtime-materialization"
+  }
+ },
+ {
+  "method": "process/mcpTelemetry",
+  "params": {
+   "arch": "x64",
+   "configuredCount": 0,
+   "connectedCount": 0,
+   "failedCount": 0,
+   "kind": "session_startup",
+   "occurredAt": "<time>",
+   "platform": "linux",
+   "processCount": 0,
+   "sessionId": "<id1>"
+  }
+ },
+ {
+  "id": "server-2",
+  "method": "session/requestRuntimePreferences",
+  "params": {
+   "sessionId": "<id1>",
+   "scope": "user-execution"
+  }
+ },
+ {
+  "id": 1,
+  "result": {
+   "commandId": "cmd-0001",
+   "status": "accepted",
+   "revisionAtDecision": 0,
+   "result": {
+    "type": "createSession",
+    "sessionId": "<id1>",
+    "input": {
+     "delivery": "startNow",
+     "inputId": "cmd-0001"
+    }
+   },
+   "memoryEnabled": false
+  }
+ },
+ {
+  "id": 2,
+  "result": {
+   "ack": {
+    "subscriptionId": "<sub1>-1",
+    "mode": "snapshot",
+    "logEpoch": "<epoch1>",
+    "openTiming": {
+     "version": 1,
+     "initialFrameEncodeMs": 0,
+     "sessionRuntimeState": "warm",
+     "snapshotRowCount": 0
+    }
+   }
+  }
+ },
+ {
+  "method": "computer-use/operation-event",
+  "params": {
+   "eventId": "<uuid2>",
+   "sequenceNumber": 2,
+   "sessionId": "<id1>",
+   "timestamp": "<time>",
+   "kind": "turn-started",
+   "turnId": "<id2>"
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid2>",
+   "eventSeq": 2,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "turn.started"
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid3>",
+   "eventSeq": 5,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "model.request.status",
+   "requestId": "<uuid4>",
+   "status": "model_request_started",
+   "providerId": "mock",
+   "modelId": "mock-model",
+   "providerKind": "openai-compatible",
+   "providerHostname": "127.0.0.1",
+   "transport": "sse",
+   "querySource": "main_turn",
+   "queryId": "cmd-0001",
+   "attempt": 1,
+   "maxAttempts": 11
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid5>",
+   "eventSeq": 12,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "model.request.status",
+   "requestId": "<uuid4>",
+   "status": "model_request_completed",
+   "providerId": "mock",
+   "modelId": "mock-model",
+   "providerKind": "openai-compatible",
+   "providerHostname": "127.0.0.1",
+   "transport": "sse",
+   "querySource": "main_turn",
+   "queryId": "cmd-0001",
+   "attempt": 1,
+   "maxAttempts": 11,
+   "durationMs": 0
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid6>",
+   "eventSeq": 13,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "usage.delta",
+   "requestId": "<uuid4>",
+   "providerId": "mock",
+   "modelId": "mock-model",
+   "providerKind": "openai-compatible",
+   "providerHostname": "127.0.0.1",
+   "inputTokens": 100,
+   "outputTokens": 20,
+   "totalTokens": 120,
+   "reasoningTokens": 0,
+   "cacheReadTokens": 0,
+   "cacheWriteTokens": 0
+  }
+ },
+ {
+  "method": "computer-use/operation-event",
+  "params": {
+   "eventId": "<uuid7>",
+   "sequenceNumber": 15,
+   "sessionId": "<id1>",
+   "timestamp": "<time>",
+   "kind": "tool-scheduled",
+   "turnId": "<id2>",
+   "toolCallId": "c1",
+   "toolName": "Write"
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid7>",
+   "eventSeq": 15,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "tool.lifecycle",
+   "phase": "scheduled",
+   "toolCallId": "c1",
+   "toolName": "Write"
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid8>",
+   "eventSeq": 18,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "permission.lifecycle",
+   "phase": "requested",
+   "requestId": "perm_<uuid9>",
+   "toolCallId": "c1",
+   "toolName": "Write"
+  }
+ },
+ {
+  "id": "server-3",
+  "method": "interaction/requestPermission",
+  "params": {
+   "input": {
+    "file_path": "<WS>/exists.txt",
+    "content": "new\n"
+   },
+   "reason": "Tool has side effects and requires approval",
+   "requestId": "perm_<uuid9>",
+   "riskLevel": "medium",
+   "sessionId": "<id1>",
+   "options": [
+    {
+     "kind": "allow_once",
+     "name": "Allow once",
+     "optionId": "allow_once",
+     "response": {
+      "decision": "allow",
+      "reason": "Approved once"
+     }
+    },
+    {
+     "description": "Do not ask again for matching requests in this project",
+     "kind": "allow_always",
+     "name": "Always allow in this project",
+     "optionId": "allow_project",
+     "response": {
+      "decision": "allow",
+      "permissionUpdates": [
+       {
+        "behavior": "allow",
+        "rules": [
+         {
+          "toolName": "Write",
+          "ruleContent": "<WS>/exists.txt"
+         }
+        ],
+        "type": "addRules"
+       }
+      ],
+      "reason": "Approved for this project"
+     }
+    },
+    {
+     "kind": "deny",
+     "name": "Deny",
+     "optionId": "deny",
+     "response": {
+      "decision": "deny",
+      "reason": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+     }
+    }
+   ],
+   "toolCallId": "c1",
+   "toolName": "Write",
+   "turnId": "<id2>"
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid10>",
+   "eventSeq": 19,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "permission.lifecycle",
+   "phase": "resolved",
+   "requestId": "perm_<uuid9>",
+   "toolCallId": "c1",
+   "decision": "allow"
+  }
+ },
+ {
+  "method": "computer-use/operation-event",
+  "params": {
+   "eventId": "<uuid11>",
+   "sequenceNumber": 20,
+   "sessionId": "<id1>",
+   "timestamp": "<time>",
+   "kind": "tool-started",
+   "turnId": "<id2>",
+   "toolCallId": "c1",
+   "toolName": "Write"
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid11>",
+   "eventSeq": 20,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "tool.lifecycle",
+   "phase": "started",
+   "toolCallId": "c1",
+   "toolName": "Write"
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid12>",
+   "eventSeq": 21,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "tool.lifecycle",
+   "phase": "failed",
+   "toolCallId": "c1",
+   "toolName": "Write",
+   "errorCode": "TOOL_EXECUTION_FAILED",
+   "errorMessage": "File has not been read yet. Read it first before writing to it."
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid13>",
+   "eventSeq": 26,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "model.request.status",
+   "requestId": "<uuid14>",
+   "status": "model_request_started",
+   "providerId": "mock",
+   "modelId": "mock-model",
+   "providerKind": "openai-compatible",
+   "providerHostname": "127.0.0.1",
+   "transport": "sse",
+   "querySource": "main_turn",
+   "queryId": "cmd-0001",
+   "attempt": 1,
+   "maxAttempts": 11
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid15>",
+   "eventSeq": 29,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "stream.chunk",
+   "channel": "text",
+   "chunkLength": 7,
+   "firstChunk": true,
+   "assistantMessageId": "<id3>"
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid16>",
+   "eventSeq": 32,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "model.request.status",
+   "requestId": "<uuid14>",
+   "status": "model_request_completed",
+   "providerId": "mock",
+   "modelId": "mock-model",
+   "providerKind": "openai-compatible",
+   "providerHostname": "127.0.0.1",
+   "transport": "sse",
+   "querySource": "main_turn",
+   "queryId": "cmd-0001",
+   "attempt": 1,
+   "maxAttempts": 11,
+   "durationMs": 0
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid17>",
+   "eventSeq": 33,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "usage.delta",
+   "requestId": "<uuid14>",
+   "providerId": "mock",
+   "modelId": "mock-model",
+   "providerKind": "openai-compatible",
+   "providerHostname": "127.0.0.1",
+   "inputTokens": 100,
+   "outputTokens": 20,
+   "totalTokens": 120,
+   "reasoningTokens": 0,
+   "cacheReadTokens": 0,
+   "cacheWriteTokens": 0
+  }
+ },
+ {
+  "method": "computer-use/operation-event",
+  "params": {
+   "eventId": "<uuid18>",
+   "sequenceNumber": 34,
+   "sessionId": "<id1>",
+   "timestamp": "<time>",
+   "kind": "turn-completed",
+   "turnId": "<id2>"
+  }
+ },
+ {
+  "method": "v4/telemetry/event",
+  "params": {
+   "memoryEnabled": false,
+   "version": 1,
+   "eventId": "<uuid18>",
+   "eventSeq": 34,
+   "occurredAt": "<time>",
+   "sessionId": "<id1>",
+   "sourceCommandId": "cmd-0001",
+   "turnId": "<id2>",
+   "kind": "turn.terminal",
+   "status": "success",
+   "resultType": "success",
+   "durationMs": 0,
+   "tokenCount": 240,
+   "toolCallCount": 1
+  }
+ },
+ {
+  "method": "state.updated",
+  "params": {
+   "patch": {
+    "mode": {
+     "current": "build"
+    },
+    "model": {
+     "available": [
+      {
+       "ref": {
+        "providerId": "mock",
+        "modelId": "mock-model"
+       },
+       "label": "Mock Model",
+       "providerLabel": "Mock",
+       "contextWindow": 200000,
+       "maxOutputTokens": 8000,
+       "reasoning": {
+        "levels": [
+         {
+          "value": "none",
+          "label": "none"
+         }
+        ],
+        "defaultLevel": "none"
+       },
+       "properties": {
+        "inputFormat": {
+         "supportsText": true,
+         "supportsImage": false,
+         "supportsVideo": false,
+         "supportsAudio": false,
+         "supportsPdf": false
+        },
+        "outputFormat": {
+         "supportsText": true
+        }
+       }
+      }
+     ],
+     "current": {
+      "providerId": "mock",
+      "modelId": "mock-model",
+      "options": {
+       "reasoningLevel": "none"
+      }
+     },
+     "lastUsed": {
+      "providerId": "mock",
+      "modelId": "mock-model"
+     }
+    },
+    "permission": {
+     "mode": "build"
+    },
+    "thoughtLevel": {
+     "available": [
+      {
+       "label": "none",
+       "value": "none"
+      }
+     ],
+     "current": "none",
+     "enabled": true
+    }
+   },
+   "reason": "prompt_completed",
+   "revision": 1,
+   "scope": "session",
+   "sessionId": "<id1>",
+   "type": "state.updated",
+   "workspace": {
+    "workspacePath": "<WS>",
+    "workspaceKey": "<WS>"
+   }
+  }
+ },
+ {
+  "method": "v4/conversation/frame",
+  "params": {
+   "wireVersion": 3,
+   "kind": "complete",
+   "deliveryKind": "initial",
+   "logicalFrameId": "<sub1>-1-lf-1",
+   "logicalFrameOrdinal": 1,
+   "topic": "conversation/<id1>",
+   "subscriptionId": "<sub1>-1",
+   "frame": {
+    "topic": "conversation/<id1>",
+    "subscriptionId": "<sub1>-1",
+    "sentAt": "<time>",
+    "fromSeq": 0,
+    "toSeq": 2,
+    "payload": {
+     "kind": "snapshot",
+     "snapshot": {
+      "protocolVersion": 1,
+      "sessionId": "<id1>",
+      "logEpoch": "<epoch1>",
+      "seq": 2,
+      "revision": 1,
+      "control": {
+       "phase": "draft",
+       "sessionEnded": false,
+       "canStop": false,
+       "stopState": "idle",
+       "stopTargetKind": "unknown",
+       "activeWorks": [],
+       "lastError": null,
+       "apiRetry": null
+      },
+      "availability": {
+       "fork": {
+        "allowed": false,
+        "reasonCode": "forkTargetNotStable"
+       },
+       "compact": {
+        "allowed": false,
+        "reasonCode": "idleCannotCompact"
+       },
+       "switchModelConfig": {
+        "allowed": true
+       },
+       "setFollowupMode": {
+        "allowed": true
+       },
+       "queueEdit": {
+        "allowed": true
+       },
+       "sendQueuedNow": {
+        "allowed": false,
+        "reasonCode": "sendQueuedNowRequiresRunning"
+       },
+       "pauseGoal": {
+        "allowed": false,
+        "reasonCode": "noGoalToPause"
+       },
+       "resumeGoal": {
+        "allowed": false,
+        "reasonCode": "noGoalToResume"
+       }
+      },
+      "inputRouting": {
+       "mode": "startNow"
+      },
+      "meta": {
+       "title": "do it",
+       "titleSource": "generated"
+      },
+      "config": {
+       "provider": "mock",
+       "model": "mock-model",
+       "thought": "none",
+       "thoughtLevels": [
+        "none"
+       ],
+       "followupMode": "queue",
+       "mode": "build",
+       "modelSelection": {
+        "providerId": "mock",
+        "modelId": "mock-model",
+        "options": {
+         "reasoningLevel": "none"
+        }
+       },
+       "planEnabled": false
+      },
+      "modelTransition": null,
+      "usage": {
+       "contextWindow": null,
+       "cumulative": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0
+       }
+      },
+      "queue": {
+       "items": [],
+       "autoDrain": true
+      },
+      "pendingInteractions": [],
+      "pendingCommands": [],
+      "backgroundWorks": [],
+      "subagents": {
+       "revision": 0,
+       "childSessionIds": [],
+       "running": [],
+       "endedTotal": 0
+      },
+      "goal": null,
+      "plan": null,
+      "workspaceHookAdmission": null,
+      "rows": {
+       "window": [],
+       "totalCount": 0,
+       "firstRowId": null
+      }
+     }
+    }
+   }
+  }
+ },
+ {
+  "method": "v4/conversation/deltas(flattened)",
+  "finalToSeq": [
+   35
+  ],
+  "deltas": [
+   {
+    "op": "row.appended",
+    "row": {
+     "rowId": 1,
+     "turnId": "<id4>",
+     "entityId": "<id4>",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 3,
+     "kind": "turnHeader",
+     "origin": "userInput",
+     "executionKind": "agent",
+     "sourceCommandId": "cmd-0001",
+     "state": "running",
+     "startedAt": "<time>"
+    }
+   },
+   {
+    "op": "row.appended",
+    "row": {
+     "rowId": 2,
+     "turnId": "<id4>",
+     "entityId": "<id4>",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 3,
+     "kind": "userInput",
+     "text": "do it",
+     "origin": "realUser",
+     "sourceCommandId": "cmd-0001",
+     "rootSourceCommandId": "cmd-0001",
+     "clientId": "rec-client"
+    }
+   },
+   {
+    "op": "state.updated",
+    "patch": {
+     "control": {
+      "phase": "running",
+      "sessionEnded": false,
+      "canStop": true,
+      "stopState": "stoppable",
+      "stopTargetKind": "assistant",
+      "activeWorks": [
+       {
+        "kind": "primaryTurn",
+        "foregroundExecutionId": "runtime_command_1",
+        "startedAt": "<time>"
+       }
+      ],
+      "lastError": null,
+      "apiRetry": null
+     },
+     "availability": {
+      "fork": {
+       "allowed": true
+      },
+      "compact": {
+       "allowed": true
+      },
+      "switchModelConfig": {
+       "allowed": true
+      },
+      "setFollowupMode": {
+       "allowed": true
+      },
+      "queueEdit": {
+       "allowed": true
+      },
+      "sendQueuedNow": {
+       "allowed": true
+      },
+      "pauseGoal": {
+       "allowed": false,
+       "reasonCode": "noGoalToPause"
+      },
+      "resumeGoal": {
+       "allowed": false,
+       "reasonCode": "noGoalToResume"
+      }
+     },
+     "inputRouting": {
+      "mode": "enqueue"
+     }
+    }
+   },
+   {
+    "op": "row.upserted",
+    "row": {
+     "rowId": 2,
+     "turnId": "<id4>",
+     "entityId": "<id4>",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 3,
+     "kind": "userInput",
+     "text": "do it",
+     "origin": "realUser",
+     "sourceCommandId": "cmd-0001",
+     "rootSourceCommandId": "cmd-0001",
+     "clientId": "rec-client",
+     "actions": {
+      "canEdit": true,
+      "editDisposition": "rewind"
+     }
+    }
+   },
+   {
+    "op": "state.updated",
+    "patch": {
+     "revision": 2
+    }
+   },
+   {
+    "op": "row.appended",
+    "row": {
+     "rowId": 3,
+     "turnId": "<id4>",
+     "entityId": "c1",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 8,
+     "kind": "toolCall",
+     "assistantResponseId": "<id5>",
+     "toolCallId": "c1",
+     "toolName": "Write",
+     "status": "inputStreaming",
+     "inputText": ""
+    }
+   },
+   {
+    "op": "state.updated",
+    "patch": {
+     "revision": 3
+    }
+   },
+   {
+    "op": "row.upserted",
+    "row": {
+     "rowId": 3,
+     "turnId": "<id4>",
+     "entityId": "c1",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 8,
+     "kind": "toolCall",
+     "assistantResponseId": "<id5>",
+     "toolCallId": "c1",
+     "toolName": "Write",
+     "status": "inputStreaming",
+     "inputText": "{\"file_path\":\"<WS>/exists.txt\",\"content\":\"new\\n\"}",
+     "input": {
+      "file_path": "<WS>/exists.txt",
+      "content": "new\n"
+     }
+    }
+   },
+   {
+    "op": "state.updated",
+    "patch": {
+     "revision": 4,
+     "usage": {
+      "contextWindow": {
+       "usedTokens": 120,
+       "maxTokens": 100000,
+       "autoCompactThresholdTokens": null,
+       "cache": {
+        "inputTokens": 100,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "latestHitRate": 0,
+        "hitRate": 0,
+        "hitRateRequestCount": 1,
+        "totalInputTokens": 100,
+        "totalCacheReadTokens": 0,
+        "totalCacheWriteTokens": 0
+       },
+       "breakdown": [
+        {
+         "source": "system_prompt",
+         "chars": 6516
+        },
+        {
+         "source": "meta_user_context",
+         "chars": 41
+        },
+        {
+         "source": "system_tool_schemas",
+         "chars": 81936
+        },
+        {
+         "source": "messages",
+         "chars": 33
+        }
+       ]
+      },
+      "cumulative": {
+       "inputTokens": 100,
+       "outputTokens": 20,
+       "cacheReadTokens": 0,
+       "cacheWriteTokens": 0
+      }
+     }
+    }
+   },
+   {
+    "op": "row.upserted",
+    "row": {
+     "rowId": 3,
+     "turnId": "<id4>",
+     "entityId": "c1",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 8,
+     "kind": "toolCall",
+     "assistantResponseId": "<id5>",
+     "toolCallId": "c1",
+     "toolName": "Write",
+     "status": "inputStreaming",
+     "inputText": "{\"file_path\":\"<WS>/exists.txt\",\"content\":\"new\\n\"}",
+     "input": {
+      "file_path": "<WS>/exists.txt",
+      "content": "new\n"
+     }
+    }
+   },
+   {
+    "op": "state.updated",
+    "patch": {
+     "revision": 5
+    }
+   },
+   {
+    "op": "row.upserted",
+    "row": {
+     "rowId": 3,
+     "turnId": "<id4>",
+     "entityId": "c1",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 8,
+     "kind": "toolCall",
+     "assistantResponseId": "<id5>",
+     "toolCallId": "c1",
+     "toolName": "Write",
+     "status": "pendingApproval",
+     "inputText": "{\"file_path\":\"<WS>/exists.txt\",\"content\":\"new\\n\"}",
+     "input": {
+      "file_path": "<WS>/exists.txt",
+      "content": "new\n"
+     },
+     "approvalInteractionId": "perm_<uuid9>"
+    }
+   },
+   {
+    "op": "state.updated",
+    "patch": {
+     "pendingInteractions": [
+      {
+       "interactionId": "perm_<uuid9>",
+       "kind": "permission",
+       "anchorRowId": 3,
+       "createdAt": "<time>",
+       "payload": {
+        "kind": "permission",
+        "toolCallId": "c1",
+        "toolName": "Write",
+        "summary": "Tool has side effects and requires approval",
+        "detail": {
+         "file_path": "<WS>/exists.txt",
+         "content": "new\n"
+        },
+        "freeText": true,
+        "fullAccessOption": {
+         "optionId": "fullAccess",
+         "label": "Full access",
+         "kind": "custom",
+         "response": {
+          "decision": "deny",
+          "reason": "Full access requires V4 approval"
+         }
+        },
+        "options": [
+         {
+          "optionId": "allowOnce",
+          "label": "Allow once",
+          "kind": "allowOnce",
+          "response": {
+           "decision": "allow",
+           "reason": "Approved once"
+          }
+         },
+         {
+          "optionId": "allowAlways",
+          "label": "Always allow in this project",
+          "kind": "allowAlways",
+          "response": {
+           "decision": "allow",
+           "permissionUpdates": [
+            {
+             "behavior": "allow",
+             "rules": [
+              {
+               "toolName": "Write",
+               "ruleContent": "<WS>/exists.txt"
+              }
+             ],
+             "type": "addRules"
+            }
+           ],
+           "reason": "Approved for this project"
+          }
+         },
+         {
+          "optionId": "deny",
+          "label": "Deny",
+          "kind": "deny",
+          "response": {
+           "decision": "deny",
+           "reason": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+          }
+         }
+        ]
+       }
+      }
+     ],
+     "revision": 6
+    }
+   },
+   {
+    "op": "row.upserted",
+    "row": {
+     "rowId": 3,
+     "turnId": "<id4>",
+     "entityId": "c1",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 8,
+     "kind": "toolCall",
+     "assistantResponseId": "<id5>",
+     "toolCallId": "c1",
+     "toolName": "Write",
+     "status": "running",
+     "inputText": "{\"file_path\":\"<WS>/exists.txt\",\"content\":\"new\\n\"}",
+     "input": {
+      "file_path": "<WS>/exists.txt",
+      "content": "new\n"
+     }
+    }
+   },
+   {
+    "op": "state.updated",
+    "patch": {
+     "pendingInteractions": [],
+     "revision": 7
+    }
+   },
+   {
+    "op": "row.upserted",
+    "row": {
+     "rowId": 3,
+     "turnId": "<id4>",
+     "entityId": "c1",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 8,
+     "kind": "toolCall",
+     "assistantResponseId": "<id5>",
+     "toolCallId": "c1",
+     "toolName": "Write",
+     "status": "running",
+     "inputText": "{\"file_path\":\"<WS>/exists.txt\",\"content\":\"new\\n\"}",
+     "input": {
+      "file_path": "<WS>/exists.txt",
+      "content": "new\n"
+     },
+     "startedAt": "<time>"
+    }
+   },
+   {
+    "op": "state.updated",
+    "patch": {
+     "revision": 8
+    }
+   },
+   {
+    "op": "row.upserted",
+    "row": {
+     "rowId": 3,
+     "turnId": "<id4>",
+     "entityId": "c1",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 8,
+     "kind": "toolCall",
+     "assistantResponseId": "<id5>",
+     "toolCallId": "c1",
+     "toolName": "Write",
+     "status": "error",
+     "inputText": "{\"file_path\":\"<WS>/exists.txt\",\"content\":\"new\\n\"}",
+     "input": {
+      "file_path": "<WS>/exists.txt",
+      "content": "new\n"
+     },
+     "startedAt": "<time>",
+     "error": {
+      "code": "tool_execution_failed",
+      "message": "File has not been read yet. Read it first before writing to it."
+     },
+     "endedAt": "<time>"
+    }
+   },
+   {
+    "op": "state.updated",
+    "patch": {
+     "revision": 9
+    }
+   },
+   {
+    "op": "row.appended",
+    "row": {
+     "rowId": 4,
+     "turnId": "<id4>",
+     "entityId": "<id3>",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 29,
+     "kind": "assistantText",
+     "assistantResponseId": "<id3>",
+     "text": "",
+     "state": "streaming"
+    }
+   },
+   {
+    "op": "state.updated",
+    "patch": {
+     "revision": 10
+    }
+   },
+   {
+    "op": "row.upserted",
+    "row": {
+     "rowId": 4,
+     "turnId": "<id4>",
+     "entityId": "<id3>",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 29,
+     "kind": "assistantText",
+     "assistantResponseId": "<id3>",
+     "text": "blocked",
+     "state": "complete"
+    }
+   },
+   {
+    "op": "state.updated",
+    "patch": {
+     "revision": 11,
+     "usage": {
+      "contextWindow": {
+       "usedTokens": 120,
+       "maxTokens": 100000,
+       "autoCompactThresholdTokens": null,
+       "cache": {
+        "inputTokens": 100,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "latestHitRate": 0,
+        "hitRate": 0,
+        "hitRateRequestCount": 2,
+        "totalInputTokens": 200,
+        "totalCacheReadTokens": 0,
+        "totalCacheWriteTokens": 0
+       },
+       "breakdown": [
+        {
+         "source": "system_prompt",
+         "chars": 6516
+        },
+        {
+         "source": "meta_user_context",
+         "chars": 41
+        },
+        {
+         "source": "system_tool_schemas",
+         "chars": 81936
+        },
+        {
+         "source": "messages",
+         "chars": 332
+        }
+       ]
+      },
+      "cumulative": {
+       "inputTokens": 200,
+       "outputTokens": 40,
+       "cacheReadTokens": 0,
+       "cacheWriteTokens": 0
+      }
+     }
+    }
+   },
+   {
+    "op": "row.upserted",
+    "row": {
+     "rowId": 1,
+     "turnId": "<id4>",
+     "entityId": "<id4>",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 3,
+     "kind": "turnHeader",
+     "origin": "userInput",
+     "executionKind": "agent",
+     "sourceCommandId": "cmd-0001",
+     "state": "completedSuccess",
+     "startedAt": "<time>",
+     "endedAt": "<time>",
+     "activeMs": 0,
+     "historyRoundCount": 2
+    }
+   },
+   {
+    "op": "row.upserted",
+    "row": {
+     "rowId": 4,
+     "turnId": "<id4>",
+     "entityId": "<id3>",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 29,
+     "kind": "assistantText",
+     "assistantResponseId": "<id3>",
+     "text": "blocked",
+     "state": "complete",
+     "actions": {
+      "canFork": true
+     }
+    }
+   },
+   {
+    "op": "state.updated",
+    "patch": {
+     "control": {
+      "phase": "completedSuccess",
+      "sessionEnded": true,
+      "canStop": false,
+      "stopState": "idle",
+      "stopTargetKind": "unknown",
+      "activeWorks": [],
+      "lastError": null,
+      "apiRetry": null
+     },
+     "availability": {
+      "fork": {
+       "allowed": true
+      },
+      "compact": {
+       "allowed": true
+      },
+      "switchModelConfig": {
+       "allowed": true
+      },
+      "setFollowupMode": {
+       "allowed": true
+      },
+      "queueEdit": {
+       "allowed": true
+      },
+      "sendQueuedNow": {
+       "allowed": false,
+       "reasonCode": "sendQueuedNowRequiresRunning"
+      },
+      "pauseGoal": {
+       "allowed": false,
+       "reasonCode": "noGoalToPause"
+      },
+      "resumeGoal": {
+       "allowed": false,
+       "reasonCode": "noGoalToResume"
+      }
+     },
+     "inputRouting": {
+      "mode": "startNow"
+     }
+    }
+   },
+   {
+    "op": "row.upserted",
+    "row": {
+     "rowId": 4,
+     "turnId": "<id4>",
+     "entityId": "<id3>",
+     "productTurnId": "<id4>",
+     "visibility": "visible",
+     "createdAt": "<time>",
+     "createdAtSeq": 29,
+     "kind": "assistantText",
+     "assistantResponseId": "<id3>",
+     "text": "blocked",
+     "state": "complete",
+     "actions": {
+      "canFork": true,
+      "canRetry": true
+     }
+    }
+   },
+   {
+    "op": "state.updated",
+    "patch": {
+     "revision": 12
+    }
+   }
+  ]
+ }
+]

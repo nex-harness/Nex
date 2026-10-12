@@ -1,0 +1,26 @@
+{
+  "id": "S02",
+  "title": "v4 createSession with first input, subscribe, streamed text answer",
+  "model": { "steps": [{ "text": "Hello from the mock model." }] },
+  "script": [
+    { "op": "waitReady" },
+    {
+      "op": "command",
+      "type": "createSession",
+      "as": "created",
+      "payload": {
+        "workspaceId": "$WS",
+        "firstInput": {
+          "text": "Say hello",
+          "modelSelection": {
+            "providerId": "mock",
+            "modelId": "mock-model",
+            "options": { "reasoningLevel": "none" }
+          }
+        }
+      }
+    },
+    { "op": "subscribe", "sessionFrom": "created", "as": "sub" },
+    { "op": "waitTelemetry", "kind": "turn.terminal" }
+  ]
+}

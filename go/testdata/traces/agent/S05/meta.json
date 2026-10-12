@@ -1,0 +1,9 @@
+{
+ "id": "S05",
+ "title": "permission denied: Write is refused and the model is told so",
+ "outFrames": 60,
+ "inFrames": 5,
+ "modelRequests": 3,
+ "exitCode": 0,
+ "normalizedOutSha256": "99c4afd2be20be3c8b7c2ec5077d8b4d6fcdf8d5de494a7f641556ea49d35720"
+}

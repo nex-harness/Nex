@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "auth": {
+      "properties": {
+        "userId": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "capabilities": {
+      "properties": {
+        "binaryFrames": {
+          "type": "boolean"
+        },
+        "compression": {
+          "enum": [
+            "none",
+            "permessage-deflate"
+          ],
+          "type": "string"
+        },
+        "independentPlanState": {
+          "type": "boolean"
+        },
+        "localTerminal": {
+          "type": "boolean"
+        },
+        "nativeDialogs": {
+          "type": "boolean"
+        },
+        "workflowRunDeltas": {
+          "type": "boolean"
+        },
+        "workspaceHookReview": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "nativeDialogs",
+        "localTerminal",
+        "binaryFrames",
+        "compression"
+      ],
+      "type": "object"
+    },
+    "clientMode": {
+      "enum": [
+        "desktop-continuous",
+        "web-remote-replayable"
+      ],
+      "type": "string"
+    },
+    "connectionId": {
+      "type": "string"
+    },
+    "deliveryProfile": {
+      "enum": [
+        "continuous",
+        "replayable"
+      ],
+      "type": "string"
+    },
+    "kind": {
+      "const": "hello",
+      "type": "string"
+    },
+    "protocolVersion": {
+      "const": 3,
+      "type": "number"
+    },
+    "serverTime": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "kind",
+    "protocolVersion",
+    "connectionId",
+    "clientMode",
+    "deliveryProfile",
+    "serverTime",
+    "capabilities",
+    "auth"
+  ],
+  "type": "object"
+}

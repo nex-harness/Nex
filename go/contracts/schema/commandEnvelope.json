@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "baseLogEpoch": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "baseRevision": {
+      "type": "number"
+    },
+    "clientId": {
+      "type": "string"
+    },
+    "commandId": {
+      "type": "string"
+    },
+    "issuedAt": {
+      "type": "number"
+    },
+    "payload": {},
+    "sessionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ttft": {
+      "additionalProperties": false,
+      "properties": {
+        "observationId": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string"
+        },
+        "version": {
+          "const": 1,
+          "type": "number"
+        }
+      },
+      "required": [
+        "version",
+        "observationId"
+      ],
+      "type": "object"
+    },
+    "type": {
+      "enum": [
+        "createSession",
+        "createSelectionSideSession",
+        "sendText",
+        "sendGoalCommand",
+        "stop",
+        "compact",
+        "forkAssistant",
+        "applyFileRewind",
+        "editUserQuery",
+        "retryTurn",
+        "setAssistantFeedback",
+        "sendQueuedNow",
+        "editQueueItem",
+        "reorderQueueItem",
+        "deleteQueueItem",
+        "setAutoDrain",
+        "resolveInteraction",
+        "respondWorkspaceHookReview",
+        "toggleWorkspaceHookReviewItem",
+        "revokeWorkspaceHookTrust",
+        "requestWorkspaceHookReview",
+        "snoozeInteractionAutoResolution",
+        "switchModelConfig",
+        "switchCollaborationMode",
+        "setFollowupMode",
+        "pauseGoal",
+        "resumeGoal",
+        "cancelBackgroundWork",
+        "resumeWorkflowRun",
+        "startSavedWorkflow",
+        "amendWorkflowRunSettings",
+        "renameSession",
+        "deleteSession",
+        "discardSharedContext"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "commandId",
+    "clientId",
+    "sessionId",
+    "type",
+    "payload",
+    "issuedAt"
+  ],
+  "type": "object"
+}

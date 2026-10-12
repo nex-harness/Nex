@@ -1,0 +1,49 @@
+{
+ "name": "number-formatting",
+ "logEpoch": "epochepoch0",
+ "workflowRunDeltas": true,
+ "sessionId": "sess-vector",
+ "steps": [
+  {
+   "seq": 1,
+   "revision": 1,
+   "deltas": [
+    {
+     "op": "state.updated",
+     "patch": {
+      "revision": 7,
+      "control": {
+       "phase": "draft",
+       "sessionEnded": false,
+       "canStop": false,
+       "stopState": "idle",
+       "stopTargetKind": "unknown",
+       "activeWorks": [],
+       "lastError": null,
+       "apiRetry": null,
+       "waitMs": 0.1,
+       "ratio": 1234.5
+      }
+     }
+    }
+   ]
+  }
+ ],
+ "actions": [
+  {
+   "op": "subscribe",
+   "connectionId": "a",
+   "deliveryProfile": "continuous",
+   "mode": "snapshot",
+   "sub": 0
+  },
+  {
+   "op": "ingest",
+   "step": 0
+  },
+  {
+   "op": "flush",
+   "sub": 0
+  }
+ ]
+}

@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "activeRunStartedAtMs": {
+      "anyOf": [
+        {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "iteration": {
+      "type": "number"
+    },
+    "iterations": {
+      "default": [],
+      "items": {
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "content": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "pending",
+                    "inProgress",
+                    "completed"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "content",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "iteration": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "iteration",
+          "items",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "objective": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "paused",
+        "verifying",
+        "verified",
+        "notSatisfied",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "summaryTitle": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "targetId": {
+      "default": "",
+      "type": "string"
+    },
+    "timeUsedSeconds": {
+      "default": 0,
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "verifications": {
+      "items": {
+        "properties": {
+          "anchorRowId": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "at": {
+            "type": "number"
+          },
+          "iteration": {
+            "type": "number"
+          },
+          "nextAction": {
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "pass",
+              "notSatisfied",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "iteration",
+          "outcome",
+          "at",
+          "anchorRowId"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "objective",
+    "status",
+    "iteration",
+    "verifications"
+  ],
+  "type": "object"
+}

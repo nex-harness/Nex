@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "canApply": {
+      "type": "boolean"
+    },
+    "ignoredFiles": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "operationCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "reason": {
+            "const": "bash_ignored",
+            "type": "string"
+          },
+          "toolNames": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "operationCount",
+          "path",
+          "reason",
+          "toolNames"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "safeFiles": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "restore",
+              "delete"
+            ],
+            "type": "string"
+          },
+          "operationCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "toolNames": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "action",
+          "operationCount",
+          "path",
+          "toolNames"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "unsafeFiles": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "currentHash": {
+            "type": "string"
+          },
+          "expectedHash": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "operationCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "checkpoint_missing",
+              "checkpoint_unreadable",
+              "external_modified",
+              "file_read_failed",
+              "unsupported_checkpoint"
+            ],
+            "type": "string"
+          },
+          "toolNames": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "operationCount",
+          "path",
+          "reason",
+          "toolNames"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "canApply",
+    "ignoredFiles",
+    "safeFiles",
+    "unsafeFiles"
+  ],
+  "type": "object"
+}

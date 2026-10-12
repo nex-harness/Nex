@@ -1,0 +1,1952 @@
+{
+ "tool": "write",
+ "cases": [
+  {
+   "name": "write/create",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "new.txt",
+    "content": "hello\n"
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/new.txt (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/new.txt",
+     "content": "hello\n",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/new.txt\u00001\u0000",
+      "path": "<WS>/new.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "new.txt": {
+      "content": "hello\n",
+      "bytesBase64": "aGVsbG8K",
+      "sizeBytes": 6,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/create-deep-parents",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "a/b/c/new.txt",
+    "content": "deep\n"
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/a/b/c/new.txt (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/a/b/c/new.txt",
+     "content": "deep\n",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/a/b/c/new.txt\u00001\u0000",
+      "path": "<WS>/a/b/c/new.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "a/b/c/new.txt": {
+      "content": "deep\n",
+      "bytesBase64": "ZGVlcAo=",
+      "sizeBytes": 5,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/overwrite-after-read",
+   "files": [
+    {
+     "path": "notes.txt",
+     "content": "old\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "notes.txt",
+     "input": {
+      "file_path": "notes.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "notes.txt",
+    "content": "new\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/notes.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/notes.txt",
+     "content": "new\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-old",
+        "+new"
+       ]
+      }
+     ],
+     "originalFile": "old\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/notes.txt\u00001\u0000",
+      "path": "<WS>/notes.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "notes.txt": {
+      "content": "new\n",
+      "bytesBase64": "bmV3Cg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/overwrite-not-read",
+   "files": [
+    {
+     "path": "notes.txt",
+     "content": "old\n"
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "notes.txt",
+    "content": "new\n"
+   },
+   "result": {
+    "modelContent": "File has not been read yet. Read it first before writing to it.",
+    "failed": true,
+    "errorName": "Error",
+    "errorMessage": "File has not been read yet. Read it first before writing to it.",
+    "readStateAfter": [],
+    "treeAfter": {
+     "notes.txt": {
+      "content": "old\n",
+      "bytesBase64": "b2xkCg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/overwrite-stale",
+   "files": [
+    {
+     "path": "notes.txt",
+     "content": "old\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "notes.txt",
+     "input": {
+      "file_path": "notes.txt"
+     }
+    }
+   ],
+   "bumpMtime": true,
+   "input": {
+    "file_path": "notes.txt",
+    "content": "new\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/notes.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/notes.txt",
+     "content": "new\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-old",
+        "+new"
+       ]
+      }
+     ],
+     "originalFile": "old\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/notes.txt\u00001\u0000",
+      "path": "<WS>/notes.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "notes.txt": {
+      "content": "new\n",
+      "bytesBase64": "bmV3Cg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/overwrite-stale-content",
+   "files": [
+    {
+     "path": "notes.txt",
+     "content": "old\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "notes.txt",
+     "input": {
+      "file_path": "notes.txt"
+     }
+    }
+   ],
+   "bumpMtime": true,
+   "mutateAfterPreRead": {
+    "path": "notes.txt",
+    "content": "changed\n"
+   },
+   "input": {
+    "file_path": "notes.txt",
+    "content": "new\n"
+   },
+   "result": {
+    "modelContent": "File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.",
+    "failed": true,
+    "errorName": "Error",
+    "errorMessage": "File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.",
+    "readStateAfter": [
+     {
+      "key": "<WS>/notes.txt\u00001\u0000",
+      "path": "<WS>/notes.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "notes.txt": {
+      "content": "changed\n",
+      "bytesBase64": "Y2hhbmdlZAo=",
+      "sizeBytes": 8,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/overwrite-partial-read",
+   "files": [
+    {
+     "path": "m.txt",
+     "content": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "m.txt",
+     "input": {
+      "file_path": "m.txt",
+      "offset": 1,
+      "limit": 2
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "m.txt",
+    "content": "replaced\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/m.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/m.txt",
+     "content": "replaced\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 10,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-one",
+        "-two",
+        "-three",
+        "-four",
+        "-five",
+        "-six",
+        "-seven",
+        "-eight",
+        "-nine",
+        "-ten",
+        "+replaced"
+       ]
+      }
+     ],
+     "originalFile": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/m.txt\u00001\u00002",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     },
+     {
+      "key": "<WS>/m.txt\u00001\u0000",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "m.txt": {
+      "content": "replaced\n",
+      "bytesBase64": "cmVwbGFjZWQK",
+      "sizeBytes": 9,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/preserve-mode-0755",
+   "files": [
+    {
+     "path": "s.sh",
+     "content": "#!/bin/sh\n",
+     "mode": 493
+    }
+   ],
+   "preRead": [
+    {
+     "path": "s.sh",
+     "input": {
+      "file_path": "s.sh"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "s.sh",
+    "content": "#!/bin/sh\necho hi\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/s.sh has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/s.sh",
+     "content": "#!/bin/sh\necho hi\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 2,
+       "lines": [
+        " #!/bin/sh",
+        "+echo hi"
+       ]
+      }
+     ],
+     "originalFile": "#!/bin/sh\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/s.sh\u00001\u0000",
+      "path": "<WS>/s.sh",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "s.sh": {
+      "content": "#!/bin/sh\necho hi\n",
+      "bytesBase64": "IyEvYmluL3NoCmVjaG8gaGkK",
+      "sizeBytes": 18,
+      "mode": "755"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/preserve-mode-0644",
+   "files": [
+    {
+     "path": "f.txt",
+     "content": "x\n",
+     "mode": 420
+    }
+   ],
+   "preRead": [
+    {
+     "path": "f.txt",
+     "input": {
+      "file_path": "f.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "f.txt",
+    "content": "yy\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/f.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/f.txt",
+     "content": "yy\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-x",
+        "+yy"
+       ]
+      }
+     ],
+     "originalFile": "x\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/f.txt\u00001\u0000",
+      "path": "<WS>/f.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "f.txt": {
+      "content": "yy\n",
+      "bytesBase64": "eXkK",
+      "sizeBytes": 3,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/crlf-preserved",
+   "files": [
+    {
+     "path": "w.txt",
+     "content": "a\r\nb\r\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "w.txt",
+     "input": {
+      "file_path": "w.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "w.txt",
+    "content": "a\nB\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/w.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/w.txt",
+     "content": "a\nB\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 2,
+       "newStart": 1,
+       "newLines": 2,
+       "lines": [
+        " a",
+        "-b",
+        "+B"
+       ]
+      }
+     ],
+     "originalFile": "a\nb\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/w.txt\u00001\u0000",
+      "path": "<WS>/w.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "w.txt": {
+      "content": "a\r\nB\r\n",
+      "bytesBase64": "YQ0KQg0K",
+      "sizeBytes": 6,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/lf-preserved",
+   "files": [
+    {
+     "path": "w.txt",
+     "content": "a\nb\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "w.txt",
+     "input": {
+      "file_path": "w.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "w.txt",
+    "content": "a\r\nB\r\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/w.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/w.txt",
+     "content": "a\r\nB\r\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 2,
+       "newStart": 1,
+       "newLines": 2,
+       "lines": [
+        "-a",
+        "-b",
+        "+a\r",
+        "+B\r"
+       ]
+      }
+     ],
+     "originalFile": "a\nb\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/w.txt\u00001\u0000",
+      "path": "<WS>/w.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "w.txt": {
+      "content": "a\nB\n",
+      "bytesBase64": "YQpCCg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/empty-content-create",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "e.txt",
+    "content": ""
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/e.txt (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/e.txt",
+     "content": "",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/e.txt\u00001\u0000",
+      "path": "<WS>/e.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "e.txt": {
+      "content": "",
+      "bytesBase64": "",
+      "sizeBytes": 0,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/empty-content-overwrite",
+   "files": [
+    {
+     "path": "e.txt",
+     "content": "x\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "e.txt",
+     "input": {
+      "file_path": "e.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "e.txt",
+    "content": ""
+   },
+   "result": {
+    "modelContent": "The file <WS>/e.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/e.txt",
+     "content": "",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 0,
+       "lines": [
+        "-x"
+       ]
+      }
+     ],
+     "originalFile": "x\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/e.txt\u00001\u0000",
+      "path": "<WS>/e.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "e.txt": {
+      "content": "",
+      "bytesBase64": "",
+      "sizeBytes": 0,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/unicode",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "u.txt",
+    "content": "héllo\n世界\n"
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/u.txt (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/u.txt",
+     "content": "héllo\n世界\n",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/u.txt\u00001\u0000",
+      "path": "<WS>/u.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "u.txt": {
+      "content": "héllo\n世界\n",
+      "bytesBase64": "aMOpbGxvCuS4lueVjAo=",
+      "sizeBytes": 14,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/no-trailing-newline",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "n.txt",
+    "content": "no newline"
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/n.txt (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/n.txt",
+     "content": "no newline",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/n.txt\u00001\u0000",
+      "path": "<WS>/n.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "n.txt": {
+      "content": "no newline",
+      "bytesBase64": "bm8gbmV3bGluZQ==",
+      "sizeBytes": 10,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/no-file-path",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "content": "x"
+   },
+   "result": {
+    "modelContent": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"undefined\",\n    \"path\": [\n      \"file_path\"\n    ],\n    \"message\": \"Required\"\n  }\n]",
+    "failed": true,
+    "errorName": "ZodError",
+    "errorMessage": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"undefined\",\n    \"path\": [\n      \"file_path\"\n    ],\n    \"message\": \"Required\"\n  }\n]",
+    "readStateAfter": [],
+    "treeAfter": {}
+   }
+  },
+  {
+   "name": "write/no-content",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "x.txt"
+   },
+   "result": {
+    "modelContent": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"undefined\",\n    \"path\": [\n      \"content\"\n    ],\n    \"message\": \"Required\"\n  }\n]",
+    "failed": true,
+    "errorName": "ZodError",
+    "errorMessage": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"undefined\",\n    \"path\": [\n      \"content\"\n    ],\n    \"message\": \"Required\"\n  }\n]",
+    "readStateAfter": [],
+    "treeAfter": {}
+   }
+  },
+  {
+   "name": "write/bad-content-type",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "x.txt",
+    "content": 5
+   },
+   "result": {
+    "modelContent": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"number\",\n    \"path\": [\n      \"content\"\n    ],\n    \"message\": \"Expected string, received number\"\n  }\n]",
+    "failed": true,
+    "errorName": "ZodError",
+    "errorMessage": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"string\",\n    \"received\": \"number\",\n    \"path\": [\n      \"content\"\n    ],\n    \"message\": \"Expected string, received number\"\n  }\n]",
+    "readStateAfter": [],
+    "treeAfter": {}
+   }
+  },
+  {
+   "name": "write/extra-key",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "x.txt",
+    "content": "a",
+    "extra": true
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/x.txt (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/x.txt",
+     "content": "a",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/x.txt\u00001\u0000",
+      "path": "<WS>/x.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "x.txt": {
+      "content": "a",
+      "bytesBase64": "YQ==",
+      "sizeBytes": 1,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/overwrite-same-content",
+   "files": [
+    {
+     "path": "s.txt",
+     "content": "same\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "s.txt",
+     "input": {
+      "file_path": "s.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "s.txt",
+    "content": "same\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/s.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/s.txt",
+     "content": "same\n",
+     "structuredPatch": [],
+     "originalFile": "same\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/s.txt\u00001\u0000",
+      "path": "<WS>/s.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "s.txt": {
+      "content": "same\n",
+      "bytesBase64": "c2FtZQo=",
+      "sizeBytes": 5,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/append-lines",
+   "files": [
+    {
+     "path": "a.txt",
+     "content": "l1\nl2\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "a.txt",
+     "input": {
+      "file_path": "a.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "a.txt",
+    "content": "l1\nl2\nl3\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/a.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/a.txt",
+     "content": "l1\nl2\nl3\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 2,
+       "newStart": 1,
+       "newLines": 3,
+       "lines": [
+        " l1",
+        " l2",
+        "+l3"
+       ]
+      }
+     ],
+     "originalFile": "l1\nl2\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/a.txt\u00001\u0000",
+      "path": "<WS>/a.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "a.txt": {
+      "content": "l1\nl2\nl3\n",
+      "bytesBase64": "bDEKbDIKbDMK",
+      "sizeBytes": 9,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/utf16le-roundtrip",
+   "files": [
+    {
+     "path": "u16.txt",
+     "bytes": [
+      255,
+      254,
+      104,
+      0,
+      105,
+      0,
+      10,
+      0
+     ]
+    }
+   ],
+   "preRead": [
+    {
+     "path": "u16.txt",
+     "input": {
+      "file_path": "u16.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "u16.txt",
+    "content": "bye\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/u16.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/u16.txt",
+     "content": "bye\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-﻿hi",
+        "+bye"
+       ]
+      }
+     ],
+     "originalFile": "﻿hi\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/u16.txt\u00001\u0000",
+      "path": "<WS>/u16.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "u16.txt": {
+      "content": "b\u0000y\u0000e\u0000\n\u0000",
+      "bytesBase64": "YgB5AGUACgA=",
+      "sizeBytes": 8,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/dot-relative",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "./new.txt",
+    "content": "z\n"
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/new.txt (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/new.txt",
+     "content": "z\n",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/new.txt\u00001\u0000",
+      "path": "<WS>/new.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "new.txt": {
+      "content": "z\n",
+      "bytesBase64": "ego=",
+      "sizeBytes": 2,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/nested-overwrite",
+   "files": [
+    {
+     "path": "sub/deep/f.txt",
+     "content": "old\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "sub/deep/f.txt",
+     "input": {
+      "file_path": "sub/deep/f.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "sub/deep/f.txt",
+    "content": "new\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/sub/deep/f.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/sub/deep/f.txt",
+     "content": "new\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-old",
+        "+new"
+       ]
+      }
+     ],
+     "originalFile": "old\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/sub/deep/f.txt\u00001\u0000",
+      "path": "<WS>/sub/deep/f.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "sub/deep/f.txt": {
+      "content": "new\n",
+      "bytesBase64": "bmV3Cg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/empty-path",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "",
+    "content": "z"
+   },
+   "result": {
+    "modelContent": "Tool path must not be empty",
+    "failed": true,
+    "errorName": "Error",
+    "errorMessage": "Tool path must not be empty",
+    "readStateAfter": [],
+    "treeAfter": {}
+   }
+  },
+  {
+   "name": "write/many-lines",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "big.txt",
+    "content": "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nline 20\nline 21\nline 22\nline 23\nline 24\nline 25\nline 26\nline 27\nline 28\nline 29\nline 30\nline 31\nline 32\nline 33\nline 34\nline 35\nline 36\nline 37\nline 38\nline 39\nline 40\nline 41\nline 42\nline 43\nline 44\nline 45\nline 46\nline 47\nline 48\nline 49\n"
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/big.txt (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/big.txt",
+     "content": "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nline 20\nline 21\nline 22\nline 23\nline 24\nline 25\nline 26\nline 27\nline 28\nline 29\nline 30\nline 31\nline 32\nline 33\nline 34\nline 35\nline 36\nline 37\nline 38\nline 39\nline 40\nline 41\nline 42\nline 43\nline 44\nline 45\nline 46\nline 47\nline 48\nline 49\n",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/big.txt\u00001\u0000",
+      "path": "<WS>/big.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "big.txt": {
+      "content": "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nline 20\nline 21\nline 22\nline 23\nline 24\nline 25\nline 26\nline 27\nline 28\nline 29\nline 30\nline 31\nline 32\nline 33\nline 34\nline 35\nline 36\nline 37\nline 38\nline 39\nline 40\nline 41\nline 42\nline 43\nline 44\nline 45\nline 46\nline 47\nline 48\nline 49\n",
+      "bytesBase64": "bGluZSAwCmxpbmUgMQpsaW5lIDIKbGluZSAzCmxpbmUgNApsaW5lIDUKbGluZSA2CmxpbmUgNwpsaW5lIDgKbGluZSA5CmxpbmUgMTAKbGluZSAxMQpsaW5lIDEyCmxpbmUgMTMKbGluZSAxNApsaW5lIDE1CmxpbmUgMTYKbGluZSAxNwpsaW5lIDE4CmxpbmUgMTkKbGluZSAyMApsaW5lIDIxCmxpbmUgMjIKbGluZSAyMwpsaW5lIDI0CmxpbmUgMjUKbGluZSAyNgpsaW5lIDI3CmxpbmUgMjgKbGluZSAyOQpsaW5lIDMwCmxpbmUgMzEKbGluZSAzMgpsaW5lIDMzCmxpbmUgMzQKbGluZSAzNQpsaW5lIDM2CmxpbmUgMzcKbGluZSAzOApsaW5lIDM5CmxpbmUgNDAKbGluZSA0MQpsaW5lIDQyCmxpbmUgNDMKbGluZSA0NApsaW5lIDQ1CmxpbmUgNDYKbGluZSA0NwpsaW5lIDQ4CmxpbmUgNDkK",
+      "sizeBytes": 390,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/tabs-and-spaces",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "t.txt",
+    "content": "\tindent\n    spaces\n"
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/t.txt (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/t.txt",
+     "content": "\tindent\n    spaces\n",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/t.txt\u00001\u0000",
+      "path": "<WS>/t.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "t.txt": {
+      "content": "\tindent\n    spaces\n",
+      "bytesBase64": "CWluZGVudAogICAgc3BhY2VzCg==",
+      "sizeBytes": 19,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/overwrite-binary-ext-create",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "x.bin",
+    "content": "text-in-bin\n"
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/x.bin (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/x.bin",
+     "content": "text-in-bin\n",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/x.bin\u00001\u0000",
+      "path": "<WS>/x.bin",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "x.bin": {
+      "content": "text-in-bin\n",
+      "bytesBase64": "dGV4dC1pbi1iaW4K",
+      "sizeBytes": 12,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/stale-after-partial-still-reads",
+   "files": [
+    {
+     "path": "m.txt",
+     "content": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "m.txt",
+     "input": {
+      "file_path": "m.txt",
+      "offset": 1,
+      "limit": 2
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "m.txt",
+    "content": "full replace\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/m.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/m.txt",
+     "content": "full replace\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 10,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-one",
+        "-two",
+        "-three",
+        "-four",
+        "-five",
+        "-six",
+        "-seven",
+        "-eight",
+        "-nine",
+        "-ten",
+        "+full replace"
+       ]
+      }
+     ],
+     "originalFile": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/m.txt\u00001\u00002",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     },
+     {
+      "key": "<WS>/m.txt\u00001\u0000",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "m.txt": {
+      "content": "full replace\n",
+      "bytesBase64": "ZnVsbCByZXBsYWNlCg==",
+      "sizeBytes": 13,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/create-existing-mode-preserved",
+   "files": [
+    {
+     "path": "x.sh",
+     "content": "#!/bin/sh\n",
+     "mode": 448
+    }
+   ],
+   "preRead": [
+    {
+     "path": "x.sh",
+     "input": {
+      "file_path": "x.sh"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "x.sh",
+    "content": "#!/bin/sh\n:\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/x.sh has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/x.sh",
+     "content": "#!/bin/sh\n:\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 2,
+       "lines": [
+        " #!/bin/sh",
+        "+:"
+       ]
+      }
+     ],
+     "originalFile": "#!/bin/sh\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/x.sh\u00001\u0000",
+      "path": "<WS>/x.sh",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "x.sh": {
+      "content": "#!/bin/sh\n:\n",
+      "bytesBase64": "IyEvYmluL3NoCjoK",
+      "sizeBytes": 12,
+      "mode": "700"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/newline-in-path-parent",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "dir/sub/i.txt",
+    "content": "v\n"
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/dir/sub/i.txt (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/dir/sub/i.txt",
+     "content": "v\n",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/dir/sub/i.txt\u00001\u0000",
+      "path": "<WS>/dir/sub/i.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "dir/sub/i.txt": {
+      "content": "v\n",
+      "bytesBase64": "dgo=",
+      "sizeBytes": 2,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/shrink-content",
+   "files": [
+    {
+     "path": "long.txt",
+     "content": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "long.txt",
+     "input": {
+      "file_path": "long.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "long.txt",
+    "content": "one\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/long.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/long.txt",
+     "content": "one\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 10,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        " one",
+        "-two",
+        "-three",
+        "-four",
+        "-five",
+        "-six",
+        "-seven",
+        "-eight",
+        "-nine",
+        "-ten"
+       ]
+      }
+     ],
+     "originalFile": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/long.txt\u00001\u0000",
+      "path": "<WS>/long.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "long.txt": {
+      "content": "one\n",
+      "bytesBase64": "b25lCg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/grow-content",
+   "files": [
+    {
+     "path": "short.txt",
+     "content": "alpha\nbeta\ngamma\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "short.txt",
+     "input": {
+      "file_path": "short.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "short.txt",
+    "content": "added 0\nadded 1\nadded 2\nadded 3\nadded 4\nadded 5\nadded 6\nadded 7\nadded 8\nadded 9\nadded 10\nadded 11\nadded 12\nadded 13\nadded 14\nadded 15\nadded 16\nadded 17\nadded 18\nadded 19\nadded 20\nadded 21\nadded 22\nadded 23\nadded 24\nadded 25\nadded 26\nadded 27\nadded 28\nadded 29\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/short.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/short.txt",
+     "content": "added 0\nadded 1\nadded 2\nadded 3\nadded 4\nadded 5\nadded 6\nadded 7\nadded 8\nadded 9\nadded 10\nadded 11\nadded 12\nadded 13\nadded 14\nadded 15\nadded 16\nadded 17\nadded 18\nadded 19\nadded 20\nadded 21\nadded 22\nadded 23\nadded 24\nadded 25\nadded 26\nadded 27\nadded 28\nadded 29\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 3,
+       "newStart": 1,
+       "newLines": 30,
+       "lines": [
+        "-alpha",
+        "-beta",
+        "-gamma",
+        "+added 0",
+        "+added 1",
+        "+added 2",
+        "+added 3",
+        "+added 4",
+        "+added 5",
+        "+added 6",
+        "+added 7",
+        "+added 8",
+        "+added 9",
+        "+added 10",
+        "+added 11",
+        "+added 12",
+        "+added 13",
+        "+added 14",
+        "+added 15",
+        "+added 16",
+        "+added 17",
+        "+added 18",
+        "+added 19",
+        "+added 20",
+        "+added 21",
+        "+added 22",
+        "+added 23",
+        "+added 24",
+        "+added 25",
+        "+added 26",
+        "+added 27",
+        "+added 28",
+        "+added 29"
+       ]
+      }
+     ],
+     "originalFile": "alpha\nbeta\ngamma\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/short.txt\u00001\u0000",
+      "path": "<WS>/short.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "short.txt": {
+      "content": "added 0\nadded 1\nadded 2\nadded 3\nadded 4\nadded 5\nadded 6\nadded 7\nadded 8\nadded 9\nadded 10\nadded 11\nadded 12\nadded 13\nadded 14\nadded 15\nadded 16\nadded 17\nadded 18\nadded 19\nadded 20\nadded 21\nadded 22\nadded 23\nadded 24\nadded 25\nadded 26\nadded 27\nadded 28\nadded 29\n",
+      "bytesBase64": "YWRkZWQgMAphZGRlZCAxCmFkZGVkIDIKYWRkZWQgMwphZGRlZCA0CmFkZGVkIDUKYWRkZWQgNgphZGRlZCA3CmFkZGVkIDgKYWRkZWQgOQphZGRlZCAxMAphZGRlZCAxMQphZGRlZCAxMgphZGRlZCAxMwphZGRlZCAxNAphZGRlZCAxNQphZGRlZCAxNgphZGRlZCAxNwphZGRlZCAxOAphZGRlZCAxOQphZGRlZCAyMAphZGRlZCAyMQphZGRlZCAyMgphZGRlZCAyMwphZGRlZCAyNAphZGRlZCAyNQphZGRlZCAyNgphZGRlZCAyNwphZGRlZCAyOAphZGRlZCAyOQo=",
+      "sizeBytes": 260,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/edit-tail-line",
+   "files": [
+    {
+     "path": "m.txt",
+     "content": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "m.txt",
+     "input": {
+      "file_path": "m.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "m.txt",
+    "content": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nTEN\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/m.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/m.txt",
+     "content": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nTEN\n",
+     "structuredPatch": [
+      {
+       "oldStart": 7,
+       "oldLines": 4,
+       "newStart": 7,
+       "newLines": 4,
+       "lines": [
+        " seven",
+        " eight",
+        " nine",
+        "-ten",
+        "+TEN"
+       ]
+      }
+     ],
+     "originalFile": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/m.txt\u00001\u0000",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "m.txt": {
+      "content": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nTEN\n",
+      "bytesBase64": "b25lCnR3bwp0aHJlZQpmb3VyCmZpdmUKc2l4CnNldmVuCmVpZ2h0Cm5pbmUKVEVOCg==",
+      "sizeBytes": 49,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/gbk-roundtrip",
+   "files": [
+    {
+     "path": "gbk.txt",
+     "bytes": [
+      214,
+      208,
+      206,
+      196,
+      178,
+      226,
+      202,
+      212,
+      10
+     ]
+    }
+   ],
+   "preRead": [
+    {
+     "path": "gbk.txt",
+     "input": {
+      "file_path": "gbk.txt"
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "gbk.txt",
+    "content": "改写\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/gbk.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/gbk.txt",
+     "content": "改写\n",
+     "structuredPatch": [
+      {
+       "oldStart": 1,
+       "oldLines": 1,
+       "newStart": 1,
+       "newLines": 1,
+       "lines": [
+        "-中文测试",
+        "+改写"
+       ]
+      }
+     ],
+     "originalFile": "中文测试\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/gbk.txt\u00001\u0000",
+      "path": "<WS>/gbk.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "gbk.txt": {
+      "content": "��д\n",
+      "bytesBase64": "uMTQtAo=",
+      "sizeBytes": 5,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/same-size-different-content",
+   "files": [
+    {
+     "path": "s.txt",
+     "content": "aaaa\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "s.txt",
+     "input": {
+      "file_path": "s.txt"
+     }
+    }
+   ],
+   "bumpMtime": true,
+   "mutateAfterPreRead": {
+    "path": "s.txt",
+    "content": "bbbb\n"
+   },
+   "input": {
+    "file_path": "s.txt",
+    "content": "cccc\n"
+   },
+   "result": {
+    "modelContent": "File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.",
+    "failed": true,
+    "errorName": "Error",
+    "errorMessage": "File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.",
+    "readStateAfter": [
+     {
+      "key": "<WS>/s.txt\u00001\u0000",
+      "path": "<WS>/s.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "s.txt": {
+      "content": "bbbb\n",
+      "bytesBase64": "YmJiYgo=",
+      "sizeBytes": 5,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/range-read-then-full-write",
+   "files": [
+    {
+     "path": "m.txt",
+     "content": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n"
+    }
+   ],
+   "preRead": [
+    {
+     "path": "m.txt",
+     "input": {
+      "file_path": "m.txt",
+      "offset": 2,
+      "limit": 3
+     }
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "m.txt",
+    "content": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n"
+   },
+   "result": {
+    "modelContent": "The file <WS>/m.txt has been updated successfully. (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "update",
+     "filePath": "<WS>/m.txt",
+     "content": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
+     "structuredPatch": [],
+     "originalFile": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/m.txt\u00002\u00003",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     },
+     {
+      "key": "<WS>/m.txt\u00001\u0000",
+      "path": "<WS>/m.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "m.txt": {
+      "content": "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
+      "bytesBase64": "b25lCnR3bwp0aHJlZQpmb3VyCmZpdmUKc2l4CnNldmVuCmVpZ2h0Cm5pbmUKdGVuCg==",
+      "sizeBytes": 49,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/dotfile",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": ".env",
+    "content": "KEY=value\n"
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/.env (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/.env",
+     "content": "KEY=value\n",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/.env\u00001\u0000",
+      "path": "<WS>/.env",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     ".env": {
+      "content": "KEY=value\n",
+      "bytesBase64": "S0VZPXZhbHVlCg==",
+      "sizeBytes": 10,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/parent-is-file",
+   "files": [
+    {
+     "path": "blocker",
+     "content": "i am a file\n"
+    }
+   ],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "blocker/child.txt",
+    "content": "nope\n"
+   },
+   "result": {
+    "modelContent": "ENOTDIR: not a directory, stat '<WS>/blocker/child.txt'",
+    "failed": true,
+    "errorName": "FileSystemPortError",
+    "errorMessage": "ENOTDIR: not a directory, stat '<WS>/blocker/child.txt'",
+    "readStateAfter": [],
+    "treeAfter": {
+     "blocker": {
+      "content": "i am a file\n",
+      "bytesBase64": "aSBhbSBhIGZpbGUK",
+      "sizeBytes": 12,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/content-with-nul",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "nul.txt",
+    "content": "a\u0000b\n"
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/nul.txt (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/nul.txt",
+     "content": "a\u0000b\n",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/nul.txt\u00001\u0000",
+      "path": "<WS>/nul.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "nul.txt": {
+      "content": "a\u0000b\n",
+      "bytesBase64": "YQBiCg==",
+      "sizeBytes": 4,
+      "mode": "644"
+     }
+    }
+   }
+  },
+  {
+   "name": "write/create-crlf-content",
+   "files": [],
+   "bumpMtime": false,
+   "input": {
+    "file_path": "crlf.txt",
+    "content": "a\r\nb\r\n"
+   },
+   "result": {
+    "modelContent": "File created successfully at: <WS>/crlf.txt (file state is current in your context — no need to Read it back)",
+    "output": {
+     "type": "create",
+     "filePath": "<WS>/crlf.txt",
+     "content": "a\r\nb\r\n",
+     "structuredPatch": [],
+     "originalFile": null,
+     "userModified": false
+    },
+    "failed": false,
+    "readStateAfter": [
+     {
+      "key": "<WS>/crlf.txt\u00001\u0000",
+      "path": "<WS>/crlf.txt",
+      "isPartialView": false
+     }
+    ],
+    "treeAfter": {
+     "crlf.txt": {
+      "content": "a\r\nb\r\n",
+      "bytesBase64": "YQ0KYg0K",
+      "sizeBytes": 6,
+      "mode": "644"
+     }
+    }
+   }
+  }
+ ]
+}
