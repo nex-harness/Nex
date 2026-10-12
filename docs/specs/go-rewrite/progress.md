@@ -1,7 +1,7 @@
 # Go 重写整体进度
 
 > 单一来源:`docs/specs/go-rewrite/phase-*.md` 是各 phase 的规约，本文档只是它们的勾选视图。
-> 最后更新：2026-10-12(Phase 0 全绿，Phase 1 接近完成)。
+> 最后更新：2026-10-12(Phase 0 全绿，Phase 1 接近完成，Phase 2 全绿)。
 
 ## 总览
 
@@ -9,7 +9,7 @@
 | ------- | ----------- | ------------------- | ---------------------------------------------------------------------------------------- |
 | Phase 0 | ✅ 全绿     | 21/21               | `gate.sh 0` exit 0(2026-10-10)                                                           |
 | Phase 1 | 🟢 接近完成 | 45/45 自动 + 1 人工 | 自动 gate 全过；剩 G1.13 手动 checklist(permission prompts / 文件编辑 / Desktop)需人工跑 |
-| Phase 2 | ⬜ 未开始   | 0/13                | 依赖 Phase 0(已就绪）；与 Phase 1 并行可行                                               |
+| Phase 2 | ✅ 全绿     | 21/21               | `gate.sh 2` exit 0(2026-10-12);12 步全过                                                 |
 | Phase 3 | ⬜ 未开始   | 0/15                | 依赖 Phase 1 + Phase 2                                                                   |
 | Phase 4 | ⬜ 未开始   | 0/16                | 依赖 Phase 1;D4(JS-bound features）在 Phase 4 启动时需最终决策                           |
 | Phase 5 | ⬜ 未开始   | 0/16                | 依赖 Phase 3 + Phase 4                                                                   |
