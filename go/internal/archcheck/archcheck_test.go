@@ -29,9 +29,16 @@ var ioPackages = map[string]bool{
 // ioPathAllowed reports whether a package path may import ioPackages.
 // internal/protocol is allowed none of them on purpose: it works on io.Reader
 // and io.Writer so it stays testable; only cmd/ wires real streams.
+//
+// internal/server is the other boundary: it *is* the HTTP shell (static files,
+// GET /api/server-info), so net/http is its job rather than something to abstract
+// away. Its filesystem and environment access still goes through adapters
+// (internal/adapters/webroot, internal/adapters/serverenv), which is why it is absent
+// from osAllowedOutsideAdapters.
 func ioPathAllowed(relDir string) bool {
 	return strings.HasPrefix(relDir, "cmd/") ||
-		strings.HasPrefix(relDir, "internal/adapters/")
+		strings.HasPrefix(relDir, "internal/adapters/") ||
+		relDir == "internal/server"
 }
 
 // osAllowedOutsideAdapters lists packages that may import "os" even though they

@@ -194,7 +194,14 @@ gate2() {
   # own frames with the TypeScript recordings byte for byte.
   check G2.4 "rpc client: in-memory pair + Node integration (step 2.4)" \
     bash -c 'cd go && go test -race -count=1 ./internal/rpc/ -run "Client|Call|Listen|Cancel|Leak"'
-  todo G2.5 "http shell: static, server-info, headers (step 2.5)"
+  # G2.5 (step 2.5): the HTTP shell. Covers the static serving rules (MIME table, cache
+  # headers, traversal guard, SPA fallback, HEAD) and GET /api/server-info (shape, optional
+  # name, capabilities, authRequired including the NEX_SERVER_TOKEN / NEX_SERVER_AUTH_TOKEN
+  # inconsistency). TestStaticAndServerInfoMatchRecordedTypeScript replays 47 exchanges
+  # recorded from packages/server/src/http.ts by scripts/go-rewrite/record/record-http.mjs and
+  # compares status, headers and body SHA-256, so a difference the UI could observe fails here.
+  check G2.5 "http shell: static, server-info, headers match recorded TypeScript responses (step 2.5)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/server/ -run "Static|ServerInfo|Http|Traversal|SPA"' 
   todo G2.6 "web authentication: session store, limiter, cookie (step 2.6)"
   todo G2.7 "host capability + WebSocket endpoints (step 2.7)"
   todo G2.8 "gateway: routing table + upstream forwarding (step 2.8)"

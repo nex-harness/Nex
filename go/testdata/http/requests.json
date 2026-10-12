@@ -1,0 +1,613 @@
+{
+  "version": 1,
+  "note": "recorded from packages/server/src/http.ts via tsx; see record-http.mjs",
+  "ignoredHeaders": [
+    "date",
+    "server",
+    "connection"
+  ],
+  "fixtureRoot": "static-root",
+  "cases": [
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/index.html",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "plain",
+      "method": "HEAD",
+      "path": "/",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8"
+      },
+      "bodyBytes": 0,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "group": "plain",
+      "method": "HEAD",
+      "path": "/assets/app.js",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "text/javascript; charset=utf-8"
+      },
+      "bodyBytes": 0,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets/app.js",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "text/javascript; charset=utf-8",
+        "content-length": "26"
+      },
+      "bodyBytes": 26,
+      "bodySha256": "a2098bd92b10bf8b816d24b7556b1ce8c49a879d130489065ef1051c17e042f6"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets/style.css",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "text/css; charset=utf-8",
+        "content-length": "20"
+      },
+      "bodyBytes": 20,
+      "bodySha256": "bfec0c7b339cfd4a9b9cb6ed35e27ca7f3dd173612261a0bd7063e5147d530de"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets/data.json",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "12"
+      },
+      "bodyBytes": 12,
+      "bodySha256": "e5f1eb4d806641698a35efe20e098efd20d7d57a9b90ee69079d5bb650920726"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets/logo.png",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "image/png",
+        "content-length": "16"
+      },
+      "bodyBytes": 16,
+      "bodySha256": "02a3e298f1533f62558c58e4c70edcab9af5a50d62d925fd5390942020fb0fb8"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets/mod.wasm",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "application/wasm",
+        "content-length": "8"
+      },
+      "bodyBytes": 8,
+      "bodySha256": "93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets/font.woff2",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "font/woff2",
+        "content-length": "4"
+      },
+      "bodyBytes": 4,
+      "bodySha256": "78636849015e5d2ab5689e3f2aff050a589cbede7b789470076f450f03acb2bb"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets/icon.ico",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "image/x-icon",
+        "content-length": "4"
+      },
+      "bodyBytes": 4,
+      "bodySha256": "bf5e8ffa51a9e748985800c1d3d7f1a2a6ae7435136593ca8d9637e3f87c699c"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets/icon.svg",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "image/svg+xml",
+        "content-length": "42"
+      },
+      "bodyBytes": 42,
+      "bodySha256": "f502af1820bfc04f67ff9daac2ae7a392e23c7cb6c3dfa5422db05fd9538be19"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets/fallback.bin",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "application/octet-stream",
+        "content-length": "10"
+      },
+      "bodyBytes": 10,
+      "bodySha256": "0c76bdf6e63585bbfbee86b2830095d8ed4e7ef3765192906e01eb75cccc9687"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets/app.js.map",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets/app.js?v=1",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "text/javascript; charset=utf-8",
+        "content-length": "26"
+      },
+      "bodyBytes": 26,
+      "bodySha256": "a2098bd92b10bf8b816d24b7556b1ce8c49a879d130489065ef1051c17e042f6"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets/",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/nested",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "37"
+      },
+      "bodyBytes": 37,
+      "bodySha256": "a7d01f087374dfc86a8b4d0c7b3500ba60162e18ad6ffa4b51b55aea3bce8b18"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/nested/index.html",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "37"
+      },
+      "bodyBytes": 37,
+      "bodySha256": "a7d01f087374dfc86a8b4d0c7b3500ba60162e18ad6ffa4b51b55aea3bce8b18"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/nested/deep/page.html",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "35"
+      },
+      "bodyBytes": 35,
+      "bodySha256": "4df6d25f45fc406f203cd800f933c7dfa9e28317573ae3d3534dd9e891c5db02"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/nested/no-index/",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/empty-dir/",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/UPPER.PNG",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "image/png",
+        "content-length": "11"
+      },
+      "bodyBytes": 11,
+      "bodySha256": "6f3f377669ca816a513183e088eb246a28346162e458c45670ccc1051aba8ea1"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/no-extension",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "application/octet-stream",
+        "content-length": "12"
+      },
+      "bodyBytes": 12,
+      "bodySha256": "57515962dba899c53b48739f36b4599937a8e23c9218743a72eddaf92ed99087"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/README.md",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "application/octet-stream",
+        "content-length": "21"
+      },
+      "bodyBytes": 21,
+      "bodySha256": "c93171cf910490f05c8793eebc60091ad557b0a5031d8893cc394886ea8ddff8"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/file%20with%20space.txt",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "text/plain; charset=utf-8",
+        "content-length": "7"
+      },
+      "bodyBytes": 7,
+      "bodySha256": "e47fbedb2823cf1ae4d4cdb8273635be2024cb870588e259c9b23d76ae49d484"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/./assets/app.js",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "text/javascript; charset=utf-8",
+        "content-length": "26"
+      },
+      "bodyBytes": 26,
+      "bodySha256": "a2098bd92b10bf8b816d24b7556b1ce8c49a879d130489065ef1051c17e042f6"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets/../assets/app.js",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "text/javascript; charset=utf-8",
+        "content-length": "26"
+      },
+      "bodyBytes": 26,
+      "bodySha256": "a2098bd92b10bf8b816d24b7556b1ce8c49a879d130489065ef1051c17e042f6"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/missing-asset.png",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/login",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/settings/general",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/../etc/passwd",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/%2e%2e/etc/passwd",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/%2E%2E/%2E%2E/etc/passwd",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/..%2fetc%2fpasswd",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=UTF-8",
+        "content-length": "13"
+      },
+      "bodyBytes": 13,
+      "bodySha256": "7d04f7431bbfa41a04bcc7e6b98b9de0d919756c4c671c5785c99fff45f16402"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/assets%2fapp.js",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "text/javascript; charset=utf-8",
+        "content-length": "26"
+      },
+      "bodyBytes": 26,
+      "bodySha256": "a2098bd92b10bf8b816d24b7556b1ce8c49a879d130489065ef1051c17e042f6"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "//assets/app.js",
+      "status": 200,
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "text/javascript; charset=utf-8",
+        "content-length": "26"
+      },
+      "bodyBytes": 26,
+      "bodySha256": "a2098bd92b10bf8b816d24b7556b1ce8c49a879d130489065ef1051c17e042f6"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/api/does-not-exist",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=UTF-8",
+        "content-length": "13"
+      },
+      "bodyBytes": 13,
+      "bodySha256": "7d04f7431bbfa41a04bcc7e6b98b9de0d919756c4c671c5785c99fff45f16402"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/ws",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=UTF-8",
+        "content-length": "13"
+      },
+      "bodyBytes": 13,
+      "bodySha256": "7d04f7431bbfa41a04bcc7e6b98b9de0d919756c4c671c5785c99fff45f16402"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/ws/remote/none",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=UTF-8",
+        "content-length": "13"
+      },
+      "bodyBytes": 13,
+      "bodySha256": "7d04f7431bbfa41a04bcc7e6b98b9de0d919756c4c671c5785c99fff45f16402"
+    },
+    {
+      "group": "plain",
+      "method": "GET",
+      "path": "/api/server-info",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "content-length": "200"
+      },
+      "bodyBytes": 200,
+      "bodySha256": "2ea166dc8244f43582137a4e4afd5ccada96525160c8de822b3649bdd0491dc9"
+    },
+    {
+      "group": "named",
+      "method": "GET",
+      "path": "/api/server-info",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "content-length": "260"
+      },
+      "bodyBytes": 260,
+      "bodySha256": "ca62963bbf9647c4f994dcb694690a784a5b5770fb293ca1a46fa73fcd80668c"
+    },
+    {
+      "group": "named",
+      "method": "GET",
+      "path": "/",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "named",
+      "method": "GET",
+      "path": "/missing-page",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "token",
+      "method": "GET",
+      "path": "/api/server-info",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "content-length": "199"
+      },
+      "bodyBytes": 199,
+      "bodySha256": "82c7a52c00160d7285a0df2ac453d7421efec6405863c3ebcd1fdfdf4eddfa21"
+    },
+    {
+      "group": "token",
+      "method": "GET",
+      "path": "/",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-cache",
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "49"
+      },
+      "bodyBytes": 49,
+      "bodySha256": "a2dbc070eb49b77118413fa4b01bc67ebb850c0e0f1149653419ad21391ee84f"
+    },
+    {
+      "group": "token",
+      "method": "GET",
+      "path": "/api/does-not-exist",
+      "status": 404,
+      "headers": {
+        "content-type": "text/plain; charset=UTF-8",
+        "content-length": "13"
+      },
+      "bodyBytes": 13,
+      "bodySha256": "7d04f7431bbfa41a04bcc7e6b98b9de0d919756c4c671c5785c99fff45f16402"
+    }
+  ]
+}
