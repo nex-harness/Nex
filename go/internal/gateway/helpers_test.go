@@ -187,7 +187,7 @@ func newGatewayAtDeadUpstream(t *testing.T) *Gateway {
 		// Short: the connect is refused immediately, and a slow default would only make a broken
 		// deployment look like a slow one.
 		DialTimeout: 2 * time.Second,
-		Log:         testLogger{t},
+		Log:         newTestLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("gateway.New: %v", err)

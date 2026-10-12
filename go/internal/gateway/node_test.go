@@ -448,7 +448,7 @@ func newGatewayForNode(t *testing.T, upstream *nodeUpstream) *Gateway {
 		// Generous: the first real request after boot initializes the provider registry, which is
 		// far slower than a dial but still not a hang.
 		DialTimeout: 30 * time.Second,
-		Log:         testLogger{t},
+		Log:         newTestLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("gateway.New: %v", err)

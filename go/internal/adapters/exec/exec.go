@@ -67,6 +67,14 @@ type Options struct {
 
 	// TermGrace overrides DefaultTermGrace for KillTree.
 	TermGrace time.Duration
+
+	// StdoutLines, when non-nil, is fed every complete line the child writes to its
+	// stdout, in order, before the line reaches the retained output. It exists for the
+	// one caller that must react to a line while the child is still running (a
+	// supervisor learning the port it just announced); the retained Output is still
+	// collected for everyone else. Lines are dropped if the receiver falls behind,
+	// because a full pipe must never block the child.
+	StdoutLines chan<- string
 }
 
 func (o Options) normalized() Options {
@@ -156,6 +164,9 @@ func Start(ctx context.Context, opts Options) (*Process, error) {
 		done:      make(chan struct{}),
 		killDone:  make(chan struct{}),
 		watchCtx:  ctx,
+	}
+	if o.StdoutLines != nil {
+		p.stdout.SetLineSink(o.StdoutLines)
 	}
 	cmd.Stdout = p.stdout
 	cmd.Stderr = p.stderr

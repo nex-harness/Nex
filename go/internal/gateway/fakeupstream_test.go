@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -324,7 +325,7 @@ func newTestGateway(t *testing.T, fake *fakeUpstream, table string) *Gateway {
 			BaseURL:   fake.BaseURL(),
 			AuthToken: fake.authToken,
 		},
-		Log: testLogger{t},
+		Log: newTestLogger(t),
 	})
 	if err != nil {
 		t.Fatalf("gateway.New: %v", err)
@@ -336,13 +337,52 @@ func newTestGateway(t *testing.T, fake *fakeUpstream, table string) *Gateway {
 // wait ran out.
 var errTestTimeout = errors.New("gateway test timeout")
 
-// testLogger sends gateway logs to the test, at debug so a passing run stays quiet.
-type testLogger struct{ t *testing.T }
+// testLogger collects gateway logs and hands them to the test once it is finishing.
+//
+// It buffers instead of calling t.Logf inline because the gateway logs from its own
+// connection goroutines and from the httptest server's, and those can still be running
+// after the test function has returned — at which point t.Logf writes to testing's own
+// fields after the test finished, which the race detector reports (it is the write at
+// testing.tRunner.func1 that the detector pairs with the read here). Buffering under a
+// mutex and flushing from Cleanup, which runs on the test's goroutine while t is still
+// valid, removes that: a line that arrives after the flush is dropped rather than
+// touching a finished test.
+type testLogger struct {
+	mu     sync.Mutex
+	buffer []string
+}
 
-func (l testLogger) Debug(msg string, args ...any) { l.t.Logf("DEBUG "+msg, args...) }
-func (l testLogger) Info(msg string, args ...any)  { l.t.Logf("INFO  "+msg, args...) }
-func (l testLogger) Warn(msg string, args ...any)  { l.t.Logf("WARN  "+msg, args...) }
-func (l testLogger) Error(msg string, args ...any) { l.t.Logf("ERROR "+msg, args...) }
+func (l *testLogger) record(msg string, args ...any) {
+	line := fmt.Sprintf(msg, args...)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	// Bounded: a failure loop must not turn into an OOM.
+	if len(l.buffer) < 200 {
+		l.buffer = append(l.buffer, line)
+	}
+}
+
+func (l *testLogger) Debug(msg string, args ...any) { l.record("DEBUG "+msg, args...) }
+func (l *testLogger) Info(msg string, args ...any)  { l.record("INFO  "+msg, args...) }
+func (l *testLogger) Warn(msg string, args ...any)  { l.record("WARN  "+msg, args...) }
+func (l *testLogger) Error(msg string, args ...any) { l.record("ERROR "+msg, args...) }
+
+// newTestLogger returns a logger that dumps the collected lines into t when the test
+// finishes — only on failure, so a passing run stays quiet.
+func newTestLogger(t *testing.T) *testLogger {
+	t.Helper()
+	logger := &testLogger{}
+	t.Cleanup(func() {
+		logger.mu.Lock()
+		lines := logger.buffer
+		logger.buffer = nil
+		logger.mu.Unlock()
+		if t.Failed() && len(lines) > 0 {
+			t.Logf("gateway log:\n%s", strings.Join(lines, "\n"))
+		}
+	})
+	return logger
+}
 
 // testClient is a minimal WebSocket client for driving a gateway from the outside.
 type testClient struct {
