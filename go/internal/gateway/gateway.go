@@ -89,6 +89,18 @@ func (g *Gateway) RegisterChannel(name string, channel rpc.Channel) {
 	g.goChannels[name] = channel
 }
 
+// RegisterChannels records every Go-implemented channel a source provides. It is
+// the bulk form a service Registry feeds (step 3.1): the registry owns the name →
+// channel set, the gateway owns routing, and this is the single handoff point
+// between them.
+func (g *Gateway) RegisterChannels(names []string, channelFor func(name string) rpc.Channel) {
+	for _, name := range names {
+		if channel := channelFor(name); channel != nil {
+			g.RegisterChannel(name, channel)
+		}
+	}
+}
+
 // Handle owns one accepted client connection and returns when it has ended.
 //
 // It implements server.ConnectionOwner. client is the already-upgraded socket; this method never

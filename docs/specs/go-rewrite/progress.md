@@ -10,7 +10,7 @@
 | Phase 0 | ✅ 全绿     | 21/21               | `gate.sh 0` exit 0(2026-10-10)                                                           |
 | Phase 1 | 🟢 接近完成 | 45/45 自动 + 1 人工 | 自动 gate 全过；剩 G1.13 手动 checklist(permission prompts / 文件编辑 / Desktop)需人工跑 |
 | Phase 2 | ✅ 全绿     | 21/21               | `gate.sh 2` exit 0(2026-10-12);12 步全过                                                 |
-| Phase 3 | ⬜ 未开始   | 0/15                | 依赖 Phase 1 + Phase 2                                                                   |
+| Phase 3 | 🟡 刚起步   | 1/15                | 3.1 shared infra `G3.shared` PASS(2026-10-13);3.2–3.11 未开始                            |
 | Phase 4 | ⬜ 未开始   | 0/16                | 依赖 Phase 1;D4(JS-bound features）在 Phase 4 启动时需最终决策                           |
 | Phase 5 | ⬜ 未开始   | 0/16                | 依赖 Phase 3 + Phase 4                                                                   |
 
@@ -90,7 +90,7 @@
 
 依赖 Phase 1 + Phase 2。
 
-- [ ] **3.1** Shared service infrastructure(Registry、broadcast、paths、atomic file)
+- [x] **3.1** Shared service infrastructure(Registry、broadcast、paths、atomic file)— `G3.shared` PASS(2026-10-13):`go/internal/services/{registry.go,broadcast/,paths/}`、`go/internal/adapters/{fsx(atomic+fault),logx}`;winpath 向量表由真实 Node 生成;Registry 已接入 nex-server `buildHandler`(broadcast 为首个注册渠道,路由仍由 gateway-routes.json 控制)
 - [ ] **3.2** Tier 1 stateless:`ISystemService`、`IFileService`、`IFileWatcherService`、`IMediaPreviewService`
 - [ ] **3.3** Tier 1b:`IGitService`、`IGitCheckpointService`
 - [ ] **3.4** Tier 2:`ITerminalService`(PTY)

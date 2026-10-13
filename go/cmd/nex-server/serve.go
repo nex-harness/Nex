@@ -33,6 +33,8 @@ import (
 	"github.com/tylinux/nex/go/internal/adapters/serverenv"
 	"github.com/tylinux/nex/go/internal/gateway"
 	"github.com/tylinux/nex/go/internal/server"
+	"github.com/tylinux/nex/go/internal/services"
+	"github.com/tylinux/nex/go/internal/services/broadcast"
 )
 
 // config is the resolved deployment. Every field comes from an environment variable the
@@ -193,6 +195,15 @@ const shutdownGrace = 5 * time.Second
 // twice and setting the owner afterwards — is what guarantees one store and therefore one ticket
 // per POST /api/rpc-host-capability.
 func buildHandler(cfg config, upstream *upstreamProcess, log *slog.Logger) (http.Handler, *server.Config, error) {
+	// The service registry (step 3.1) is the Go-side ServiceCollection. The
+	// broadcast channel is the first real service ported into it; every later
+	// Phase-3 tier registers here the same way. The gateway still owns ROUTING,
+	// so a registered channel only serves traffic once gateway-routes.json
+	// marks it "go" — registering early can never flip a channel by accident.
+	registry := services.NewRegistry()
+	broadcastHub := broadcast.NewHub()
+	registry.MustRegister(broadcast.ChannelName, &broadcast.Channel{Service: broadcast.NewService(broadcastHub)})
+
 	gw, err := gateway.New(gateway.Options{
 		// Empty selects gateway.DefaultRoutesFilePath(): <data base>/.nex/v2/gateway-routes.json.
 		// A missing file is not an error — LoadRouter falls back to "everything to Node", which is
@@ -207,6 +218,11 @@ func buildHandler(cfg config, upstream *upstreamProcess, log *slog.Logger) (http
 		return nil, nil, err
 	}
 	upstream.routerSource = gw.Router().Source()
+
+	// Registry → gateway handoff: the registry owns the name → channel set,
+	// the gateway owns routing. Names the routing table still sends to Node
+	// are simply never dispatched here.
+	gw.RegisterChannels(registry.ChannelNames(), registry.LookupOptional)
 
 	handler, resolved, err := server.NewHandler(server.Options{
 		Host:          cfg.host,

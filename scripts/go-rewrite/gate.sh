@@ -257,13 +257,37 @@ gate2() {
   fi
 }
 
+gate3() {
+  common_block 3
+  # G3.1: phases 0-2 must pass.
+  if GATE_SELFTEST=1 "$0" 2 >"$LOG_DIR/G3.1.log" 2>&1; then echo "PASS G3.1 gates 0-2 pass"; PASS=$((PASS+1))
+  else echo "FAIL G3.1 gates 0-2 do not pass (phase 3 entry criterion)   (log: $LOG_DIR/G3.1.log)"; FAIL=$((FAIL+1)); fi
+  # G3.2 (step 3.1): shared service infrastructure — registry, broadcast, paths,
+  # atomic file helpers. These are the foundations every later tier builds on.
+  check G3.shared "shared infrastructure: registry, broadcast, paths, atomic writes (step 3.1)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/services/ ./internal/services/paths/ ./internal/services/broadcast/ ./internal/adapters/fsx/ ./internal/adapters/logx/'
+  # G3.4 (terminal, step 3.4) is deferred by user decision 2026-10-12: the
+  # implementation will be redesigned before porting. Recorded here so the gate
+  # reports it rather than silently omitting it.
+  todo G3.terminal "terminal service (step 3.4) deferred — implementation will be redesigned first (user 2026-10-12)"
+  todo G3.system/file/watcher/media "stateless IO adapters (step 3.2)"
+  todo G3.git/gitcheckpoint "git services (step 3.3)"
+  todo G3.settings "settings family (step 3.5)"
+  todo G3.providers "providers and models (step 3.6)"
+  todo G3.skills/plugins/mcpsync/hooks/memory "knowledge extensions (step 3.7)"
+  todo G3.peripheral "peripheral services (step 3.8)"
+  todo G3.bots "bots (step 3.9)"
+  todo G3.agentbridge "agent bridge (step 3.10)"
+}
+
 gate_unbuilt() { common_block "$1"; todo "G$1.*" "phase $1 checks are defined in its doc but not implemented yet"; }
 
 case "$PHASE" in
   0) gate0 ;;
   1) gate1 ;;
   2) gate2 ;;
-  3|4|5) gate_unbuilt "$PHASE" ;;
+  3) gate3 ;;
+  4|5) gate_unbuilt "$PHASE" ;;
   *) echo "unknown phase $PHASE" >&2; exit 2 ;;
 esac
 echo "----"

@@ -58,6 +58,12 @@ var osAllowedOutsideAdapters = map[string]string{
 	// is the only persistent state the gateway owns and it is read exactly once at startup, so an
 	// adapter would be a wrapper around os.ReadFile with one call site.
 	"internal/gateway": "reads the gateway-routes.json routing table",
+	// internal/services/paths is the paths.ts port (step 3.1): its whole job is
+	// resolving NEX_DATA_BASE_DIR/HOME into directories, captured once at
+	// construction (NewFromProcess) exactly like the TS module-level consts.
+	// Reading env/home is the package's contract, not a side effect to hide
+	// behind an adapter; New(env, home) keeps the logic pure for tests.
+	"internal/services/paths": "owns the paths.ts env/home resolution",
 }
 
 func goFiles(t *testing.T, root string) []string {
