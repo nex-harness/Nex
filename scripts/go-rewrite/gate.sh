@@ -274,7 +274,12 @@ gate3() {
   check G3.file "file service: search, read, write, ignore (step 3.2)" bash -c 'cd go && go test -race -count=1 ./internal/services/file/'
   check G3.watcher "file watcher (step 3.2)" bash -c 'cd go && go test -race -count=1 ./internal/services/filewatcher/'
   check G3.media "media preview (step 3.2)" bash -c 'cd go && go test -race -count=1 ./internal/services/mediapreview/'
-  todo G3.git/gitcheckpoint "git services (step 3.3)"
+  # G3.3 (step 3.3): git services shell out to the git binary through the exec
+  # adapter (never a Go git library). The suites cover the porcelain=v2 parser
+  # (vectors from real git output), branch/diff/stage/commit flows against
+  # fixture repos, and the checkpoint store atomic manifest writes.
+  check G3.git "git service: summary/branches/diff/stage/commit (step 3.3)" bash -c 'cd go && go test -race -count=1 ./internal/services/git/'
+  check G3.gitcheckpoint "git checkpoint service (step 3.3)" bash -c 'cd go && go test -race -count=1 ./internal/services/gitcheckpoint/'
   todo G3.settings "settings family (step 3.5)"
   todo G3.providers "providers and models (step 3.6)"
   todo G3.skills/plugins/mcpsync/hooks/memory "knowledge extensions (step 3.7)"

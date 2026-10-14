@@ -74,6 +74,13 @@ var osAllowedOutsideAdapters = map[string]string{
 	"internal/services/file":        "tier-1 IFileService: its contract IS filesystem access (step 3.2)",
 	"internal/services/filewatcher": "tier-1 IFileWatcherService: its contract IS filesystem watching (step 3.2)",
 	"internal/services/system":      "tier-1 ISystemService: probes the OS (shells, tcp, http via probehttp) (step 3.2)",
+	// The git services (step 3.3) shell out to the git binary and touch the
+	// working tree: temp index dirs (git update-index --index-info), stat/read
+	// of paths being staged, and the checkpoint store's atomic manifest
+	// writes. os/exec itself still routes through internal/adapters/exec; the
+	// os usage here is the same tier-1 "the service IS the I/O boundary" case.
+	"internal/services/git":           "git services stage/restore working-tree files (step 3.3)",
+	"internal/services/gitcheckpoint": "checkpoint store writes manifests atomically (step 3.3)",
 }
 
 func goFiles(t *testing.T, root string) []string {
