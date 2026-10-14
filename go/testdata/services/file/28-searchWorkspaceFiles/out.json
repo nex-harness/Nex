@@ -1,0 +1,101 @@
+{
+  "ok": true,
+  "result": [
+    {
+      "name": ".gitignore",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/.gitignore",
+      "relativePath": ".gitignore",
+      "type": "file"
+    },
+    {
+      "name": "file.txt",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/.hidden/nested/file.txt",
+      "relativePath": ".hidden/nested/file.txt",
+      "type": "file"
+    },
+    {
+      "name": "root-hidden.txt",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/.hidden/root-hidden.txt",
+      "relativePath": ".hidden/root-hidden.txt",
+      "type": "file"
+    },
+    {
+      "name": "note.md",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/docs/note.md",
+      "relativePath": "docs/note.md",
+      "type": "file"
+    },
+    {
+      "name": "sample.txt",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/media/sample.txt",
+      "relativePath": "media/sample.txt",
+      "type": "file"
+    },
+    {
+      "name": "README.md",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/README.md",
+      "relativePath": "README.md",
+      "type": "file"
+    },
+    {
+      "name": "blob.bin",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src/binary/blob.bin",
+      "relativePath": "src/binary/blob.bin",
+      "type": "file"
+    },
+    {
+      "name": "main.ts",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src/main.ts",
+      "relativePath": "src/main.ts",
+      "type": "file"
+    },
+    {
+      "name": "big.txt",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src/text/big.txt",
+      "relativePath": "src/text/big.txt",
+      "type": "file"
+    },
+    {
+      "name": "helper.ts",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src/util/helper.ts",
+      "relativePath": "src/util/helper.ts",
+      "type": "file"
+    },
+    {
+      "name": "docs",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/docs",
+      "relativePath": "docs",
+      "type": "directory"
+    },
+    {
+      "name": "media",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/media",
+      "relativePath": "media",
+      "type": "directory"
+    },
+    {
+      "name": "src",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src",
+      "relativePath": "src",
+      "type": "directory"
+    },
+    {
+      "name": "binary",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src/binary",
+      "relativePath": "src/binary",
+      "type": "directory"
+    },
+    {
+      "name": "text",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src/text",
+      "relativePath": "src/text",
+      "type": "directory"
+    },
+    {
+      "name": "util",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src/util",
+      "relativePath": "src/util",
+      "type": "directory"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "ok": true,
+  "result": [
+    {
+      "name": ".hidden",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/.hidden",
+      "type": "directory",
+      "isSymbolicLink": false
+    },
+    {
+      "name": "build",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/build",
+      "type": "directory",
+      "isSymbolicLink": false
+    },
+    {
+      "name": "coverage",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/coverage",
+      "type": "directory",
+      "isSymbolicLink": false
+    },
+    {
+      "name": "docs",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/docs",
+      "type": "directory",
+      "isSymbolicLink": false
+    },
+    {
+      "name": "media",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/media",
+      "type": "directory",
+      "isSymbolicLink": false
+    },
+    {
+      "name": "node_modules",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/node_modules",
+      "type": "directory",
+      "isSymbolicLink": false
+    },
+    {
+      "name": "src",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src",
+      "type": "directory",
+      "isSymbolicLink": false
+    },
+    {
+      "name": ".gitignore",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/.gitignore",
+      "type": "file",
+      "isSymbolicLink": false
+    },
+    {
+      "name": "README.md",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/README.md",
+      "type": "file",
+      "isSymbolicLink": false
+    }
+  ]
+}

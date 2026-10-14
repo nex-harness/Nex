@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "result": {
+    "isIntranet": false,
+    "reachedTargetCount": 0,
+    "requiredSuccessCount": 1,
+    "totalTargets": 1,
+    "checkedAt": "<checkedAt>",
+    "strategy": "service-http",
+    "results": [
+      {
+        "targetId": "http://127.0.0.1:1/",
+        "kind": "service",
+        "url": "http://127.0.0.1:1/",
+        "reachable": false,
+        "attemptCount": 1,
+        "latencyMs": "<latencyMs>",
+        "error": "fetch failed"
+      }
+    ]
+  }
+}

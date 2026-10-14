@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "result": {
+    "isIntranet": false,
+    "reachedTargetCount": 0,
+    "requiredSuccessCount": 1,
+    "totalTargets": 1,
+    "checkedAt": "<checkedAt>",
+    "strategy": "tcp-connect",
+    "results": [
+      {
+        "targetId": "127.0.0.1:1",
+        "kind": "tcp",
+        "host": "127.0.0.1",
+        "port": 1,
+        "reachable": false,
+        "attemptCount": 1,
+        "latencyMs": "<latencyMs>",
+        "error": "connect ECONNREFUSED 127.0.0.1:1"
+      }
+    ]
+  }
+}

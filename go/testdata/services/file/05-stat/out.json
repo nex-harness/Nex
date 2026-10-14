@@ -1,0 +1,7 @@
+{
+  "ok": true,
+  "result": {
+    "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src",
+    "type": "directory"
+  }
+}

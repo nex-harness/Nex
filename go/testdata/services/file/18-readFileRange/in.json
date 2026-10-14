@@ -1,0 +1,11 @@
+{
+  "channel": "file",
+  "method": "readFileRange",
+  "args": [
+    {
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src/binary/blob.bin",
+      "offset": 100,
+      "length": 8
+    }
+  ]
+}

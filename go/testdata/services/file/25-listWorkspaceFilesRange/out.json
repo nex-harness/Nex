@@ -1,0 +1,4 @@
+{
+  "ok": true,
+  "result": "directory\tdocs\ndirectory\tmedia\ndirectory\tsrc\ndirectory\tsrc/binary\ndirectory\tsrc/text\ndirectory\tsrc/util\nfile\t.gitignore\nfile\t.hidden/nested/file.txt\nfile\t.hidden/root-hidden.txt\nfile\tdocs/note.md\nfile\tmedia/sample.txt\nfile\tREADME.md\nfile\tsrc/binary/blob.bin\nfile\tsrc/main.ts\nfile\tsrc/text/big.txt\nfile\tsrc/util/helper.ts"
+}

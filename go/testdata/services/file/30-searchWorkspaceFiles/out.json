@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "result": [
+    {
+      "name": "helper.ts",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src/util/helper.ts",
+      "relativePath": "src/util/helper.ts",
+      "type": "file"
+    }
+  ]
+}

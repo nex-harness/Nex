@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "result": [
+    {
+      "name": "README.md",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/README.md",
+      "relativePath": "README.md",
+      "type": "file"
+    },
+    {
+      "name": "sample.txt",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/media/sample.txt",
+      "relativePath": "media/sample.txt",
+      "type": "file"
+    }
+  ]
+}

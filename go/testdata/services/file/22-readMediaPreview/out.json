@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "name": "Error",
+    "message": "File is too large to preview: /mnt/MX500/Developer/Nex/go/testdata/services/fixtures/root/workspace/src/text/big.txt"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "channel": "file",
+  "method": "applyWorkspaceFileSearchIgnoreTransform",
+  "args": [
+    {
+      "rootPath": "<ROOT>/go/testdata/services/fixtures/root/ignore-workspace",
+      "transform": "reset-defaults"
+    }
+  ]
+}

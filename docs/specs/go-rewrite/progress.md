@@ -10,7 +10,7 @@
 | Phase 0 | ✅ 全绿     | 21/21               | `gate.sh 0` exit 0(2026-10-10)                                                           |
 | Phase 1 | 🟢 接近完成 | 45/45 自动 + 1 人工 | 自动 gate 全过；剩 G1.13 手动 checklist(permission prompts / 文件编辑 / Desktop)需人工跑 |
 | Phase 2 | ✅ 全绿     | 21/21               | `gate.sh 2` exit 0(2026-10-12);12 步全过                                                 |
-| Phase 3 | 🟡 刚起步   | 1/15                | 3.1 shared infra `G3.shared` PASS(2026-10-13);3.2–3.11 未开始                            |
+| Phase 3 | 🟡 进行中   | 1/15                | 3.1 shared infra ✅;3.4 终端 defer(用户决策，将改实现）;3.2 进行中                       |
 | Phase 4 | ⬜ 未开始   | 0/16                | 依赖 Phase 1;D4(JS-bound features）在 Phase 4 启动时需最终决策                           |
 | Phase 5 | ⬜ 未开始   | 0/16                | 依赖 Phase 3 + Phase 4                                                                   |
 

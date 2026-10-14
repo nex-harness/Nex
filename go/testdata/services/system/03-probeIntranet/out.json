@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "result": {
+    "isIntranet": false,
+    "reachedTargetCount": 0,
+    "requiredSuccessCount": 1,
+    "totalTargets": 0,
+    "checkedAt": "<checkedAt>",
+    "strategy": "tcp-connect",
+    "results": []
+  }
+}

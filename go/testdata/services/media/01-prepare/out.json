@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "result": {
+    "kind": "inline",
+    "dataBase64": "AAAAGGZ0eXA=",
+    "mediaType": "video/mp4",
+    "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/media/clip.mp4",
+    "size": 8
+  }
+}

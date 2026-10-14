@@ -1,0 +1,20 @@
+{
+  "channel": "system",
+  "method": "probeIntranet",
+  "args": [
+    {
+      "targets": [
+        {
+          "host": "  ",
+          "port": 1
+        },
+        {
+          "kind": "tcp",
+          "host": "127.0.0.1",
+          "port": 1
+        }
+      ],
+      "attempts": 1
+    }
+  ]
+}

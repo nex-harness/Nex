@@ -1,0 +1,9 @@
+{
+  "channel": "system",
+  "method": "probeIntranet",
+  "args": [
+    {
+      "targets": []
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "channel": "file",
+  "method": "searchWorkspaceFiles",
+  "args": [
+    {
+      "rootPath": "<ROOT>/go/testdata/services/fixtures/root/workspace",
+      "query": ""
+    }
+  ]
+}

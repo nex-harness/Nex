@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "result": {
+    "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src/binary/blob.bin",
+    "content": "",
+    "offset": 0,
+    "bytesRead": 9,
+    "totalBytes": 9,
+    "truncated": false,
+    "isBinary": true
+  }
+}

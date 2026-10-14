@@ -108,8 +108,18 @@ for (const name of [...localToolNames].sort()) {
 
 // ── (d) service channels ─────────────────────────────────────────────────────
 const CHANNELS_SRC = REL("packages/shared/src/channels.ts");
+// Tier-1 stateless IO adapters are ported (step 3.2); their trace is the
+// G3 gate check that runs the package's race suite. Everything else in
+// phase 3 stays todo until its step lands.
+const PORTED_CHANNELS: Record<string, string> = {
+  file: "G3.file",
+  "file-watcher": "G3.watcher",
+  "media-preview": "G3.media",
+  system: "G3.system",
+};
 for (const channel of Object.values(channels.ServiceChannels).sort()) {
-  add(`channel ${channel}`, CHANNELS_SRC, "3", "todo");
+  const trace = PORTED_CHANNELS[channel];
+  add(`channel ${channel}`, CHANNELS_SRC, "3", trace ? "ported" : "todo", trace ?? "—");
 }
 
 // ── (e) SQLite migrations ────────────────────────────────────────────────────

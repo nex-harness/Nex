@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "result": [
+    {
+      "name": "src",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src",
+      "relativePath": "src",
+      "type": "directory"
+    },
+    {
+      "name": "text",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src/text",
+      "relativePath": "src/text",
+      "type": "directory"
+    },
+    {
+      "name": "util",
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src/util",
+      "relativePath": "src/util",
+      "type": "directory"
+    }
+  ]
+}

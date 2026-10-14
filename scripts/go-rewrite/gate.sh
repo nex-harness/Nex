@@ -270,7 +270,10 @@ gate3() {
   # implementation will be redesigned before porting. Recorded here so the gate
   # reports it rather than silently omitting it.
   todo G3.terminal "terminal service (step 3.4) deferred — implementation will be redesigned first (user 2026-10-12)"
-  todo G3.system/file/watcher/media "stateless IO adapters (step 3.2)"
+  check G3.system "system service: info, shells, intranet probe (step 3.2)" bash -c 'cd go && go test -race -count=1 ./internal/services/system/'
+  check G3.file "file service: search, read, write, ignore (step 3.2)" bash -c 'cd go && go test -race -count=1 ./internal/services/file/'
+  check G3.watcher "file watcher (step 3.2)" bash -c 'cd go && go test -race -count=1 ./internal/services/filewatcher/'
+  check G3.media "media preview (step 3.2)" bash -c 'cd go && go test -race -count=1 ./internal/services/mediapreview/'
   todo G3.git/gitcheckpoint "git services (step 3.3)"
   todo G3.settings "settings family (step 3.5)"
   todo G3.providers "providers and models (step 3.6)"

@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "result": {
+    "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/README.md",
+    "mediaType": "application/octet-stream",
+    "dataBase64": "IyB3b3Jrc3BhY2UKaGVsbG8K",
+    "totalBytes": 18
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "ok": false,
+  "error": {
+    "name": "Error",
+    "message": "ENOENT: no such file or directory, stat '/mnt/MX500/Developer/Nex/go/testdata/services/fixtures/root/workspace/media/missing.mp4'",
+    "code": "ENOENT"
+  }
+}

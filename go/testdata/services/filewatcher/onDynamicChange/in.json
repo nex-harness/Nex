@@ -1,0 +1,7 @@
+{
+  "channel": "file-watcher",
+  "method": "onDynamicChange",
+  "args": [
+    "0"
+  ]
+}

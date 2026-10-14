@@ -1,0 +1,15 @@
+{
+  "channel": "system",
+  "method": "probeIntranet",
+  "args": [
+    {
+      "targets": [
+        {
+          "host": "127.0.0.1",
+          "port": 1,
+          "timeoutMs": 200
+        }
+      ]
+    }
+  ]
+}

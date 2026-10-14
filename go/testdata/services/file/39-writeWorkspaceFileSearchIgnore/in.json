@@ -1,0 +1,10 @@
+{
+  "channel": "file",
+  "method": "writeWorkspaceFileSearchIgnore",
+  "args": [
+    {
+      "rootPath": "<ROOT>/go/testdata/services/fixtures/root/ignore-workspace",
+      "content": "*.log\n"
+    }
+  ]
+}

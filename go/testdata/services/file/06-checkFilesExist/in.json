@@ -1,0 +1,12 @@
+{
+  "channel": "file",
+  "method": "checkFilesExist",
+  "args": [
+    {
+      "paths": [
+        "<ROOT>/go/testdata/services/fixtures/root/workspace/README.md",
+        "<ROOT>/go/testdata/services/fixtures/root/workspace/nope.txt"
+      ]
+    }
+  ]
+}

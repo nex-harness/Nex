@@ -64,6 +64,16 @@ var osAllowedOutsideAdapters = map[string]string{
 	// Reading env/home is the package's contract, not a side effect to hide
 	// behind an adapter; New(env, home) keeps the logic pure for tests.
 	"internal/services/paths": "owns the paths.ts env/home resolution",
+	// The step-3.2 tier-1 services ARE the I/O adapters (the phase-3 plan's own
+	// title for them): IFileService/IFileWatcherService wrap the filesystem
+	// for the RPC surface, ISystemService probes tcp/http. Wrapping their
+	// os.Stat/ReadDir in a second adapter adds indirection with no second
+	// implementation — the RPC channel adapters (channel.go in each package)
+	// already isolate the transport. The system package's net/http stays
+	// behind internal/adapters/probehttp (see system.go).
+	"internal/services/file":        "tier-1 IFileService: its contract IS filesystem access (step 3.2)",
+	"internal/services/filewatcher": "tier-1 IFileWatcherService: its contract IS filesystem watching (step 3.2)",
+	"internal/services/system":      "tier-1 ISystemService: probes the OS (shells, tcp, http via probehttp) (step 3.2)",
 }
 
 func goFiles(t *testing.T, root string) []string {

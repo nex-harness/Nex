@@ -220,50 +220,50 @@ Count: 38
 
 Count: 42
 
-| item                                 | source                          | owner phase | status | trace |
-| ------------------------------------ | ------------------------------- | ----------- | ------ | ----- |
-| channel bots                         | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel broadcast                    | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel client-config                | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel client-scenes                | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel coding-plan-subscription     | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel commands                     | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel conversation-share           | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel credential                   | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel cua-permission               | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel cua-pip-session              | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel feedback                     | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel file                         | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel file-watcher                 | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel git                          | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel git-checkpoint               | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel hooks                        | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel mcp-sync                     | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel media-preview                | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel memory                       | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel model-selection              | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel nex-agent                    | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel nex-session                  | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel nex-task                     | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel oauth                        | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel off-peak-task                | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel onboarding-record            | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel pets                         | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel plugin-management            | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel plugin-sync                  | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel plugins                      | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel prompt-attachment-transfer   | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel provider-provisioning-target | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel provider-settings            | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel setting                      | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel settings-sync                | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel skill-sync                   | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel skills                       | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel subagents                    | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel system                       | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel terminal                     | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel usage-stats                  | packages/shared/src/channels.ts | 3           | todo   | —     |
-| channel window-controller            | packages/shared/src/channels.ts | 3           | todo   | —     |
+| item                                 | source                          | owner phase | status | trace      |
+| ------------------------------------ | ------------------------------- | ----------- | ------ | ---------- |
+| channel bots                         | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel broadcast                    | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel client-config                | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel client-scenes                | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel coding-plan-subscription     | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel commands                     | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel conversation-share           | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel credential                   | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel cua-permission               | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel cua-pip-session              | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel feedback                     | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel file                         | packages/shared/src/channels.ts | 3           | ported | G3.file    |
+| channel file-watcher                 | packages/shared/src/channels.ts | 3           | ported | G3.watcher |
+| channel git                          | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel git-checkpoint               | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel hooks                        | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel mcp-sync                     | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel media-preview                | packages/shared/src/channels.ts | 3           | ported | G3.media   |
+| channel memory                       | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel model-selection              | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel nex-agent                    | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel nex-session                  | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel nex-task                     | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel oauth                        | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel off-peak-task                | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel onboarding-record            | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel pets                         | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel plugin-management            | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel plugin-sync                  | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel plugins                      | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel prompt-attachment-transfer   | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel provider-provisioning-target | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel provider-settings            | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel setting                      | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel settings-sync                | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel skill-sync                   | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel skills                       | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel subagents                    | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel system                       | packages/shared/src/channels.ts | 3           | ported | G3.system  |
+| channel terminal                     | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel usage-stats                  | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel window-controller            | packages/shared/src/channels.ts | 3           | todo   | —          |
 
 ## SQLite migrations
 
@@ -319,5 +319,5 @@ Count: 15
 ## Totals
 
 - items: 268
-- ported: 24
-- todo: 244
+- ported: 28
+- todo: 240

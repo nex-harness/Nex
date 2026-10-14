@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "result": [
+    {
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/README.md",
+      "exists": true
+    },
+    {
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/nope.txt",
+      "exists": false
+    }
+  ]
+}

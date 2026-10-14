@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "post": [
+    ".nexignore",
+    "keep.log",
+    "other.log",
+    "sub/",
+    "sub/file.txt"
+  ]
+}

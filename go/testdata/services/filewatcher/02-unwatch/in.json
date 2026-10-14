@@ -1,0 +1,9 @@
+{
+  "channel": "file-watcher",
+  "method": "unwatch",
+  "args": [
+    {
+      "id": "0"
+    }
+  ]
+}

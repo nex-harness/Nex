@@ -1,0 +1,12 @@
+{
+  "events": [
+    {
+      "dirPath": "<ROOT>/go/testdata/services/fixtures/root/watch-dir",
+      "changedPath": "<ROOT>/go/testdata/services/fixtures/root/watch-dir/a.txt"
+    },
+    {
+      "dirPath": "<ROOT>/go/testdata/services/fixtures/root/watch-dir",
+      "changedPath": "<ROOT>/go/testdata/services/fixtures/root/watch-dir/b.txt"
+    }
+  ]
+}

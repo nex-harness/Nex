@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "name": "Error",
+    "message": "无法监视目录 '/mnt/MX500/Developer/Nex/go/testdata/services/fixtures/root/missing-dir': ENOENT: no such file or directory, watch '/mnt/MX500/Developer/Nex/go/testdata/services/fixtures/root/missing-dir'"
+  }
+}

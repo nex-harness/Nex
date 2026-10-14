@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "channels": {
+    "file": "go",
+    "system": "go",
+    "file-watcher": "go",
+    "media-preview": "go"
+  }
+}

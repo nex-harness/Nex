@@ -1,0 +1,9 @@
+{
+  "channel": "file",
+  "method": "readMediaPreview",
+  "args": [
+    {
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/README.md"
+    }
+  ]
+}

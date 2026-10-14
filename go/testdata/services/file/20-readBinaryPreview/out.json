@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "name": "Error",
+    "message": "Path is not a file: /mnt/MX500/Developer/Nex/go/testdata/services/fixtures/root/workspace/src"
+  }
+}

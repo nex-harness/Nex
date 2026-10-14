@@ -1,0 +1,8 @@
+{
+  "ok": false,
+  "error": {
+    "name": "Error",
+    "message": "ENOENT: no such file or directory, scandir '/mnt/MX500/Developer/Nex/go/testdata/services/fixtures/root/workspace/nope'",
+    "code": "ENOENT"
+  }
+}

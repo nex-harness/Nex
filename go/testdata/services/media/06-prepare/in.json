@@ -1,0 +1,10 @@
+{
+  "channel": "media-preview",
+  "method": "prepare",
+  "args": [
+    {
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/media/missing.mp4",
+      "expectedKind": "video"
+    }
+  ]
+}

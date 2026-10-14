@@ -1,0 +1,11 @@
+{
+  "channel": "file",
+  "method": "listWorkspaceFilesRange",
+  "args": [
+    {
+      "rootPath": "<ROOT>/go/testdata/services/fixtures/root/workspace",
+      "offset": 3,
+      "length": 5
+    }
+  ]
+}

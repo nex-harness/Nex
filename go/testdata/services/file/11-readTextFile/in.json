@@ -1,0 +1,11 @@
+{
+  "channel": "file",
+  "method": "readTextFile",
+  "args": [
+    {
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/README.md",
+      "offset": 2,
+      "length": 5
+    }
+  ]
+}

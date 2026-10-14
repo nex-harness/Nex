@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "result": {
+    "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/src/binary/blob.bin",
+    "dataBase64": "AEFC//4BH38K",
+    "totalBytes": 9
+  }
+}

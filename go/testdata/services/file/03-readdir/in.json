@@ -1,0 +1,9 @@
+{
+  "channel": "file",
+  "method": "readdir",
+  "args": [
+    {
+      "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/nope"
+    }
+  ]
+}

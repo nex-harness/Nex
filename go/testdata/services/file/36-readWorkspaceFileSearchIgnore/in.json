@@ -1,0 +1,9 @@
+{
+  "channel": "file",
+  "method": "readWorkspaceFileSearchIgnore",
+  "args": [
+    {
+      "rootPath": "<ROOT>/go/testdata/services/fixtures/root/ignore-workspace"
+    }
+  ]
+}

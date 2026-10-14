@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "result": {
+    "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/README.md",
+    "content": "works",
+    "offset": 2,
+    "bytesRead": 5,
+    "totalBytes": 18,
+    "truncated": true,
+    "isBinary": false
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "channel": "file-watcher",
+  "method": "watch",
+  "args": [
+    {
+      "path": "<ROOT>/go/testdata/services/fixtures/root/missing-dir"
+    }
+  ]
+}

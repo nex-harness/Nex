@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "result": {
+    "kind": "inline",
+    "dataBase64": "SUQzBA==",
+    "mediaType": "audio/mpeg",
+    "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/media/song.mp3",
+    "size": 4
+  }
+}

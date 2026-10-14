@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "result": {
+    "path": "<ROOT>/go/testdata/services/fixtures/root/workspace/README.md",
+    "type": "file",
+    "size": 18,
+    "mtimeMs": "<mtimeMs>"
+  }
+}
