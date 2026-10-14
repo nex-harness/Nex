@@ -1,0 +1,10 @@
+{
+  "channel": "onboarding-record",
+  "method": "updateRecordPreferences",
+  "args": [
+    {
+      "memoryEnabled": false,
+      "proactiveSuggestionsEnabled": true
+    }
+  ]
+}

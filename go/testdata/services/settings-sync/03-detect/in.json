@@ -1,0 +1,13 @@
+{
+  "channel": "settings-sync",
+  "method": "detect",
+  "args": [
+    {
+      "workspacePath": "<ROOT>/go/testdata/services/fixtures/root/sync-workspace",
+      "categories": [
+        "commands"
+      ],
+      "intent": "manualImport"
+    }
+  ]
+}

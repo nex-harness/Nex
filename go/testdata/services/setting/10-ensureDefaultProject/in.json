@@ -1,0 +1,7 @@
+{
+  "channel": "setting",
+  "method": "ensureDefaultProject",
+  "args": [
+    "<ROOT>/go/testdata/services/fixtures/root/proj-home"
+  ]
+}

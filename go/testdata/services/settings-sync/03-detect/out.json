@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "result": {
+    "agents": [
+      {
+        "agent": "claudeCode",
+        "discovered": true,
+        "categories": [
+          {
+            "category": "commands",
+            "discoveredCount": 1,
+            "importableCount": 1,
+            "skippedCount": 0,
+            "sourcePaths": [
+              "<ROOT>/go/testdata/services/fixtures/root/.claude/commands"
+            ],
+            "sourceRoots": [
+              {
+                "scope": "global",
+                "path": "<ROOT>/go/testdata/services/fixtures/root/.claude/commands",
+                "discoveredCount": 1,
+                "importableCount": 1,
+                "skippedCount": 0,
+                "commands": [
+                  {
+                    "name": "/deploy",
+                    "path": "<ROOT>/go/testdata/services/fixtures/root/.claude/commands/deploy.md",
+                    "importable": true,
+                    "description": "Deploy",
+                    "argumentHint": "[env]"
+                  }
+                ]
+              }
+            ],
+            "selectedByDefault": false
+          }
+        ]
+      }
+    ]
+  }
+}

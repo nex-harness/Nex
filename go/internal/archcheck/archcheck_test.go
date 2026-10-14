@@ -81,6 +81,26 @@ var osAllowedOutsideAdapters = map[string]string{
 	// os usage here is the same tier-1 "the service IS the I/O boundary" case.
 	"internal/services/git":           "git services stage/restore working-tree files (step 3.3)",
 	"internal/services/gitcheckpoint": "checkpoint store writes manifests atomically (step 3.3)",
+	// The settings family (step 3.5) owns local state files whose paths ARE
+	// the contract: settingService reads/quarantines setting.json and copies
+	// the whole data directory on updateDataBaseDir; the onboarding record and
+	// device telemetry-state files live under the data dir. Atomic writes
+	// still route through internal/adapters/fsx (lock + rename); the raw os
+	// usage is direct stat/read of the owned files, the same "service IS the
+	// I/O boundary" case as file/git.
+	"internal/services/setting":    "settings family owns setting.json reads/quarantines and the data-dir copy (step 3.5)",
+	"internal/services/onboarding": "onboarding record file is the service's own state (step 3.5)",
+	"internal/services/device":     "device identity file telemetry-state.json is the service's own state (step 3.5)",
+	"internal/services/credential": "credentials.json store is the service's own state; private atomic writes route through fsx (step 3.5)",
+	// settings-sync (step 3.5) copies/symlinks skill, command, plugin and MCP
+	// config trees between agent directories and the Nex layout — its whole
+	// contract is local filesystem migration (the plan's own reading of the
+	// 2.4k-line TS: "local file scan/import, not a remote sync protocol").
+	"internal/services/settingssync": "settings-sync migrates local agent config trees (step 3.5)",
+	// The dynamic-workflow snapshot reads the process env override before
+	// any network action; env reads are its contract (HTTP stays behind the
+	// injected client seam).
+	"internal/services/codingplansubscription": "reads the NEX_DYNAMIC_WORKFLOW_MODE env override (step 3.5)",
 }
 
 func goFiles(t *testing.T, root string) []string {

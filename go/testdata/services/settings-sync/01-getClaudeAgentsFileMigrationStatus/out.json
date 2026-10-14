@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "result": {
+    "sourcePath": "<ROOT>/go/testdata/services/fixtures/root/.claude/CLAUDE.md",
+    "targetPath": "<ROOT>/go/testdata/services/fixtures/root/.nex/AGENTS.md",
+    "sourceExists": false,
+    "targetExists": false,
+    "supported": false,
+    "unavailableReason": "missingSource"
+  }
+}

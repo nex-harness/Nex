@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "name": "ZodError",
+    "message": "[\n  {\n    \"origin\": \"number\",\n    \"code\": \"too_big\",\n    \"maximum\": 365,\n    \"inclusive\": true,\n    \"path\": [\n      \"taskAutoArchiveOlderThanDays\"\n    ],\n    \"message\": \"Too big: expected number to be <=365\"\n  }\n]"
+  }
+}

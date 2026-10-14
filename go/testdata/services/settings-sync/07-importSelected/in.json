@@ -1,0 +1,16 @@
+{
+  "channel": "settings-sync",
+  "method": "importSelected",
+  "args": [
+    {
+      "workspacePath": "<ROOT>/go/testdata/services/fixtures/root/sync-workspace",
+      "selections": [
+        {
+          "agent": "claudeCode",
+          "category": "skills",
+          "importMode": "copy"
+        }
+      ]
+    }
+  ]
+}

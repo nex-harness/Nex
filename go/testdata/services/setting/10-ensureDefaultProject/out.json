@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "result": {
+    "path": "<ROOT>/go/testdata/services/fixtures/root/proj-home/NexProject",
+    "created": true
+  },
+  "post": [
+    "NexProject/"
+  ]
+}

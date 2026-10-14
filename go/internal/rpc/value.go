@@ -232,3 +232,15 @@ func appendJSNumber(dst []byte, n float64) []byte {
 	}
 	return dst
 }
+
+// nullValue is the typed JSON null: a Value that serializes through the JSON
+// fallback as `null` (the TS `null`, distinct from `undefined`). Channels
+// returning nullable results use it so the wire carries result: null.
+type nullValue struct{}
+
+// Null is the singleton nullValue.
+var Null = nullValue{}
+
+// NullType is an exported alias for the sentinel's type so other packages can
+// type-assert the sentinel.
+type NullType = nullValue

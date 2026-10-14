@@ -1,0 +1,5 @@
+{
+  "channel": "settings-sync",
+  "method": "getFirstRunPromptState",
+  "args": []
+}

@@ -1,0 +1,28 @@
+{
+  "ok": true,
+  "result": {
+    "successCount": 0,
+    "skippedCount": 1,
+    "failedCount": 0,
+    "taskResults": [
+      {
+        "agent": "claudeCode",
+        "category": "skills",
+        "status": "skipped",
+        "importedCount": 0,
+        "skippedCount": 1,
+        "failedCount": 0,
+        "skillResults": [
+          {
+            "name": "code-review",
+            "path": "<ROOT>/go/testdata/services/fixtures/root/.claude/skills/code-review",
+            "sourceScope": "global",
+            "status": "skipped",
+            "skipReason": "targetExists",
+            "version": "1.2.0"
+          }
+        ]
+      }
+    ]
+  }
+}

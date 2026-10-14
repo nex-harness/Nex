@@ -1,0 +1,72 @@
+{
+  "ok": true,
+  "result": {
+    "agents": [
+      {
+        "agent": "claudeCode",
+        "discovered": true,
+        "categories": [
+          {
+            "category": "skills",
+            "discoveredCount": 1,
+            "importableCount": 1,
+            "skippedCount": 0,
+            "sourcePaths": [
+              "<ROOT>/go/testdata/services/fixtures/root/.claude/skills"
+            ],
+            "sourceRoots": [
+              {
+                "scope": "global",
+                "path": "<ROOT>/go/testdata/services/fixtures/root/.claude/skills",
+                "discoveredCount": 1,
+                "importableCount": 1,
+                "skippedCount": 0,
+                "skills": [
+                  {
+                    "name": "code-review",
+                    "path": "<ROOT>/go/testdata/services/fixtures/root/.claude/skills/code-review",
+                    "importable": true,
+                    "version": "1.2.0"
+                  }
+                ]
+              }
+            ],
+            "selectedByDefault": true
+          }
+        ]
+      },
+      {
+        "agent": "codexCli",
+        "discovered": true,
+        "categories": [
+          {
+            "category": "skills",
+            "discoveredCount": 1,
+            "importableCount": 1,
+            "skippedCount": 0,
+            "sourcePaths": [
+              "<ROOT>/go/testdata/services/fixtures/root/sync-workspace/.codex/skills"
+            ],
+            "sourceRoots": [
+              {
+                "scope": "project",
+                "path": "<ROOT>/go/testdata/services/fixtures/root/sync-workspace/.codex/skills",
+                "discoveredCount": 1,
+                "importableCount": 1,
+                "skippedCount": 0,
+                "skills": [
+                  {
+                    "name": "local-skill",
+                    "path": "<ROOT>/go/testdata/services/fixtures/root/sync-workspace/.codex/skills/local-skill",
+                    "importable": true
+                  }
+                ]
+              }
+            ],
+            "selectedByDefault": true
+          }
+        ]
+      }
+    ]
+  }
+}

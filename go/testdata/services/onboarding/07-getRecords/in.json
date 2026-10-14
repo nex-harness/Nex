@@ -1,0 +1,5 @@
+{
+  "channel": "onboarding-record",
+  "method": "getRecords",
+  "args": []
+}

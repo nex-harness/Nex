@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "result": {
+    "agents": [
+      {
+        "agent": "claudeCode",
+        "discovered": true,
+        "categories": [
+          {
+            "category": "mcpServers",
+            "discoveredCount": 1,
+            "importableCount": 1,
+            "skippedCount": 0,
+            "sourcePaths": [
+              "<ROOT>/go/testdata/services/fixtures/root/sync-workspace/.mcp.json"
+            ],
+            "sourceRoots": [
+              {
+                "scope": "project",
+                "path": "<ROOT>/go/testdata/services/fixtures/root/sync-workspace/.mcp.json",
+                "discoveredCount": 1,
+                "importableCount": 1,
+                "skippedCount": 0,
+                "mcpServers": [
+                  {
+                    "name": "fs",
+                    "path": "<ROOT>/go/testdata/services/fixtures/root/sync-workspace/.mcp.json#fs",
+                    "importable": true
+                  }
+                ]
+              }
+            ],
+            "selectedByDefault": false
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -50,6 +50,8 @@ func (w *Writer) Serialize(value Value) error {
 		w.buf = appendInt32VQL(w.buf, int32(len(v)))
 		w.buf = append(w.buf, v...)
 		return nil
+	case nullValue:
+		return w.writeJSONRaw([]byte("null"))
 	case []byte:
 		w.buf = append(w.buf, TypeBuffer)
 		w.buf = appendInt32VQL(w.buf, int32(len(v)))

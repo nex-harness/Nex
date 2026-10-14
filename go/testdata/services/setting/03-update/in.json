@@ -1,0 +1,13 @@
+{
+  "channel": "setting",
+  "method": "update",
+  "args": [
+    {
+      "recentProjects": [
+        "/a",
+        "/b",
+        "/a"
+      ]
+    }
+  ]
+}

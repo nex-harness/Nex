@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- svc 行为录制：一个脚本按服务名驱动 Node 侧全部 method，拆开会让录制上下文断裂 */
 // G3 (step 3.2, recipe sub-step b): behavior capture for the Tier-1 services.
 //
 // Drives the REAL Node service instances through the real RPC layer
@@ -206,6 +207,45 @@ async function buildService(svc, fixtures) {
       channel: "media-preview",
     };
   }
+  // Step 3.5 (settings family): each local-state service runs with its own
+  // NEX_DESKTOP_HOME_DIR so captures never touch the real home, and the
+  // fixture home is reused as the workspace for settings-sync.
+  if (["setting", "onboarding", "credential", "settings-sync"].includes(svc)) {
+    // setting/settings-sync read NEX_DESKTOP_HOME_DIR; credential/onboarding
+    // read HOME (paths.ts getAppConfigDir). Set both.
+    process.env.NEX_DESKTOP_HOME_DIR = fixtures.root;
+    process.env.HOME = fixtures.root;
+  }
+  if (svc === "setting") {
+    const { createSettingService } = await import(
+      join(ROOT, "packages/services/src/setting/settingService.js")
+    );
+    return { service: createSettingService(), channel: "setting" };
+  }
+  if (svc === "onboarding") {
+    const { createOnboardingRecordService } = await import(
+      join(ROOT, "packages/services/src/onboarding/onboardingRecordService.js")
+    );
+    return { service: createOnboardingRecordService(), channel: "onboarding-record" };
+  }
+  if (svc === "credential") {
+    const { createCredentialService } = await import(
+      join(ROOT, "packages/services/src/credential/credentialService.js")
+    );
+    return { service: createCredentialService(), channel: "credential" };
+  }
+  if (svc === "settings-sync") {
+    const { createSettingService } = await import(
+      join(ROOT, "packages/services/src/setting/settingService.js")
+    );
+    const { createSettingsSyncService } = await import(
+      join(ROOT, "packages/services/src/settings-sync/settingsSyncService.js")
+    );
+    return {
+      service: createSettingsSyncService({ settingService: createSettingService() }),
+      channel: "settings-sync",
+    };
+  }
   throw new Error(`unknown service: ${svc}`);
 }
 
@@ -321,6 +361,106 @@ const scenarios = {
     });
   },
 
+  async setting(fixtures, run) {
+    await run("get", []);
+    await run("update", [{ locale: "en-US" }]);
+    await run("update", [{ recentProjects: ["/a", "/b", "/a"] }]);
+    await run("update", [{ terminalFontFamily: "   " }]);
+    await run("update", [{ httpProxy: "  proxy.example  " }]);
+    await run("update", [{ integratedTerminalShell: { mode: "auto" } }]);
+    await run("update", [{ locale: "fr-FR" }]);
+    await run("update", [{ taskAutoArchiveOlderThanDays: 999 }]);
+    await run("get", []);
+    await run("ensureDefaultProject", [join(fixtures.root, "proj-home")], {
+      post: () => treeSnapshot(join(fixtures.root, "proj-home")),
+    });
+  },
+
+  async onboarding(fixtures, run) {
+    const entry = {
+      occupation: "developer",
+      interfaceMode: "coding",
+      memoryEnabled: true,
+      proactiveSuggestionsEnabled: false,
+      completedAt: "2024-01-01T00:00:00.000Z",
+    };
+    await run("getLatestEntry", []);
+    await run("appendRecord", ["mid-capture", entry]);
+    await run("getLatestEntry", []);
+    await run("appendRecord", ["mid-capture", entry]); // replace
+    await run("updateRecordPreferences", [
+      { memoryEnabled: false, proactiveSuggestionsEnabled: true },
+    ]);
+    await run("dismissOnboarding", [{ deviceMid: "mid-capture" }]); // no-op with an entry
+    await run("getRecords", []);
+    await run("clearRecords", []);
+    await run("getRecords", []);
+  },
+
+  async credential(fixtures, run) {
+    await run("load", ["missing"]);
+    await run("save", ["mcp.oauth.token", "tok-1"]);
+    await run("load", ["mcp.oauth.token"]);
+    await run("save", ["  padded  ", "tok-2"]);
+    await run("delete", ["mcp.oauth.token"]);
+    await run("load", ["mcp.oauth.token"]);
+    await run("save", ["bad", ""]); // empty value allowed by schema
+  },
+
+  async "settings-sync"(fixtures, run) {
+    const home = fixtures.root;
+    const workspace = join(fixtures.root, "sync-workspace");
+    mkdirSync(join(home, ".claude", "skills", "code-review"), { recursive: true });
+    writeFileSync(
+      join(home, ".claude", "skills", "code-review", "SKILL.md"),
+      "---\nname: code-review\nversion: 1.2.0\n---\nReview.\n",
+    );
+    mkdirSync(join(home, ".claude", "commands"), { recursive: true });
+    writeFileSync(
+      join(home, ".claude", "commands", "deploy.md"),
+      "---\ndescription: Deploy\nargument-hint: [env]\n---\nDeploy.\n",
+    );
+    mkdirSync(join(workspace, ".codex", "skills", "local-skill"), { recursive: true });
+    writeFileSync(
+      join(workspace, ".codex", "skills", "local-skill", "SKILL.md"),
+      "---\nname: local-skill\n---\nLocal.\n",
+    );
+    writeFileSync(
+      join(workspace, ".mcp.json"),
+      JSON.stringify({ mcpServers: { fs: { command: "uvx", args: ["fs-server"] } } }),
+    );
+    await run("getClaudeAgentsFileMigrationStatus", [{ workspacePath: workspace }]);
+    await run("detect", [
+      { workspacePath: workspace, categories: ["skills"], intent: "manualImport" },
+    ]);
+    await run("detect", [
+      { workspacePath: workspace, categories: ["commands"], intent: "manualImport" },
+    ]);
+    await run("detect", [
+      { workspacePath: workspace, categories: ["mcpServers"], intent: "manualImport" },
+    ]);
+    await run("detect", [{ workspacePath: workspace, categories: ["skills"], intent: "firstRun" }]); // empty
+    await run(
+      "importSelected",
+      [
+        {
+          workspacePath: workspace,
+          selections: [{ agent: "claudeCode", category: "skills", importMode: "copy" }],
+        },
+      ],
+      { post: () => treeSnapshot(home) },
+    );
+    await run("importSelected", [
+      {
+        workspacePath: workspace,
+        selections: [{ agent: "claudeCode", category: "skills", importMode: "copy" }],
+      },
+    ]); // re-import: skips
+    await run("getFirstRunPromptState", []);
+    await run("markFirstRunPromptHandled", []);
+    await run("getFirstRunPromptState", []);
+  },
+
   async media(fixtures, run) {
     const ws = fixtures.workspace;
     mkdirSync(join(ws, "media"), { recursive: true });
@@ -406,7 +546,16 @@ async function captureFileWatcher(fixtures, client, rawChannel, counter) {
 
 async function main() {
   const svcName = process.argv[2];
-  const knownServices = new Set(["system", "file", "filewatcher", "media"]);
+  const knownServices = new Set([
+    "system",
+    "file",
+    "filewatcher",
+    "media",
+    "setting",
+    "onboarding",
+    "credential",
+    "settings-sync",
+  ]);
   if (!svcName || !knownServices.has(svcName)) {
     console.error("usage: node scripts/go-rewrite/svc-capture.mjs <system|file|filewatcher|media>");
     process.exit(2);

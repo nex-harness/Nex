@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "name": "ZodError",
+    "message": "[\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"zh-CN\",\n      \"en-US\"\n    ],\n    \"path\": [\n      \"locale\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"zh-CN\\\"|\\\"en-US\\\"\"\n  },\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"system\",\n      \"zh-CN\",\n      \"en-US\"\n    ],\n    \"path\": [\n      \"localePreference\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"system\\\"|\\\"zh-CN\\\"|\\\"en-US\\\"\"\n  }\n]"
+  }
+}

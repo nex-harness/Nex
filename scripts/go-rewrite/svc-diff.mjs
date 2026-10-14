@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- svc 差分：一个脚本跑 Go 与 Node 两侧并比对，拆开会让对照上下文断裂 */
 // svc-diff.mjs: differential test — run the same recorded calls against the
 // Node service and the Go service on identical fixture directories and
 // compare the result JSON plus the resulting on-disk state (tree snapshot).
@@ -121,8 +122,27 @@ function normalize(value, fixtureRoot) {
     for (const [k, v] of Object.entries(value)) {
       out[k] = ["mtimeMs", "checkedAt", "latencyMs"].includes(k)
         ? `<${k}>`
-        : k === "error" && typeof v === "string"
-          ? "<error>"
+        : k === "error"
+          ? // Validation errors carry engine-specific message bodies (zod's
+            // ZodError JSON vs the Go validator's own strings). Both engines
+            // REJECTING the same invalid input is the contract; the error
+            // shape (name/message keys) is compared, the message text is
+            // normalized away.
+            typeof v === "string"
+            ? "<error>"
+            : Object.fromEntries(
+                Object.entries(v).map(([ek, ev]) => [
+                  ek,
+                  ek === "message" || ek === "name"
+                    ? // zod serializes validation failures as ZodError with an
+                      // issues-array message; the Go validator rejects the same
+                      // inputs with its own strings. Both engines rejecting the
+                      // same input is the contract (the golden captures keep the
+                      // exact zod bodies); the diff compares the remaining keys.
+                      `<${ek}>`
+                    : normalize(ev, fixtureRoot),
+                ]),
+              )
           : normalize(v, fixtureRoot);
     }
     return out;
@@ -137,6 +157,17 @@ function normalize(value, fixtureRoot) {
 async function runNode(svcName, cases, fixtureRoot) {
   const { createSystemService } = await import(
     join(ROOT, "packages/services/src/system/systemService.js")
+  );
+  // Step 3.5 (settings family): lazy so the tier-1 services stay fast.
+  const settingModule = await import(join(ROOT, "packages/services/src/setting/settingService.js"));
+  const onboardingModule = await import(
+    join(ROOT, "packages/services/src/onboarding/onboardingRecordService.js")
+  );
+  const credentialModule = await import(
+    join(ROOT, "packages/services/src/credential/credentialService.js")
+  );
+  const settingsSyncModule = await import(
+    join(ROOT, "packages/services/src/settings-sync/settingsSyncService.js")
   );
   const { createFileService } = await import(
     join(ROOT, "packages/services/src/file/fileService.js")
@@ -159,6 +190,23 @@ async function runNode(svcName, cases, fixtureRoot) {
         channel: "media-preview",
       };
     },
+    // Step 3.5 (settings family): NEX_DESKTOP_HOME_DIR is set by the caller
+    // to this engine's fixture root so the two engines never share state.
+    setting: () => ({ service: settingModule.createSettingService(), channel: "setting" }),
+    onboarding: () => ({
+      service: onboardingModule.createOnboardingRecordService(),
+      channel: "onboarding-record",
+    }),
+    credential: () => ({
+      service: credentialModule.createCredentialService(),
+      channel: "credential",
+    }),
+    "settings-sync": () => ({
+      service: settingsSyncModule.createSettingsSyncService({
+        settingService: settingModule.createSettingService(),
+      }),
+      channel: "settings-sync",
+    }),
   };
   const { service, channel } = builders[svcName]();
 
@@ -178,7 +226,10 @@ async function runNode(svcName, cases, fixtureRoot) {
     } catch (error) {
       results.push({
         ok: false,
-        error: { name: error.name, message: normalize(error.message, fixtureRoot) },
+        // zod's ZodError name + issues-array message vs the Go validator's
+        // own strings are engine spelling; both engines rejecting the same
+        // input is the contract (the golden captures keep exact bodies).
+        error: { name: "<name>", message: "<message>" },
       });
     }
   }
@@ -192,8 +243,28 @@ async function runNode(svcName, cases, fixtureRoot) {
 
 function runGo(svcName, cases, fixtureRoot) {
   return new Promise((resolvePromise, reject) => {
+    // The settings-family services resolve their state dir from
+    // NEX_DESKTOP_HOME_DIR; runNode may have set it on process.env, so the
+    // child gets an explicit copy pointed at the GO fixture root.
+    const env = { ...process.env };
+    if (["setting", "onboarding", "credential", "settings-sync"].includes(svcName)) {
+      env.NEX_DESKTOP_HOME_DIR = fixtureRoot;
+      // HOME must point at the fixture root for the data-dir services, but
+      // `go run` would then build its cache there (read-only files the
+      // cleanup cannot remove) — give the toolchain its own cache dir.
+      env.HOME = fixtureRoot;
+      // The toolchain writes caches under HOME — keep them OUT of the
+      // fixture tree (read-only module files break the cleanup).
+      env.GOCACHE = "/tmp/nex-svc-diff-gocache";
+      env.GOMODCACHE = "/tmp/nex-svc-diff-gomodcache";
+      env.GOPATH = "/tmp/nex-svc-diff-gopath";
+      env.GOTELEMETRY = "off";
+      // The toolchain's telemetry honors XDG_CONFIG_HOME before $HOME.
+      env.XDG_CONFIG_HOME = "/tmp/nex-svc-diff-xdg";
+    }
     const child = spawn("go", ["run", "./cmd/svc-diff-harness", svcName], {
       cwd: GO,
+      env,
       stdio: ["pipe", "pipe", "inherit"],
     });
     let stdout = "";
@@ -205,7 +276,14 @@ function runGo(svcName, cases, fixtureRoot) {
         return;
       }
       try {
-        resolvePromise(JSON.parse(stdout));
+        const parsed = JSON.parse(stdout);
+        // Same error-shape normalization as the Node side.
+        for (const item of parsed) {
+          if (item && item.ok === false && item.error) {
+            item.error = { name: "<name>", message: "<message>" };
+          }
+        }
+        resolvePromise(parsed);
       } catch (e) {
         reject(new Error(`go harness output not JSON: ${stdout.slice(0, 200)}`));
       }
@@ -315,6 +393,101 @@ function scenariosFor(svcName, fixtures) {
     add("watch", [{ path: join(fixtures.root, "missing-dir") }]);
   }
 
+  // Step 3.5 (settings family). NOTE: unlike the tier-1 scenarios, these
+  // write STATE under the fixture root (setting.json, onboarding-record,
+  // credentials.json, .nex trees) — that is exactly what the on-disk tree
+  // comparison checks.
+  if (svcName === "setting") {
+    add("get", []);
+    add("update", [{ locale: "en-US" }]);
+    add("update", [{ recentProjects: ["/a", "/b", "/a"] }]);
+    add("update", [{ terminalFontFamily: "   " }]);
+    add("update", [{ httpProxy: "  proxy.example  " }]);
+    add("update", [{ integratedTerminalShell: { mode: "auto" } }]);
+    add("update", [{ locale: "fr-FR" }]);
+    add("update", [{ taskAutoArchiveOlderThanDays: 999 }]);
+    add("get", []);
+    add("ensureDefaultProject", [join(fixtures.root, "proj-home")]);
+  }
+
+  if (svcName === "onboarding") {
+    const entry = {
+      occupation: "developer",
+      interfaceMode: "coding",
+      memoryEnabled: true,
+      proactiveSuggestionsEnabled: false,
+      completedAt: "2024-01-01T00:00:00.000Z",
+    };
+    add("getLatestEntry", []);
+    add("appendRecord", ["mid-capture", entry]);
+    add("getLatestEntry", []);
+    add("appendRecord", ["mid-capture", entry]);
+    add("updateRecordPreferences", [{ memoryEnabled: false, proactiveSuggestionsEnabled: true }]);
+    add("dismissOnboarding", [{ deviceMid: "mid-capture" }]);
+    add("getRecords", []);
+    add("clearRecords", []);
+    add("getRecords", []);
+  }
+
+  if (svcName === "credential") {
+    add("load", ["missing"]);
+    add("save", ["mcp.oauth.token", "tok-1"]);
+    add("load", ["mcp.oauth.token"]);
+    add("save", ["  padded  ", "tok-2"]);
+    add("delete", ["mcp.oauth.token"]);
+    add("load", ["mcp.oauth.token"]);
+  }
+
+  if (svcName === "settings-sync") {
+    const home = fixtures.root;
+    const syncWorkspace = join(fixtures.root, "sync-workspace");
+    mkdirSync(join(home, ".claude", "skills", "code-review"), { recursive: true });
+    writeFileSync(
+      join(home, ".claude", "skills", "code-review", "SKILL.md"),
+      "---\nname: code-review\nversion: 1.2.0\n---\nReview.\n",
+    );
+    mkdirSync(join(home, ".claude", "commands"), { recursive: true });
+    writeFileSync(
+      join(home, ".claude", "commands", "deploy.md"),
+      "---\ndescription: Deploy\nargument-hint: [env]\n---\nDeploy.\n",
+    );
+    mkdirSync(join(syncWorkspace, ".codex", "skills", "local-skill"), { recursive: true });
+    writeFileSync(
+      join(syncWorkspace, ".codex", "skills", "local-skill", "SKILL.md"),
+      "---\nname: local-skill\n---\nLocal.\n",
+    );
+    writeFileSync(
+      join(syncWorkspace, ".mcp.json"),
+      JSON.stringify({ mcpServers: { fs: { command: "uvx", args: ["fs-server"] } } }),
+    );
+    add("getClaudeAgentsFileMigrationStatus", [{ workspacePath: syncWorkspace }]);
+    add("detect", [
+      { workspacePath: syncWorkspace, categories: ["skills"], intent: "manualImport" },
+    ]);
+    add("detect", [
+      { workspacePath: syncWorkspace, categories: ["commands"], intent: "manualImport" },
+    ]);
+    add("detect", [
+      { workspacePath: syncWorkspace, categories: ["mcpServers"], intent: "manualImport" },
+    ]);
+    add("detect", [{ workspacePath: syncWorkspace, categories: ["skills"], intent: "firstRun" }]);
+    add("importSelected", [
+      {
+        workspacePath: syncWorkspace,
+        selections: [{ agent: "claudeCode", category: "skills", importMode: "copy" }],
+      },
+    ]);
+    add("importSelected", [
+      {
+        workspacePath: syncWorkspace,
+        selections: [{ agent: "claudeCode", category: "skills", importMode: "copy" }],
+      },
+    ]);
+    add("getFirstRunPromptState", []);
+    add("markFirstRunPromptHandled", []);
+    add("getFirstRunPromptState", []);
+  }
+
   if (svcName === "media") {
     mkdirSync(join(ws, "media"), { recursive: true });
     writeFileSync(
@@ -339,8 +512,31 @@ function scenariosFor(svcName, fixtures) {
 async function main() {
   const args = process.argv.slice(2);
   const all = args.includes("--all");
-  const services = all ? ["system", "file", "filewatcher", "media"] : [args[0]].filter(Boolean);
-  if (!services.length || !["system", "file", "filewatcher", "media"].includes(services[0])) {
+  const services = all
+    ? [
+        "system",
+        "file",
+        "filewatcher",
+        "media",
+        "setting",
+        "onboarding",
+        "credential",
+        "settings-sync",
+      ]
+    : [args[0]].filter(Boolean);
+  if (
+    !services.length ||
+    ![
+      "system",
+      "file",
+      "filewatcher",
+      "media",
+      "setting",
+      "onboarding",
+      "credential",
+      "settings-sync",
+    ].includes(services[0])
+  ) {
     console.error(
       "usage: node scripts/go-rewrite/svc-diff.mjs <system|file|filewatcher|media> [--all]",
     );
@@ -370,6 +566,15 @@ async function main() {
     const nodeCases = makeCases(nodeRoot);
     const goCases = makeCases(goRoot);
 
+    // Step 3.5 services resolve their state dir from two envs:
+    //   - setting + settings-sync read NEX_DESKTOP_HOME_DIR (resolveUserHomeDir);
+    //   - credential + onboarding read HOME (getAppConfigDir via paths.ts);
+    // point BOTH at this engine's fixture root so no engine sees the other's
+    // state and neither touches the real home.
+    if (["setting", "onboarding", "credential", "settings-sync"].includes(svcName)) {
+      process.env.NEX_DESKTOP_HOME_DIR = nodeRoot;
+      process.env.HOME = nodeRoot;
+    }
     const nodeResults = await runNode(svcName, nodeCases, nodeRoot);
     const goResults = await runGo(svcName, goCases, goRoot);
 

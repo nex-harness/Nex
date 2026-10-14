@@ -306,8 +306,11 @@ func randomHexSuffix(n int) string {
 // acquireFileLock ports acquireFileLock's semantics for the one-caller case:
 // open/create `<path>.lock`, take an exclusive OS lock, retry with the delay
 // ladder up to maxWait, then give up with an error. The lock is released by
-// closing the file (and on process death, which is what makes a crashed writer
-// recoverable without a stale lock file).
+// closing the file AND removing it (the TS's @nex/shared/node lock is a
+// directory removed on release — a completed write leaves no artifact; the
+// on-disk tree comparison in svc-diff treats a leftover .lock as a diff).
+// Process death still releases the OS lock; a leftover lock FILE after a
+// crash is inert (the next writer recreates/locks it).
 func acquireFileLock(ctx context.Context, lockPath string, opts *AtomicWriteOptions) (func(), error) {
 	delays := defaultLockRetryDelays
 	if opts != nil && opts.LockRetryDelays != nil {
@@ -326,6 +329,11 @@ func acquireFileLock(ctx context.Context, lockPath string, opts *AtomicWriteOpti
 				return func() {
 					_ = unlockFile(f)
 					_ = f.Close()
+					// 修复依据：TS 的锁在释放时移除自身（目录锁 rmdir / 单文件锁
+					// rm），完成后目录里没有 lock 残留；Go 此前留下 setting.json.lock
+					// 文件，被 svc-diff 的 on-disk 对比判为差异。Remove 是 best-effort：
+					// Windows 上短暂占用失败可容忍，下一次写入会复用该文件。
+					_ = os.Remove(lockPath)
 				}, nil
 			}
 			f.Close()
@@ -340,4 +348,28 @@ func acquireFileLock(ctx context.Context, lockPath string, opts *AtomicWriteOpti
 			return nil, ctx.Err()
 		}
 	}
+}
+
+// AtomicWritePrivateTextFile ports @nex/shared/node's
+// atomicWritePrivateTextFile (privateFilePersistence.ts): temp file with mode
+// 0600 + rename with the EPERM/EBUSY/EACCES retry ladder. This is the
+// credentials-store writer; unlike AtomicWriteText it takes no lock and adds
+// no trailing content — the caller controls the exact bytes.
+func AtomicWritePrivateTextFile(ctx context.Context, filePath string, content []byte, opts *AtomicWriteOptions) error {
+	dir := filepath.Dir(filePath)
+	base := filepath.Base(filePath)
+	now := opts.now()
+	tempFile := filepath.Join(dir, fmt.Sprintf(".%s.%d.%d.%s.tmp", base, os.Getpid(), now.UnixMilli(), randomTempSuffix()))
+	if err := os.MkdirAll(dir, 0o777); err != nil {
+		return err
+	}
+	if err := writeTempFile(tempFile, content, 0o600); err != nil {
+		_ = os.Remove(tempFile)
+		return err
+	}
+	if err := renameWithRetry(ctx, tempFile, filePath, opts); err != nil {
+		_ = os.Remove(tempFile)
+		return err
+	}
+	return nil
 }

@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "result": {
+    "userId": null,
+    "occupation": "developer",
+    "interfaceMode": "coding",
+    "memoryEnabled": true,
+    "proactiveSuggestionsEnabled": false,
+    "completedAt": "2024-01-01T00:00:00.000Z",
+    "uploadState": "pending"
+  }
+}

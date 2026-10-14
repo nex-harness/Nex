@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "result": {
+    "version": 2,
+    "deviceMid": "mid-capture",
+    "entries": [
+      {
+        "userId": null,
+        "occupation": "developer",
+        "interfaceMode": "coding",
+        "memoryEnabled": false,
+        "proactiveSuggestionsEnabled": true,
+        "completedAt": "2024-01-01T00:00:00.000Z",
+        "uploadState": "pending"
+      }
+    ],
+    "decisions": []
+  }
+}

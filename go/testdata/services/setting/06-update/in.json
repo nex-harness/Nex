@@ -1,0 +1,11 @@
+{
+  "channel": "setting",
+  "method": "update",
+  "args": [
+    {
+      "integratedTerminalShell": {
+        "mode": "auto"
+      }
+    }
+  ]
+}

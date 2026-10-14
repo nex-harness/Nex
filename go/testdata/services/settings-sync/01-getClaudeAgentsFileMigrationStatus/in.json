@@ -1,0 +1,9 @@
+{
+  "channel": "settings-sync",
+  "method": "getClaudeAgentsFileMigrationStatus",
+  "args": [
+    {
+      "workspacePath": "<ROOT>/go/testdata/services/fixtures/root/sync-workspace"
+    }
+  ]
+}

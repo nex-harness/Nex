@@ -1,0 +1,9 @@
+{
+  "channel": "setting",
+  "method": "update",
+  "args": [
+    {
+      "locale": "fr-FR"
+    }
+  ]
+}

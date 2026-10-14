@@ -1,0 +1,76 @@
+{
+  "ok": true,
+  "result": {
+    "successCount": 1,
+    "skippedCount": 0,
+    "failedCount": 0,
+    "taskResults": [
+      {
+        "agent": "claudeCode",
+        "category": "skills",
+        "status": "success",
+        "importedCount": 1,
+        "skippedCount": 0,
+        "failedCount": 0,
+        "skillResults": [
+          {
+            "name": "code-review",
+            "path": "<ROOT>/go/testdata/services/fixtures/root/.claude/skills/code-review",
+            "sourceScope": "global",
+            "status": "imported",
+            "version": "1.2.0"
+          }
+        ]
+      }
+    ]
+  },
+  "post": [
+    ".claude/",
+    ".claude/commands/",
+    ".claude/commands/deploy.md",
+    ".claude/skills/",
+    ".claude/skills/code-review/",
+    ".claude/skills/code-review/SKILL.md",
+    ".nex/",
+    ".nex/skills/",
+    ".nex/skills/code-review/",
+    ".nex/skills/code-review/SKILL.md",
+    "ignore-workspace/",
+    "ignore-workspace/keep.log",
+    "ignore-workspace/other.log",
+    "ignore-workspace/sub/",
+    "ignore-workspace/sub/file.txt",
+    "sync-workspace/",
+    "sync-workspace/.codex/",
+    "sync-workspace/.codex/skills/",
+    "sync-workspace/.codex/skills/local-skill/",
+    "sync-workspace/.codex/skills/local-skill/SKILL.md",
+    "sync-workspace/.mcp.json",
+    "workspace/",
+    "workspace/.gitignore",
+    "workspace/.hidden/",
+    "workspace/.hidden/nested/",
+    "workspace/.hidden/nested/file.txt",
+    "workspace/.hidden/root-hidden.txt",
+    "workspace/README.md",
+    "workspace/build/",
+    "workspace/build/out.js",
+    "workspace/coverage/",
+    "workspace/coverage/lcov.info",
+    "workspace/docs/",
+    "workspace/docs/note.md",
+    "workspace/media/",
+    "workspace/media/sample.txt",
+    "workspace/node_modules/",
+    "workspace/node_modules/dep/",
+    "workspace/node_modules/dep/index.js",
+    "workspace/src/",
+    "workspace/src/binary/",
+    "workspace/src/binary/blob.bin",
+    "workspace/src/main.ts",
+    "workspace/src/text/",
+    "workspace/src/text/big.txt",
+    "workspace/src/util/",
+    "workspace/src/util/helper.ts"
+  ]
+}

@@ -280,7 +280,17 @@ gate3() {
   # fixture repos, and the checkpoint store atomic manifest writes.
   check G3.git "git service: summary/branches/diff/stage/commit (step 3.3)" bash -c 'cd go && go test -race -count=1 ./internal/services/git/'
   check G3.gitcheckpoint "git checkpoint service (step 3.3)" bash -c 'cd go && go test -race -count=1 ./internal/services/gitcheckpoint/'
-  todo G3.settings "settings family (step 3.5)"
+  # G3.settings (step 3.5): the settings family — 8 packages' race suites.
+  # setting.json state ownership, write queue semantics, schema validation
+  # parity, the credential cipher (AES-256-GCM, Node-key parity vector), the
+  # onboarding record, device identity lock, the data-dir copy fault suite,
+  # settings-sync discovery/import across the four categories, and the three
+  # HTTP-facing services against mocks (client-config, client-scenes,
+  # coding-plan-subscription). device has no RPC channel (ensureDeviceMid is
+  # a host entry point); its suite runs with the family, plus the registry
+  # wiring test in the services root.
+  check G3.settings "settings family: setting, settings-sync, client-config, client-scenes, onboarding, credential, device, coding-plan-subscription (step 3.5)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/services/setting/ ./internal/services/settingssync/ ./internal/services/clientconfig/ ./internal/services/clientscenes/ ./internal/services/onboarding/ ./internal/services/credential/ ./internal/services/device/ ./internal/services/codingplansubscription/ ./internal/services/'
   todo G3.providers "providers and models (step 3.6)"
   todo G3.skills/plugins/mcpsync/hooks/memory "knowledge extensions (step 3.7)"
   todo G3.peripheral "peripheral services (step 3.8)"

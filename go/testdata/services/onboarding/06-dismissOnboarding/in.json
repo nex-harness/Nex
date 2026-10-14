@@ -1,0 +1,9 @@
+{
+  "channel": "onboarding-record",
+  "method": "dismissOnboarding",
+  "args": [
+    {
+      "deviceMid": "mid-capture"
+    }
+  ]
+}

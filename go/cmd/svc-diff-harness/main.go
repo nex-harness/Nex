@@ -12,11 +12,31 @@ import (
 	"strings"
 
 	"github.com/tylinux/nex/go/internal/rpc"
+	"github.com/tylinux/nex/go/internal/services/credential"
 	"github.com/tylinux/nex/go/internal/services/file"
 	"github.com/tylinux/nex/go/internal/services/filewatcher"
 	"github.com/tylinux/nex/go/internal/services/mediapreview"
+	"github.com/tylinux/nex/go/internal/services/onboarding"
+	"github.com/tylinux/nex/go/internal/services/setting"
+	"github.com/tylinux/nex/go/internal/services/settingssync"
 	"github.com/tylinux/nex/go/internal/services/system"
 )
+
+// settingBridge adapts *setting.Service to settingssync.SettingService
+// (map-based settings access for the first-run prompt state).
+type settingBridge struct{ svc *setting.Service }
+
+func (b settingBridge) Get(ctx context.Context) (map[string]any, error) {
+	settings, err := b.svc.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return settings.Map(), nil
+}
+
+func (b settingBridge) Update(ctx context.Context, patch map[string]any) error {
+	return b.svc.Update(ctx, patch, nil)
+}
 
 type harnessCase struct {
 	Method string      `json:"method"`
@@ -48,6 +68,20 @@ func main() {
 		channel = &mediapreview.Channel{Service: mediapreview.NewService(mediapreview.Options{
 			FileService: file.NewService(nil),
 		})}
+	// Step 3.5 (settings family): the mjs side sets NEX_DESKTOP_HOME_DIR to
+	// this engine's fixture root before spawning the harness; the services
+	// resolve their state files from it (resolveUserHomeDir parity).
+	case "setting":
+		channel = &setting.Channel{Service: setting.NewService(setting.ServiceOptions{})}
+	case "onboarding":
+		channel = &onboarding.Channel{Service: onboarding.NewService(onboarding.Options{})}
+	case "credential":
+		channel = &credential.Channel{Service: credential.NewService(credential.Options{})}
+	case "settings-sync":
+		settingService := setting.NewService(setting.ServiceOptions{})
+		channel = &settingssync.Channel{Service: settingssync.NewService(settingssync.Options{
+			SettingService: settingBridge{svc: settingService},
+		})}
 	default:
 		fmt.Fprintf(os.Stderr, "svc-diff-harness: unknown service %q\n", svcName)
 		os.Exit(2)
@@ -73,6 +107,9 @@ func main() {
 		if value == nil {
 			// void methods serialize as {"ok":true} — no result key
 			results = append(results, map[string]any{"ok": true})
+		} else if _, isNull := value.(rpc.NullType); isNull {
+			// The TS `null` result: the key IS present with a null value.
+			results = append(results, map[string]any{"ok": true, "result": nil})
 		} else {
 			results = append(results, map[string]any{"ok": true, "result": normalize(value, in.FixtureRoot)})
 		}
@@ -97,6 +134,12 @@ func normalize(v rpc.Value, fixtureRoot string) any {
 		out := make([]any, len(t))
 		for i, item := range t {
 			out[i] = normalize(item, fixtureRoot)
+		}
+		return out
+	case []string:
+		out := make([]string, len(t))
+		for i, item := range t {
+			out[i] = normalizeString(item, fixtureRoot)
 		}
 		return out
 	case rpc.Object:

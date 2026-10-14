@@ -1,0 +1,14 @@
+{
+  "channel": "onboarding-record",
+  "method": "appendRecord",
+  "args": [
+    "mid-capture",
+    {
+      "occupation": "developer",
+      "interfaceMode": "coding",
+      "memoryEnabled": true,
+      "proactiveSuggestionsEnabled": false,
+      "completedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}
