@@ -302,7 +302,33 @@ gate3() {
   # proves the connection-scoped channel flows only through a scope.
   check G3.providers "providers and models: providerconfig, modelprovider, providers, registry wiring (step 3.6)" \
     bash -c 'cd go && go test -race -count=1 ./internal/providerconfig/ ./internal/services/modelprovider/ ./internal/services/providers/ ./internal/services/ && go test -race -count=1 -run Security ./internal/services/providers/' 
-  todo G3.skills/plugins/mcpsync/hooks/memory "knowledge extensions (step 3.7)"
+  # G3 knowledge extensions (step 3.7): the shared single-implementation
+  # libraries (internal/skills: frontmatter, scan policy, bounded walk, sync
+  # path policy, tar.gz archive with the zip-slip/symlink/bomb security
+  # suite and the bundled-skills frontmatter corpus; internal/plugins:
+  # manifest reading, marketplace partitions + merged metadata, version
+  # compare, atomic dir install, plugin archive codec) and the nine service
+  # packages built on them: skills, skill-sync (candidate/export/import),
+  # commands (.nex/.agents discovery + enable overrides), memory (Project
+  # Memory catalog + guarded stable read), hooktrust (declaration/bundle
+  # digests over JSON.stringify-compatible canonical JSON, the review
+  # monotonicity property test, the byte-compatible trust-store codec,
+  # fail-closed corrupt handling), plugin-management (local read side +
+  # agent-required mutation refusals), the retired plugins channel stub,
+  # plugin-sync (archives + marketplace source mirrors), and mcp-sync
+  # (mcp.servers/mcpServers dual source, legacy enable migration,
+  # filesystem path rewriting). The services-root suite carries the tier-4
+  # registry wiring test.
+  check G3.skills "knowledge extensions: skills, skill-sync (internal/skills + internal/services/skills + skillsync) (step 3.7)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/skills/ ./internal/services/skills/ ./internal/services/skillsync/'
+  check G3.plugins "knowledge extensions: plugins, plugin-management, plugin-sync (internal/plugins + internal/services/plugins*) (step 3.7)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/plugins/ ./internal/services/plugins/ ./internal/services/pluginmgmt/ ./internal/services/pluginsync/'
+  check G3.mcpsync "knowledge extensions: mcp-sync (dual-source read, legacy migration, path rewrite) (step 3.7)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/services/mcpsync/'
+  check G3.hooks "knowledge extensions: hooktrust (digests, monotonicity property, trust-store compat, fail-closed) (step 3.7)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/services/hooktrust/'
+  check G3.memory "knowledge extensions: memory (Project Memory catalog + stable read) and commands (step 3.7)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/services/memory/ ./internal/services/commands/'
   todo G3.peripheral "peripheral services (step 3.8)"
   todo G3.bots "bots (step 3.9)"
   todo G3.agentbridge "agent bridge (step 3.10)"

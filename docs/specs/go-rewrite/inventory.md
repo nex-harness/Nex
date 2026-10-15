@@ -227,7 +227,7 @@ Count: 42
 | channel client-config                | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel client-scenes                | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel coding-plan-subscription     | packages/shared/src/channels.ts | 3           | todo   | —          |
-| channel commands                     | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel commands                     | packages/shared/src/channels.ts | 3           | ported | G3.memory  |
 | channel conversation-share           | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel credential                   | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel cua-permission               | packages/shared/src/channels.ts | 3           | todo   | —          |
@@ -237,10 +237,10 @@ Count: 42
 | channel file-watcher                 | packages/shared/src/channels.ts | 3           | ported | G3.watcher |
 | channel git                          | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel git-checkpoint               | packages/shared/src/channels.ts | 3           | todo   | —          |
-| channel hooks                        | packages/shared/src/channels.ts | 3           | todo   | —          |
-| channel mcp-sync                     | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel hooks                        | packages/shared/src/channels.ts | 3           | ported | G3.hooks   |
+| channel mcp-sync                     | packages/shared/src/channels.ts | 3           | ported | G3.mcpsync |
 | channel media-preview                | packages/shared/src/channels.ts | 3           | ported | G3.media   |
-| channel memory                       | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel memory                       | packages/shared/src/channels.ts | 3           | ported | G3.memory  |
 | channel model-selection              | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel nex-agent                    | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel nex-session                  | packages/shared/src/channels.ts | 3           | todo   | —          |
@@ -249,16 +249,16 @@ Count: 42
 | channel off-peak-task                | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel onboarding-record            | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel pets                         | packages/shared/src/channels.ts | 3           | todo   | —          |
-| channel plugin-management            | packages/shared/src/channels.ts | 3           | todo   | —          |
-| channel plugin-sync                  | packages/shared/src/channels.ts | 3           | todo   | —          |
-| channel plugins                      | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel plugin-management            | packages/shared/src/channels.ts | 3           | ported | G3.plugins |
+| channel plugin-sync                  | packages/shared/src/channels.ts | 3           | ported | G3.plugins |
+| channel plugins                      | packages/shared/src/channels.ts | 3           | ported | G3.plugins |
 | channel prompt-attachment-transfer   | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel provider-provisioning-target | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel provider-settings            | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel setting                      | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel settings-sync                | packages/shared/src/channels.ts | 3           | todo   | —          |
-| channel skill-sync                   | packages/shared/src/channels.ts | 3           | todo   | —          |
-| channel skills                       | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel skill-sync                   | packages/shared/src/channels.ts | 3           | ported | G3.skills  |
+| channel skills                       | packages/shared/src/channels.ts | 3           | ported | G3.skills  |
 | channel subagents                    | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel system                       | packages/shared/src/channels.ts | 3           | ported | G3.system  |
 | channel terminal                     | packages/shared/src/channels.ts | 3           | todo   | —          |
@@ -319,5 +319,5 @@ Count: 15
 ## Totals
 
 - items: 268
-- ported: 28
-- todo: 240
+- ported: 37
+- todo: 231

@@ -121,6 +121,31 @@ var osAllowedOutsideAdapters = map[string]string{
 	// any network action; env reads are its contract (HTTP stays behind the
 	// injected client seam).
 	"internal/services/codingplansubscription": "reads the NEX_DYNAMIC_WORKFLOW_MODE env override (step 3.5)",
+	// The knowledge extensions (step 3.7) are disk-stateful services whose
+	// whole contract is reading/writing the agent's own file layout
+	// (~/.nex/{skills,cli,memory}, workspace .nex/.agents trees,
+	// installed_plugins.json, marketplace metadata, the trust store):
+	// skills/skill-sync walk and import skill trees, commands writes
+	// .md files under .nex/commands, memory guards the Project Memory
+	// catalog reads, hooktrust writes hooks configs and reads the
+	// byte-compatible trust store, plugin-management/plugins/plugin-sync
+	// scan the plugin storage roots and write archives+staging dirs,
+	// mcp-sync owns the mcp.servers/mcp.json configs. The shared
+	// internal/skills + internal/plugins libraries are the same layout's
+	// single implementation (the step's single-implementation rule) —
+	// an adapter around them would duplicate the one implementation the
+	// step exists to create.
+	"internal/skills":              "skill frontmatter/walk/archive single implementation over the agent file layout (step 3.7)",
+	"internal/plugins":             "plugin manifest/marketplace/archive single implementation over the agent file layout (step 3.7)",
+	"internal/services/skills":     "skills service walks workspace/user/plugin skill trees (step 3.7)",
+	"internal/services/skillsync":  "skill-sync imports archives into ~/.nex/skills (step 3.7)",
+	"internal/services/commands":   "commands service owns .nex/commands file writes (step 3.7)",
+	"internal/services/memory":     "memory service guards Project Memory catalog reads (step 3.7)",
+	"internal/services/hooktrust":  "hooks service writes hooks configs and reads the trust store (step 3.7)",
+	"internal/services/plugins":    "retired plugins channel stub (step 3.7)",
+	"internal/services/pluginmgmt": "plugin management reads the plugin storage roots (step 3.7)",
+	"internal/services/pluginsync": "plugin-sync extracts archives and writes staging dirs (step 3.7)",
+	"internal/services/mcpsync":    "mcp-sync owns the mcp.servers/mcp.json user configs (step 3.7)",
 }
 
 func goFiles(t *testing.T, root string) []string {

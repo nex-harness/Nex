@@ -109,12 +109,23 @@ for (const name of [...localToolNames].sort()) {
 // ── (d) service channels ─────────────────────────────────────────────────────
 const CHANNELS_SRC = REL("packages/shared/src/channels.ts");
 // Tier-1 stateless IO adapters are ported (step 3.2); their trace is the
-// G3 gate check that runs the package's race suite. Everything else in
-// phase 3 stays todo until its step lands.
+// G3 gate check that runs the package's race suite. The tier-4 knowledge
+// extensions are ported (step 3.7; commands shares G3.memory with the
+// memory service because one gate runs both packages' race suites).
+// Everything else in phase 3 stays todo until its step lands.
 const PORTED_CHANNELS: Record<string, string> = {
+  commands: "G3.memory",
   file: "G3.file",
   "file-watcher": "G3.watcher",
+  hooks: "G3.hooks",
+  "mcp-sync": "G3.mcpsync",
   "media-preview": "G3.media",
+  memory: "G3.memory",
+  "plugin-management": "G3.plugins",
+  "plugin-sync": "G3.plugins",
+  plugins: "G3.plugins",
+  "skill-sync": "G3.skills",
+  skills: "G3.skills",
   system: "G3.system",
 };
 for (const channel of Object.values(channels.ServiceChannels).sort()) {
