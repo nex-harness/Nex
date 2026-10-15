@@ -373,3 +373,20 @@ func AtomicWritePrivateTextFile(ctx context.Context, filePath string, content []
 	}
 	return nil
 }
+
+// WithFileLock runs body while holding the <lockPath>.lock convention lock
+// (the TS withFileLock). Exposed for the step-3.6 personal provider config
+// repository, whose read-modify-write span must hold the lock across more
+// than the write itself.
+func WithFileLock(ctx context.Context, filePath string, body func() error) error {
+	lockPath := filePath + ".lock"
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
+		return err
+	}
+	release, err := acquireFileLock(ctx, lockPath, nil)
+	if err != nil {
+		return err
+	}
+	defer release()
+	return body()
+}

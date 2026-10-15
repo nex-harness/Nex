@@ -52,6 +52,17 @@ func ioPathAllowed(relDir string) bool {
 
 // osAllowedOutsideAdapters lists packages that may import "os" even though they
 // are not adapters, with the reason. Keep this list short.
+// ioAllowedOutsideAdapters lists the os-allowlisted packages that may ALSO
+// import the net/net/http ioPackages, with the reason.
+var ioAllowedOutsideAdapters = map[string]string{
+	// internal/services/modelprovider (step 3.6): the models.dev catalog fetch
+	// and the remote /models list are outbound HTTP the TS service itself
+	// performs with fetch(); its local-file access is already justified in
+	// osAllowedOutsideAdapters. Kept in the same tier as settingssync's
+	// HTTP-facing services.
+	"internal/services/modelprovider": "models.dev catalog + provider /models fetch (step 3.6)",
+}
+
 var osAllowedOutsideAdapters = map[string]string{
 	"internal/archcheck": "reads the source tree to check it",
 	// internal/gateway reads the gateway-routes.json routing table itself (step 2.8). The table
@@ -97,6 +108,15 @@ var osAllowedOutsideAdapters = map[string]string{
 	// contract is local filesystem migration (the plan's own reading of the
 	// 2.4k-line TS: "local file scan/import, not a remote sync protocol").
 	"internal/services/settingssync": "settings-sync migrates local agent config trees (step 3.5)",
+	// The providers/model family (step 3.6) owns local state files whose
+	// paths ARE the contract, the same tier-3 "service IS the I/O boundary"
+	// case as setting/credential: provider_config.json + provisioning state
+	// reads/writes route through fsx (lock + atomic), models.dev fetches its
+	// catalog and the remote model list hits provider /models endpoints over
+	// HTTP (the TS service itself calls fetch()). The agent-shared
+	// internal/providerconfig stays pure (no os/net there).
+	"internal/services/modelprovider": "providers family owns provider_config.json + provisioning state + models.dev/remote-model HTTP (step 3.6)",
+	"internal/services/providers":     "provisioning target owns its state file; private atomic writes route through fsx (step 3.6)",
 	// The dynamic-workflow snapshot reads the process env override before
 	// any network action; env reads are its contract (HTTP stays behind the
 	// injected client seam).
@@ -157,7 +177,9 @@ func TestImportBoundaries(t *testing.T) {
 				continue
 			}
 			if ioPackages[path] && !ioPathAllowed(relDir) {
-				t.Errorf("%s imports %q: external I/O belongs in internal/adapters or cmd", rel, path)
+				if _, ok := ioAllowedOutsideAdapters[relDir]; !ok {
+					t.Errorf("%s imports %q: external I/O belongs in internal/adapters or cmd", rel, path)
+				}
 			}
 			if path == "os" && !ioPathAllowed(relDir) {
 				if _, ok := osAllowedOutsideAdapters[relDir]; !ok {

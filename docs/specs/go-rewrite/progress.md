@@ -95,7 +95,7 @@
 - [ ] **3.3** Tier 1b:`IGitService`、`IGitCheckpointService`
 - [ ] **3.4** Tier 2:`ITerminalService`(PTY)
 - [ ] **3.5** Tier 3 settings:`ISettingService`、`ISettingsSyncService`、`IClientConfigService`、`IClientScenesService`、`IOnboardingRecordService`、`ICredentialService`、`IDeviceService`、`ICodingPlanSubscriptionService`
-- [ ] **3.6** Tier 3b providers:`IModelSelectionService`、`IProviderSettingsService`、`IProviderProvisioningTargetService`、`packages/provider` + `packages/provider-node`
+- [x] **3.6** Tier 3b providers:`IModelSelectionService`、`IProviderSettingsService`、`IProviderProvisioningTargetService`、`packages/provider` + `packages/provider-node` — `G3.providers` PASS(2026-10-15):`go/internal/providerconfig`(共享解析包:overlay 值类型、规则引擎、resolver、registry、file codec、builtin release、agent parser 抽取自 cmd/nex-agent)+ `go/internal/services/modelprovider`(personal repo、builtin source(内嵌 nex-builtin.json 工件)、config service、registry service、facades、models.dev/remote model list、legacy importers)+ `go/internal/services/providers`(provisioning target + 连接模式权限门,web-remote 精确拒绝错误)。路由翻转(step f)留待后续;Phase 1 agent 测试保持通过(cmd/nex-agent 改用共享包)
 - [ ] **3.7** Tier 4 知识扩展：`ISkillsService`、`ISkillSyncService`、`ICommandsService`、`IMemoryService`、`IHooks…`、`IPluginsService` 读侧、`IPluginManagementService`、`IPluginSyncService`、`IMcpSyncService`
 - [ ] **3.8** Tier 5 peripheral:`IPetService`、`IConversationShareService`、`IPromptAttachmentTransferService`、feedback、`IUsageStats`、`IStorageService`、process telemetry、`ICuaPermissionService`/`ICuaPipSessionService`
 - [ ] **3.9** Tier 6a bots:`IBotsService` + `/api/bots/*`

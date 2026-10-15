@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"errors"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -16,6 +14,7 @@ import (
 	"github.com/tylinux/nex/go/internal/adapters/store"
 	"github.com/tylinux/nex/go/internal/modelclient"
 	"github.com/tylinux/nex/go/internal/protocol"
+	"github.com/tylinux/nex/go/internal/providerconfig"
 	"github.com/tylinux/nex/go/internal/runtime"
 	"github.com/tylinux/nex/go/internal/tools"
 )
@@ -202,9 +201,10 @@ func buildRuntime(ctx context.Context, w *protocol.FrameWriter, db *sql.DB) (*ru
 
 // openProviderConfig resolves the provider_config.json the same way the Node
 // agent does: NEX_PERSONAL_PROVIDER_CONFIG_FILE wins over ~/.nex/v2/provider_config.json
-// (packages/provider-node/src/runtime-paths.ts). The server spawns the agent with
-// the env var set when the data dir is not $HOME; without it we fall through to
-// the user's home directory.
+// (packages/provider-node/src/runtime-paths.ts). The parsing itself moved to
+// internal/providerconfig (step 3.6's single-implementation rule: the Go agent
+// and the Go server share one package, like @nex/provider in TS); this wrapper
+// keeps only the path resolution.
 func openProviderConfig() (runtime.Provider, error) {
 	if env := os.Getenv("NEX_PERSONAL_PROVIDER_CONFIG_FILE"); env != "" {
 		data, err := os.ReadFile(env)
@@ -225,80 +225,25 @@ func openProviderConfig() (runtime.Provider, error) {
 	return parseProviderConfig(data)
 }
 
-type providerConfigFile struct {
-	Config struct {
-		ProviderConfigRules struct {
-			ProviderRules []struct {
-				ProviderID   string `json:"providerId"`
-				ProviderName string `json:"providerName"`
-				Config       struct {
-					Access struct {
-						Type   string `json:"type"`
-						APIKey string `json:"apiKey"`
-					} `json:"access"`
-					API struct {
-						Type    string `json:"type"`
-						BaseURL string `json:"baseUrl"`
-					} `json:"api"`
-				} `json:"config"`
-			} `json:"providerRules"`
-		} `json:"providerConfigRules"`
-		ModelConfigRules struct {
-			ManualProviderModelRules []struct {
-				ProviderID string `json:"providerId"`
-				ModelID    string `json:"modelId"`
-				Config     struct {
-					Enabled    bool   `json:"enabled"`
-					Name       string `json:"name"`
-					Properties struct {
-						ContextWindow int64 `json:"contextWindow"`
-					} `json:"properties"`
-					OptionSpecs struct {
-						ReasoningLevel struct {
-							Values []string `json:"values"`
-						} `json:"reasoningLevel"`
-						MaxOutputTokens struct {
-							Max int64 `json:"max"`
-						} `json:"maxOutputTokens"`
-					} `json:"optionSpecs"`
-				} `json:"config"`
-			} `json:"manualProviderModelRules"`
-		} `json:"modelConfigRules"`
-	} `json:"config"`
-}
-
+// parseProviderConfig adapts the shared providerconfig facts to the runtime
+// Provider shape (a thin field copy; providerconfig owns the parsing).
 func parseProviderConfig(data []byte) (runtime.Provider, error) {
-	var f providerConfigFile
-	if err := json.Unmarshal(data, &f); err != nil {
+	facts, err := providerconfig.ParseAgentProviderFacts(data)
+	if err != nil {
 		return runtime.Provider{}, err
 	}
-	if len(f.Config.ModelConfigRules.ManualProviderModelRules) == 0 {
-		return runtime.Provider{}, errors.New("provider config has no manual model rules")
-	}
-	m := f.Config.ModelConfigRules.ManualProviderModelRules[0]
-	p := runtime.Provider{
-		ProviderID:      m.ProviderID,
-		ModelID:         m.ModelID,
-		ModelName:       m.Config.Name,
-		ContextWindow:   m.Config.Properties.ContextWindow,
-		MaxOutputToken:  m.Config.OptionSpecs.MaxOutputTokens.Max,
-		ReasoningLevels: m.Config.OptionSpecs.ReasoningLevel.Values,
-	}
-	if len(p.ReasoningLevels) > 0 {
-		p.DefaultReasoning = p.ReasoningLevels[0]
-	}
-	for _, pr := range f.Config.ProviderConfigRules.ProviderRules {
-		if pr.ProviderID != m.ProviderID {
-			continue
-		}
-		p.ProviderName = pr.ProviderName
-		p.BaseURL = pr.Config.API.BaseURL
-		p.APIKey = pr.Config.Access.APIKey
-		if pr.Config.API.Type == "openai-chat-completions" {
-			p.ProviderKind = "openai-compatible"
-		} else {
-			p.ProviderKind = pr.Config.API.Type
-		}
-	}
-	return p, nil
+	return runtime.Provider{
+		ProviderID:       facts.ProviderID,
+		ProviderName:     facts.ProviderName,
+		ProviderKind:     facts.ProviderKind,
+		ModelID:          facts.ModelID,
+		ModelName:        facts.ModelName,
+		BaseURL:          facts.BaseURL,
+		APIKey:           facts.APIKey,
+		ContextWindow:    facts.ContextWindow,
+		MaxOutputToken:   facts.MaxOutputToken,
+		ReasoningLevels:  facts.ReasoningLevels,
+		DefaultReasoning: facts.DefaultReasoning,
+		HTTP:             facts.HTTP,
+	}, nil
 }

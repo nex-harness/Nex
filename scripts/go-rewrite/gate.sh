@@ -291,7 +291,17 @@ gate3() {
   # wiring test in the services root.
   check G3.settings "settings family: setting, settings-sync, client-config, client-scenes, onboarding, credential, device, coding-plan-subscription (step 3.5)" \
     bash -c 'cd go && go test -race -count=1 ./internal/services/setting/ ./internal/services/settingssync/ ./internal/services/clientconfig/ ./internal/services/clientscenes/ ./internal/services/onboarding/ ./internal/services/credential/ ./internal/services/device/ ./internal/services/codingplansubscription/ ./internal/services/'
-  todo G3.providers "providers and models (step 3.6)"
+  # G3.providers (step 3.6): providers and models. The shared
+  # internal/providerconfig extraction (agent + server in one package), the
+  # personal provider config repository + file codec, the builtin release
+  # materialization (the embedded nex-builtin.json artifact), the registry
+  # service + facades, models.dev + remote model list against httptest, the
+  # legacy importers, and the security suite: the provisioning permission
+  # matrix (web-remote rejected with the exact trusted-host error) and secret
+  # redaction. The services-root suite runs the registry wiring test that
+  # proves the connection-scoped channel flows only through a scope.
+  check G3.providers "providers and models: providerconfig, modelprovider, providers, registry wiring (step 3.6)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/providerconfig/ ./internal/services/modelprovider/ ./internal/services/providers/ ./internal/services/ && go test -race -count=1 -run Security ./internal/services/providers/' 
   todo G3.skills/plugins/mcpsync/hooks/memory "knowledge extensions (step 3.7)"
   todo G3.peripheral "peripheral services (step 3.8)"
   todo G3.bots "bots (step 3.9)"
