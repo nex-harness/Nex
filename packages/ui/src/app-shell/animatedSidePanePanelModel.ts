@@ -3,6 +3,7 @@ const MIN_PREVIEW_PANE_HEAVY_CONTENT_VISIBLE_INLINE_SIZE_PX = 96;
 export type OpenTabLauncherItemId =
   | "selection-side-conversation"
   | "review"
+  | "files"
   | "terminal"
   | "browser"
   | "developer-tools";
@@ -28,7 +29,7 @@ export function resolveOpenTabLauncherItemIds({
     itemIds.push("review");
   }
 
-  itemIds.push("terminal");
+  itemIds.push("files", "terminal");
 
   if (supportsEmbeddedBrowser) {
     itemIds.push("browser");

@@ -85,6 +85,14 @@ export interface DeveloperToolsSidePaneTab {
   openedAt?: number;
 }
 
+export interface FilesSidePaneTab {
+  id: "files";
+  type: "files";
+  ownerTaskId?: string | null;
+  workspaceKey?: string | null;
+  openedAt?: number;
+}
+
 export interface TerminalSidePaneTab {
   id: string;
   type: "terminal";
@@ -522,6 +530,7 @@ export type WorkspaceSidePaneTab =
   | WhiteboardSidePaneTab
   | ModelTrajectorySidePaneTab
   | DeveloperToolsSidePaneTab
+  | FilesSidePaneTab
   | TerminalSidePaneTab
   | BrowserUseSidePaneTab
   | SubagentSessionSidePaneTab
@@ -668,6 +677,14 @@ function createDeveloperToolsSidePaneTab(): DeveloperToolsSidePaneTab {
   return {
     id: "developer-tools",
     type: "developer-tools",
+    openedAt: Date.now(),
+  };
+}
+
+function createFilesSidePaneTab(): FilesSidePaneTab {
+  return {
+    id: "files",
+    type: "files",
     openedAt: Date.now(),
   };
 }
@@ -1055,6 +1072,7 @@ const WORKSPACE_GLOBAL_SIDE_PANE_TAB_TYPES = new Set<WorkspaceSidePaneTab["type"
   "git",
   "developer-tools",
   "treemapping",
+  "files",
 ]);
 
 function isWorkspaceGlobalSidePaneTab(tab: WorkspaceSidePaneTab): boolean {
@@ -1584,6 +1602,12 @@ export function activateDeveloperToolsSidePane(
   current: WorkspaceSidePaneState | null,
 ): WorkspaceSidePaneState {
   return activateSidePaneTab(current, createDeveloperToolsSidePaneTab());
+}
+
+export function activateFilesSidePane(
+  current: WorkspaceSidePaneState | null,
+): WorkspaceSidePaneState {
+  return activateSidePaneTab(current, createFilesSidePaneTab());
 }
 
 export function openTerminalSidePane(

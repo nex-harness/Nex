@@ -12,7 +12,8 @@ export interface WorkspaceFileTreeProps {
   temporaryExternalDirectory?: boolean;
   canOpenLocalFileManager?: boolean;
   activePreviewPath?: string | null;
-  onClose: () => void;
+  /** 缺省时不渲染"返回任务"按钮（作为 side pane tab 嵌入时没有可返回的上层）。 */
+  onClose?: () => void;
   onOpenBrowserUrl?: (url: string) => void;
   onOpenPreview?: (source: CodeViewerSource) => void;
 }

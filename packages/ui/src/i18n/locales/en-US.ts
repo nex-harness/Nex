@@ -969,6 +969,7 @@ const enUS: Record<string, string> = {
   "sidePane.openFile.category": "Files",
   "sidePane.openFile.emptyQuery": "Type to search files",
   "sidePane.review": "Review",
+  "sidePane.files": "Files",
   "whiteboard.title": "Whiteboard",
   "whiteboard.defaultName": "Whiteboard",
   "whiteboard.nameLabel": "Whiteboard name",

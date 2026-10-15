@@ -29,6 +29,7 @@ import { TreemappingPane } from "@/TreemappingPane.js";
 import { WhiteboardPane } from "@/WhiteboardPane.js";
 import { ModelTrajectoryPane } from "@/ModelTrajectoryPane.js";
 import { DeveloperToolsPane } from "@/DeveloperToolsPane.js";
+import { WorkspaceFileTree } from "@/WorkspaceFileTree.js";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -92,6 +93,7 @@ import { useNexIntl } from "@/i18n/IntlProvider.js";
 import {
   BugIcon,
   FileDiffIcon,
+  FolderTreeIcon,
   GlobeIcon,
   MessageSquareTextIcon,
   PlusIcon,
@@ -313,6 +315,7 @@ export function AnimatedSidePanePanel({
   onOpenBrowserTab,
   onOpenWhiteboard: _onOpenWhiteboard,
   onOpenDeveloperTools,
+  onOpenFilesTab,
   onOpenTerminalTab,
   onOpenReviewTab,
   onOpenSelectionSideConversation,
@@ -378,6 +381,7 @@ export function AnimatedSidePanePanel({
   onOpenBrowserTab: () => void;
   onOpenWhiteboard: () => void;
   onOpenDeveloperTools: () => void;
+  onOpenFilesTab: () => void;
   onOpenTerminalTab: () => void;
   onOpenReviewTab: () => void;
   onOpenSelectionSideConversation: () => void;
@@ -724,6 +728,15 @@ export function AnimatedSidePanePanel({
           <PaletteIcon className="size-4" />
           <span>{intl.formatMessage({ id: "whiteboard.title" })}</span>
         </DropdownMenuItem> */}
+        <DropdownMenuItem
+          data-side-pane-add-item="files"
+          onSelect={() => {
+            onOpenFilesTab();
+          }}
+        >
+          <FolderTreeIcon className="size-4" />
+          <span>{intl.formatMessage({ id: "sidePane.files" })}</span>
+        </DropdownMenuItem>
         {!isOfficeMode ? (
           <DropdownMenuItem
             data-side-pane-add-item="terminal"
@@ -772,6 +785,12 @@ export function AnimatedSidePanePanel({
       label: intl.formatMessage({ id: "sidePane.review" }),
       icon: FileDiffIcon,
       onOpen: onOpenReviewTab,
+    },
+    files: {
+      id: "files",
+      label: intl.formatMessage({ id: "sidePane.files" }),
+      icon: FolderTreeIcon,
+      onOpen: onOpenFilesTab,
     },
     terminal: {
       id: "terminal",
@@ -886,6 +905,7 @@ export function AnimatedSidePanePanel({
           id: "developerTools.title",
         }),
         terminalTitle: intl.formatMessage({ id: "terminal.title" }),
+        filesTitle: intl.formatMessage({ id: "sidePane.files" }),
         subagentTypeLabel: intl.formatMessage({ id: "sidePane.subagent" }),
         subagentDirectoryTitle: intl.formatMessage({
           id: "sidePane.subagentDirectory",
@@ -1253,6 +1273,15 @@ export function AnimatedSidePanePanel({
                               enabled={isVisible && tab.id === visibleActiveTabId}
                             />
                           </ServiceProvider>
+                        ) : tab.type === "files" ? (
+                          <WorkspaceFileTree
+                            workspacePath={workspaceAbsPath}
+                            workspaceIdentity={workspaceIdentity}
+                            workspaceRemoteSessionId={workspaceRemoteSessionId}
+                            canOpenLocalFileManager={isDesktop}
+                            onOpenBrowserUrl={isDesktop ? onOpenBrowserUrl : undefined}
+                            onOpenPreview={onOpenCodeViewer}
+                          />
                         ) : tab.type === "terminal" ? (
                           <SidePaneTerminalPane
                             services={services}
