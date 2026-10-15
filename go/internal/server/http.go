@@ -79,6 +79,10 @@ type Options struct {
 	Gateway Gateway
 	// WorkspacePath is NEX_SERVER_WORKSPACE; empty means no workspaces are advertised.
 	WorkspacePath string
+	// Pets backs GET /api/pets/:id/spritesheet (step 3.8). Nil answers with
+	// the TS "Pets service unavailable" 404 (services.getOptional(IPetService)
+	// missing), and the request never reaches the gateway.
+	Pets PetsService
 }
 
 // Gateway is the strangler as the HTTP shell sees it: the per-connection WebSocket owner plus the
@@ -166,6 +170,12 @@ func NewHandler(opts Options) (http.Handler, *Config, error) {
 		if escaped, ok := urlPathname(r); ok && escaped == serverInfoPath &&
 			(r.Method == http.MethodGet || r.Method == http.MethodHead) {
 			writeServerInfo(w, NewServerInfo(cfg))
+			return
+		}
+		// GET /api/pets/:id/spritesheet (step 3.8): answered before the
+		// gateway so the route is Go-owned, exactly where the comment above
+		// places the pets route.
+		if servePetsSpritesheet(opts.Pets, w, r) {
 			return
 		}
 		if proxy != nil {
