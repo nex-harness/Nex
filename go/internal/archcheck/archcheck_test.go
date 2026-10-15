@@ -72,6 +72,14 @@ var ioAllowedOutsideAdapters = map[string]string{
 	// alternative, and hiding it behind an adapter would only obscure which
 	// platform path is taken.
 	"internal/services/processtelemetry": "process telemetry runs ps/powershell for the machine process table (step 3.8)",
+	// bots (step 3.9) talks to three third-party chat platforms itself, exactly
+	// as the TS service does: Telegram's Bot API, Feishu/Lark open-apis and the
+	// Weixin iLink gateway are all hand-written fetch calls in the source being
+	// ported (providers/{telegram,feishu,weixin,webhook}Provider.ts). The
+	// ProviderClient is the injected transport seam and the endpoint list is the
+	// contract, so no third-party SDK sits behind an adapter that would only move
+	// the net/http calls somewhere less honest.
+	"internal/services/bots": "bots calls the Telegram/Feishu/Weixin/webhook bot APIs itself (step 3.9)",
 }
 
 var osAllowedOutsideAdapters = map[string]string{
@@ -178,6 +186,12 @@ var osAllowedOutsideAdapters = map[string]string{
 	"internal/services/promptattachment":  "prompt attachment transfer stages files in its own directories (step 3.8)",
 	"internal/services/conversationshare": "conversation-share reads workspace artifacts and calls the share API itself (step 3.8)",
 	"internal/services/processtelemetry":  "process telemetry reads /proc and the ps/powershell table (step 3.8)",
+	// bots (step 3.9) owns two local state files whose paths ARE the contract —
+	// bot-config.v3.json and bot-state.v3.json are read by BOTH engines while the
+	// strangler runs, so the read-modify-write spans hold the same <file>.lock and
+	// the atomic private write the TS uses. It also owns the Telegram polling
+	// cursor, which is why it reads the file under a lock on its own path.
+	"internal/services/bots": "bots owns bot-config.v3.json / bot-state.v3.json and the polling cursors (step 3.9)",
 }
 
 func goFiles(t *testing.T, root string) []string {

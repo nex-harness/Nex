@@ -342,7 +342,19 @@ gate3() {
   # child-process tree).
   check G3.peripheral "peripheral services: pets, conversation-share, prompt-attachment, feedback, usage-stats, storage, process telemetry (step 3.8)" \
     bash -c 'cd go && go test -race -count=1 ./internal/services/pets/ ./internal/services/conversationshare/ ./internal/services/promptattachment/ ./internal/services/feedback/ ./internal/services/usagestats/ ./internal/services/storage/ ./internal/services/processtelemetry/ ./internal/feedbackprivacy/' 
-  todo G3.bots "bots (step 3.9)"
+  # G3.bots (step 3.9): the bots tier. IBotsService + the two POST
+  # /api/bots/* routes. The suite covers the four-branch status contract
+  # (400 unsupported / 400 no-HTTP-callback / 503 no-service / 200) and its
+  # three byte-exact bodies, the x-nex-bot-secret and rawBody forwarding, the
+  # commandParser table case by case, the reply-formatter golden outputs
+  # generated from the TS by scripts/go-rewrite/vectors/bots-reply.mts, the
+  # webhook-secret reply rule, the inbound delivery dedupe (including its TTL
+  # and its per-chat key), and the Telegram cursor discipline: the offset must
+  # NOT advance when the callback failed and MUST advance by update_id+1 when
+  # it succeeded. Provider HTTP is exercised only against httptest fakes, plus
+  # the Weixin AES-128-ECB CDN decrypt round trip.
+  check G3.bots "bots: IBotsService + POST /api/bots/* (status contract, secrets, dedupe, telegram offset discipline, parser table, formatter goldens) (step 3.9)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/services/bots/ ./internal/server/' 
   todo G3.agentbridge "agent bridge (step 3.10)"
 }
 

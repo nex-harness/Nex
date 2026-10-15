@@ -2,9 +2,10 @@
 // /api/server-info, web authentication and the WebSocket endpoints with the one-shot host
 // capability. It is a byte-compatible port of packages/server/src/http.ts.
 //
-// Scope is steps 2.5, 2.6 and 2.7 of docs/specs/go-rewrite/phase-2-go-server.md. The routes owned
-// by later steps (/api/pets/*, /api/bots/*, /api/connect-remote, /ws/remote/:id and the gateway
-// itself) are not registered yet; while the strangler runs, the Node upstream owns them. Because
+// Scope is steps 2.5, 2.6 and 2.7 of docs/specs/go-rewrite/phase-2-go-server.md, plus the
+// /api/pets/* (step 3.8) and /api/bots/* (step 3.9) routes the shell now answers itself.
+// The routes owned by later steps (/api/connect-remote, /ws/remote/:id and the gateway itself)
+// are not registered yet; while the strangler runs, the Node upstream owns them. Because
 // this handler answers 404 for anything it does not own, and because /api/* never falls back to
 // index.html, an unowned API path is a 404 here exactly as it is in Node.
 package server
@@ -83,6 +84,11 @@ type Options struct {
 	// the TS "Pets service unavailable" 404 (services.getOptional(IPetService)
 	// missing), and the request never reaches the gateway.
 	Pets PetsService
+	// Bots backs POST /api/bots/:provider[/:botId] (step 3.9). Nil answers the
+	// TS 503 `{"error":"Bots service is not available."}` — the route still
+	// answers the unsupported-provider checks itself, because those run BEFORE
+	// the service lookup in handleBotCallback.
+	Bots BotsService
 }
 
 // Gateway is the strangler as the HTTP shell sees it: the per-connection WebSocket owner plus the
@@ -162,9 +168,14 @@ func NewHandler(opts Options) (http.Handler, *Config, error) {
 	// /api/server-info and the capability route in http.ts).
 	//
 	// The gateway (step 2.8) sits at the END of the /api/* chain, so it sees exactly the routes
-	// the Go shell does not own — /api/pets/*, /api/bots/*, /api/connect-remote. Everything the
-	// Go shell owns is answered before it is reached, which is what makes "Go owns these routes"
-	// one statement in one place instead of a set of exclusions in two.
+	// the Go shell does not own — /api/connect-remote and the WebSocket remote routes. Everything
+	// the Go shell owns is answered before it is reached, which is what makes "Go owns these
+	// routes" one statement in one place instead of a set of exclusions in two.
+	//
+	// The pets and bots routes are answered here WITHOUT being added to the gateway's
+	// HTTPRoutePrefixes: the shell intercepts them before the proxy is consulted, so a rollout
+	// that drops Options.Bots/Options.Pets falls through to Node again with no routing-table
+	// edit. That is the same rollback shape step 3.8 chose for pets.
 	proxy := gatewayHandler(opts.Gateway)
 	terminalAPI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if escaped, ok := urlPathname(r); ok && escaped == serverInfoPath &&
@@ -176,6 +187,12 @@ func NewHandler(opts Options) (http.Handler, *Config, error) {
 		// gateway so the route is Go-owned, exactly where the comment above
 		// places the pets route.
 		if servePetsSpritesheet(opts.Pets, w, r) {
+			return
+		}
+		// POST /api/bots/:provider[/:botId] (step 3.9): same placement as the
+		// pets route. Both /api/bots routes are POST-only, so a GET under
+		// /api/bots/ is not this route and keeps flowing to the gateway.
+		if serveBotCallback(opts.Bots, w, r) {
 			return
 		}
 		if proxy != nil {

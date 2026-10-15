@@ -127,6 +127,8 @@ const PORTED_CHANNELS: Record<string, string> = {
   "skill-sync": "G3.skills",
   skills: "G3.skills",
   system: "G3.system",
+  // Tier 6a (step 3.9): IBotsService + the two POST /api/bots/* routes.
+  bots: "G3.bots",
 };
 for (const channel of Object.values(channels.ServiceChannels).sort()) {
   const trace = PORTED_CHANNELS[channel];
@@ -144,6 +146,16 @@ for (const migration of migrations.SQLITE_MIGRATIONS) {
 // ── (f) HTTP routes ──────────────────────────────────────────────────────────
 const httpSources = ["packages/server/src/http.ts", "packages/server/src/webAuth.ts"];
 const routeRegex = /app\.(get|post|put|delete|patch|use|all)\(\s*["'`]([^"'`]+)["'`]/g;
+// The routes the Go shell now owns (step 3.8 spritesheet, step 3.9 bot
+// callbacks). Both are answered by internal/server/{petsroute,botsroute}.go
+// BEFORE the gateway is consulted, so they are ported even though the routing
+// table still lists them for Node — dropping the Options.{Pets,Bots} wiring
+// falls back to the upstream with no table edit, which is the same rollback
+// shape both routes were shipped with.
+const PORTED_ROUTES: Record<string, string> = {
+  "POST /api/bots/:provider": "G3.bots",
+  "POST /api/bots/:provider/:botId": "G3.bots",
+};
 for (const source of httpSources) {
   if (!existsSync(join(ROOT, source))) continue;
   const content = read(source);
@@ -152,7 +164,8 @@ for (const source of httpSources) {
     const key = `${match[1].toUpperCase()} ${match[2]}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    add(`route ${key}`, source, "2", "todo");
+    const trace = PORTED_ROUTES[key];
+    add(`route ${key}`, source, "2", trace ? "ported" : "todo", trace ?? "—");
   }
 }
 

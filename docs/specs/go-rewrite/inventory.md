@@ -222,7 +222,7 @@ Count: 42
 
 | item                                 | source                          | owner phase | status | trace      |
 | ------------------------------------ | ------------------------------- | ----------- | ------ | ---------- |
-| channel bots                         | packages/shared/src/channels.ts | 3           | todo   | —          |
+| channel bots                         | packages/shared/src/channels.ts | 3           | ported | G3.bots    |
 | channel broadcast                    | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel client-config                | packages/shared/src/channels.ts | 3           | todo   | —          |
 | channel client-scenes                | packages/shared/src/channels.ts | 3           | todo   | —          |
@@ -298,26 +298,26 @@ Count: 22
 
 Count: 15
 
-| item                                  | source                         | owner phase | status | trace |
-| ------------------------------------- | ------------------------------ | ----------- | ------ | ----- |
-| route USE \*                          | packages/server/src/http.ts    | 2           | todo   | —     |
-| route GET /api/server-info            | packages/server/src/http.ts    | 2           | todo   | —     |
-| route POST /api/rpc-host-capability   | packages/server/src/http.ts    | 2           | todo   | —     |
-| route GET /api/pets/:id/spritesheet   | packages/server/src/http.ts    | 2           | todo   | —     |
-| route GET /ws                         | packages/server/src/http.ts    | 2           | todo   | —     |
-| route USE /ws/host                    | packages/server/src/http.ts    | 2           | todo   | —     |
-| route GET /ws/host                    | packages/server/src/http.ts    | 2           | todo   | —     |
-| route POST /api/connect-remote        | packages/server/src/http.ts    | 2           | todo   | —     |
-| route POST /api/bots/:provider        | packages/server/src/http.ts    | 2           | todo   | —     |
-| route POST /api/bots/:provider/:botId | packages/server/src/http.ts    | 2           | todo   | —     |
-| route GET /ws/remote/:id              | packages/server/src/http.ts    | 2           | todo   | —     |
-| route GET \*                          | packages/server/src/http.ts    | 2           | todo   | —     |
-| route GET /api/auth/session           | packages/server/src/webAuth.ts | 2           | todo   | —     |
-| route POST /api/auth/login            | packages/server/src/webAuth.ts | 2           | todo   | —     |
-| route POST /api/auth/logout           | packages/server/src/webAuth.ts | 2           | todo   | —     |
+| item                                  | source                         | owner phase | status | trace   |
+| ------------------------------------- | ------------------------------ | ----------- | ------ | ------- |
+| route USE \*                          | packages/server/src/http.ts    | 2           | todo   | —       |
+| route GET /api/server-info            | packages/server/src/http.ts    | 2           | todo   | —       |
+| route POST /api/rpc-host-capability   | packages/server/src/http.ts    | 2           | todo   | —       |
+| route GET /api/pets/:id/spritesheet   | packages/server/src/http.ts    | 2           | todo   | —       |
+| route GET /ws                         | packages/server/src/http.ts    | 2           | todo   | —       |
+| route USE /ws/host                    | packages/server/src/http.ts    | 2           | todo   | —       |
+| route GET /ws/host                    | packages/server/src/http.ts    | 2           | todo   | —       |
+| route POST /api/connect-remote        | packages/server/src/http.ts    | 2           | todo   | —       |
+| route POST /api/bots/:provider        | packages/server/src/http.ts    | 2           | ported | G3.bots |
+| route POST /api/bots/:provider/:botId | packages/server/src/http.ts    | 2           | ported | G3.bots |
+| route GET /ws/remote/:id              | packages/server/src/http.ts    | 2           | todo   | —       |
+| route GET \*                          | packages/server/src/http.ts    | 2           | todo   | —       |
+| route GET /api/auth/session           | packages/server/src/webAuth.ts | 2           | todo   | —       |
+| route POST /api/auth/login            | packages/server/src/webAuth.ts | 2           | todo   | —       |
+| route POST /api/auth/logout           | packages/server/src/webAuth.ts | 2           | todo   | —       |
 
 ## Totals
 
 - items: 268
-- ported: 37
-- todo: 231
+- ported: 40
+- todo: 228
