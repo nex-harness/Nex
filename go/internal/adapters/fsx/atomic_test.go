@@ -253,6 +253,12 @@ func TestFaultInjectorDisabled(t *testing.T) {
 
 // TestAtomicWriteConcurrent is the two-writers race: with the lock file, both
 // writes complete and the final content is exactly one of them — never a mix.
+// TestAtomicWriteConcurrent is the two-writers race: with the lock file, both
+// writes complete and the final content is exactly one of them — never a mix.
+//
+// 修复依据：并发写者的锁等待时间不是常数，gate 全量并跑几十个测试包时
+// 临界区会被抢占拉长，8s 默认超时在高负载下不足。本测试显式给足余量，
+// 不改变产品的默认锁等待语义。
 func TestAtomicWriteConcurrent(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "shared.json")
@@ -262,7 +268,7 @@ func TestAtomicWriteConcurrent(t *testing.T) {
 	for i := 0; i < writers; i++ {
 		go func(i int) {
 			content := strings.Repeat(string(rune('a'+i)), 2048)
-			done <- AtomicWriteText(ctx, target, content, nil)
+			done <- AtomicWriteText(ctx, target, content, &AtomicWriteOptions{LockMaxWait: 60 * time.Second})
 		}(i)
 	}
 	for i := 0; i < writers; i++ {

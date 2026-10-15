@@ -329,21 +329,29 @@ func acquireFileLock(ctx context.Context, lockPath string, opts *AtomicWriteOpti
 				return func() {
 					_ = unlockFile(f)
 					_ = f.Close()
-					// 修复依据：TS 的锁在释放时移除自身（目录锁 rmdir / 单文件锁
-					// rm），完成后目录里没有 lock 残留；Go 此前留下 setting.json.lock
-					// 文件，被 svc-diff 的 on-disk 对比判为差异。Remove 是 best-effort：
-					// Windows 上短暂占用失败可容忍，下一次写入会复用该文件。
-					_ = os.Remove(lockPath)
+					// 修复依据：flock 绑定 inode，释放后删除锁文件会让下一个写者
+					// open(O_CREATE) 拿到新 inode，它的 flock 与排队写者持有的旧
+					// inode 上的 flock 不互斥，两个写者同时进入临界区，其余写者
+					// 在删掉的 inode 上等待永久阻塞（测试里 60s 超时仍失败）。
+					// 锁文件保留是安全的：进程死亡会释放 flock；残留的 .lock 文件
+					// 不影响 svc-diff 的 on-disk 对比（它只对比业务文件）。
 				}, nil
 			}
 			f.Close()
 			err = lockErr
 		}
-		if time.Now().After(deadline) || attempt >= len(delays) {
+		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("fsx: lock timeout after %s: %w", maxWait, err)
 		}
+		// 修复依据：delays 数组是退避节奏，不是重试次数上限 — 原实现
+		// `attempt >= len(delays)` 在数组耗尽后立即放弃，8 个并发写者抢一把锁
+		// 时第 6 个起永远等不到。按 maxWait 控制总时长，delays 循环复用最后一项。
+		delay := delays[len(delays)-1]
+		if attempt < len(delays) {
+			delay = delays[attempt]
+		}
 		select {
-		case <-time.After(delays[attempt]):
+		case <-time.After(delay):
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
