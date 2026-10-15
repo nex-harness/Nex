@@ -110,22 +110,41 @@ func TestPetsSpritesheetUnreadableBody(t *testing.T) {
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("status = %d", response.Code)
 	}
-	// for the unreadable path: valid scan, then delete the file between the
-	// scan and the read.
-	dir3 := writeRoutePet(t, root, "cat3", `{"id":"cat3"}`)
-	// force the scan to succeed and cache
-	response3 := httptest.NewRecorder()
-	handler.ServeHTTP(response3, httptest.NewRequest(http.MethodGet, "/api/pets/cat3/spritesheet", nil))
-	if response3.Code != http.StatusOK {
-		t.Fatalf("first fetch status = %d", response3.Code)
+	// "Spritesheet unreadable" 覆盖的是「路径解析成功但读取失败」这一段：真实的
+	// pets service 会先 stat 并校验 spritesheet，文件缺失时根本不会解析出路径
+	// （走上面的 "Pet not found"）。所以这一段必须用 PetsService seam 直接给出
+	// 一个指向不可读目标的路径，否则测的是 scan 而不是 route 的读失败分支。
+	unreadable := t.TempDir()
+	target := filepath.Join(unreadable, "spritesheet.webp")
+	if err := os.WriteFile(target, []byte("x"), 0o000); err != nil {
+		t.Fatal(err)
 	}
-	os.Remove(filepath.Join(dir3, "spritesheet.webp"))
+	t.Cleanup(func() { _ = os.Chmod(target, 0o644) })
+	if _, err := os.ReadFile(target); err == nil && os.Geteuid() == 0 {
+		t.Skip("running as root: file permissions do not block the read")
+	}
+	failing := &stubPetsService{path: target}
+	failingMux := http.NewServeMux()
+	failingMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if !servePetsSpritesheet(failing, w, r) {
+			writeNotFound(w)
+		}
+	})
 	response4 := httptest.NewRecorder()
-	handler.ServeHTTP(response4, httptest.NewRequest(http.MethodGet, "/api/pets/cat3/spritesheet", nil))
-	// cached scan still resolves the path; the read now fails → unreadable
+	failingMux.ServeHTTP(response4, httptest.NewRequest(http.MethodGet, "/api/pets/cat3/spritesheet", nil))
 	if response4.Code != http.StatusNotFound || response4.Body.String() != `{"error":"Spritesheet unreadable"}` {
 		t.Fatalf("status = %d body = %q", response4.Code, response4.Body.String())
 	}
+}
+
+// stubPetsService resolves a pet id to a fixed path (or nil).
+type stubPetsService struct{ path string }
+
+func (s *stubPetsService) GetPetSpritesheetPath(_ string) *struct{ Path string } {
+	if s.path == "" {
+		return nil
+	}
+	return &struct{ Path string }{Path: s.path}
 }
 
 func TestPetsServiceUnavailableBody(t *testing.T) {

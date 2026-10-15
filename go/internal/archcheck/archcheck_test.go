@@ -61,6 +61,17 @@ var ioAllowedOutsideAdapters = map[string]string{
 	// osAllowedOutsideAdapters. Kept in the same tier as settingssync's
 	// HTTP-facing services.
 	"internal/services/modelprovider": "models.dev catalog + provider /models fetch (step 3.6)",
+	// conversation-share (step 3.8) performs its own HTTP: the TS service calls
+	// the share API directly through ConversationShareHttpClient (preparation,
+	// artifact upload, confirm, preview, continuation) and downloads artifact
+	// bytes on import. The client is the injected transport seam; the endpoint
+	// list and the error-kind mapping are the contract.
+	"internal/services/conversationshare": "conversation-share calls the share API + downloads artifacts itself (step 3.8)",
+	// process telemetry (step 3.8) reads the whole-machine process table, which
+	// on macOS/Windows means spawning ps / powershell — there is no in-process
+	// alternative, and hiding it behind an adapter would only obscure which
+	// platform path is taken.
+	"internal/services/processtelemetry": "process telemetry runs ps/powershell for the machine process table (step 3.8)",
 }
 
 var osAllowedOutsideAdapters = map[string]string{
@@ -146,6 +157,27 @@ var osAllowedOutsideAdapters = map[string]string{
 	"internal/services/pluginmgmt": "plugin management reads the plugin storage roots (step 3.7)",
 	"internal/services/pluginsync": "plugin-sync extracts archives and writes staging dirs (step 3.7)",
 	"internal/services/mcpsync":    "mcp-sync owns the mcp.servers/mcp.json user configs (step 3.7)",
+	// The peripheral tier (step 3.8) is the same "service IS the I/O boundary"
+	// case again, in four flavors:
+	//
+	//  - pets / feedback / storage / promptattachment are disk-stateful: the pet
+	//    directory scan and spritesheet resolution, the feedback local ticket
+	//    store and diagnostic log archive, the storage scan/clean walk over the
+	//    data dir, and the prompt attachment staging dir are their contracts.
+	//  - conversation-share additionally owns an outbound HTTP client: the TS
+	//    service performs the fetch itself (ConversationShareHttpClient), so the
+	//    client is the injected seam and the endpoint list is the contract. Its
+	//    artifact source resolves workspace-relative paths under the workspace
+	//    root, which is why it also holds os.
+	//  - process telemetry reads /proc (Linux) and shells out to ps/powershell
+	//    (macOS/Windows): the whole-machine process table IS its contract, and
+	//    there is no adapter that could own it without hiding the platform.
+	"internal/services/pets":              "pets scans the pet directory and resolves spritesheet paths (step 3.8)",
+	"internal/services/feedback":          "feedback owns the local ticket store and writes the diagnostic log archive (step 3.8)",
+	"internal/services/storage":           "storage scan/clean walk over the data dir is the service's contract (step 3.8)",
+	"internal/services/promptattachment":  "prompt attachment transfer stages files in its own directories (step 3.8)",
+	"internal/services/conversationshare": "conversation-share reads workspace artifacts and calls the share API itself (step 3.8)",
+	"internal/services/processtelemetry":  "process telemetry reads /proc and the ps/powershell table (step 3.8)",
 }
 
 func goFiles(t *testing.T, root string) []string {

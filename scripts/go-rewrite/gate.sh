@@ -329,7 +329,19 @@ gate3() {
     bash -c 'cd go && go test -race -count=1 ./internal/services/hooktrust/'
   check G3.memory "knowledge extensions: memory (Project Memory catalog + stable read) and commands (step 3.7)" \
     bash -c 'cd go && go test -race -count=1 ./internal/services/memory/ ./internal/services/commands/'
-  todo G3.peripheral "peripheral services (step 3.8)"
+  # G3.peripheral (step 3.8): the peripheral tier. Pets (manifest/image
+  # parsing, grid tiling, path confinement), conversation-share (canonical-JSON
+  # digests against Node-computed vectors, the cross-RPC redaction boundary,
+  # the projection's identity re-minting, the publish/upload/preflight flow
+  # against loopback httptest servers only, and the local artifact source's
+  # symlink containment), prompt-attachment transfer, feedback (redaction +
+  # the local ticket store + the diagnostic log archive), usage-stats, storage
+  # (domain/app/adapters, scan accuracy), the shared feedbackprivacy redaction
+  # vectors, and process telemetry (/proc parsing, the CPU differential with
+  # its PID-reuse guard, the Host descendant attribution, and a live Linux
+  # child-process tree).
+  check G3.peripheral "peripheral services: pets, conversation-share, prompt-attachment, feedback, usage-stats, storage, process telemetry (step 3.8)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/services/pets/ ./internal/services/conversationshare/ ./internal/services/promptattachment/ ./internal/services/feedback/ ./internal/services/usagestats/ ./internal/services/storage/ ./internal/services/processtelemetry/ ./internal/feedbackprivacy/' 
   todo G3.bots "bots (step 3.9)"
   todo G3.agentbridge "agent bridge (step 3.10)"
 }
