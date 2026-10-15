@@ -264,3 +264,30 @@ func (g *graceTimer) stop() {
 // is why node-execution-adapter-process.ts treats win32 stop state separately
 // from `stop.killed || state.signal`.
 func exitedSignal(*os.ProcessState) string { return "" }
+
+// processRunning reports whether pid is still running.
+//
+// The Windows equivalent of the Unix signal-0 probe is an OpenProcess handle plus
+// the process exit code: STILL_ACTIVE (259) means the process has not exited. A
+// pid that cannot be opened at all (it is gone, or it belongs to another user's
+// protected process) is reported as NOT running, because the watcher's only job is
+// to release the stdin reader once the child can no longer consume anything.
+func processRunning(pid int) bool {
+	if pid <= 1 {
+		return false
+	}
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return false
+	}
+	defer windows.CloseHandle(handle)
+	var code uint32
+	if err := windows.GetExitCodeProcess(handle, &code); err != nil {
+		return false
+	}
+	return code == stillActive
+}
+
+// stillActive is the exit code Windows reports for a process that has not exited
+// (STILL_ACTIVE). It is a Windows constant with no x/sys/windows spelling.
+const stillActive = 259

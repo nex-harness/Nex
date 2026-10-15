@@ -82,3 +82,16 @@ func killProcessTree(ctx context.Context, pid int, grace time.Duration) error {
 	}
 	return errors.Join(termErr, signalProcessTree(ctx, pid, killSignal))
 }
+
+// stdinReleaseMaxWait bounds how long the stdin-release watcher polls. It is a
+// backstop only: the watcher normally stops as soon as the process leaves the
+// table, and a caller that owns a long-lived child closes its own stdin. A watcher
+// that could poll forever would be a goroutine leak, which is worse than a stdin
+// that is released late.
+const stdinReleaseMaxWait = 30 * time.Second
+
+// stdinReleasePollInterval is how often the stdin-release watcher asks whether the
+// child is still running. It matches the process-table poll cadence used by the
+// kill path: short enough that a released stdin is not observable as a delay,
+// long enough not to spin.
+const stdinReleasePollInterval = 25 * time.Millisecond

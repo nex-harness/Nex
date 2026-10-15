@@ -355,6 +355,10 @@ gate3() {
   # the Weixin AES-128-ECB CDN decrypt round trip.
   check G3.bots "bots: IBotsService + POST /api/bots/* (status contract, secrets, dedupe, telegram offset discipline, parser table, formatter goldens) (step 3.9)" \
     bash -c 'cd go && go test -race -count=1 ./internal/services/bots/ ./internal/server/' 
+  # G3.10.1: the agent process manager — spawn via GLM_BINARY_PATH resolution,
+  # per-workspace residency keyed by workspaceKey, exec-adapter tree kill, idle
+  # reclaim, runtime epoch, stderr lifecycle logging.
+  check G3.agentproc "agent process manager: spawn, residency, tree kill (step 3.10.1)" bash -c 'cd go && go test -race -count=1 ./internal/agentproc/'
   todo G3.agentbridge "agent bridge (step 3.10)"
 }
 

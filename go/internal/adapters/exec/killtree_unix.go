@@ -199,3 +199,13 @@ func (s Signal) sysSignal() syscall.Signal {
 	}
 	return syscall.SIGTERM
 }
+
+// processRunning reports whether pid is still in the process table. Signal 0
+// performs the permission and existence checks without delivering anything:
+// ESRCH means the process is gone, EPERM means it exists but is not ours.
+func processRunning(pid int) bool {
+	if pid <= 1 {
+		return false
+	}
+	return !errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
+}

@@ -47,7 +47,10 @@ func ioPathAllowed(relDir string) bool {
 		strings.HasPrefix(relDir, "internal/adapters/") ||
 		relDir == "internal/server" ||
 		strings.HasPrefix(relDir, "internal/server/") ||
-		relDir == "internal/gateway"
+		relDir == "internal/gateway" ||
+		// internal/agentproc/fakeagent is a test helper binary (a tiny process the
+		// process-manager tests spawn and kill); os/exec is its whole job.
+		relDir == "internal/agentproc/fakeagent"
 }
 
 // osAllowedOutsideAdapters lists packages that may import "os" even though they
@@ -111,6 +114,13 @@ var osAllowedOutsideAdapters = map[string]string{
 	// os usage here is the same tier-1 "the service IS the I/O boundary" case.
 	"internal/services/git":           "git services stage/restore working-tree files (step 3.3)",
 	"internal/services/gitcheckpoint": "checkpoint store writes manifests atomically (step 3.3)",
+	// internal/agentproc (step 3.10.1) is the process manager boundary: it reads
+	// the agent binary path from env/filesystem (GLM_BINARY_PATH resolution,
+	// bundled-agents dirs) and builds the child process env. The actual spawn and
+	// tree kill stay in internal/adapters/exec; the os usage here is path probing
+	// and env capture, same tier as internal/services/paths.
+	"internal/agentproc":           "agent process manager: binary path + env probing (step 3.10.1)",
+	"internal/agentproc/fakeagent": "test helper binary; os/exec is its job (step 3.10.1)",
 	// The settings family (step 3.5) owns local state files whose paths ARE
 	// the contract: settingService reads/quarantines setting.json and copies
 	// the whole data directory on updateDataBaseDir; the onboarding record and

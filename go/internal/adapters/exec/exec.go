@@ -54,7 +54,9 @@ type Options struct {
 	Dir string
 	// Env is the child environment; nil inherits the parent environment.
 	Env []string
-	// Stdin is optional; nil closes the child's stdin immediately.
+	// Stdin is optional; nil closes the child's stdin immediately. A non-nil value
+	// that is not an *os.File is serviced by a copier goroutine, which the adapter
+	// unblocks by closing it once the child is gone (see Process.releaseStdinOnExit).
 	Stdin io.Reader
 
 	// MaxOutputBytes caps the inline output kept per stream (0 ->
@@ -75,6 +77,14 @@ type Options struct {
 	// collected for everyone else. Lines are dropped if the receiver falls behind,
 	// because a full pipe must never block the child.
 	StdoutLines chan<- string
+
+	// StderrLines mirrors StdoutLines for the stderr stream: every complete line
+	// the child writes to stderr, in order, while it is still running. It exists
+	// for the agent process manager, which must parse a crash diagnostic and
+	// report it even though the process keeps running afterwards; a retained
+	// buffer alone cannot do that. Lines are dropped if the receiver falls behind,
+	// because a full pipe must never block the child.
+	StderrLines chan<- string
 }
 
 func (o Options) normalized() Options {
@@ -133,6 +143,10 @@ type Process struct {
 	// terminated records that KillTree ran, so the platform hook can tell a
 	// cancelled process (kill the whole job) from one that exited on its own.
 	terminated atomic.Bool
+	// stdinSource is the caller-supplied stdin reader, kept so it can be closed
+	// once the child is gone (see releaseStdinOnExit). Nil when the caller passed
+	// no stdin or an *os.File, which os/exec hands straight to the child.
+	stdinSource io.Reader
 	// treeErr is the Windows job-assignment failure kept for the taskkill
 	// fallback; it is nil on Unix, where Setpgid cannot fail.
 	treeErr error
@@ -157,16 +171,20 @@ func Start(ctx context.Context, opts Options) (*Process, error) {
 	cmd.Env = o.Env
 	cmd.Stdin = o.Stdin
 	p := &Process{
-		cmd:       cmd,
-		stdout:    NewOutputCollector(o.MaxOutputBytes, o.MaxTailBytes),
-		stderr:    NewOutputCollector(o.MaxOutputBytes, o.MaxTailBytes),
-		termGrace: o.TermGrace,
-		done:      make(chan struct{}),
-		killDone:  make(chan struct{}),
-		watchCtx:  ctx,
+		cmd:         cmd,
+		stdinSource: o.Stdin,
+		stdout:      NewOutputCollector(o.MaxOutputBytes, o.MaxTailBytes),
+		stderr:      NewOutputCollector(o.MaxOutputBytes, o.MaxTailBytes),
+		termGrace:   o.TermGrace,
+		done:        make(chan struct{}),
+		killDone:    make(chan struct{}),
+		watchCtx:    ctx,
 	}
 	if o.StdoutLines != nil {
 		p.stdout.SetLineSink(o.StdoutLines)
+	}
+	if o.StderrLines != nil {
+		p.stderr.SetLineSink(o.StderrLines)
 	}
 	cmd.Stdout = p.stdout
 	cmd.Stderr = p.stderr
@@ -257,6 +275,15 @@ func (p *Process) watchCancellation(ctx context.Context) {
 // waitLoop reaps the child, publishes the Result and releases the platform
 // resources the tree was holding.
 func (p *Process) waitLoop() {
+	// The stdin copier must be released as soon as the PROCESS is gone, not after
+	// cmd.Wait returns: cmd.Wait does not return until that copier finishes, so
+	// waiting first would deadlock whenever the child dies on its own while the
+	// caller still holds its stdin open (a crash). A goroutine armed here watches
+	// for the process to leave the table and closes the caller's reader, which makes
+	// the copier's blocked Read return.
+	if p.stdinSource != nil {
+		go p.releaseStdinOnExit()
+	}
 	waitErr := p.cmd.Wait()
 	state := p.cmd.ProcessState
 	res := Result{PID: p.pid, Stdout: p.stdout.Result(), Stderr: p.stderr.Result(), WaitErr: waitErr}
@@ -271,4 +298,42 @@ func (p *Process) waitLoop() {
 	// in it, which is only wanted when the tree was cancelled (releaseProcessTree
 	// drops the limit flag first on a normal exit).
 	releaseProcessTree(p.pid, p.terminated.Load())
+}
+
+// releaseStdinOnExit closes the caller's stdin reader once the child is no longer
+// running, so os/exec's stdin copier can finish and cmd.Wait can return.
+//
+// os/exec's own WaitDelay does not cover this: it bounds the time spent draining
+// the child's OUTPUT pipes after the exit, not a reader whose Read is blocked and
+// will never return on its own.
+func (p *Process) releaseStdinOnExit() {
+	ticker := time.NewTicker(stdinReleasePollInterval)
+	defer ticker.Stop()
+	deadline := time.NewTimer(stdinReleaseMaxWait)
+	defer deadline.Stop()
+	for {
+		if !processRunning(p.pid) {
+			p.closeStdin()
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			// Give up rather than poll forever; a child that outlives the wait is
+			// not this goroutine's problem, and the caller's own dispose closes it.
+			p.closeStdin()
+			return
+		case <-p.done:
+			p.closeStdin()
+			return
+		}
+	}
+}
+
+// closeStdin releases the caller's stdin reader once it is no longer useful. It is
+// safe to call more than once.
+func (p *Process) closeStdin() {
+	if closer, ok := p.stdinSource.(io.Closer); ok {
+		_ = closer.Close()
+	}
 }
