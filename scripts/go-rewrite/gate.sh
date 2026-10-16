@@ -359,6 +359,16 @@ gate3() {
   # per-workspace residency keyed by workspaceKey, exec-adapter tree kill, idle
   # reclaim, runtime epoch, stderr lifecycle logging.
   check G3.agentproc "agent process manager: spawn, residency, tree kill (step 3.10.1)" bash -c 'cd go && go test -race -count=1 ./internal/agentproc/'
+  # G3.protoclient (step 3.10.2): the host side of the agent protocol. The
+  # TopicWireFrameAssembler against the 25 vectors recorded from the TypeScript
+  # assembler (go/testdata/vectors/wire.json assemblyCases, 14 distinct fault
+  # reasons, ordinals, supersede and timeout rules), the request/response client
+  # (correlation by id, out-of-order answers, per-call timeout, cancellation,
+  # observation/business timeout split, close), the startup/storageState gate, the
+  # interaction/* routing seam, capability negotiation, and a live round trip
+  # against the REAL Go agent binary (built on demand into a temp dir) plus the
+  # goroutine-leak delta check.
+  check G3.protoclient "protocol client + wire assembler (step 3.10.2)" bash -c 'cd go && go test -race -count=1 ./internal/agentproc/proto/'
   todo G3.agentbridge "agent bridge (step 3.10)"
 }
 

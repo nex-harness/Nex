@@ -73,11 +73,18 @@ func (c *Client) IsAlive() bool {
 func (c *Client) Exited() <-chan struct{} { return c.proc.exitedSignal() }
 
 // ExitInfo returns the observed terminal state once the process has exited.
+//
+// It waits on the broadcast exit signal and then reads the published state under
+// the child's lock, rather than receiving from child.exited: that channel carries
+// the value but nothing ever sends on it (the exit observer publishes into the
+// locked fields and closes the broadcast signal), so receiving from it blocked
+// forever. Fixing that here rather than at the call site keeps every future
+// consumer on the working path.
 func (c *Client) ExitInfo() ExitInfo {
 	if c == nil || c.proc == nil {
 		return ExitInfo{}
 	}
-	return <-c.proc.exited
+	return c.proc.WaitExit()
 }
 
 // Dispose requests the graceful close (stdin EOF, bounded wait, then tree kill).

@@ -101,8 +101,9 @@
 - [x] **3.9** Tier 6a bots:`IBotsService` + `/api/bots/*` — `G3.bots` PASS(2026-10-15):`go/internal/services/bots`(@nex/shared 合约类型、commandParser/commandOrder 表、reply formatter + tool-call summary + permission preview、`bot-config.v3.json`/`bot-state.v3.json` 仓库与 legacy 迁移、webhook/telegram/feishu/lark/weixin 五个 provider adapter、Telegram 长轮询 runtime 与游标纪律、回调管道与入站幂等层、SessionBridge 接缝)+ `go/internal/server/botsroute.go`(两条 POST 路由)。库选型见 decisions.md:飞书/微信/Telegram 全部 raw HTTP(TS 侧也只有手写 fetch;微信无任何公开 SDK),Go SDK 与 WebSocket 长连接一起留到 Phase 4 再评估。会话腿走 `bots.SessionBridge` 接缝,由 3.10 填充,不阻塞本步
   - ⚠️ `G3.0.test`(`go test -race ./...`)在本机有既有 flake,与本步无关:`TestRuntimeEndToEndPersonalProvider`(modelprovider)在全量并行下偶发失败,`TestAtomicWriteConcurrent`(fsx)在干净树上也偶发失败;两个包单独跑 5 次均稳定通过
 - [ ] **3.10** Tier 6b agent bridge（关键路径，9 个子步骤）
-  - [ ] 3.10.1 Process manager
-  - [ ] 3.10.2 Protocol client（含 `TopicWireFrameAssembler` 移植，25 个 assembler 向量已生成）
+  - [x] 3.10.1 Process manager — `G3.agentproc` PASS:`go/internal/agentproc`(spawn/residency/tree kill/idle reclaim/epoch/stderr 诊断)+ `fakeagent` 测试二进制
+  - [x] 3.10.2 Protocol client — `G3.protoclient` PASS(2026-10-16):`go/internal/agentproc/proto`。`TopicWireFrameAssembler` 移植(25 个 assembler 向量逐条比对 TS 记录,14 种 fault reason、ordinal/supersede/timeout 规则);协议 client(按 id 关联、乱序应答、每请求超时、取消、observation 与业务请求的回收事件区分、transport close);`startup/storageState` gate;`interaction/*` 路由接缝(默认 method-not-found);`runtime/capabilities` 协商(正结果缓存、负结果不缓存);对**真实 Go agent 二进制**的往返测试(S01 握手形态 + 未知名 method 的 -32601 + gate 释放 + 并发关联);goroutine 泄漏 delta 检查
+    - 顺带修掉 3.10.1 的一个真实缺陷:`agentproc.Client.ExitInfo()` 原本从 `child.exited`(无人写入的 channel)接收,任何调用者都会永久阻塞;改为 `child.WaitExit()`(等广播信号后持锁读已发布状态)
   - [ ] 3.10.3 V4 connection scope facade
   - [ ] 3.10.4 Task index & syncer
   - [ ] 3.10.5 Task service adapter(owner/lease、跨 Host 路由、stale-run 防护）
