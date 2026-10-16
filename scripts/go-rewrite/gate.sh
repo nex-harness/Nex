@@ -369,6 +369,30 @@ gate3() {
   # against the REAL Go agent binary (built on demand into a temp dir) plus the
   # goroutine-leak delta check.
   check G3.protoclient "protocol client + wire assembler (step 3.10.2)" bash -c 'cd go && go test -race -count=1 ./internal/agentproc/proto/'
+  # G3.connscope (step 3.10.3): the V4 connection-scoped service facade, one per
+  # accepted WebSocket. The suite is the port of nexAgentConnectionScope.ts and its
+  # comment-described past bugs, one test each: the hello → clientHello handshake
+  # (hello required before initialize, a client that changes mid-connection, the
+  # strict clientHello parse) across BOTH client modes x BOTH roles; the
+  # workflowRunDeltas capability negotiated as a CONNECTION fact with every
+  # caller-supplied delta bit stripped; frame routing by (connectionId, topic) with
+  # concurrent connections proving no cross-delivery and no loss; the ACK-race
+  # staging window (early frames released in arrival order, only for the acked
+  # subscription id, whole-batch overflow failure, late-ACK reverse unsubscribe);
+  # runtime-generation invalidation (available is NOT a boundary, unavailable IS,
+  # a late ACK is refused WITHOUT unsubscribing the new runtime); the
+  # unsubscribe route pinning and the terminal no-guess rule; flow control per
+  # V4ConnectionFlowState (terminal forbidden, untrusted downstream refused,
+  # unowned route refused, edge order preserved, close is terminal, saturated
+  # replayed on subscribe, last subscription closes before unsubscribing, late
+  # attachment begin aborted); the trusted-carrier strip of every forgeable field;
+  # the command/query rules (clientId mismatch refused, clock probe exempt from the
+  # workspace pin); interaction/* routing to the owning connection with
+  # method-not-found when none is live; disposal tearing down every owned
+  # subscription and leaving other connections untouched; and the goroutine-leak
+  # delta check over every pump exit path.
+  check G3.connscope "V4 connection scope: handshake, ownership, flow control, disposal, interaction routing (step 3.10.3)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/services/agentscope/'
   todo G3.agentbridge "agent bridge (step 3.10)"
 }
 
