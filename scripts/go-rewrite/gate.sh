@@ -458,6 +458,35 @@ gate3() {
   #     50-command FIFO under concurrent drains, and the goroutine-leak delta.
   check G3.taskadapter "task service adapter: owner/lease, cross-host routing, stale-run, queue, pending state (step 3.10.5)" \
     bash -c 'cd go && go test -race -count=1 ./internal/services/taskadapter/'
+  # G3.windowcontroller (step 3.10.6): IWindowControllerService + the server
+  # variant's per-connection attachment. The guard inventory is
+  # docs/specs/go-rewrite/phase-3-guards.md § "Step 3.10.6".
+  #   - topics (W1-W4): the two topics carry INDEPENDENT cursors, subscribe
+  #     delivers the snapshot before the ack, an empty delta batch publishes
+  #     nothing (no phantom gap), and a remote reconnect that changes
+  #     remoteSessionId publishes old removals + new upserts in ONE frame.
+  #   - projection (W5-W11): liveStatus comes only from the live overlay (a
+  #     persisted running status is not a live fact), a disconnect FREEZES the
+  #     rows instead of dropping them, a failed read keeps the last trusted
+  #     snapshot, the membership buckets partition, local and remote rows with
+  #     the same id stay separate, an unresolvable scope fails closed, and a
+  #     remote scope without an identity is refused.
+  #   - refresh and writes (W12-W19): the read is single-flight, a write routes
+  #     to the source and converges the projection, delete returns no meta,
+  #     open/resume are not writes, an offline source refuses writes, a batch
+  #     naming a replaced source is refused, search is per source and one
+  #     source's failure does not empty the answer, and sort+limit are total.
+  #   - per-connection boundary (C1-C10): two connections get separate
+  #     subscriptions over shared rows, disposing one removes only its own ids,
+  #     a disposed connection receives nothing and refuses every entry point, a
+  #     foreign unsubscribe is a no-op, runtime dispose releases everything,
+  #     removing a source stops its observer, 16 concurrent connections leave no
+  #     attachment or subscription behind, and 50 connect/dispose rounds leave no
+  #     goroutine growth.
+  #   The suite runs -race: the parallel-refresh cursor advance is a real race
+  #   the TypeScript cannot have, and it was found here rather than by review.
+  check G3.windowcontroller "window controller: two topics, frozen offline projection, per-connection attachment, single-flight refresh (step 3.10.6)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/services/windowcontroller/'
   todo G3.agentbridge "agent bridge (step 3.10)"
 }
 
