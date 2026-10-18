@@ -1,0 +1,30 @@
+[
+ {
+  "automation_id": "g1",
+  "model_selection": "{\"providerId\":\"account:zai-start-plan\",\"modelId\":\"GLM-5.3\"}"
+ },
+ {
+  "automation_id": "g2",
+  "model_selection": "{\"providerId\":\"account:bigmodel-individual-coding-plan\",\"modelId\":\"GLM-4.6V\"}"
+ },
+ {
+  "automation_id": "g3",
+  "model_selection": "{\"providerId\":\"openai\",\"modelId\":\"glm-5.3\"}"
+ },
+ {
+  "automation_id": "g4",
+  "model_selection": "{\"providerId\":\"account:zai-start-plan\",\"modelId\":\"GLM-4.7-FlashX\"}"
+ },
+ {
+  "automation_id": "g5",
+  "model_selection": "not json"
+ },
+ {
+  "automation_id": "g6",
+  "model_selection": "{\"providerId\":\"account:bigmodel-team-coding-plan\",\"modelId\":\"GLM-4-Flash-250414\"}"
+ },
+ {
+  "automation_id": "g7",
+  "model_selection": "null"
+ }
+]

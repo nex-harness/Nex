@@ -393,6 +393,41 @@ gate3() {
   # delta check over every pump exit path.
   check G3.connscope "V4 connection scope: handshake, ownership, flow control, disposal, interaction routing (step 3.10.3)" \
     bash -c 'cd go && go test -race -count=1 ./internal/services/agentscope/'
+  # G3.taskindex (step 3.10.4): the task index store, repository and syncer.
+  # The suite is the port of tasksDatabase/{schema-v1,migrations,provider-selection-v2,
+  # official-glm-selection-v3,startup}.ts + taskIndexRepo.ts + nexTaskIndexSyncer.ts:
+  #   - migrations: every recorded Node version (v0001, v0002, fresh) migrates to
+  #     a byte-identical sqlite_master and ledger; a second open executes nothing;
+  #     a tampered checksum and a ledger from a newer build are both refused; a
+  #     failed migration rolls the whole run back; concurrent opens serialize.
+  #   - the two code-level migrations are checked against Node's row-level output:
+  #     the frozen 0002 legacy-selection decoding and the 0003 GLM rename, plus the
+  #     scheduled_run_count backfill and the duplicate-binding retention policy.
+  #   - repo: remote identity isolation on a shared path, the primary key winning
+  #     over a stale identity column, monotonic updatedAt, no terminal-status
+  #     rewind, manual titles preserved, indexed body preserved by agent patches,
+  #     strictly increasing unread markers, conditional clear, atomic tombstone,
+  #     one-shot system grouping, one-shot grouped order, serialized concurrent
+  #     writes, archive sweep selectivity.
+  #   - syncer: the silent baseline (no broadcast, no terminal replay), terminal
+  #     transition → status patch + reason + unread signal + terminal/ready order,
+  #     title changes, gap → same-sub resync from the proven base, no base → forced
+  #     snapshot, duplicate/foreign/wrong-topic frames dropped, assembly fault →
+  #     recovery, drafts never mirrored, session.removed keeps the row, recovery
+  #     snapshot re-diffs, stale online snapshot dropped, provider-not-ready /
+  #     transient / runtime-unavailable paths, runtime restart resubscribe, no
+  #     runtime → no subscribe, dispose stops everything.
+  check G3.taskindex "task index store, repo and syncer (step 3.10.4)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/adapters/taskindex/ ./internal/services/taskindex/'
+  # G3.taskindexx (step 3.10.4): the cross-engine check from step 1.3, applied to
+  # tasks-index.sqlite. Node and Go must create identical schemas and ledgers,
+  # open each other's database without migrating, and read each other's rows.
+  if have node && [ -x node_modules/.bin/tsx ] && have go; then
+    check G3.taskindexx "Node/Go create byte-identical task-index databases and open each other's" \
+      node scripts/go-rewrite/crosscheck-taskindex.mjs
+  else
+    skip G3.taskindexx "task index cross-engine check" "node/tsx/go not available"
+  fi
   todo G3.agentbridge "agent bridge (step 3.10)"
 }
 

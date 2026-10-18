@@ -1,0 +1,17 @@
+[
+ {
+  "id": "0001_adopt_task_schema",
+  "checksum": "3e8337b015d94b05dd31a6003f3acc649e821794cfa288bc0af3022698bd4d17",
+  "time_applied": 1792334476746
+ },
+ {
+  "id": "0002_provider_selection",
+  "checksum": "7244ef7c351f8d02750ab1953fff09f493a71befbf1b6e2d4bab726b0c6b48fc",
+  "time_applied": 1792334476746
+ },
+ {
+  "id": "0003_official_glm_selection",
+  "checksum": "8987adb50ae412a46c294141c1af89ccfc252f22d41351bdf4c7528f56edc8b4",
+  "time_applied": 1792334476746
+ }
+]

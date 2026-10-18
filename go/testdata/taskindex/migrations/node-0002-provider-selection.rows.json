@@ -1,0 +1,46 @@
+[
+ {
+  "automation_id": "a1",
+  "model_selection": "{\"providerId\":\"zai-api\",\"modelId\":\"GLM-5.3\"}"
+ },
+ {
+  "automation_id": "a10",
+  "model_selection": "{\"providerId\":\"account:bigmodel-start-plan\",\"modelId\":\"GLM-5.1\"}"
+ },
+ {
+  "automation_id": "a11",
+  "model_selection": "{\"providerId\":\"anthropic\",\"modelId\":\"claude-x$\"}"
+ },
+ {
+  "automation_id": "a2",
+  "model_selection": "{\"providerId\":\"openai\",\"modelId\":\"gpt-4o\",\"options\":{\"reasoningLevel\":\"high\"}}"
+ },
+ {
+  "automation_id": "a3",
+  "model_selection": null
+ },
+ {
+  "automation_id": "a4",
+  "model_selection": "null"
+ },
+ {
+  "automation_id": "a5",
+  "model_selection": "null"
+ },
+ {
+  "automation_id": "a6",
+  "model_selection": "{\"providerId\":\"my prov\",\"modelId\":\"my:model\",\"options\":{\"reasoningLevel\":\"low\"}}"
+ },
+ {
+  "automation_id": "a7",
+  "model_selection": null
+ },
+ {
+  "automation_id": "a8",
+  "model_selection": "{\"providerId\":\"zai-api\",\"modelId\":\"plain-model\"}"
+ },
+ {
+  "automation_id": "a9",
+  "model_selection": "{\"providerId\":\"prov\",\"modelId\":\"model$\"}"
+ }
+]

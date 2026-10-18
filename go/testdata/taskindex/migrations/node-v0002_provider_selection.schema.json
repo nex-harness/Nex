@@ -1,0 +1,140 @@
+[
+ {
+  "type": "index",
+  "name": "idx_automation_runs_by_automation",
+  "tbl_name": "automation_runs",
+  "sql": "CREATE INDEX idx_automation_runs_by_automation\n      ON automation_runs (automation_id, created_at DESC)"
+ },
+ {
+  "type": "index",
+  "name": "idx_automations_due",
+  "tbl_name": "automations",
+  "sql": "CREATE INDEX idx_automations_due\n      ON automations (enabled, next_run_at)"
+ },
+ {
+  "type": "index",
+  "name": "idx_automations_retry",
+  "tbl_name": "automations",
+  "sql": "CREATE INDEX idx_automations_retry\n      ON automations (enabled, retry_at)"
+ },
+ {
+  "type": "index",
+  "name": "idx_automations_target_task",
+  "tbl_name": "automations",
+  "sql": "CREATE INDEX idx_automations_target_task ON automations(target_task_id) WHERE target_task_id IS NOT NULL"
+ },
+ {
+  "type": "index",
+  "name": "idx_automations_workspace",
+  "tbl_name": "automations",
+  "sql": "CREATE INDEX idx_automations_workspace\n      ON automations (workspace_key)"
+ },
+ {
+  "type": "index",
+  "name": "idx_off_peak_bound_active",
+  "tbl_name": "off_peak_tasks",
+  "sql": "CREATE UNIQUE INDEX idx_off_peak_bound_active ON off_peak_tasks(workspace_key,session_id) WHERE session_id IS NOT NULL AND status NOT IN ('completed','failed','cancelled')"
+ },
+ {
+  "type": "index",
+  "name": "idx_off_peak_pick",
+  "tbl_name": "off_peak_tasks",
+  "sql": "CREATE INDEX idx_off_peak_pick\n      ON off_peak_tasks (status, queued_at)"
+ },
+ {
+  "type": "index",
+  "name": "idx_off_peak_ws",
+  "tbl_name": "off_peak_tasks",
+  "sql": "CREATE INDEX idx_off_peak_ws\n      ON off_peak_tasks (workspace_key, status)"
+ },
+ {
+  "type": "index",
+  "name": "idx_task_group_members_group_order",
+  "tbl_name": "task_group_members",
+  "sql": "CREATE INDEX idx_task_group_members_group_order\n      ON task_group_members (group_id, sort_order, added_at)"
+ },
+ {
+  "type": "index",
+  "name": "idx_task_group_view_node_orders_order",
+  "tbl_name": "task_group_view_node_orders",
+  "sql": "CREATE INDEX idx_task_group_view_node_orders_order\n      ON task_group_view_node_orders (sort_order, created_at)"
+ },
+ {
+  "type": "index",
+  "name": "idx_tasks_cron_automation",
+  "tbl_name": "tasks",
+  "sql": "CREATE INDEX idx_tasks_cron_automation ON tasks(cron_automation_id, updated_at DESC)\n    WHERE cron_automation_id IS NOT NULL AND deleted=0"
+ },
+ {
+  "type": "index",
+  "name": "idx_tasks_off_peak_task",
+  "tbl_name": "tasks",
+  "sql": "CREATE INDEX idx_tasks_off_peak_task ON tasks(off_peak_task_id, updated_at DESC)\n    WHERE off_peak_task_id IS NOT NULL AND deleted=0"
+ },
+ {
+  "type": "index",
+  "name": "idx_tasks_workspace_archived_updated",
+  "tbl_name": "tasks",
+  "sql": "CREATE INDEX idx_tasks_workspace_archived_updated\n      ON tasks (workspace_key, archived, updated_at DESC)\n      WHERE deleted = 0"
+ },
+ {
+  "type": "index",
+  "name": "idx_tasks_workspace_pinned_updated",
+  "tbl_name": "tasks",
+  "sql": "CREATE INDEX idx_tasks_workspace_pinned_updated\n      ON tasks (workspace_key, pinned, updated_at DESC)\n      WHERE deleted = 0"
+ },
+ {
+  "type": "table",
+  "name": "automation_runs",
+  "tbl_name": "automation_runs",
+  "sql": "CREATE TABLE automation_runs (\n        run_id TEXT PRIMARY KEY,\n        automation_id TEXT NOT NULL,\n        workspace_key TEXT NOT NULL,\n        scheduled_at INTEGER,\n        trigger TEXT NOT NULL DEFAULT 'schedule',\n        model_selection TEXT,\n        dispatch_status TEXT NOT NULL DEFAULT 'claimed',\n        outcome TEXT,\n        session_id TEXT,\n        error TEXT,\n        attempts INTEGER NOT NULL DEFAULT 0,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL\n      )"
+ },
+ {
+  "type": "table",
+  "name": "automations",
+  "tbl_name": "automations",
+  "sql": "CREATE TABLE automations (\n        automation_id TEXT PRIMARY KEY,\n        title TEXT NOT NULL DEFAULT '',\n        cron_expr TEXT NOT NULL,\n        prompt TEXT NOT NULL,\n        model TEXT,\n        provider TEXT,\n        mode TEXT,\n        thought_level TEXT,\n        model_selection TEXT,\n        workspace_key TEXT NOT NULL,\n        workspace_path TEXT NOT NULL,\n        workspace_identity TEXT,\n        target_task_id TEXT,\n        bot_delivery_target TEXT,\n        location_kind TEXT NOT NULL DEFAULT 'local',\n        recurring INTEGER NOT NULL DEFAULT 1,\n        max_runs INTEGER,\n        end_at INTEGER,\n        schedule_rule TEXT,\n        schedule_edited_by_user INTEGER NOT NULL DEFAULT 0,\n        run_count INTEGER NOT NULL DEFAULT 0,\n        scheduled_run_count INTEGER NOT NULL DEFAULT 0,\n        enabled INTEGER NOT NULL DEFAULT 1,\n        lifecycle_status TEXT NOT NULL DEFAULT 'active',\n        next_run_at INTEGER,\n        last_run_at INTEGER,\n        running INTEGER NOT NULL DEFAULT 0,\n        claimed_at INTEGER,\n        dispatch_status TEXT NOT NULL DEFAULT 'idle',\n        dispatch_attempts INTEGER NOT NULL DEFAULT 0,\n        retry_at INTEGER,\n        last_error TEXT,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL\n      )"
+ },
+ {
+  "type": "table",
+  "name": "off_peak_tasks",
+  "tbl_name": "off_peak_tasks",
+  "sql": "CREATE TABLE off_peak_tasks (\n        off_peak_task_id   TEXT PRIMARY KEY,\n        server_ticket_id   TEXT,\n        title              TEXT NOT NULL DEFAULT '',\n        conversation_id    TEXT,\n        session_id         TEXT,\n        prompt             TEXT NOT NULL,\n        permission_mode    TEXT NOT NULL,\n        model              TEXT,\n        thought_level      TEXT,\n        model_selection    TEXT,\n        workspace_key      TEXT NOT NULL,\n        workspace_path     TEXT NOT NULL,\n        workspace_identity TEXT,\n        status             TEXT NOT NULL,\n        queued_at          INTEGER NOT NULL,\n        started_at         INTEGER,\n        ended_at           INTEGER,\n        failure_reason     TEXT,\n        files_changed      INTEGER,\n        settled_at         INTEGER,\n        history_deleted_at INTEGER,\n        registered_at      INTEGER,\n        schedulable        INTEGER NOT NULL DEFAULT 0,\n        queue_position     INTEGER,\n        next_poll_at       INTEGER,\n        claim_running      INTEGER NOT NULL DEFAULT 0,\n        claimed_at         INTEGER,\n        attempt_count      INTEGER NOT NULL DEFAULT 0,\n        last_error         TEXT,\n        created_at         INTEGER NOT NULL,\n        updated_at         INTEGER NOT NULL\n      )"
+ },
+ {
+  "type": "table",
+  "name": "task_group_members",
+  "tbl_name": "task_group_members",
+  "sql": "CREATE TABLE task_group_members (\n        group_id TEXT NOT NULL,\n        workspace_key TEXT NOT NULL,\n        workspace_path TEXT NOT NULL,\n        workspace_identity TEXT,\n        task_id TEXT NOT NULL,\n        sort_order INTEGER,\n        added_at INTEGER NOT NULL,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL,\n        PRIMARY KEY (workspace_key, task_id),\n        FOREIGN KEY (group_id) REFERENCES task_groups(group_id) ON DELETE CASCADE\n      )"
+ },
+ {
+  "type": "table",
+  "name": "task_group_view_node_orders",
+  "tbl_name": "task_group_view_node_orders",
+  "sql": "CREATE TABLE task_group_view_node_orders (\n        node_type TEXT NOT NULL,\n        node_key TEXT NOT NULL,\n        sort_order INTEGER NOT NULL,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL,\n        PRIMARY KEY (node_type, node_key)\n      )"
+ },
+ {
+  "type": "table",
+  "name": "task_group_workspace_bootstraps",
+  "tbl_name": "task_group_workspace_bootstraps",
+  "sql": "CREATE TABLE task_group_workspace_bootstraps (\n        workspace_key TEXT PRIMARY KEY,\n        group_id TEXT,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL\n      )"
+ },
+ {
+  "type": "table",
+  "name": "task_groups",
+  "tbl_name": "task_groups",
+  "sql": "CREATE TABLE task_groups (\n        group_id TEXT PRIMARY KEY,\n        title TEXT NOT NULL,\n        color TEXT NOT NULL DEFAULT 'gray',\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL\n      )"
+ },
+ {
+  "type": "table",
+  "name": "tasks",
+  "tbl_name": "tasks",
+  "sql": "CREATE TABLE tasks (\n        workspace_key TEXT NOT NULL,\n        workspace_path TEXT NOT NULL,\n        workspace_identity TEXT,\n        task_id TEXT NOT NULL,\n        title TEXT NOT NULL DEFAULT '',\n        task_status TEXT,\n        provider TEXT,\n        mode TEXT NOT NULL DEFAULT 'build',\n        model TEXT,\n        migration_source TEXT,\n        forked_from_task_id TEXT,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL,\n        unread_at INTEGER,\n        last_unread_at INTEGER NOT NULL DEFAULT 0,\n        pinned INTEGER NOT NULL DEFAULT 0,\n        archived INTEGER NOT NULL DEFAULT 0,\n        deleted INTEGER NOT NULL DEFAULT 0,\n        title_overridden INTEGER NOT NULL DEFAULT 0,\n        meta_json TEXT NOT NULL DEFAULT '{}', searchable_text TEXT NOT NULL DEFAULT '', cron_automation_id TEXT, off_peak_task_id TEXT,\n        PRIMARY KEY (workspace_key, task_id)\n      )"
+ },
+ {
+  "type": "table",
+  "name": "tasks_schema_migration",
+  "tbl_name": "tasks_schema_migration",
+  "sql": "CREATE TABLE tasks_schema_migration (\n      id TEXT PRIMARY KEY, checksum TEXT NOT NULL, time_applied INTEGER NOT NULL\n    )"
+ }
+]
