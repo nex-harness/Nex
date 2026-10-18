@@ -428,6 +428,36 @@ gate3() {
   else
     skip G3.taskindexx "task index cross-engine check" "node/tsx/go not available"
   fi
+  # G3.taskadapter (step 3.10.5): the task service adapter — the local owner-run
+  # bookkeeping, the cross-host task run lease, the owner-command route, the host
+  # command queue and its drain, and the pending optimistic boundaries. The guard
+  # inventory is docs/specs/go-rewrite/phase-3-guards.md: 61 rows, each naming the
+  # test here that pins it, and each recording a decision rather than being dropped.
+  #   - owner/lease local (A1–A7): the desktop leg passes unchecked, a dead run is
+  #     NO_ACTIVE_TASK_OWNER, an older run is STALE_TASK_OWNER_COMMAND, an unloaded
+  #     task is NEX_SESSION_TARGET_NOT_FOUND, cronAutomationId stays sticky.
+  #   - owner/lease cross-host (B1–B12): two hosts one task — a held lease refuses
+  #     another host AND the same host on a different run; a re-acquire keeps
+  #     acquiredAt; a non-matching release is ignored; a window close releases only its
+  #     own leases; the owner command reaches the lease owner only, a foreign result is
+  #     dropped, an unanswered command times out, a dead owner host refuses
+  #     immediately.
+  #   - stale-run CAS (C1–C8): a CAS command without baseRevision throws, duplicate/noop
+  #     are idempotent success, a stale ack converges on revisionAtDecision with a NEW
+  #     commandId per attempt, exhaustion throws, and a stale base never executes.
+  #   - queue and drain (D1–D23): an active run and a running command both block the
+  #     drain, drains serialize per task and re-arm for what arrived mid-send, a failed
+  #     send is marked failed, promote/cancel have their three outcomes each, enqueue is
+  #     FIFO and idempotent per commandId, a turn terminal closes the queue but does NOT
+  #     drain while the ready boundary does.
+  #   - pending optimistic (E1–E8): a new run clears the previous live buffers, the
+  #     snapshot reads the HOST queue, empty elicitations are replayable-only, events fan
+  #     out to both emitters, the live projection is bounded, and a cancel emits only when
+  #     it removed something.
+  #   - scenarios: the two-host handover, the stale command that never executes, the
+  #     50-command FIFO under concurrent drains, and the goroutine-leak delta.
+  check G3.taskadapter "task service adapter: owner/lease, cross-host routing, stale-run, queue, pending state (step 3.10.5)" \
+    bash -c 'cd go && go test -race -count=1 ./internal/services/taskadapter/'
   todo G3.agentbridge "agent bridge (step 3.10)"
 }
 
