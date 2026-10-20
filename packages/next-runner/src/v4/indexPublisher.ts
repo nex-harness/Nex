@@ -2,7 +2,7 @@ import { setImmediate as deferImmediate } from "node:timers";
 import type { Logger } from "../logger.js";
 import { newLogEpoch, randomId } from "../util/ids.js";
 import type { Engine } from "../engine/types.js";
-import { buildSessionsIndexSnapshot } from "./sessionsIndex.js";
+import { buildSessionsIndexSnapshot, type SessionPendingInteraction } from "./sessionsIndex.js";
 import {
   FrameOrdinal,
   type CompleteSessionsIndexWireFrame,
@@ -12,8 +12,17 @@ import {
 
 type IndexSink = (frame: CompleteSessionsIndexWireFrame) => void;
 
+/** UI workspace key: the single rule shared with the client (`identity?.trim() || path`). */
+function workspaceKeyOf(params: { workspacePath: string; workspaceIdentity?: string }): string {
+  const identity = params.workspaceIdentity?.trim();
+  return identity || params.workspacePath;
+}
+
 interface IndexRuntime {
-  workspaceId: string;
+  /** Runner-local path: the engine keys sessions by it. */
+  workspacePath: string;
+  /** UI workspace key (`workspaceIdentity?.trim() || workspacePath`): topic + snapshot. */
+  workspaceKey: string;
   subscriptionId: string;
   logEpoch: string;
   ordinal: FrameOrdinal;
@@ -27,11 +36,20 @@ interface IndexRuntime {
 export class SessionsIndexPublisher {
   private readonly indexes = new Map<string, IndexRuntime>();
   private readonly sinks = new Set<{ workspacePath: string; emit: IndexSink }>();
+  private pendingSource: (workspacePath: string) => Map<string, SessionPendingInteraction[]> = () =>
+    new Map();
 
   constructor(
     private readonly engine: Engine,
     private readonly logger: Logger,
   ) {}
+
+  /** Live approvals come from the projection store; the index owns no approval state. */
+  setPendingInteractionsSource(
+    source: (workspacePath: string) => Map<string, SessionPendingInteraction[]>,
+  ): void {
+    this.pendingSource = source;
+  }
 
   addSink(workspacePath: string, emit: IndexSink): { dispose(): void } {
     const entry = { workspacePath, emit };
@@ -39,12 +57,13 @@ export class SessionsIndexPublisher {
     return { dispose: () => this.sinks.delete(entry) };
   }
 
-  subscribe(workspacePath: string): {
+  subscribe(params: { workspacePath: string; workspaceIdentity?: string }): {
     ack: { subscriptionId: string; mode: "snapshot"; logEpoch: string };
   } {
     const subscriptionId = randomId("si");
     const runtime: IndexRuntime = {
-      workspaceId: workspacePath,
+      workspacePath: params.workspacePath,
+      workspaceKey: workspaceKeyOf(params),
       subscriptionId,
       logEpoch: newLogEpoch(),
       ordinal: new FrameOrdinal(),
@@ -55,17 +74,20 @@ export class SessionsIndexPublisher {
     return { ack: { subscriptionId, mode: "snapshot", logEpoch: runtime.logEpoch } };
   }
 
-  resync(
-    workspacePath: string,
-    subscriptionId: string,
-  ): {
+  resync(params: { workspacePath: string; workspaceIdentity?: string; subscriptionId: string }): {
     ack: { subscriptionId: string; mode: "snapshot"; logEpoch: string };
   } {
-    const runtime = this.indexes.get(subscriptionId);
-    if (!runtime) return this.subscribe(workspacePath);
+    const runtime = this.indexes.get(params.subscriptionId);
+    if (!runtime) return this.subscribe(params);
+    // 同一 subscription 的 resync 必须沿用首次订阅读到的 workspaceKey；身份缺失的
+    // resync 不能把已按 identity 归属的 topic 悄悄改回 path。
     deferImmediate(() => void this.send(runtime, "recovery"));
     return {
-      ack: { subscriptionId, mode: "snapshot", logEpoch: runtime.logEpoch },
+      ack: {
+        subscriptionId: params.subscriptionId,
+        mode: "snapshot",
+        logEpoch: runtime.logEpoch,
+      },
     };
   }
 
@@ -73,10 +95,10 @@ export class SessionsIndexPublisher {
     this.indexes.delete(subscriptionId);
   }
 
-  /** Pushes a fresh snapshot to every subscription for one workspace. */
+  /** Pushes a fresh snapshot to every subscription for one workspace path. */
   publishWorkspace(workspacePath: string): void {
     for (const runtime of this.indexes.values()) {
-      if (runtime.workspaceId !== workspacePath) continue;
+      if (runtime.workspacePath !== workspacePath) continue;
       void this.send(runtime, "online");
     }
   }
@@ -90,12 +112,17 @@ export class SessionsIndexPublisher {
     runtime: IndexRuntime,
     deliveryKind: "initial" | "online" | "recovery",
   ): Promise<void> {
-    const sessions = await this.engine.listSessions(runtime.workspaceId);
-    const snapshot = buildSessionsIndexSnapshot(runtime.workspaceId, runtime.logEpoch, sessions);
+    const sessions = await this.engine.listSessions(runtime.workspacePath);
+    const snapshot = buildSessionsIndexSnapshot(
+      runtime.workspaceKey,
+      runtime.logEpoch,
+      sessions,
+      this.pendingSource(runtime.workspacePath),
+    );
     runtime.seq += 1;
     const next = runtime.ordinal.next(runtime.subscriptionId);
     const wire = buildSessionsIndexFrame({
-      topic: sessionsIndexTopic(runtime.workspaceId),
+      topic: sessionsIndexTopic(runtime.workspaceKey),
       subscriptionId: runtime.subscriptionId,
       ordinal: next.ordinal,
       logicalFrameId: next.logicalFrameId,
@@ -105,7 +132,7 @@ export class SessionsIndexPublisher {
       sentAt: Date.now(),
     });
     for (const sink of this.sinks) {
-      if (sink.workspacePath !== runtime.workspaceId) continue;
+      if (sink.workspacePath !== runtime.workspacePath) continue;
       try {
         sink.emit(wire);
       } catch (error) {

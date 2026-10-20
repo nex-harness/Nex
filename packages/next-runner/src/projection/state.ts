@@ -1,8 +1,10 @@
 import type {
+  EngineApprovalOutcome,
   EnginePhase,
   EngineTitleSource,
   EngineUsage,
   EngineModelState,
+  PermissionMode,
 } from "../engine/types.js";
 
 export type ProjectedRow =
@@ -52,13 +54,26 @@ export interface ToolCallRowState extends RowBase {
   assistantResponseId?: string;
   toolCallId: string;
   toolName: string;
-  status: "inputStreaming" | "running" | "success" | "error" | "cancelled";
+  status: "inputStreaming" | "pendingApproval" | "running" | "success" | "error" | "cancelled";
   inputText: string;
   input?: unknown;
   outputText?: string;
   errorMessage?: string;
+  /** Set while the row waits for approval; cleared on the terminal transition. */
+  approvalInteractionId?: string;
   startedAt?: number;
   endedAt?: number;
+}
+
+/** Mirrors one live `EngineApprovalRequest`; the gate remains its owner. */
+export interface PendingApprovalState {
+  interactionId: string;
+  toolCallId: string;
+  toolName: string;
+  summary: string;
+  detail: unknown;
+  createdAt: number;
+  outcome?: EngineApprovalOutcome;
 }
 
 export interface ProjectionError {
@@ -81,6 +96,9 @@ export interface ProjectionState {
   lastActivityAt: number;
   model: EngineModelState | null;
   usage: EngineUsage;
+  /** Permission mode echoed in `snapshot.config`; the gate is the authority. */
+  mode: PermissionMode;
+  planEnabled: boolean;
   rows: ProjectedRow[];
   nextRowId: number;
   currentTurn: {
@@ -96,6 +114,8 @@ export interface ProjectionState {
     reasoningRowId?: number;
   } | null;
   toolRows: Record<string, number>;
+  /** Live approval cards, keyed by interactionId (insertion order = request order). */
+  pendingApprovals: Record<string, PendingApprovalState>;
   lastError: ProjectionError | null;
 }
 
@@ -107,6 +127,8 @@ export interface CreateProjectionInput {
   titleSource?: EngineTitleSource;
   model?: EngineModelState | null;
   phase?: EnginePhase;
+  mode?: PermissionMode;
+  planEnabled?: boolean;
 }
 
 export function createProjection(input: CreateProjectionInput): ProjectionState {
@@ -123,11 +145,14 @@ export function createProjection(input: CreateProjectionInput): ProjectionState 
     lastActivityAt: now,
     model: input.model ?? null,
     usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    mode: input.mode ?? "build",
+    planEnabled: input.planEnabled ?? false,
     rows: [],
     nextRowId: 1,
     currentTurn: null,
     currentResponse: null,
     toolRows: {},
+    pendingApprovals: {},
     lastError: null,
   };
 }

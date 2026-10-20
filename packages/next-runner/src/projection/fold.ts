@@ -1,5 +1,10 @@
 import type { EngineEvent, EngineStopReason } from "../engine/types.js";
 import {
+  applyApprovalRequest,
+  applyApprovalSettled,
+  clearPendingApprovals,
+} from "./approvalEvents.js";
+import {
   endToolCall as endToolCallEvent,
   startToolCall as startToolCallEvent,
   updateToolInput as updateToolInputEvent,
@@ -80,6 +85,17 @@ export function applyEngineEvent(state: ProjectionState, event: EngineEvent): Pr
       return settle(state, event.at, event.aborted);
     case "phase":
       return bump({ ...state, phase: event.phase, lastActivityAt: event.at });
+    case "mode_changed":
+      return bump({
+        ...state,
+        mode: event.mode,
+        planEnabled: event.planEnabled,
+        lastActivityAt: event.at,
+      });
+    case "approval_request":
+      return applyApprovalRequest(state, event);
+    case "approval_settled":
+      return applyApprovalSettled(state, event);
     case "error":
       return bump({
         ...state,
@@ -245,16 +261,19 @@ function assistantRowState(
 }
 
 function settle(state: ProjectionState, at: number, aborted: boolean): ProjectionState {
+  // Defensive: a run cannot end while a tool_call hook still awaits approval. If a settle
+  // event was lost, close the cards here so the UI is never stuck on a dead interaction.
+  const working = clearPendingApprovals(state, at);
   const phase = aborted
     ? "completedInterrupted"
-    : state.phase === "error"
+    : working.phase === "error"
       ? "error"
       : "completedSuccess";
-  const turn = state.currentTurn;
+  const turn = working.currentTurn;
   const rows =
     turn === null
-      ? state.rows
-      : state.rows.map((row) => {
+      ? working.rows
+      : working.rows.map((row) => {
           if (row.rowId !== turn.headerRowId || row.kind !== "turnHeader") return row;
           return {
             ...row,
@@ -263,7 +282,7 @@ function settle(state: ProjectionState, at: number, aborted: boolean): Projectio
             endedAt: at,
           } as ProjectedRow;
         });
-  const closedResponse = state.currentResponse === null ? null : state.currentResponse;
+  const closedResponse = working.currentResponse === null ? null : working.currentResponse;
   const rowsWithClosedText =
     closedResponse === null
       ? rows
@@ -281,7 +300,7 @@ function settle(state: ProjectionState, at: number, aborted: boolean): Projectio
           return row;
         });
   return bump({
-    ...state,
+    ...working,
     rows: rowsWithClosedText,
     currentTurn: null,
     currentResponse: null,

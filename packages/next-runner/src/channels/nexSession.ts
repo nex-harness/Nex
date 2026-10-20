@@ -5,9 +5,21 @@ import type { NexWorkspacePresentation } from "@nex/shared";
  * synthetic config option and passes `slashCommands` through. pi has no workspace slash
  * command catalog in this MVP, so the list is empty.
  */
-export function readWorkspacePresentation(workspacePath: string): NexWorkspacePresentation {
+export function readWorkspacePresentation(params: {
+  workspacePath: string;
+  workspaceIdentity?: string;
+}): NexWorkspacePresentation {
+  const { workspacePath } = params;
+  // 多 runner：服务端按 `runner:<id>:<path>` 路由，UI 的 workspaceKey 统一取
+  // `identity?.trim() || path`。这里必须回显请求里的身份，否则同路径的两台机器在
+  // UI 侧会被归到同一个 workspaceKey，任务行/订阅无法区分机器。
+  const workspaceIdentity = params.workspaceIdentity?.trim();
   return {
-    workspace: { workspacePath, workspaceKey: workspacePath },
+    workspace: {
+      workspacePath,
+      ...(workspaceIdentity ? { workspaceIdentity } : {}),
+      workspaceKey: workspaceIdentity || workspacePath,
+    },
     mode: "build",
     slashCommands: [],
   };

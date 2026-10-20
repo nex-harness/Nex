@@ -106,3 +106,34 @@ test("nex-task workspace events skip the draft→draft transition and announce p
   subscription.dispose();
   channel.dispose();
 });
+
+test("nex-task echoes workspaceIdentity so the UI's workspaceKey grouping matches", async () => {
+  const engine = new FakeEngine();
+  engine.seedSession(session("running-1", "running"), []);
+  const channel = new NexTaskChannel(engine, logger);
+  const identity = "runner:runner_abc:/workspace/demo";
+
+  const tasks = await channel.listTasks({ workspacePath: WORKSPACE, workspaceIdentity: identity });
+  assert.equal(tasks[0]?.workspaceIdentity, identity);
+  nexTaskMetaSchema.parse(tasks[0]);
+
+  const events: Array<Record<string, unknown>> = [];
+  const subscription = channel.onDynamicWorkspaceEvent(
+    WORKSPACE,
+    (event) => events.push(event as unknown as Record<string, unknown>),
+    identity,
+  );
+  await settle();
+  engine.seedSession(session("running-2", "running", { title: "Second" }), []);
+  engine.emitSessionsChanged(WORKSPACE);
+  await settle();
+  const created = events.find((event) => event["reason"] === "task_created");
+  assert.equal(created?.["workspaceIdentity"], identity);
+  assert.equal(
+    created?.["taskMeta"] &&
+      (created["taskMeta"] as { workspaceIdentity?: string }).workspaceIdentity,
+    identity,
+  );
+  subscription.dispose();
+  channel.dispose();
+});

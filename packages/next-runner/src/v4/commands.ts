@@ -6,6 +6,7 @@ import type {
 } from "@nex/shared/nex-protocol-v4";
 import type { Logger } from "../logger.js";
 import type { Engine } from "../engine/types.js";
+import { normalizeMode } from "../engine/permissions/policy.js";
 import { buildConversationSnapshot } from "../projection/snapshot.js";
 import type { SessionRuntime, SessionRuntimeStore } from "./sessionStore.js";
 import {
@@ -13,7 +14,9 @@ import {
   createSessionResult,
   duplicateAck,
   inputAcceptedResult,
+  noopAck,
   rejectedAck,
+  resolveInteractionResult,
 } from "./envelopes.js";
 
 /**
@@ -54,7 +57,7 @@ export class CommandHandler {
       case "stop":
         return this.stop(workspacePath, envelope);
       case "resolveInteraction":
-        return this.noop(workspacePath, envelope);
+        return this.resolveInteraction(workspacePath, envelope);
       default:
         return rejectedAck(
           envelope.commandId,
@@ -107,8 +110,13 @@ export class CommandHandler {
     envelope: CommandEnvelope,
   ): Promise<CommandAck> {
     const payload = envelope.payload as {
-      firstInput?: { text?: string; modelSelection?: ModelSelection };
-      config?: { modelSelection?: ModelSelection };
+      firstInput?: {
+        text?: string;
+        modelSelection?: ModelSelection;
+        mode?: string;
+        planEnabled?: boolean;
+      };
+      config?: { modelSelection?: ModelSelection; mode?: string; planEnabled?: boolean };
     };
     const modelSelection = payload.firstInput?.modelSelection ?? payload.config?.modelSelection;
     try {
@@ -118,11 +126,19 @@ export class CommandHandler {
       );
       const runtime = this.sessions.ensure(workspacePath, sessionId);
       const text = payload.firstInput?.text;
+      // The mode travels with the submission, never as a live command: firstInput (the
+      // actual send) wins over the config override.
+      const mode = payload.firstInput?.mode ?? payload.config?.mode;
+      const planEnabled = payload.firstInput?.planEnabled ?? payload.config?.planEnabled;
       if (text !== undefined && text.trim().length > 0) {
         await this.engine.submit(sessionId, text, {
           requestId: envelope.commandId,
           ...(modelSelection ? { modelSelection } : {}),
+          ...(mode ? { mode } : {}),
+          ...(planEnabled !== undefined ? { planEnabled } : {}),
         });
+      } else if (mode !== undefined || planEnabled !== undefined) {
+        this.applyModeToProjection(runtime, mode, planEnabled);
       }
       const ack = acceptedAck(
         envelope.commandId,
@@ -143,7 +159,12 @@ export class CommandHandler {
     if (!sessionId) {
       return rejectedAck(envelope.commandId, 0, "session_required", "sendText needs sessionId");
     }
-    const payload = envelope.payload as { text?: string; modelSelection?: ModelSelection };
+    const payload = envelope.payload as {
+      text?: string;
+      modelSelection?: ModelSelection;
+      mode?: string;
+      planEnabled?: boolean;
+    };
     try {
       const runtime = this.sessions.ensure(workspacePath, sessionId);
       // A restored session is opened asynchronously; submit must not race openSession.
@@ -151,7 +172,10 @@ export class CommandHandler {
       await this.engine.submit(sessionId, payload.text ?? "", {
         requestId: envelope.commandId,
         ...(payload.modelSelection ? { modelSelection: payload.modelSelection } : {}),
+        ...(payload.mode ? { mode: payload.mode } : {}),
+        ...(payload.planEnabled !== undefined ? { planEnabled: payload.planEnabled } : {}),
       });
+      this.applyModeToProjection(runtime, payload.mode, payload.planEnabled);
       runtime.throttle.request();
       const ack = acceptedAck(
         envelope.commandId,
@@ -248,13 +272,85 @@ export class CommandHandler {
     }
   }
 
-  private noop(workspacePath: string, envelope: CommandEnvelope): CommandAck {
-    const runtime = envelope.sessionId
-      ? this.sessions.ensure(workspacePath, envelope.sessionId)
-      : undefined;
-    const ack = acceptedAck(envelope.commandId, runtime?.projection.revision ?? 0);
-    runtime?.acceptedCommands.set(envelope.commandId, ack);
-    return ack;
+  /**
+   * `resolveInteraction {interactionId, answer:{optionId,freeText?}}`. The gate owns the
+   * pending state; this only forwards the answer. Unknown or already-resolved ids are an
+   * idempotent no-op (`noop`), matching the UI's retry semantics.
+   */
+  private async resolveInteraction(
+    workspacePath: string,
+    envelope: CommandEnvelope,
+  ): Promise<CommandAck> {
+    const sessionId = envelope.sessionId;
+    const payload = envelope.payload as {
+      interactionId?: string;
+      answer?: { optionId?: string; freeText?: string };
+    };
+    const interactionId = payload.interactionId ?? "";
+    if (!sessionId) {
+      return rejectedAck(
+        envelope.commandId,
+        0,
+        "session_required",
+        "resolveInteraction needs sessionId",
+      );
+    }
+    const runtime = this.sessions.ensure(workspacePath, sessionId);
+    const revision = runtime.projection.revision;
+    if (!interactionId) {
+      return rejectedAck(
+        envelope.commandId,
+        revision,
+        "invalid_payload",
+        "interactionId is required",
+      );
+    }
+    const result = resolveInteractionResult(envelope.clientId, payload.answer?.optionId);
+    try {
+      await runtime.ready;
+      const outcome = await this.engine.resolveApproval(sessionId, interactionId, {
+        ...(payload.answer?.optionId !== undefined ? { optionId: payload.answer.optionId } : {}),
+        ...(payload.answer?.freeText !== undefined ? { freeText: payload.answer.freeText } : {}),
+      });
+      this.applyModeToProjection(runtime);
+      runtime.throttle.request();
+      // Unknown/already-resolved ids still return the resolvedBy result so a retried ACK
+      // replays the same shape; the status tells the client nothing changed.
+      const ack = outcome.resolved
+        ? acceptedAck(envelope.commandId, runtime.projection.revision, result)
+        : noopAck(envelope.commandId, runtime.projection.revision, "already_resolved", result);
+      runtime.acceptedCommands.set(envelope.commandId, ack);
+      return ack;
+    } catch (error) {
+      return rejectedAck(envelope.commandId, revision, "resolve_failed", messageOf(error));
+    }
+  }
+
+  /**
+   * Mirrors the engine's current mode into the projection (the gate is the authority).
+   * Uses the engine value rather than the command payload so createSession without text
+   * and resolveInteraction stay consistent.
+   */
+  private applyModeToProjection(
+    runtime: SessionRuntime | undefined,
+    mode?: string,
+    planEnabled?: boolean,
+  ): void {
+    if (!runtime) return;
+    const engineMode = this.engine.permissionMode(runtime.sessionId);
+    const nextMode = engineMode?.mode ?? normalizeMode(mode);
+    const nextPlan = engineMode?.planEnabled ?? planEnabled ?? false;
+    if (runtime.projection.mode === nextMode && runtime.projection.planEnabled === nextPlan) {
+      return;
+    }
+    runtime.projection = {
+      ...runtime.projection,
+      seq: runtime.projection.seq + 1,
+      revision: runtime.projection.revision + 1,
+      mode: nextMode,
+      planEnabled: nextPlan,
+      lastActivityAt: Date.now(),
+    };
   }
 
   private remember(workspacePath: string, commandId: string, ack: CommandAck): void {

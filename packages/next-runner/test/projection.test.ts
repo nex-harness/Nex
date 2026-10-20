@@ -404,7 +404,7 @@ test("acks: createSession/sendText ACKs parse with commandAckSchema", () => {
 });
 
 test("nex-session presentation and model views parse", () => {
-  presentationSchema.parse(readWorkspacePresentation("/workspace/demo"));
+  presentationSchema.parse(readWorkspacePresentation({ workspacePath: "/workspace/demo" }));
 
   const catalog: EngineCatalog = {
     models: [

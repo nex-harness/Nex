@@ -149,4 +149,26 @@ export function inputAcceptedResult(inputId: string): CommandResult {
   return { type: "inputAccepted", delivery: "startNow", inputId };
 }
 
+export function resolveInteractionResult(clientId: string, optionId?: string): CommandResult {
+  return {
+    type: "resolveInteraction",
+    resolvedBy: { clientId, ...(optionId ? { optionId } : {}) },
+  };
+}
+
+export function noopAck(
+  commandId: string,
+  revisionAtDecision: number,
+  reasonCode: string,
+  result?: CommandResult,
+): CommandAck {
+  return {
+    commandId,
+    status: "noop",
+    reasonCode,
+    revisionAtDecision,
+    ...(result ? { result } : {}),
+  };
+}
+
 export type { CommandEnvelope, ModelSelection, EnginePhase };

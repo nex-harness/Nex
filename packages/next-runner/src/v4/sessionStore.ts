@@ -18,6 +18,7 @@ import {
   buildConversationFrame,
   conversationTopic,
 } from "./envelopes.js";
+import type { SessionPendingInteraction } from "./sessionsIndex.js";
 import { SnapshotThrottle } from "./throttle.js";
 
 export type FrameSink = (frame: CompleteConversationWireFrame) => void;
@@ -49,6 +50,7 @@ export interface SessionRuntime {
 export class SessionRuntimeStore {
   readonly runtimes = new Map<string, SessionRuntime>();
   private readonly sinks = new Set<{ workspacePath: string; emit: FrameSink }>();
+  private readonly pendingListeners = new Set<(workspacePath: string) => void>();
 
   constructor(
     private readonly engine: Engine,
@@ -59,6 +61,31 @@ export class SessionRuntimeStore {
     const entry = { workspacePath, emit };
     this.sinks.add(entry);
     return { dispose: () => this.sinks.delete(entry) };
+  }
+
+  /**
+   * Fires when a session's live approval set changes. The sessions index (sidebar attention
+   * dot) is derived from that set, so it republishes without the projection owning it.
+   */
+  onPendingApprovalsChanged(listener: (workspacePath: string) => void): () => void {
+    this.pendingListeners.add(listener);
+    return () => {
+      this.pendingListeners.delete(listener);
+    };
+  }
+
+  /** Live approvals per session for one workspace (first item is the sidebar's summary). */
+  pendingInteractions(workspacePath: string): Map<string, SessionPendingInteraction[]> {
+    const result = new Map<string, SessionPendingInteraction[]>();
+    for (const runtime of this.runtimes.values()) {
+      if (runtime.workspacePath !== workspacePath) continue;
+      const entries = Object.values(runtime.projection.pendingApprovals).map((approval) => ({
+        interactionId: approval.interactionId,
+        toolName: approval.toolName,
+      }));
+      if (entries.length > 0) result.set(runtime.sessionId, entries);
+    }
+    return result;
   }
 
   ensure(workspacePath: string, sessionId: string): SessionRuntime {
@@ -169,11 +196,28 @@ export class SessionRuntimeStore {
       const meta = sessions.find((item) => item.sessionId === runtime.sessionId);
       const history = await this.engine.history(runtime.sessionId);
       if (meta) runtime.projection = projectHistory(meta, history, runtime.logEpoch);
+      // The gate is the mode authority; a mode command may have landed while history was
+      // being read, so re-apply it after the base projection exists.
+      const liveMode = this.engine.permissionMode(runtime.sessionId);
+      if (liveMode) {
+        runtime.projection = {
+          ...runtime.projection,
+          mode: liveMode.mode,
+          planEnabled: liveMode.planEnabled,
+        };
+      }
       const buffered = runtime.bufferedEvents;
       runtime.bufferedEvents = [];
       runtime.hydrated = true;
       for (const event of buffered) {
         runtime.projection = applyEngineEvent(runtime.projection, event);
+      }
+      if (
+        buffered.some(
+          (event) => event.type === "approval_request" || event.type === "approval_settled",
+        )
+      ) {
+        this.notifyPendingChanged(runtime.workspacePath);
       }
       if (buffered.length > 0) runtime.throttle.request();
     } catch (error) {
@@ -193,6 +237,14 @@ export class SessionRuntimeStore {
     }
     runtime.projection = applyEngineEvent(runtime.projection, event);
     runtime.throttle.request();
+    // Only approvals change the sidebar attention dot; every other event keeps the set.
+    if (event.type === "approval_request" || event.type === "approval_settled") {
+      this.notifyPendingChanged(runtime.workspacePath);
+    }
+  }
+
+  private notifyPendingChanged(workspacePath: string): void {
+    for (const listener of this.pendingListeners) listener(workspacePath);
   }
 
   private flush(runtime: SessionRuntime): void {

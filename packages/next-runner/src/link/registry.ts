@@ -5,10 +5,29 @@ export type EventEmitter = (value: JsonValue) => void;
 export type ListenHandler = (arg: JsonValue, emit: EventEmitter) => { dispose?: () => void } | void;
 
 /**
+ * Registration surface used by channel modules. Kept as an interface so a decorator
+ * (e.g. the workspace-served guard in channels/register.ts) can wrap it.
+ */
+export interface ChannelRegistration {
+  call(channel: string, method: string, handler: CallHandler): void;
+  listen(channel: string, event: string, handler: ListenHandler): void;
+}
+
+/** Dispatch surface used by the runner link. */
+export interface ChannelDispatch {
+  getCall(channel: string, method: string): CallHandler | undefined;
+  getListen(channel: string, event: string): ListenHandler | undefined;
+  listRegistered(): string[];
+}
+
+/** Full registry surface: handlers register calls/listens and the link dispatches them. */
+export type ChannelRegistryLike = ChannelRegistration & ChannelDispatch;
+
+/**
  * `(channel, method)` and `(channel, event)` registries. The runner is a single process,
  * so a plain map is the whole routing table; per-workspace selection happens in handlers.
  */
-export class ChannelRegistry {
+export class ChannelRegistry implements ChannelRegistration, ChannelDispatch {
   private readonly calls = new Map<string, CallHandler>();
   private readonly listens = new Map<string, ListenHandler>();
   private readonly debugNames = new Set<string>();

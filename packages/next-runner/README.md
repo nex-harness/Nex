@@ -3,7 +3,8 @@
 Agent runner for the `next/` server. It dials the server's `/runner` WebSocket, announces
 its workspaces, and serves pi-backed sessions to the unchanged ZCode web UI.
 
-Spec of record: [`docs/next/README.md`](../../docs/next/README.md) and
+Spec of record: [`docs/next/README.md`](../../docs/next/README.md),
+[`docs/next/permissions.md`](../../docs/next/permissions.md) and
 [`docs/next/channels-research.md`](../../docs/next/channels-research.md).
 
 ## Run
@@ -77,17 +78,26 @@ src/
     client.ts             WebSocket client, dispatch, reconnect, ping/pong
   engine/
     types.ts              Engine interface (the only surface the rest of the runner uses)
+    permissions/
+      policy.ts           tool → allow/ask/deny table + plan-mode gate
+      bashClassifier.ts   conservative read-only bash classifier
+      gate.ts             PermissionGate: the single writer of pending approvals
     pi/
       piEngine.ts         pi implementation (AgentSession, SessionManager, ModelRuntime)
+      piSessionFactory.ts session + inline nex-permission-gate extension bootstrap
+      piSessionFiles.ts   session dir/file lookup
+      piSessionOps.ts     metadata transitions, prompt start, model selection
+      permissionExtension.ts  pi `tool_call` hook → gate.authorize
       events.ts           pi AgentSessionEvent → EngineEvent (drops cumulative `partial`)
       translate.ts        transcript → EngineMessage; pi model → EngineModelInfo
-      metaStore.ts        per-workspace runner metadata (title/phase/tombstones)
+      metaStore.ts        per-workspace runner metadata (title/phase/mode/tombstones)
       sessionHelpers.ts   model/thinking/usage projections
       modelCatalog.ts     available models + default selection
   projection/
     state.ts              ProjectionState + row types (pure data)
     fold.ts               EngineEvent → ProjectionState (assistant/reasoning/turn)
     toolEvents.ts         EngineEvent → ProjectionState (tool rows)
+    approvalEvents.ts     approval_request/settled → pendingApproval rows + cards
     toolMapping.ts        pi tool name/args → UI tool name/args
     restore.ts            transcript → ProjectionState (restart recovery)
     snapshot.ts           ProjectionState → v4 ConversationSnapshot
@@ -97,7 +107,7 @@ src/
     indexPublisher.ts     sessions-index snapshots
     commands.ts           command admission + idempotency + ACK shapes
     envelopes.ts          wire envelope builders (complete frames only)
-    sessionsIndex.ts      SessionSummary projection
+    sessionsIndex.ts      SessionSummary projection (incl. pendingInteraction)
     throttle.ts           leading+trailing 10 fps throttle
   channels/
     register.ts           channel/method wiring
@@ -123,7 +133,9 @@ interface Engine {
   state(sessionId): EngineSessionState | null;
   history(sessionId): Promise<EngineMessage[]>;
   subscribe(sessionId, listener): { dispose(): void };
-  submit(sessionId, text, { requestId, modelSelection? }): Promise<{ status, inputId }>;
+  submit(sessionId, text, { requestId, modelSelection?, mode?, planEnabled? }): Promise<{ status, inputId }>;
+  resolveApproval(sessionId, interactionId, { optionId?, freeText? }): Promise<{ resolved, outcome? }>;
+  permissionMode(sessionId): { mode, planEnabled } | null;
   abort(sessionId): Promise<void>;
   rename(sessionId, title): Promise<void>;
   setModel(sessionId, selection): Promise<void>;
@@ -135,22 +147,77 @@ interface Engine {
 
 `submit` is idempotent on `requestId` (the v4 `commandId`): a repeated id returns
 `duplicate` without re-running the prompt. `submit` never awaits the model run; the
-run's progress arrives through `subscribe`.
+run's progress arrives through `subscribe`. The submission's `mode`/`planEnabled` are
+applied to the session's permission gate before the prompt starts.
 
 ## State ownership
 
-| State                                        | Owner                                                              |
-| -------------------------------------------- | ------------------------------------------------------------------ |
-| pi session files + transcript                | pi `SessionManager` under `<data>/sessions/<sha1(workspacePath)>/` |
-| title/phase/deleted tombstones/seen commands | `SessionMetaStore` (runner is the single writer)                   |
-| `ConversationSnapshot`                       | derived per session by `SessionRuntimeStore`                       |
-| sessions-index list                          | derived on demand from the engine                                  |
-| command idempotency                          | `CommandHandler` (session bucket + per-workspace create bucket)    |
+| State                                             | Owner                                                              |
+| ------------------------------------------------- | ------------------------------------------------------------------ |
+| pi session files + transcript                     | pi `SessionManager` under `<data>/sessions/<sha1(workspacePath)>/` |
+| title/phase/mode/deleted tombstones/seen commands | `SessionMetaStore` (runner is the single writer)                   |
+| pending approvals + "allow always" set            | `PermissionGate` per open session (engine-owned, in memory)        |
+| `ConversationSnapshot`                            | derived per session by `SessionRuntimeStore`                       |
+| sessions-index list                               | derived on demand from the engine + projection store               |
+| command idempotency                               | `CommandHandler` (session bucket + per-workspace create bucket)    |
 
 Rows are numbered monotonically within a session's `logEpoch`. A runner restart starts a
 new `logEpoch`; the UI resyncs on epoch change. Every published frame is a full snapshot
 (`fromSeq: 0`, `toSeq: seq`, `snapshot.seq === toSeq`) throttled to ≤ 10 fps per session
 with a trailing flush.
+
+## Permissions ("Ask before changes")
+
+Spec: [`docs/next/permissions.md`](../../docs/next/permissions.md).
+
+One `PermissionGate` per open session is the single writer of pending state. An inline pi
+extension (`DefaultResourceLoader({extensionFactories})`, reloaded before
+`createAgentSession({resourceLoader})`) registers a `tool_call` handler that awaits
+`gate.authorize(...)`. pi emits `tool_execution_start` before the hook, so the tool row
+already exists when the card appears.
+
+Event order for one gated call:
+
+```
+pi tool_execution_start ──▶ projection row "running"
+pi tool_call hook ────────▶ gate.authorize
+                              ├─ allow  → undefined (tool executes)
+                              ├─ ask    → emit approval_request → row "pendingApproval",
+                              │           snapshot.pendingInteractions[] with anchorRowId,
+                              │           sessions-index pendingInteraction (+ summary)
+                              └─ deny   → { block:true, reason }
+resolveInteraction ───────▶ gate.resolve → emit approval_settled
+                              ├─ allow  → hook returns, row "running"
+                              └─ deny/aborted → hook returns blocked, row "cancelled"
+```
+
+Policy (`engine/permissions/policy.ts`):
+
+| pi tool                      | build | edit  | yolo  | planEnabled |
+| ---------------------------- | ----- | ----- | ----- | ----------- |
+| `read`, `grep`, `find`, `ls` | allow | allow | allow | allow       |
+| `edit`, `write`              | ask   | allow | allow | deny        |
+| `bash` classified read-only  | allow | allow | allow | allow       |
+| `bash` other                 | ask   | ask   | allow | deny        |
+| unknown / extension tools    | ask   | ask   | allow | deny        |
+
+Nested calls (`parentToolCallId`) go through the same hook. "Always allow" is per tool
+name for that session, in memory only.
+
+Failure behavior (fail closed):
+
+- No client connected: the hook keeps waiting (no timeout); nothing runs unapproved.
+- Stop/abort or `deleteSession`: `gate.abortPending()` settles live cards as `aborted`, so
+  the hook returns and the run can settle; the row ends `cancelled`.
+- Runner restart: pending approvals are not persisted. A restore marks every tool call
+  without a tool result as `cancelled` (never `success`).
+- A blocked call's error tool result does not overwrite `cancelled`.
+- Plan mode denies with a reason and never shows a card.
+
+Modes arrive per submission (`createSession.firstInput.mode`, `createSession.config.mode`,
+`sendText.mode`, `planEnabled`). `snapshot.config.mode` / `.planEnabled` echo the session's
+current values for the composer; `config.permissionGrant` is never set (the UI would flip
+the composer to yolo).
 
 ## Tool name mapping
 
@@ -182,8 +249,19 @@ heuristics understand `oldText`/`newText` pairs.
 | `provider-settings` | `getView`, `onDidChange` (never fires)                                                                                                                                                                                                                                                                                                                    |
 
 Commands: `createSession` (with or without `firstInput`; draft prewarm works),
-`sendText`, `deleteSession`, `renameSession`, `stop`, `resolveInteraction` (accepted
-no-op). Unknown commands return `rejected` with `reasonCode:"unsupported_command"`.
+`sendText`, `deleteSession`, `renameSession`, `stop`, `resolveInteraction`. Unknown
+commands return `rejected` with `reasonCode:"unsupported_command"`.
+
+`resolveInteraction {interactionId, answer:{optionId, freeText?}}` forwards the answer to
+the session's `PermissionGate`. ACK: `accepted` with
+`result:{type:"resolveInteraction", resolvedBy:{clientId, optionId}}`; unknown or
+already-resolved ids return `noop` (`reasonCode:"already_resolved"`) with the same result
+shape. A repeated `commandId` replays the stored ACK as `duplicate`.
+
+`nex-task` rows and workspace events echo the `workspaceIdentity` the server forwarded
+(`runner:<runnerId>:<path>`). The UI groups sidebar rows by
+`workspaceIdentity?.trim() || workspacePath`, so omitting it leaves every row out of its
+workspace group.
 
 View contracts (details in `docs/next/README.md`):
 
@@ -203,6 +281,18 @@ pnpm --filter @nex/next-runner lint
 pnpm --filter @nex/next-runner test          # unit + in-process link tests
 ```
 
+The permission suite runs with the default `pnpm test` (no env vars):
+
+- `test/permissions-policy.test.ts` — policy table (build/edit/yolo/planEnabled, allow
+  always) and the bash classifier, including composition/redirect/substitution negatives.
+- `test/permissions-gate.test.ts` — fold transitions, resolve idempotency, abort while
+  pending (no hang), allowAlways session scoping, concurrent approvals.
+- `test/permissions-projection.test.ts` — every emitted snapshot / sessions-index frame /
+  ACK parsed with the real zod schemas; restore of an unanswered call; mode echo.
+- `test/permissions-pi-integration.test.ts` — the **real** pi engine and pi-ai's faux
+  provider drive a `write` through the inline `tool_call` hook: allow writes the file,
+  deny blocks it, edit mode skips the card, abort settles a pending card.
+
 Opt-in real-model smoke test (uses `~/.pi/agent` credentials):
 
 ```sh
@@ -217,6 +307,14 @@ NEX_E2E_WS_URL=ws://127.0.0.1:3030/ws \
 NEX_E2E_COOKIE="nex_session=…" \
 NEX_E2E_WORKSPACE=/path/on/runner \
 pnpm --filter @nex/next-runner test
+```
+
+Browser E2Es (see `next/dev.sh --help`):
+
+```sh
+next/dev.sh --e2e               # acceptance (read + ls -la, no cards)
+next/dev.sh --e2e=permissions   # approval card: allow / deny / edit mode / read-only ls
+next/dev.sh --e2e=all           # both, acceptance first
 ```
 
 The unit tests import the real zod schemas from `@nex/shared/nex-protocol-v4` and validate
@@ -238,8 +336,9 @@ publisher tests; an in-process `ws` server drives the link test.
   list, so sessions created by running `pi` directly in the same workspace are not listed.
 - **No attachments** (`attachment*` / `conversationFileChangesV4` etc. are not
   implemented); the composer's happy path does not need them.
-- **No permission/user-input interactions.** pi runs with its own tool policy; no
-  `permissionRequest` rows are projected.
+- **Permissions are session-scoped and in memory.** Pending approvals do not survive a
+  runner restart, and "Always allow in this session" is a per-gate set (no project rules,
+  no persistence). Plan mode is a hard deny, not a planning UI.
 - **Titles are not model-generated.** Default is the first user message truncated to 60
   chars (`titleSource:"default"`); rename sets `"custom"`.
 - **`thinkingLevel` mapping uses pi's own capability set**; levels beyond

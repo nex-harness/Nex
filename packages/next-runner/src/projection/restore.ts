@@ -26,6 +26,8 @@ export function projectHistory(
     titleSource: session.titleSource,
     model: session.model,
     phase: session.phase,
+    mode: session.mode ?? "build",
+    planEnabled: session.planEnabled ?? false,
   });
   const state: ProjectionState = {
     ...base,
@@ -179,6 +181,9 @@ export function projectHistory(
     }
     const rowId = allocate();
     const input = mapToolInput(part.name, part.arguments);
+    // A call whose result never reached the transcript was not executed (the runner
+    // stopped while the approval was pending). Restoring it as `success` would invent a
+    // mutation that never happened; mark it cancelled and let the toolResult upgrade it.
     const toolRow: ToolCallRowState = {
       rowId,
       turnId,
@@ -186,7 +191,7 @@ export function projectHistory(
       assistantResponseId: responseId,
       toolCallId: part.id,
       toolName: toolDisplayName(part.name),
-      status: "success",
+      status: "cancelled",
       inputText: jsonText(input),
       input,
       startedAt: at,

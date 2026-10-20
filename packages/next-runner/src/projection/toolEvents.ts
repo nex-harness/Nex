@@ -34,6 +34,8 @@ export function startToolCall(
             toolName: toolDisplayName(event.toolName),
             input,
             inputText: jsonText(input),
+            // A late duplicate start must not drop an approval that is already on screen.
+            ...(row.status === "pendingApproval" ? {} : { status: "running" as const }),
           }
         : row,
     );
@@ -117,6 +119,12 @@ export function endToolCall(
   const input = event.input !== undefined ? mapToolInput(event.toolName, event.input) : undefined;
   const rows = working.rows.map((row) => {
     if (row.rowId !== rowId || row.kind !== "toolCall") return row;
+    // A blocked (denied/aborted) call also produces a tool result with isError=true; the
+    // row already carries the authoritative `cancelled` status, so the error must not
+    // overwrite it.
+    if (row.status === "cancelled") {
+      return { ...row, outputText: event.text || row.outputText, endedAt: event.at };
+    }
     const updated: ToolCallRowState = {
       ...row,
       status: event.isError ? "error" : "success",

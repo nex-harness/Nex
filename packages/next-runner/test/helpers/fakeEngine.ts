@@ -8,6 +8,8 @@ import type {
   EngineModelInfo,
   EngineModelState,
   EngineSessionState,
+  PermissionMode,
+  ResolveApprovalResult,
   SubmitOptions,
   SubmitOutcome,
 } from "../../src/engine/types.js";
@@ -25,6 +27,10 @@ export class FakeEngine implements Engine {
   readonly deleted: Array<{ workspacePath: string; sessionId: string }> = [];
   readonly renamed: Array<{ sessionId: string; title: string }> = [];
   readonly aborted: string[] = [];
+  /** Test hook: interactionId → optionId, consumed by resolveApproval. */
+  readonly approvals = new Map<string, string>();
+  readonly resolvedApprovals: Array<{ sessionId: string; interactionId: string }> = [];
+  private readonly modes = new Map<string, { mode: PermissionMode; planEnabled: boolean }>();
   private readonly tombstones = new Set<string>();
   private sequence = 0;
   private catalogValue: EngineCatalog = {
@@ -95,6 +101,14 @@ export class FakeEngine implements Engine {
 
   async submit(sessionId: string, text: string, options: SubmitOptions): Promise<SubmitOutcome> {
     this.submitted.push({ sessionId, text, requestId: options.requestId });
+    if (options.mode) {
+      this.modes.set(sessionId, {
+        mode: (options.mode === "edit" || options.mode === "yolo"
+          ? options.mode
+          : "build") as PermissionMode,
+        planEnabled: options.planEnabled ?? false,
+      });
+    }
     const session = this.sessions.get(sessionId);
     if (text.trim().length > 0) {
       // pi persists the user message and emits message_end (translated to user_input).
@@ -113,6 +127,29 @@ export class FakeEngine implements Engine {
     }
     this.emitSessionsChanged(session?.workspacePath ?? "");
     return { status: "accepted", inputId: options.requestId };
+  }
+
+  async resolveApproval(
+    sessionId: string,
+    interactionId: string,
+    answer: { optionId?: string; freeText?: string },
+  ): Promise<ResolveApprovalResult> {
+    if (!this.approvals.has(interactionId)) return { resolved: false };
+    this.approvals.delete(interactionId);
+    this.resolvedApprovals.push({ sessionId, interactionId });
+    const outcome = answer.optionId === "deny" ? "deny" : "allow";
+    this.emit(sessionId, {
+      type: "approval_settled",
+      at: Date.now(),
+      interactionId,
+      toolCallId: `call-${interactionId}`,
+      outcome,
+    });
+    return { resolved: true, outcome };
+  }
+
+  permissionMode(sessionId: string): { mode: PermissionMode; planEnabled: boolean } | null {
+    return this.modes.get(sessionId) ?? null;
   }
 
   async abort(sessionId: string): Promise<void> {

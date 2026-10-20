@@ -25,11 +25,18 @@ export class ConversationPublisher {
   readonly index: SessionsIndexPublisher;
   private readonly commands: CommandHandler;
   private readonly engineUnsubscribe: () => void;
+  private readonly pendingUnsubscribe: () => void;
 
   constructor(private readonly options: PublisherOptions) {
     this.sessions = new SessionRuntimeStore(options.engine, options.logger);
     this.index = new SessionsIndexPublisher(options.engine, options.logger);
     this.commands = new CommandHandler(options.engine, this.sessions, options.logger);
+    this.index.setPendingInteractionsSource((workspacePath) =>
+      this.sessions.pendingInteractions(workspacePath),
+    );
+    this.pendingUnsubscribe = this.sessions.onPendingApprovalsChanged((workspacePath) => {
+      this.index.publishWorkspace(workspacePath);
+    });
     this.engineUnsubscribe = options.engine.onSessionsChanged((workspacePath) => {
       this.index.publishWorkspace(workspacePath);
     });
@@ -78,16 +85,20 @@ export class ConversationPublisher {
     this.sessions.unsubscribe(runtime, subscriptionId);
   }
 
-  subscribeSessionsIndex(params: { workspacePath: string }): {
+  subscribeSessionsIndex(params: { workspacePath: string; workspaceIdentity?: string }): {
     ack: { subscriptionId: string; mode: "snapshot"; logEpoch: string };
   } {
-    return this.index.subscribe(params.workspacePath);
+    return this.index.subscribe(params);
   }
 
-  resyncSessionsIndex(params: { workspacePath: string; subscriptionId: string }): {
+  resyncSessionsIndex(params: {
+    workspacePath: string;
+    workspaceIdentity?: string;
+    subscriptionId: string;
+  }): {
     ack: { subscriptionId: string; mode: "snapshot"; logEpoch: string };
   } {
-    return this.index.resync(params.workspacePath, params.subscriptionId);
+    return this.index.resync(params);
   }
 
   unsubscribeSessionsIndex(subscriptionId: string): void {
@@ -118,6 +129,7 @@ export class ConversationPublisher {
 
   dispose(): void {
     this.engineUnsubscribe();
+    this.pendingUnsubscribe();
     this.commands.dispose();
     this.index.dispose();
     this.sessions.dispose();

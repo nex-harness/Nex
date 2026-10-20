@@ -5,6 +5,8 @@ import type { Logger } from "../logger.js";
 interface WorkspaceSnapshot {
   deleted: string[];
   byId: Map<string, EngineSessionState>;
+  /** Identity the UI used for this scope; rows must echo it for workspaceKey grouping. */
+  workspaceIdentity?: string;
 }
 
 /**
@@ -12,10 +14,16 @@ interface WorkspaceSnapshot {
  * session and keeps deleted ids in the negative-membership list. Events use reasons the
  * UI's refresh policy treats as membership changes (`task_created`, `task_deleted`,
  * `task_meta_changed`).
+ *
+ * The calls carry a `workspaceIdentity` (`runner:<id>:<path>`) from the server's routing
+ * table. Rows and events must echo it: the UI groups sidebar rows by
+ * `workspaceIdentity?.trim() || workspacePath`, so a scope opened with an identity would
+ * otherwise never match its rows.
  */
 export class NexTaskChannel {
   private readonly snapshots = new Map<string, WorkspaceSnapshot>();
   private readonly watchers = new Map<string, Set<(event: NexWorkspaceEvent) => void>>();
+  private readonly identities = new Map<string, string | undefined>();
   private readonly engineUnsubscribe: () => void;
 
   constructor(
@@ -23,20 +31,34 @@ export class NexTaskChannel {
     private readonly logger: Logger,
   ) {
     this.engineUnsubscribe = engine.onSessionsChanged((workspacePath) => {
-      void this.refresh(workspacePath);
+      void this.refresh(workspacePath, this.identities.get(workspacePath));
     });
   }
 
-  async listTasks(params: { workspacePath: string }): Promise<NexTaskMeta[]> {
+  async listTasks(params: {
+    workspacePath: string;
+    workspaceIdentity?: string;
+  }): Promise<NexTaskMeta[]> {
+    this.rememberIdentity(params.workspacePath, params.workspaceIdentity);
     const sessions = await this.listVisibleSessions(params.workspacePath);
-    return sessions.map((session) => toNexTaskMeta(params.workspacePath, session));
+    return sessions.map((session) =>
+      toNexTaskMeta(params.workspacePath, session, params.workspaceIdentity),
+    );
   }
 
-  async listPinnedTasks(): Promise<NexTaskMeta[]> {
+  async listPinnedTasks(params?: {
+    workspacePath?: string;
+    workspaceIdentity?: string;
+  }): Promise<NexTaskMeta[]> {
+    this.rememberIdentity(params?.workspacePath, params?.workspaceIdentity);
     return [];
   }
 
-  async listArchivedTasks(): Promise<NexTaskMeta[]> {
+  async listArchivedTasks(params?: {
+    workspacePath?: string;
+    workspaceIdentity?: string;
+  }): Promise<NexTaskMeta[]> {
+    this.rememberIdentity(params?.workspacePath, params?.workspaceIdentity);
     return [];
   }
 
@@ -69,11 +91,13 @@ export class NexTaskChannel {
   onDynamicWorkspaceEvent(
     workspacePath: string,
     emit: (event: NexWorkspaceEvent) => void,
+    workspaceIdentity?: string,
   ): { dispose(): void } {
+    this.rememberIdentity(workspacePath, workspaceIdentity);
     const listeners = this.watchers.get(workspacePath) ?? new Set();
     listeners.add(emit);
     this.watchers.set(workspacePath, listeners);
-    void this.refresh(workspacePath);
+    void this.refresh(workspacePath, workspaceIdentity);
     return {
       dispose: () => {
         listeners.delete(emit);
@@ -99,7 +123,12 @@ export class NexTaskChannel {
     return sessions.filter((session) => session.phase !== "draft");
   }
 
-  private async refresh(workspacePath: string): Promise<void> {
+  private rememberIdentity(workspacePath: string | undefined, identity: string | undefined): void {
+    if (!workspacePath || !identity?.trim()) return;
+    this.identities.set(workspacePath, identity.trim());
+  }
+
+  private async refresh(workspacePath: string, workspaceIdentity?: string): Promise<void> {
     const listeners = this.watchers.get(workspacePath);
     if (!listeners || listeners.size === 0) return;
     let sessions: EngineSessionState[];
@@ -114,9 +143,11 @@ export class NexTaskChannel {
       });
       return;
     }
+    const identity = workspaceIdentity ?? this.identities.get(workspacePath);
     const next: WorkspaceSnapshot = {
       deleted,
       byId: new Map(sessions.map((session) => [session.sessionId, session])),
+      ...(identity ? { workspaceIdentity: identity } : {}),
     };
     const previous = this.snapshots.get(workspacePath);
     this.snapshots.set(workspacePath, next);
@@ -129,9 +160,10 @@ export class NexTaskChannel {
         events.push({
           type: "workspace_task_list_changed",
           workspacePath,
+          ...(identity ? { workspaceIdentity: identity } : {}),
           taskId: session.sessionId,
           reason: "task_created",
-          taskMeta: toNexTaskMeta(workspacePath, session),
+          taskMeta: toNexTaskMeta(workspacePath, session, identity),
         });
         continue;
       }
@@ -143,9 +175,10 @@ export class NexTaskChannel {
         events.push({
           type: "workspace_task_list_changed",
           workspacePath,
+          ...(identity ? { workspaceIdentity: identity } : {}),
           taskId: session.sessionId,
           reason: "task_meta_changed",
-          taskMeta: toNexTaskMeta(workspacePath, session),
+          taskMeta: toNexTaskMeta(workspacePath, session, identity),
         });
       }
     }
@@ -154,6 +187,7 @@ export class NexTaskChannel {
       events.push({
         type: "workspace_task_list_changed",
         workspacePath,
+        ...(identity ? { workspaceIdentity: identity } : {}),
         taskId: deletedId,
         reason: "task_deleted",
       });
@@ -172,13 +206,18 @@ export class NexTaskChannel {
   }
 }
 
-export function toNexTaskMeta(workspacePath: string, session: EngineSessionState): NexTaskMeta {
+export function toNexTaskMeta(
+  workspacePath: string,
+  session: EngineSessionState,
+  workspaceIdentity?: string,
+): NexTaskMeta {
   return {
     taskId: session.sessionId,
     traceId: session.sessionId,
     title: session.title,
     ...(session.titleSource === "custom" ? { titleOverridden: true } : {}),
     workspacePath,
+    ...(workspaceIdentity ? { workspaceIdentity } : {}),
     createdAt: session.createdAt,
     updatedAt: session.lastActivityAt,
     mode: "build",

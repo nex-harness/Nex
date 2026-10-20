@@ -3,32 +3,44 @@
 #   Go server (next/server) + pi runner (packages/next-runner) + Vite web (packages/web).
 #
 # Usage:
-#   next/dev.sh          # run the stack until Ctrl-C
-#   next/dev.sh --e2e    # run the stack, wait until healthy, run the acceptance E2E, exit
+#   next/dev.sh               # run the stack until Ctrl-C
+#   next/dev.sh --e2e         # run the stack, wait until healthy, run the acceptance E2E, exit
+#   next/dev.sh --e2e=acceptance   # same as --e2e
+#   next/dev.sh --e2e=permissions  # run the permissions E2E (approval card flow)
+#   next/dev.sh --e2e=multi        # run the multi-runner E2E (two runners, same path)
+#   next/dev.sh --e2e=all          # run acceptance, permissions and multi
 #
 # Environment:
 #   NEX_NEXT_PORT           Go server port                 (default 3031)
 #   NEX_NEXT_WEB_PORT       Vite dev port                  (default 5174)
 #   NEX_NEXT_DATA           Server/runner data directory   (default ~/.nex-next)
 #   NEX_DEMO_WORKSPACE      Workspace served by the runner (default $TMPDIR/nex-next-demo)
+#   NEX_MULTI_WORKSPACE     Path served by both E2E runners (default $TMPDIR/nex-next-multi)
 #   NEX_NEXT_BROWSER_TOKEN  Browser login token             (default: NEX_SERVER_AUTH_TOKEN or random)
 #   NEX_NEXT_RUNNER_TOKEN   Runner bearer token             (default: NEX_RUNNER_TOKEN or random)
 #
 # The demo workspace always contains notes.txt ("hello from demo"), which the
-# acceptance E2E reads.
+# acceptance E2E reads. The permissions E2E owns perm-*.txt in the same workspace
+# and removes them at the start of a run. Multi/all modes additionally start a
+# second runner (`beta`); both E2E runners serve NEX_MULTI_WORKSPACE, which is
+# recreated fresh for every E2E run.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVER_DIR="$REPO_ROOT/next/server"
 SERVER_BIN="$SERVER_DIR/bin/nex-next-server"
-RUN_E2E=0
+E2E_MODE=""
 
 for arg in "$@"; do
   case "$arg" in
-    --e2e) RUN_E2E=1 ;;
+    --e2e) E2E_MODE="acceptance" ;;
+    --e2e=acceptance) E2E_MODE="acceptance" ;;
+    --e2e=permissions) E2E_MODE="permissions" ;;
+    --e2e=multi) E2E_MODE="multi" ;;
+    --e2e=all) E2E_MODE="all" ;;
     -h | --help)
-      sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -37,13 +49,21 @@ for arg in "$@"; do
       ;;
   esac
 done
+RUN_E2E=0
+[[ -n "$E2E_MODE" ]] && RUN_E2E=1
+# Multi mode needs a second runner; `all` runs it after acceptance/permissions.
+RUN_MULTI=0
+[[ "$E2E_MODE" == "multi" || "$E2E_MODE" == "all" ]] && RUN_MULTI=1
 
 PORT="${NEX_NEXT_PORT:-3031}"
 WEB_PORT="${NEX_NEXT_WEB_PORT:-5174}"
 DATA_DIR="${NEX_NEXT_DATA:-$HOME/.nex-next}"
 WORKSPACE="${NEX_DEMO_WORKSPACE:-${TMPDIR:-/tmp}/nex-next-demo}"
+MULTI_WORKSPACE="${NEX_MULTI_WORKSPACE:-${TMPDIR:-/tmp}/nex-next-multi}"
 BROWSER_TOKEN="${NEX_NEXT_BROWSER_TOKEN:-${NEX_SERVER_AUTH_TOKEN:-}}"
 RUNNER_TOKEN="${NEX_NEXT_RUNNER_TOKEN:-${NEX_RUNNER_TOKEN:-}}"
+ALPHA_NAME="nex-next-alpha"
+BETA_NAME="nex-next-beta"
 
 log() { printf '[dev] %s\n' "$*"; }
 die() {
@@ -82,19 +102,45 @@ port_in_use "$WEB_PORT" && die "port $WEB_PORT is already in use; stop that proc
 # --- workspace and data -----------------------------------------------------
 
 RUNNER_DATA="$DATA_DIR/runner"
+BETA_RUNNER_DATA="$DATA_DIR/runner-e2e-beta"
+SERVER_DATA="$DATA_DIR/server"
 if [[ "$RUN_E2E" -eq 1 ]]; then
   # The acceptance run asserts an empty "real task" sidebar before the send.
-  # Use a dedicated runner data dir and reset it so repeat runs start clean.
+  # Reset sessions/metadata, but keep runner-id.json: the browser persists
+  # `runner:<runnerId>:<path>` workspace identities, and a new id every run turns
+  # the restored workspace into "runner offline" (sidebar + task list fail).
   RUNNER_DATA="$DATA_DIR/runner-e2e"
-  rm -rf "$RUNNER_DATA"
+  rm -rf "$RUNNER_DATA/sessions" "$RUNNER_DATA/workspaces"
+  # The server persists the browser's last workspace tabs (with their identities)
+  # in settings.json. A stale identity from an earlier runner id is routed as
+  # "runner offline", so E2E runs get their own settings store.
+  SERVER_DATA="$DATA_DIR/server-e2e"
+  rm -rf "$SERVER_DATA"
 fi
-mkdir -p "$WORKSPACE" "$DATA_DIR/server" "$RUNNER_DATA"
+if [[ "$RUN_MULTI" -eq 1 ]]; then
+  rm -rf "$BETA_RUNNER_DATA/sessions" "$BETA_RUNNER_DATA/workspaces"
+  # Fresh path per run: the multi E2E also asserts alpha never persisted a session for it.
+  rm -rf "$MULTI_WORKSPACE"
+fi
+mkdir -p "$WORKSPACE" "$SERVER_DATA" "$RUNNER_DATA"
 # $TMPDIR can end with a slash; the runner resolves the path, so normalize it
 # before using it in the health check and in what the runner announces.
 WORKSPACE="$(cd "$WORKSPACE" && pwd -P)"
 if [[ ! -f "$WORKSPACE/notes.txt" ]]; then
   printf 'hello from demo\n' >"$WORKSPACE/notes.txt"
   log "created $WORKSPACE/notes.txt"
+fi
+# 修复依据：RUNNER_WORKSPACES 必须在 WORKSPACE 归一化之后再拼装。此前在归一化前赋值，
+# 单 runner 的健康检查会拿归一化路径去匹配 runner 上报的未归一化 $TMPDIR 路径，永远超时。
+RUNNER_WORKSPACES="$WORKSPACE"
+if [[ "$RUN_MULTI" -eq 1 ]]; then
+  mkdir -p "$MULTI_WORKSPACE" "$BETA_RUNNER_DATA"
+  MULTI_WORKSPACE="$(cd "$MULTI_WORKSPACE" && pwd -P)"
+  printf 'hello from multi\n' >"$MULTI_WORKSPACE/notes.txt"
+  # 多 runner 模式下两个 runner 必须声明同一组 workspace：acceptance 的自动打开取
+  # server-info.workspaces[0]，两台机器都声明 demo + multi 才能让结果与连接顺序无关。
+  RUNNER_WORKSPACES="$WORKSPACE,$MULTI_WORKSPACE"
+  log "multi workspace: $MULTI_WORKSPACE (alpha + beta)"
 fi
 
 # --- build the Go server ----------------------------------------------------
@@ -142,14 +188,17 @@ start_prefixed() {
   CHILD_PIDS+=("$!")
 }
 
-log "server:   http://127.0.0.1:$PORT (data: $DATA_DIR/server)"
-log "runner:   $WORKSPACE (data: $RUNNER_DATA)"
+log "server:   http://127.0.0.1:$PORT (data: $SERVER_DATA)"
+log "runner:   $RUNNER_WORKSPACES (data: $RUNNER_DATA)"
+if [[ "$RUN_MULTI" -eq 1 ]]; then
+  log "beta:     $RUNNER_WORKSPACES (data: $BETA_RUNNER_DATA)"
+fi
 log "web:      http://localhost:$WEB_PORT"
 log "browser token: $BROWSER_TOKEN"
 
 start_prefixed server env \
   NEX_SERVER_ADDR="127.0.0.1:$PORT" \
-  NEX_DATA_DIR="$DATA_DIR/server" \
+  NEX_DATA_DIR="$SERVER_DATA" \
   NEX_WEB_STATIC_ROOT="$REPO_ROOT/packages/web/dist" \
   NEX_SERVER_AUTH_TOKEN="$BROWSER_TOKEN" \
   NEX_RUNNER_TOKEN="$RUNNER_TOKEN" \
@@ -158,18 +207,50 @@ start_prefixed server env \
 start_prefixed runner env \
   NEX_SERVER_URL="ws://127.0.0.1:$PORT/runner" \
   NEX_RUNNER_TOKEN="$RUNNER_TOKEN" \
-  NEX_RUNNER_WORKSPACES="$WORKSPACE" \
+  NEX_RUNNER_WORKSPACES="$RUNNER_WORKSPACES" \
   NEX_RUNNER_DATA_DIR="$RUNNER_DATA" \
-  NEX_RUNNER_NAME="${NEX_RUNNER_NAME:-nex-next-local}" \
+  NEX_RUNNER_ID="alpha" \
+  NEX_RUNNER_NAME="$ALPHA_NAME" \
   NEX_RUNNER_LOG_LEVEL="${NEX_RUNNER_LOG_LEVEL:-info}" \
   pnpm --dir "$REPO_ROOT" --filter @nex/next-runner dev
+
+# Accepting runs assert the auto-opened workspace is the demo workspace. The server
+# sorts each runner's paths, and workspaces[0] comes from the first-registered
+# runner; starting alpha first makes that deterministic.
+wait_for_workspace() {
+  local path="$1" name="$2" attempts="${3:-120}" info
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    info="$(curl -fsS "http://127.0.0.1:$PORT/api/server-info?token=$BROWSER_TOKEN" 2>/dev/null || true)"
+    if [[ -n "$info" ]] && printf '%s' "$info" | grep -Fq "\"$path\""; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+# --- optional second runner (multi-runner E2E) ------------------------------
+
+if [[ "$RUN_MULTI" -eq 1 ]]; then
+  log "waiting for alpha to list $WORKSPACE before starting beta"
+  wait_for_workspace "$WORKSPACE" alpha 120 || die "alpha did not announce $WORKSPACE within 120s"
+  start_prefixed beta env \
+    NEX_SERVER_URL="ws://127.0.0.1:$PORT/runner" \
+    NEX_RUNNER_TOKEN="$RUNNER_TOKEN" \
+    NEX_RUNNER_WORKSPACES="$RUNNER_WORKSPACES" \
+    NEX_RUNNER_DATA_DIR="$BETA_RUNNER_DATA" \
+    NEX_RUNNER_ID="beta" \
+    NEX_RUNNER_NAME="$BETA_NAME" \
+    NEX_RUNNER_LOG_LEVEL="${NEX_RUNNER_LOG_LEVEL:-info}" \
+    pnpm --dir "$REPO_ROOT" --filter @nex/next-runner dev
+fi
 
 start_prefixed web env \
   NEX_WEB_DEV_PORT="$WEB_PORT" \
   NEX_WEB_DEV_SERVER_ORIGIN="http://127.0.0.1:$PORT" \
   pnpm --dir "$REPO_ROOT" --filter @nex/web dev
 
-# --- optional acceptance E2E ------------------------------------------------
+# --- optional E2E -----------------------------------------------------------
 
 if [[ "$RUN_E2E" -eq 1 ]]; then
   log "waiting for server and runner to list $WORKSPACE"
@@ -183,6 +264,20 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
     sleep 1
   done
   [[ "$healthy" -eq 1 ]] || die "runner did not announce $WORKSPACE within 120s"
+  if [[ "$RUN_MULTI" -eq 1 ]]; then
+    log "waiting for both runners to list $MULTI_WORKSPACE"
+    info=""
+    multi_healthy=0
+    for ((attempt = 1; attempt <= 120; attempt++)); do
+      info="$(curl -fsS "http://127.0.0.1:$PORT/api/server-info?token=$BROWSER_TOKEN" 2>/dev/null || true)"
+      if [[ -n "$info" ]] && [[ "$(printf '%s' "$info" | grep -Fo "\"$MULTI_WORKSPACE\"" | wc -l | tr -d ' ')" -ge 2 ]]; then
+        multi_healthy=1
+        break
+      fi
+      sleep 1
+    done
+    [[ "$multi_healthy" -eq 1 ]] || die "both runners did not announce $MULTI_WORKSPACE within 120s"
+  fi
 
   log "waiting for Vite on http://localhost:$WEB_PORT"
   vite_ready=0
@@ -195,18 +290,55 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   done
   [[ "$vite_ready" -eq 1 ]] || die "Vite did not respond on http://localhost:$WEB_PORT within 60s"
 
-  log "running acceptance E2E"
+  log "running $E2E_MODE E2E"
   set +e
-  (
-    cd "$REPO_ROOT"
-    NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
-      NEX_E2E_TOKEN="$BROWSER_TOKEN" \
-      node next/e2e/acceptance.mjs
-  )
-  e2e_status=$?
+  acceptance_status=0
+  permissions_status=0
+  multi_status=0
+  if [[ "$E2E_MODE" == "acceptance" || "$E2E_MODE" == "all" ]]; then
+    (
+      cd "$REPO_ROOT"
+      NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
+        NEX_E2E_TOKEN="$BROWSER_TOKEN" \
+        node next/e2e/acceptance.mjs
+    )
+    acceptance_status=$?
+    log "acceptance E2E exited with $acceptance_status"
+  fi
+  if [[ "$E2E_MODE" == "permissions" || "$E2E_MODE" == "all" ]]; then
+    (
+      cd "$REPO_ROOT"
+      NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
+        NEX_E2E_TOKEN="$BROWSER_TOKEN" \
+        NEX_E2E_WORKSPACE="$WORKSPACE" \
+        node next/e2e/permissions.mjs
+    )
+    permissions_status=$?
+    log "permissions E2E exited with $permissions_status"
+  fi
+  if [[ "$E2E_MODE" == "multi" || "$E2E_MODE" == "all" ]]; then
+    (
+      cd "$REPO_ROOT"
+      NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
+        NEX_E2E_TOKEN="$BROWSER_TOKEN" \
+        NEX_E2E_MULTI_WORKSPACE="$MULTI_WORKSPACE" \
+        NEX_E2E_RUNNER_DATA_ALPHA="$RUNNER_DATA" \
+        NEX_E2E_RUNNER_DATA_BETA="$BETA_RUNNER_DATA" \
+        NEX_E2E_ALPHA_NAME="$ALPHA_NAME" \
+        NEX_E2E_BETA_NAME="$BETA_NAME" \
+        node next/e2e/multi-runner.mjs
+    )
+    multi_status=$?
+    log "multi-runner E2E exited with $multi_status"
+  fi
   set -e
-  log "acceptance E2E exited with $e2e_status"
-  exit "$e2e_status"
+  if [[ "$acceptance_status" -ne 0 ]]; then
+    exit "$acceptance_status"
+  fi
+  if [[ "$permissions_status" -ne 0 ]]; then
+    exit "$permissions_status"
+  fi
+  exit "$multi_status"
 fi
 
 wait

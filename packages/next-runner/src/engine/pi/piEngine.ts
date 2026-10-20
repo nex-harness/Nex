@@ -1,16 +1,13 @@
-import { createHash } from "node:crypto";
-import { mkdir, readdir, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, unlink } from "node:fs/promises";
 import {
   ModelRuntime,
   SessionManager,
   SettingsManager,
-  createAgentSession,
+  getAgentDir,
   type AgentSession,
   type AgentSessionEvent,
 } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
-import { clampThinkingLevel } from "@earendil-works/pi-ai";
 import type { ModelSelection } from "@nex/shared";
 import type { Logger } from "../../logger.js";
 import type {
@@ -21,19 +18,28 @@ import type {
   EngineEventSubscription,
   EngineMessage,
   EngineSessionState,
+  PermissionMode,
+  ResolveApprovalResult,
   SubmitOptions,
   SubmitOutcome,
 } from "../types.js";
-import { translatePiEvent } from "./events.js";
 import { SessionMetaStore } from "./metaStore.js";
 import { EMPTY_USAGE, defaultTitle, selectionFor, usageFromSession } from "./sessionHelpers.js";
 import { buildCatalog, resolveModel } from "./modelCatalog.js";
 import { toEngineHistory } from "./translate.js";
+import { PermissionGate } from "../permissions/gate.js";
+import { normalizeMode } from "../permissions/policy.js";
+import { createPiSessionWithGate } from "./piSessionFactory.js";
+import { findSessionFile as findSessionFileInDir, sessionDirFor } from "./piSessionFiles.js";
+import { applyModelSelection, handlePiSessionEvent, startPromptRun } from "./piSessionOps.js";
 
 interface OpenSession {
   workspacePath: string;
   session: AgentSession;
+  gate: PermissionGate;
   unsubscribe: () => void;
+  /** Subscribers of translated pi events plus gate events (approval/mode). */
+  listeners: Set<(event: EngineEvent) => void>;
   /** prompt() awaits the whole run; link calls must never await this. */
   inflight: Promise<void> | null;
 }
@@ -41,6 +47,10 @@ interface OpenSession {
 export interface PiEngineOptions {
   dataDir: string;
   logger: Logger;
+  /** Test seam: a faux-backed ModelRuntime instead of `~/.pi/agent` credentials. */
+  createModelRuntime?: () => Promise<ModelRuntime>;
+  /** Test seam: in-memory settings instead of the user's settings.json. */
+  createSettingsManager?: (workspacePath: string) => SettingsManager;
 }
 
 /**
@@ -66,7 +76,9 @@ export class PiEngine implements Engine {
     if (this.initialized) return;
     // Defaults read ~/.pi/agent/auth.json + models.json, so the user's existing pi
     // credentials are used without any server push.
-    this.modelRuntime = await ModelRuntime.create();
+    this.modelRuntime = this.options.createModelRuntime
+      ? await this.options.createModelRuntime()
+      : await ModelRuntime.create();
     this.settingsManager = SettingsManager.create(process.cwd());
     await this.metadata.load();
     this.initialized = true;
@@ -82,12 +94,7 @@ export class PiEngine implements Engine {
     const sessionDir = this.sessionDir(workspacePath);
     await mkdir(sessionDir, { recursive: true });
     const sessionManager = SessionManager.create(workspacePath, sessionDir);
-    const { session } = await createAgentSession({
-      cwd: workspacePath,
-      ...(model ? { model } : {}),
-      modelRuntime: runtime,
-      sessionManager,
-    });
+    const { session, open } = await this.openPiSession(workspacePath, sessionManager, model);
     const sessionId = session.sessionId;
     const now = Date.now();
     const selection = model ? selectionFor(session) : undefined;
@@ -98,9 +105,11 @@ export class PiEngine implements Engine {
       title: "",
       titleSource: "default",
       deleted: false,
+      mode: "build",
+      planEnabled: false,
       ...(selection ? { model: selection } : {}),
     });
-    this.attach(workspacePath, session);
+    this.attach(open);
     this.emitSessionsChanged(workspacePath);
     return { sessionId };
   }
@@ -117,16 +126,16 @@ export class PiEngine implements Engine {
     const restoredModel = meta?.model
       ? (runtime.getModel(meta.model.providerId, meta.model.modelId) as Model<never> | undefined)
       : undefined;
-    const { session } = await createAgentSession({
-      cwd: workspacePath,
-      ...(restoredModel ? { model: restoredModel } : {}),
-      modelRuntime: runtime,
+    const { session, gate, open } = await this.openPiSession(
+      workspacePath,
       sessionManager,
-    });
+      restoredModel,
+    );
     if (meta?.model?.thought) {
       session.setThinkingLevel(meta.model.thought as never);
     }
-    this.attach(workspacePath, session);
+    gate.setMode(meta?.mode ?? "build", meta?.planEnabled ?? false);
+    this.attach(open);
     await this.metadata.upsert(workspacePath, sessionId, {
       createdAt: meta?.createdAt ?? Date.now(),
       lastActivityAt: meta?.lastActivityAt ?? Date.now(),
@@ -146,6 +155,7 @@ export class PiEngine implements Engine {
       } catch {
         // Abort is best-effort; disposal below still ends the in-process session.
       }
+      open.gate.dispose();
       open.unsubscribe();
       open.session.dispose();
       this.sessions.delete(sessionId);
@@ -174,6 +184,8 @@ export class PiEngine implements Engine {
         model: open ? selectionFor(open.session) : (entry.model ?? null),
         usage: open ? usageFromSession(open.session) : (entry.usage ?? EMPTY_USAGE),
         isRunning: open?.session.isStreaming ?? false,
+        mode: open ? open.gate.getMode().mode : (entry.mode ?? "build"),
+        planEnabled: open ? open.gate.getMode().planEnabled : (entry.planEnabled ?? false),
       });
     }
     states.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
@@ -194,10 +206,8 @@ export class PiEngine implements Engine {
 
   subscribe(sessionId: string, listener: (event: EngineEvent) => void): EngineEventSubscription {
     const open = this.requireOpen(sessionId);
-    const unsubscribe = open.session.subscribe((event: AgentSessionEvent) => {
-      for (const translated of translatePiEvent(event)) listener(translated);
-    });
-    return { dispose: unsubscribe };
+    open.listeners.add(listener);
+    return { dispose: () => open.listeners.delete(listener) };
   }
 
   async submit(sessionId: string, text: string, options: SubmitOptions): Promise<SubmitOutcome> {
@@ -208,6 +218,12 @@ export class PiEngine implements Engine {
       return { status: "duplicate", inputId: options.requestId };
     }
     if (options.modelSelection) await this.applySelection(sessionId, options.modelSelection);
+    // The mode arrives per submission; the gate applies it before the run starts so the
+    // very first tool call of this turn sees it.
+    const mode = normalizeMode(options.mode ?? meta?.mode);
+    const planEnabled =
+      options.planEnabled ?? (options.mode ? false : (meta?.planEnabled ?? false));
+    open.gate.setMode(mode, planEnabled);
     const now = Date.now();
     const title = meta?.title || defaultTitle(text);
     await this.metadata.upsert(workspacePath, sessionId, {
@@ -215,6 +231,8 @@ export class PiEngine implements Engine {
       phase: text.trim() ? "running" : (meta?.phase ?? "draft"),
       title,
       titleSource: meta?.titleSource ?? "default",
+      mode,
+      planEnabled,
       seenRequestId: options.requestId,
       ...(selectionFor(open.session) ? { model: selectionFor(open.session) ?? undefined } : {}),
     });
@@ -226,9 +244,28 @@ export class PiEngine implements Engine {
     return { status: "accepted", inputId: options.requestId };
   }
 
+  async resolveApproval(
+    sessionId: string,
+    interactionId: string,
+    answer: { optionId?: string; freeText?: string },
+  ): Promise<ResolveApprovalResult> {
+    const open = this.sessions.get(sessionId);
+    if (!open) return { resolved: false };
+    const outcome = open.gate.resolve(interactionId, answer);
+    if (outcome.resolved) this.emitSessionsChanged(open.workspacePath);
+    return outcome;
+  }
+
+  permissionMode(sessionId: string): { mode: PermissionMode; planEnabled: boolean } | null {
+    const open = this.sessions.get(sessionId);
+    return open ? open.gate.getMode() : null;
+  }
+
   async abort(sessionId: string): Promise<void> {
     const open = this.sessions.get(sessionId);
     if (!open) return;
+    // Settle the hook before aborting so the run cannot stay paused on an approval.
+    open.gate.abortPending();
     await open.session.abort();
     await this.metadata.upsert(open.workspacePath, sessionId, {
       phase: "completedInterrupted",
@@ -269,6 +306,7 @@ export class PiEngine implements Engine {
 
   async dispose(): Promise<void> {
     for (const open of this.sessions.values()) {
+      open.gate.dispose();
       open.unsubscribe();
       open.session.dispose();
     }
@@ -278,46 +316,65 @@ export class PiEngine implements Engine {
 
   // ── internals ──
 
-  private attach(workspacePath: string, session: AgentSession): void {
-    const sessionId = session.sessionId;
-    this.sessions.get(sessionId)?.unsubscribe();
-    const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
-      void this.onPiEvent(workspacePath, sessionId, event);
+  /**
+   * Builds the pi session with the inline permission-gate extension. pi's SDK does not
+   * reload a supplied resource loader, so the loader is reloaded here; inline extensions
+   * load after disk extensions and therefore see every `tool_call` last.
+   */
+  private async openPiSession(
+    workspacePath: string,
+    sessionManager: SessionManager,
+    model: Model<never> | undefined,
+  ): Promise<{ session: AgentSession; gate: PermissionGate; open: OpenSession }> {
+    const settingsManager =
+      this.options.createSettingsManager?.(workspacePath) ??
+      this.settingsManager ??
+      SettingsManager.create(workspacePath, getAgentDir());
+    const sessionIdRef = { current: "" };
+    const created = await createPiSessionWithGate({
+      workspacePath,
+      sessionManager,
+      model,
+      modelRuntime: this.requireRuntime(),
+      settingsManager,
+      onPiEvent: (event) => {
+        void this.onPiEvent(workspacePath, sessionIdRef.current, event);
+      },
     });
-    this.sessions.set(sessionId, { workspacePath, session, unsubscribe, inflight: null });
+    sessionIdRef.current = created.session.sessionId;
+    const open: OpenSession = {
+      workspacePath,
+      session: created.session,
+      gate: created.gate,
+      listeners: created.listeners,
+      inflight: null,
+      unsubscribe: created.unsubscribe,
+    };
+    return { session: created.session, gate: created.gate, open };
   }
 
-  private async onPiEvent(
+  private attach(open: OpenSession): void {
+    const sessionId = open.session.sessionId;
+    this.sessions.get(sessionId)?.unsubscribe();
+    this.sessions.set(sessionId, open);
+  }
+
+  private onPiEvent(
     workspacePath: string,
     sessionId: string,
     event: AgentSessionEvent,
   ): Promise<void> {
-    if (event.type === "message_end") {
-      const message = event.message;
-      if (message.role === "user") {
-        await this.metadata.upsert(workspacePath, sessionId, { lastActivityAt: Date.now() });
-        this.emitSessionsChanged(workspacePath);
-      } else if (message.role === "assistant" && message.stopReason === "error") {
-        await this.metadata.upsert(workspacePath, sessionId, {
-          phase: "error",
-          lastActivityAt: Date.now(),
-        });
-        this.emitSessionsChanged(workspacePath);
-      }
-      return;
-    }
-    if (event.type === "agent_settled") {
-      const open = this.sessions.get(sessionId);
-      await this.metadata.upsert(workspacePath, sessionId, {
-        phase: event.aborted ? "completedInterrupted" : "completedSuccess",
-        lastActivityAt: Date.now(),
-        ...(open ? { usage: usageFromSession(open.session) } : {}),
-        ...(open && selectionFor(open.session)
-          ? { model: selectionFor(open.session) ?? undefined }
-          : {}),
-      });
-      this.emitSessionsChanged(workspacePath);
-    }
+    return handlePiSessionEvent(
+      {
+        metadata: this.metadata,
+        logger: this.options.logger,
+        sessionFor: (id) => this.sessions.get(id)?.session,
+        sessionsChanged: (path) => this.emitSessionsChanged(path),
+      },
+      workspacePath,
+      sessionId,
+      event,
+    );
   }
 
   private async startPrompt(
@@ -332,24 +389,17 @@ export class PiEngine implements Engine {
       lastActivityAt: Date.now(),
       phase: "running",
     });
-    // prompt() resolves when the whole run settles. The link's call/result must not wait
-    // for it, so the promise is retained only to keep it alive and update metadata.
-    open.inflight = open.session
-      .prompt(text, { streamingBehavior: "followUp" })
-      .catch(async (error: unknown) => {
-        await this.metadata.upsert(workspacePath, sessionId, {
-          phase: "error",
-          lastActivityAt: Date.now(),
-        });
-        this.options.logger.warn("pi prompt failed", {
-          sessionId,
-          message: error instanceof Error ? error.message : String(error),
-        });
-        this.emitSessionsChanged(workspacePath);
-      })
-      .finally(() => {
-        open.inflight = null;
-      });
+    startPromptRun(
+      {
+        metadata: this.metadata,
+        logger: this.options.logger,
+        sessionsChanged: (path) => this.emitSessionsChanged(path),
+      },
+      open,
+      workspacePath,
+      sessionId,
+      text,
+    );
     this.emitSessionsChanged(workspacePath);
     return inputId;
   }
@@ -357,15 +407,9 @@ export class PiEngine implements Engine {
   private async applySelection(sessionId: string, selection: ModelSelection): Promise<void> {
     const open = this.requireOpen(sessionId);
     const runtime = this.requireRuntime();
-    const model = runtime.getModel(selection.providerId, selection.modelId);
-    if (!model) throw new Error(`Unknown model ${selection.providerId}/${selection.modelId}`);
-    await open.session.setModel(model);
-    const level = selection.options?.reasoningLevel;
-    if (level) {
-      // pi clamps to the model's supported set; ask for the requested level and let it
-      // land on the nearest supported one (the UI only sends levels we advertised).
-      open.session.setThinkingLevel(clampThinkingLevel(model, level as never) as never);
-    }
+    await applyModelSelection(open.session, selection, (providerId, modelId) =>
+      runtime.getModel(providerId, modelId),
+    );
   }
 
   private requireRuntime(): ModelRuntime {
@@ -380,18 +424,11 @@ export class PiEngine implements Engine {
   }
 
   private sessionDir(workspacePath: string): string {
-    const digest = createHash("sha1").update(workspacePath).digest("hex");
-    return join(this.options.dataDir, "sessions", digest);
+    return sessionDirFor(this.options.dataDir, workspacePath);
   }
 
-  private async findSessionFile(
-    workspacePath: string,
-    sessionId: string,
-  ): Promise<string | undefined> {
-    const dir = this.sessionDir(workspacePath);
-    const files = await readdir(dir).catch(() => [] as string[]);
-    const match = files.find((name) => name.endsWith(`_${sessionId}.jsonl`));
-    return match ? join(dir, match) : undefined;
+  private findSessionFile(workspacePath: string, sessionId: string): Promise<string | undefined> {
+    return findSessionFileInDir(this.sessionDir(workspacePath), sessionId);
   }
 
   private emitSessionsChanged(workspacePath: string): void {

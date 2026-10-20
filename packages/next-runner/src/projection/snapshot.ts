@@ -2,10 +2,13 @@ import type {
   ActiveWorkSummary,
   ConversationSnapshot,
   ModelSelection,
+  PendingInteraction,
+  PermissionRequestPayload,
 } from "@nex/shared/nex-protocol-v4";
 import type { EnginePhase } from "../engine/types.js";
 import type {
   AssistantTextRowState,
+  PendingApprovalState,
   ProjectedRow,
   ProjectionState,
   ReasoningRowState,
@@ -13,13 +16,13 @@ import type {
   TurnHeaderRowState,
   UserInputRowState,
 } from "./state.js";
+import { mapToolInput, toolDisplayName } from "./toolMapping.js";
 
 const TAIL_WINDOW = 200;
 
 export interface SnapshotOptions {
   /** Optional model selection echoed into config.modelSelection (unused by MVP UI). */
   selection?: ModelSelection;
-  mode?: string;
 }
 
 /**
@@ -58,7 +61,10 @@ export function buildConversationSnapshot(
     thought: normalizedThought,
     thoughtLevels,
     followupMode: "queue" as const,
-    mode: options.mode ?? "build",
+    // Echo the session's permission mode so the composer seeds itself after reopen; the
+    // gate stays the authority, this is projection only.
+    mode: state.mode,
+    planEnabled: state.planEnabled,
     ...(modelSelection ? { modelSelection } : {}),
   };
   return {
@@ -109,7 +115,7 @@ export function buildConversationSnapshot(
       },
     },
     queue: { items: [], autoDrain: true },
-    pendingInteractions: [],
+    pendingInteractions: toPendingInteractions(state),
     pendingCommands: [],
     backgroundWorks: [],
     goal: null,
@@ -120,6 +126,51 @@ export function buildConversationSnapshot(
       totalCount: state.rows.length,
       firstRowId,
     },
+  };
+}
+
+/**
+ * Projects live approvals into the UI contract. `config.permissionGrant` is deliberately
+ * never set: the UI would flip the composer to yolo for the rest of the draft.
+ */
+function toPendingInteractions(state: ProjectionState): PendingInteraction[] {
+  return Object.values(state.pendingApprovals).map((approval) => ({
+    interactionId: approval.interactionId,
+    kind: "permission" as const,
+    anchorRowId: state.toolRows[approval.toolCallId] ?? null,
+    createdAt: approval.createdAt,
+    payload: permissionPayload(approval),
+  }));
+}
+
+function permissionPayload(approval: PendingApprovalState): PermissionRequestPayload {
+  return {
+    kind: "permission",
+    toolCallId: approval.toolCallId,
+    toolName: toolDisplayName(approval.toolName),
+    summary: approval.summary,
+    detail: mapToolInput(approval.toolName, approval.detail),
+    freeText: true,
+    options: [
+      {
+        optionId: "allowOnce",
+        label: "Allow",
+        kind: "allowOnce",
+        response: { decision: "allow" },
+      },
+      {
+        optionId: "allowAlways",
+        label: "Always allow in this session",
+        kind: "allowAlways",
+        response: { decision: "allow" },
+      },
+      {
+        optionId: "deny",
+        label: "Deny",
+        kind: "deny",
+        response: { decision: "deny" },
+      },
+    ],
   };
 }
 
@@ -230,6 +281,9 @@ function toolCallRow(
     ...(row.outputText !== undefined ? { outputPreview: buildOutputPreview(outputText) } : {}),
     ...(row.status === "error"
       ? { error: { code: "tool_error", message: row.errorMessage ?? outputText } }
+      : {}),
+    ...(row.status === "pendingApproval" && row.approvalInteractionId
+      ? { approvalInteractionId: row.approvalInteractionId }
       : {}),
     ...(row.startedAt !== undefined ? { startedAt: row.startedAt } : {}),
     ...(row.endedAt !== undefined ? { endedAt: row.endedAt } : {}),

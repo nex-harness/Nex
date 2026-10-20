@@ -2,7 +2,13 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Logger } from "../../logger.js";
 import { KeyedQueue, writeJsonAtomic } from "../../util/fs.js";
-import type { EngineModelState, EnginePhase, EngineTitleSource, EngineUsage } from "../types.js";
+import type {
+  EngineModelState,
+  EnginePhase,
+  EngineTitleSource,
+  EngineUsage,
+  PermissionMode,
+} from "../types.js";
 
 export interface SessionMetaEntry {
   sessionId: string;
@@ -14,6 +20,9 @@ export interface SessionMetaEntry {
   deleted: boolean;
   model?: EngineModelState;
   usage?: EngineUsage;
+  /** Last submission's permission mode; seeds `snapshot.config.mode` after a restart. */
+  mode?: PermissionMode;
+  planEnabled?: boolean;
   seenRequestIds?: string[];
 }
 

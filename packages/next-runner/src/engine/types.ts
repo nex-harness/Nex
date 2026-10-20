@@ -42,6 +42,9 @@ export interface EngineSessionState {
   model: EngineModelState | null;
   usage: EngineUsage;
   isRunning: boolean;
+  /** Last submission's permission mode; seeds the restored projection. */
+  mode?: PermissionMode;
+  planEnabled?: boolean;
 }
 
 /** Normalized transcript used for restore; mirrors the pi message shapes we consume. */
@@ -79,6 +82,21 @@ export type EngineStopReason =
   | "error"
   | "aborted"
   | "deferred";
+
+/** Submission permission mode (spec: docs/next/permissions.md). */
+export type PermissionMode = "build" | "edit" | "yolo";
+
+export type EngineApprovalOutcome = "allow" | "deny" | "aborted";
+
+/** One tool call waiting for the user's approval. Owned by the engine's PermissionGate. */
+export interface EngineApprovalRequest {
+  interactionId: string;
+  toolCallId: string;
+  toolName: string;
+  input: unknown;
+  summary: string;
+  createdAt: number;
+}
 
 /**
  * Live engine events. Deliberately close to pi's AgentSessionEvent but stripped of
@@ -123,6 +141,15 @@ export type EngineEvent =
     }
   | { type: "settled"; at: number; aborted: boolean }
   | { type: "phase"; at: number; phase: EnginePhase }
+  | { type: "mode_changed"; at: number; mode: PermissionMode; planEnabled: boolean }
+  | { type: "approval_request"; at: number; approval: EngineApprovalRequest }
+  | {
+      type: "approval_settled";
+      at: number;
+      interactionId: string;
+      toolCallId: string;
+      outcome: EngineApprovalOutcome;
+    }
   | { type: "error"; at: number; message: string };
 
 export interface EngineModelInfo {
@@ -153,6 +180,16 @@ export interface CreateEngineSessionOptions {
 export interface SubmitOptions {
   requestId: string;
   modelSelection?: ModelSelection;
+  /** Permission mode of this submission (spec: docs/next/permissions.md). */
+  mode?: string;
+  planEnabled?: boolean;
+}
+
+/** Result of resolving a permission interaction. */
+export interface ResolveApprovalResult {
+  /** false for unknown/already-resolved ids (idempotent no-op). */
+  resolved: boolean;
+  outcome?: EngineApprovalOutcome;
 }
 
 export interface SubmitOutcome {
@@ -189,6 +226,16 @@ export interface Engine {
   subscribe(sessionId: string, listener: (event: EngineEvent) => void): EngineEventSubscription;
 
   submit(sessionId: string, text: string, options: SubmitOptions): Promise<SubmitOutcome>;
+
+  /** Resolves a pending permission interaction; unknown ids are an idempotent no-op. */
+  resolveApproval(
+    sessionId: string,
+    interactionId: string,
+    answer: { optionId?: string; freeText?: string },
+  ): Promise<ResolveApprovalResult>;
+
+  /** The session's current permission mode (echoed into `snapshot.config.mode`). */
+  permissionMode(sessionId: string): { mode: PermissionMode; planEnabled: boolean } | null;
 
   abort(sessionId: string): Promise<void>;
 
