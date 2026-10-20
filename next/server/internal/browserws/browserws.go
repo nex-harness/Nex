@@ -469,7 +469,7 @@ func (c *connection) runPromise(ctx context.Context, entry *pendingPromise, requ
 		c.enqueuePromiseError(request.ID, "Method not found: "+request.Name, "Error")
 
 	case router.TargetWorkspace:
-		c.forwardCall(ctx, request, route.WorkspacePath)
+		c.forwardCall(ctx, request, route.Target())
 
 	case router.TargetFirstRunner:
 		arg, err := rpcwire.ToJSON(request.Arg)
@@ -499,13 +499,13 @@ func (c *connection) respondPromise(ctx context.Context, id uint32, value rpcwir
 // forwardCall forwards the Channel RPC body verbatim: the browser sends the
 // method arguments as an array (ProxyChannel.toService → channel.call(name,
 // args)), and the runner applies that array exactly like ProxyChannel.
-func (c *connection) forwardCall(ctx context.Context, request rpcwire.Request, workspacePath string) {
+func (c *connection) forwardCall(ctx context.Context, request rpcwire.Request, target runners.Target) {
 	arg, err := rpcwire.ToJSON(request.Arg)
 	if err != nil {
 		c.enqueuePromiseError(request.ID, err.Error(), "Error")
 		return
 	}
-	value, err := c.deps.Registry.Call(ctx, workspacePath, request.Channel, request.Name, arg)
+	value, err := c.deps.Registry.CallWorkspace(ctx, target, request.Channel, request.Name, arg)
 	c.respondForwarded(ctx, request.ID, value, err)
 }
 
@@ -533,6 +533,9 @@ func (c *connection) respondForwarded(ctx context.Context, id uint32, value json
 			return
 		case errors.Is(err, runners.ErrNoRunnerConnected):
 			c.enqueuePromiseError(id, "no runner connected", "Error")
+			return
+		case errors.Is(err, runners.ErrAmbiguousWorkspacePath):
+			c.enqueuePromiseError(id, "ambiguous workspace path; workspaceIdentity required", "Error")
 			return
 		case errors.Is(err, runners.ErrNoRunnerForWorkspace):
 			c.enqueuePromiseError(id, "no runner connected for workspace", "Error")
@@ -625,9 +628,9 @@ func (c *connection) handleListen(parent context.Context, request rpcwire.Reques
 			cancel()
 			return
 		}
-		workspacePath := ""
+		target := runners.Target{}
 		if route.Kind == router.TargetWorkspace {
-			workspacePath = route.WorkspacePath
+			target = route.Target()
 		}
 		emit := func(data json.RawMessage) {
 			// Runner event values use the rpcwire JSON bridge.
@@ -638,7 +641,16 @@ func (c *connection) handleListen(parent context.Context, request rpcwire.Reques
 			}
 			c.enqueueEvent(request.ID, value)
 		}
-		c.deps.Registry.RegisterListen(c.id, request.ID, request.Channel, request.Name, workspacePath, arg, emit)
+		if err := c.deps.Registry.RegisterListen(c.id, request.ID, target, request.Channel, request.Name, arg, emit); err != nil {
+			// Identity listens are stored even while the runner is offline so a
+			// reconnect can re-issue them; only a rejected spec (ambiguous
+			// legacy path) reaches this branch.
+			c.deps.Logger.Warn("browser listen rejected",
+				"channel", request.Channel, "event", request.Name, "error", err)
+			c.enqueueEvent(request.ID, rpcwire.Undefined{})
+			cancel()
+			return
+		}
 		if !register(nil) {
 			// The connection closed between storing the binding and recording
 			// the local listen id; UnregisterOwner may have already run before

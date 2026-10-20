@@ -95,12 +95,17 @@ func (h *harness) dialBrowser(t *testing.T, session string) *websocket.Conn {
 
 func runnerHello(t *testing.T, conn *websocket.Conn, id, path string) {
 	t.Helper()
+	runnerHelloNamed(t, conn, id, "test-runner", "darwin", path)
+}
+
+func runnerHelloNamed(t *testing.T, conn *websocket.Conn, id, name, runnerOS, path string) {
+	t.Helper()
 	hello, _ := json.Marshal(map[string]any{
 		"t":        "hello",
 		"runnerId": id,
-		"name":     "test-runner",
+		"name":     name,
 		"version":  "0.1.0",
-		"os":       "darwin",
+		"os":       runnerOS,
 		"arch":     "arm64",
 		"workspaces": []map[string]string{
 			{"path": path, "label": "demo"},
@@ -203,6 +208,10 @@ func mustRaw(t *testing.T, literal string) json.RawMessage {
 	return json.RawMessage(literal)
 }
 
+func identityFor(runnerID, path string) string {
+	return "runner:" + runnerID + ":" + path
+}
+
 func TestEndToEndRoutingAndReconnect(t *testing.T) {
 	h := newHarness(t)
 	session := h.login(t)
@@ -210,8 +219,8 @@ func TestEndToEndRoutingAndReconnect(t *testing.T) {
 	runner := h.dialRunner(t)
 	runnerHello(t, runner, runnerID, workspace)
 
-	// server-info now advertises the workspace with a "runner: basename" label
-	// and no workspaceIdentity.
+	// server-info advertises the workspace identity and runner metadata; the
+	// label is "<runnerName>: <basename>".
 	request, _ := http.NewRequest(http.MethodGet, h.server.URL+"/api/server-info", nil)
 	request.Header.Set("Cookie", "nex_session="+session)
 	response, err := http.DefaultClient.Do(request)
@@ -234,8 +243,17 @@ func TestEndToEndRoutingAndReconnect(t *testing.T) {
 	if info.Workspaces[0]["label"] != "test-runner: demo" {
 		t.Fatalf("workspace label = %v", info.Workspaces[0]["label"])
 	}
-	if _, present := info.Workspaces[0]["workspaceIdentity"]; present {
-		t.Fatalf("server-info must not set workspaceIdentity: %+v", info.Workspaces[0])
+	if info.Workspaces[0]["workspaceIdentity"] != "runner:"+runnerID+":"+workspace {
+		t.Fatalf("workspaceIdentity = %v", info.Workspaces[0]["workspaceIdentity"])
+	}
+	if info.Workspaces[0]["runnerId"] != runnerID {
+		t.Fatalf("runnerId = %v", info.Workspaces[0]["runnerId"])
+	}
+	if info.Workspaces[0]["runnerName"] != "test-runner" {
+		t.Fatalf("runnerName = %v", info.Workspaces[0]["runnerName"])
+	}
+	if info.Workspaces[0]["runnerOs"] != "darwin" {
+		t.Fatalf("runnerOs = %v", info.Workspaces[0]["runnerOs"])
 	}
 
 	browser := newBrowserClient(t, h.dialBrowser(t, session))
@@ -347,7 +365,7 @@ func TestEndToEndRoutingAndReconnect(t *testing.T) {
 	browser.send(rpcwire.RequestPromise, 7, "nex-agent", "subscribeConversationV4", mustRaw(t, `[{
 		"workspacePath": "`+workspace+`",
 		"sessionId": "sess-1",
-		"workspaceIdentity": "runner:ignored:should-not-be-used"
+		"workspaceIdentity": "`+identityFor(runnerID, workspace)+`"
 	}]`))
 
 	readCtx, cancelRead := context.WithTimeout(context.Background(), 5*time.Second)
@@ -644,36 +662,309 @@ func TestDuplicateRunnerNewestWins(t *testing.T) {
 	}
 }
 
-func TestDuplicateWorkspacePathRejected(t *testing.T) {
+// Two runners serving the same path are both listed with distinct identities,
+// and calls/listens reach only the runner named by workspaceIdentity. A path
+// call without identity is ambiguous; an offline identity fails fast.
+func TestTwoRunnersSamePathIdentityRouting(t *testing.T) {
 	h := newHarness(t)
-	first := h.dialRunner(t)
-	runnerHello(t, first, "runner-a", workspace)
-	second := h.dialRunner(t)
-	runnerHello(t, second, "runner-b", workspace)
+	session := h.login(t)
 
-	request, _ := http.NewRequest(http.MethodGet, h.server.URL+"/api/server-info?token="+authToken, nil)
+	alpha := h.dialRunner(t)
+	runnerHelloNamed(t, alpha, "alpha", "alpha-box", "linux", workspace)
+	beta := h.dialRunner(t)
+	runnerHelloNamed(t, beta, "beta", "win-box", "win32", workspace)
+
+	// Both machines are listed, same path, distinct identities, labels from
+	// the runner name.
+	request, _ := http.NewRequest(http.MethodGet, h.server.URL+"/api/server-info", nil)
+	request.Header.Set("Cookie", "nex_session="+session)
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatalf("server-info: %v", err)
 	}
 	defer response.Body.Close()
 	var info struct {
-		Workspaces []map[string]any `json:"workspaces"`
+		Workspaces []struct {
+			Path              string `json:"path"`
+			Label             string `json:"label"`
+			WorkspaceIdentity string `json:"workspaceIdentity"`
+			RunnerID          string `json:"runnerId"`
+			RunnerName        string `json:"runnerName"`
+			RunnerOS          string `json:"runnerOs"`
+		} `json:"workspaces"`
 	}
-	_ = json.NewDecoder(response.Body).Decode(&info)
-	if len(info.Workspaces) != 1 || info.Workspaces[0]["label"] != "test-runner: demo" {
-		t.Fatalf("workspaces = %+v, want the first owner only", info.Workspaces)
+	if err := json.NewDecoder(response.Body).Decode(&info); err != nil {
+		t.Fatalf("decoding server-info: %v", err)
+	}
+	if len(info.Workspaces) != 2 {
+		t.Fatalf("workspaces = %+v, want both runners", info.Workspaces)
+	}
+	want := []struct {
+		identity   string
+		runnerID   string
+		runnerName string
+		runnerOS   string
+		label      string
+	}{
+		{identityFor("alpha", workspace), "alpha", "alpha-box", "linux", "alpha-box: demo"},
+		{identityFor("beta", workspace), "beta", "win-box", "win32", "win-box: demo"},
+	}
+	for index, expected := range want {
+		row := info.Workspaces[index]
+		if row.Path != workspace || row.WorkspaceIdentity != expected.identity ||
+			row.RunnerID != expected.runnerID || row.RunnerName != expected.runnerName ||
+			row.RunnerOS != expected.runnerOS || row.Label != expected.label {
+			t.Fatalf("workspaces[%d] = %+v, want %+v", index, row, expected)
+		}
 	}
 
-	// A call for the path goes to the first runner.
-	browser := newBrowserClient(t, h.dialBrowser(t, h.login(t)))
-	browser.send(rpcwire.RequestPromise, 1, "nex-agent", "subscribeConversationV4",
-		mustRaw(t, `{"workspacePath":"`+workspace+`","sessionId":"s"}`))
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if _, _, err := first.Read(ctx); err != nil {
-		t.Fatalf("first runner did not receive the call: %v", err)
+	// recentProjects is path-only: the shared path appears once.
+	browser := newBrowserClient(t, h.dialBrowser(t, session))
+	settingsResponse := browser.call(1, "setting", "get", rpcwire.Undefined{})
+	if settingsResponse.Type != rpcwire.ResponsePromiseSuccess {
+		t.Fatalf("setting.get = %+v", settingsResponse)
 	}
+	settingsBody, _ := settingsResponse.Body.(json.RawMessage)
+	var settings struct {
+		RecentProjects []string `json:"recentProjects"`
+	}
+	if err := json.Unmarshal(settingsBody, &settings); err != nil {
+		t.Fatalf("decoding settings: %v", err)
+	}
+	if len(settings.RecentProjects) != 1 || settings.RecentProjects[0] != workspace {
+		t.Fatalf("recentProjects = %v, want the deduplicated path", settings.RecentProjects)
+	}
+
+	// Identity call routes to beta only.
+	browser.send(rpcwire.RequestPromise, 2, "nex-task", "listTasks", mustRaw(t, `[{
+		"workspacePath": "`+workspace+`",
+		"workspaceIdentity": "`+identityFor("beta", workspace)+`"
+	}]`))
+	betaStream := newRunnerStream(t, beta)
+	betaCall := betaStream.next(t, 5*time.Second)
+	if betaCall.Channel != "nex-task" || betaCall.Method != "listTasks" {
+		t.Fatalf("beta call = %+v", betaCall)
+	}
+	if err := beta.Write(context.Background(), websocket.MessageText,
+		callResultFrame(t, betaCall.ID, []any{})); err != nil {
+		t.Fatalf("writing beta result: %v", err)
+	}
+	if reply := browser.readResponse(); reply.Type != rpcwire.ResponsePromiseSuccess || reply.ID != 2 {
+		t.Fatalf("beta reply = %+v", reply)
+	}
+	alphaStream := newRunnerStream(t, alpha)
+	alphaStream.expectNone(t, 300*time.Millisecond)
+
+	// A listen for alpha's identity must reach only alpha.
+	browser.send(rpcwire.RequestEventListen, 3, "nex-task", "onDynamicWorkspaceEvent", mustRaw(t, `[{
+		"workspacePath": "`+workspace+`",
+		"workspaceIdentity": "`+identityFor("alpha", workspace)+`"
+	}]`))
+	alphaListen := alphaStream.next(t, 5*time.Second)
+	if alphaListen.T != "listen" || alphaListen.Event != "onDynamicWorkspaceEvent" {
+		t.Fatalf("alpha listen = %+v", alphaListen)
+	}
+	betaStream.expectNone(t, 300*time.Millisecond)
+
+	event, _ := json.Marshal(map[string]any{
+		"t": "event", "id": alphaListen.ID,
+		"value": map[string]any{"type": "workspace_task_list_changed", "workspacePath": workspace},
+	})
+	if err := alpha.Write(context.Background(), websocket.MessageText, event); err != nil {
+		t.Fatalf("writing alpha event: %v", err)
+	}
+	if fired := browser.readResponse(); fired.Type != rpcwire.ResponseEventFire || fired.ID != 3 {
+		t.Fatalf("alpha event = %+v", fired)
+	}
+
+	// A path-only call is ambiguous.
+	browser.send(rpcwire.RequestPromise, 4, "nex-task", "listTasks", mustRaw(t, `[{"workspacePath":"`+workspace+`"}]`))
+	ambiguous := browser.readResponse()
+	if ambiguous.Type != rpcwire.ResponsePromiseError || ambiguous.ID != 4 {
+		t.Fatalf("ambiguous response = %+v", ambiguous)
+	}
+	ambiguousBody, _ := ambiguous.Body.(json.RawMessage)
+	if !strings.Contains(string(ambiguousBody), "ambiguous workspace path; workspaceIdentity required") {
+		t.Fatalf("ambiguous error = %s", ambiguousBody)
+	}
+	alphaStream.expectNone(t, 300*time.Millisecond)
+	betaStream.expectNone(t, 100*time.Millisecond)
+
+	// A beta identity listen is bound before the disconnect; it must be
+	// re-issued to beta's next connection only.
+	browser.send(rpcwire.RequestEventListen, 7, "nex-agent", "onDynamicConversationFrame", mustRaw(t, `[{
+		"workspacePath": "`+workspace+`",
+		"workspaceIdentity": "`+identityFor("beta", workspace)+`"
+	}]`))
+	betaBoundListen := betaStream.next(t, 5*time.Second)
+	if betaBoundListen.T != "listen" || betaBoundListen.Event != "onDynamicConversationFrame" {
+		t.Fatalf("beta bound listen = %+v", betaBoundListen)
+	}
+	alphaStream.expectNone(t, 300*time.Millisecond)
+
+	// Disconnect beta: its identity fails fast with "runner offline" and never
+	// falls back to alpha.
+	_ = beta.CloseNow()
+	waitForRunnerGone(t, h, session, "beta")
+	browser.send(rpcwire.RequestPromise, 5, "nex-task", "listTasks", mustRaw(t, `[{
+		"workspacePath": "`+workspace+`",
+		"workspaceIdentity": "`+identityFor("beta", workspace)+`"
+	}]`))
+	offline := browser.readResponse()
+	if offline.Type != rpcwire.ResponsePromiseError || offline.ID != 5 {
+		t.Fatalf("offline response = %+v", offline)
+	}
+	offlineBody, _ := offline.Body.(json.RawMessage)
+	if !strings.Contains(string(offlineBody), "runner offline") {
+		t.Fatalf("offline error = %s", offlineBody)
+	}
+	alphaStream.expectNone(t, 300*time.Millisecond)
+
+	// beta reconnects: its identity listen is re-issued with the original listen
+	// id, alpha receives nothing, and an event for it reaches the browser.
+	beta2 := h.dialRunner(t)
+	runnerHelloNamed(t, beta2, "beta", "win-box", "win32", workspace)
+	beta2Stream := newRunnerStream(t, beta2)
+	reissued := beta2Stream.next(t, 5*time.Second)
+	if reissued.T != "listen" || reissued.ID != betaBoundListen.ID || reissued.Event != "onDynamicConversationFrame" {
+		t.Fatalf("beta re-listen = %+v, want id %s", reissued, betaBoundListen.ID)
+	}
+	alphaStream.expectNone(t, 300*time.Millisecond)
+
+	event2, _ := json.Marshal(map[string]any{
+		"t": "event", "id": reissued.ID,
+		"value": map[string]any{"wireVersion": 3, "kind": "complete", "reconnected": true},
+	})
+	if err := beta2.Write(context.Background(), websocket.MessageText, event2); err != nil {
+		t.Fatalf("writing beta reconnected event: %v", err)
+	}
+	if fired := browser.readResponse(); fired.Type != rpcwire.ResponseEventFire || fired.ID != 7 {
+		t.Fatalf("beta reconnected event = %+v", fired)
+	}
+
+	// A fresh beta-identity listen routes to the reconnected beta only.
+	browser.send(rpcwire.RequestEventListen, 6, "nex-agent", "onDynamicConversationFrame", mustRaw(t, `[{
+		"workspacePath": "`+workspace+`",
+		"workspaceIdentity": "`+identityFor("beta", workspace)+`"
+	}]`))
+	betaListen := beta2Stream.next(t, 5*time.Second)
+	if betaListen.T != "listen" || betaListen.Event != "onDynamicConversationFrame" {
+		t.Fatalf("beta listen = %+v", betaListen)
+	}
+	alphaStream.expectNone(t, 300*time.Millisecond)
+}
+
+type rawRunnerFrame struct {
+	T       string `json:"t"`
+	ID      string `json:"id"`
+	Channel string `json:"channel"`
+	Method  string `json:"method"`
+	Event   string `json:"event"`
+}
+
+// runnerStream reads one runner connection continuously so "no frame arrived"
+// can be asserted without a read deadline (coder/websocket closes the
+// connection when a Read's context is canceled).
+type runnerStream struct {
+	frames chan rawRunnerFrame
+	done   chan struct{}
+}
+
+func newRunnerStream(t *testing.T, conn *websocket.Conn) *runnerStream {
+	t.Helper()
+	stream := &runnerStream{
+		frames: make(chan rawRunnerFrame, 64),
+		done:   make(chan struct{}),
+	}
+	go func() {
+		defer close(stream.frames)
+		for {
+			_, data, err := conn.Read(context.Background())
+			if err != nil {
+				return
+			}
+			var frame rawRunnerFrame
+			if err := json.Unmarshal(data, &frame); err != nil {
+				continue
+			}
+			select {
+			case stream.frames <- frame:
+			case <-stream.done:
+				return
+			}
+		}
+	}()
+	t.Cleanup(func() { close(stream.done) })
+	return stream
+}
+
+func (s *runnerStream) next(t *testing.T, timeout time.Duration) rawRunnerFrame {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case frame, ok := <-s.frames:
+		if !ok {
+			t.Fatal("runner stream closed while waiting for a frame")
+		}
+		return frame
+	case <-timer.C:
+		t.Fatal("runner did not receive a frame")
+		return rawRunnerFrame{}
+	}
+}
+
+func (s *runnerStream) expectNone(t *testing.T, wait time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case frame, ok := <-s.frames:
+		if ok {
+			t.Fatalf("unexpected runner frame: %+v", frame)
+		}
+	case <-timer.C:
+	}
+}
+
+func callResultFrame(t *testing.T, id string, value any) []byte {
+	t.Helper()
+	encoded, err := json.Marshal(map[string]any{"t": "result", "id": id, "ok": true, "value": value})
+	if err != nil {
+		t.Fatalf("encoding result: %v", err)
+	}
+	return encoded
+}
+
+func waitForRunnerGone(t *testing.T, h *harness, session, runnerID string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		request, _ := http.NewRequest(http.MethodGet, h.server.URL+"/api/server-info", nil)
+		request.Header.Set("Cookie", "nex_session="+session)
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatalf("server-info: %v", err)
+		}
+		var info struct {
+			Workspaces []struct {
+				RunnerID string `json:"runnerId"`
+			} `json:"workspaces"`
+		}
+		_ = json.NewDecoder(response.Body).Decode(&info)
+		_ = response.Body.Close()
+		found := false
+		for _, workspace := range info.Workspaces {
+			if workspace.RunnerID == runnerID {
+				found = true
+			}
+		}
+		if !found {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("runner %s still listed after disconnect", runnerID)
 }
 
 // A runner disconnect must fail each pending call exactly once: the socket

@@ -109,3 +109,36 @@ func TestWelcomeCarriesConfiguredVersion(t *testing.T) {
 		t.Fatalf("welcome = %s, want the configured version", data)
 	}
 }
+
+// Runner ids are embedded in workspace identities, so ':' and whitespace are
+// rejected at hello instead of producing unparseable identities.
+func TestHelloRejectsInvalidRunnerID(t *testing.T) {
+	server := newServer(t)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	for _, hello := range []string{
+		`{"t":"hello","runnerId":"a:b","workspaces":[{"path":"/w"}]}`,
+		`{"t":"hello","runnerId":"a b","workspaces":[{"path":"/w"}]}`,
+		`{"t":"hello","runnerId":"","workspaces":[{"path":"/w"}]}`,
+	} {
+		conn, _, err := websocket.Dial(context.Background(), wsURL, &websocket.DialOptions{
+			HTTPHeader: http.Header{"Authorization": []string{"Bearer runner-secret"}},
+		})
+		if err != nil {
+			t.Fatalf("dial: %v", err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := conn.Write(ctx, websocket.MessageText, []byte(hello)); err != nil {
+			cancel()
+			_ = conn.CloseNow()
+			t.Fatalf("write hello %s: %v", hello, err)
+		}
+		_, _, readErr := conn.Read(ctx)
+		cancel()
+		_ = conn.CloseNow()
+		if readErr == nil {
+			t.Fatalf("server accepted hello %s", hello)
+		}
+	}
+}

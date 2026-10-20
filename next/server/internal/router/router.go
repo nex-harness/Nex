@@ -1,9 +1,10 @@
 // Package router decides whether a browser channel request is answered by a
-// server-local channel or forwarded to the runner that owns a workspace.
+// server-local channel or forwarded to a runner.
 //
-// Routing is by workspacePath only. The UI treats any non-empty
-// workspaceIdentity as a remote workspace, so the server never synthesizes
-// one (docs/next/README.md "Workspace identity").
+// Forwarded channels route by the server-built `runner:<runnerId>:<path>`
+// workspaceIdentity when the argument carries one, and by workspacePath only
+// as the legacy fallback (see docs/next/multi-runner.md "Routing (server)").
+// The registry resolves the target and reports `runner offline` / ambiguity.
 package router
 
 import (
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/tylinux/nex-next/server/internal/rpcwire"
+	"github.com/tylinux/nex-next/server/internal/runners"
 )
 
 // TargetKind describes who answers a request.
@@ -20,10 +22,11 @@ type TargetKind int
 const (
 	// TargetLocal is answered by a server-local channel implementation.
 	TargetLocal TargetKind = iota
-	// TargetWorkspace forwards to the runner owning WorkspacePath.
+	// TargetWorkspace forwards to the runner selected by WorkspacePath /
+	// WorkspaceIdentity.
 	TargetWorkspace
 	// TargetFirstRunner forwards to the first connected runner (channels with
-	// no workspace in their argument, e.g. the model catalog).
+	// no workspace in their argument, e.g. the model catalog without a target).
 	TargetFirstRunner
 	// TargetUnknownChannel rejects immediately with the ChannelServer error.
 	TargetUnknownChannel
@@ -37,6 +40,14 @@ type Route struct {
 	Kind TargetKind
 	// WorkspacePath is set for TargetWorkspace.
 	WorkspacePath string
+	// WorkspaceIdentity is set for TargetWorkspace when the argument carried a
+	// runner identity; the registry prefers it over WorkspacePath.
+	WorkspaceIdentity string
+}
+
+// Target combines the route's workspace fields into a registry target.
+func (r Route) Target() runners.Target {
+	return runners.Target{WorkspacePath: r.WorkspacePath, WorkspaceIdentity: r.WorkspaceIdentity}
 }
 
 // Channel names with special routing.
@@ -49,7 +60,7 @@ const (
 )
 
 // workspaceTargetMethods enumerates forwarded nex-agent methods that carry a
-// workspace path at the top level of their argument.
+// workspace target at the top level of their argument.
 var workspaceTargetMethods = map[string]struct{}{
 	"subscribeConversationV4":               {},
 	"resyncConversationV4":                  {},
@@ -130,7 +141,7 @@ var workspaceTargetMethods = map[string]struct{}{
 }
 
 // eventWorkspaceMethods enumerates dynamic events whose listen argument
-// carries the workspace path.
+// carries the workspace target.
 var eventWorkspaceMethods = map[string]struct{}{
 	"onDynamicConversationFrame":                {},
 	"onDynamicSessionsIndexFrame":               {},
@@ -167,18 +178,21 @@ func resolveSpecial(channel, method string, arg rpcwire.Value) (Route, bool) {
 	switch channel {
 	case ChannelNexAgent:
 		if _, ok := workspaceTargetMethods[method]; ok {
-			if path := workspacePathFromArg(arg); path != "" {
-				return Route{Kind: TargetWorkspace, WorkspacePath: path}, true
-			}
-			return Route{Kind: TargetLocalUnsupported}, true
+			return workspaceRoute(arg)
 		}
 		// nex-agent methods without a workspace are answered from a fixed
 		// local table (helloConversationV4 etc.) by the browser dispatcher.
 		return Route{Kind: TargetLocalUnsupported}, true
 
 	case ChannelNexSession, ChannelNexTask:
-		if path := workspacePathFromArg(arg); path != "" {
-			return Route{Kind: TargetWorkspace, WorkspacePath: path}, true
+		// Every workspace-bound method on these channels carries the target at
+		// the top level of its argument.
+		if target := workspaceTarget(arg); target != (runners.Target{}) {
+			return Route{
+				Kind:              TargetWorkspace,
+				WorkspacePath:     target.WorkspacePath,
+				WorkspaceIdentity: target.WorkspaceIdentity,
+			}, true
 		}
 		if channel == ChannelNexTask {
 			if _, ok := nexusTaskGlobalMethods[method]; ok {
@@ -190,6 +204,19 @@ func resolveSpecial(channel, method string, arg rpcwire.Value) (Route, bool) {
 		return Route{Kind: TargetLocalUnsupported}, true
 
 	case ChannelModelSelection, ChannelProviderSettings:
+		// A targeted getView carries `{selection, workspacePath,
+		// workspaceIdentity}` from the active draft. Only a runner identity is a
+		// reliable machine key here; without one the call stays on the first
+		// connected runner (legacy clients send no target at all).
+		if method == "getView" {
+			if target := workspaceTarget(arg); target.WorkspaceIdentity != "" {
+				return Route{
+					Kind:              TargetWorkspace,
+					WorkspacePath:     target.WorkspacePath,
+					WorkspaceIdentity: target.WorkspaceIdentity,
+				}, true
+			}
+		}
 		return Route{Kind: TargetFirstRunner}, true
 	}
 	return Route{}, false
@@ -210,64 +237,89 @@ func resolveSpecialEvent(channel, event string, arg rpcwire.Value) (Route, bool)
 	switch channel {
 	case ChannelNexAgent, ChannelNexTask:
 		if _, ok := eventWorkspaceMethods[event]; ok {
-			if path := workspacePathFromArg(arg); path != "" {
-				return Route{Kind: TargetWorkspace, WorkspacePath: path}, true
-			}
-			return Route{Kind: TargetLocalUnsupported}, true
+			return workspaceRoute(arg)
 		}
 		return Route{Kind: TargetLocalUnsupported}, true
 	case ChannelModelSelection, ChannelProviderSettings:
-		// Their onDidChange events are plain listens with no workspace; forward
-		// to the same runner that serves getView.
+		// Their onDidChange events are plain listens with no workspace target;
+		// keep them on the same first-runner rule as before.
 		return Route{Kind: TargetFirstRunner}, true
 	}
 	return Route{}, false
 }
 
-// workspacePathFromArg reads the workspacePath field from the RPC argument.
+func workspaceRoute(arg rpcwire.Value) (Route, bool) {
+	target := workspaceTarget(arg)
+	if target == (runners.Target{}) {
+		return Route{Kind: TargetLocalUnsupported}, true
+	}
+	return Route{
+		Kind:              TargetWorkspace,
+		WorkspacePath:     target.WorkspacePath,
+		WorkspaceIdentity: target.WorkspaceIdentity,
+	}, true
+}
+
+// workspaceTarget reads the workspace identity and path from the RPC argument.
 //
 // The web client reaches the server through ProxyChannel.toService, which
 // always sends the method arguments as an array (`call(name, args)`), so the
-// real shape is `[{workspacePath: "..."}]`. A bare object is also accepted so
-// hand-written clients and tests can call without the wrapper.
-func workspacePathFromArg(arg rpcwire.Value) string {
+// real shape is `[{workspacePath: "...", workspaceIdentity: "..."}]`. A bare
+// object is also accepted so hand-written clients and tests can call without
+// the wrapper. Only top-level fields of the first argument object are used:
+// `workspaceScopes` (nex-task listTaskList) is a list of scopes, not a routing
+// key.
+func workspaceTarget(arg rpcwire.Value) runners.Target {
 	switch typed := arg.(type) {
 	case []any:
 		for _, element := range typed {
-			if path := workspacePathFromArg(element); path != "" {
-				return path
+			if target := workspaceTarget(element); target != (runners.Target{}) {
+				return target
 			}
 		}
-		return ""
+		return runners.Target{}
 	case json.RawMessage:
-		return workspacePathFromRaw(typed)
+		return workspaceTargetFromRaw(typed)
 	case map[string]any:
-		if value, ok := typed["workspacePath"].(string); ok {
-			return strings.TrimSpace(value)
-		}
+		path, _ := typed["workspacePath"].(string)
+		identity, _ := typed["workspaceIdentity"].(string)
+		return normalizeTarget(path, identity)
 	}
-	return ""
+	return runners.Target{}
 }
 
-func workspacePathFromRaw(raw json.RawMessage) string {
+func workspaceTargetFromRaw(raw json.RawMessage) runners.Target {
 	trimmed := strings.TrimSpace(string(raw))
 	if strings.HasPrefix(trimmed, "[") {
 		var elements []json.RawMessage
 		if err := json.Unmarshal(raw, &elements); err != nil {
-			return ""
+			return runners.Target{}
 		}
 		for _, element := range elements {
-			if path := workspacePathFromRaw(element); path != "" {
-				return path
+			if target := workspaceTargetFromRaw(element); target != (runners.Target{}) {
+				return target
 			}
 		}
-		return ""
+		return runners.Target{}
 	}
 	var probe struct {
-		WorkspacePath string `json:"workspacePath"`
+		WorkspacePath     string `json:"workspacePath"`
+		WorkspaceIdentity string `json:"workspaceIdentity"`
 	}
 	if err := json.Unmarshal(raw, &probe); err != nil {
-		return ""
+		return runners.Target{}
 	}
-	return strings.TrimSpace(probe.WorkspacePath)
+	return normalizeTarget(probe.WorkspacePath, probe.WorkspaceIdentity)
+}
+
+func normalizeTarget(path, identity string) runners.Target {
+	path = strings.TrimSpace(path)
+	identity = strings.TrimSpace(identity)
+	// A non-runner identity (desktop `remote:` values) is not a server routing
+	// key; the registry falls back to the path for it as well, so dropping it
+	// here keeps Route equality checks simple.
+	if _, _, ok := runners.ParseIdentity(identity); !ok {
+		identity = ""
+	}
+	return runners.Target{WorkspacePath: path, WorkspaceIdentity: identity}
 }

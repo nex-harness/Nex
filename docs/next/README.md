@@ -46,26 +46,24 @@ forwards channel-RPC calls/events as JSON.
 
 ## Workspace identity
 
-MVP routes by `workspacePath` only and never sets `workspaceIdentity`.
+Current rule: `docs/next/multi-runner.md` (supersedes the earlier
+`workspacePath`-only MVP rule).
 
-Why: the UI treats any non-empty `workspaceIdentity` as a remote workspace and
-swaps in a disconnected service proxy unless a remote session is registered
-(`packages/ui/src/hooks/useWorkspaceServices.tsx:90-100`). A custom
-`runner:<id>:<path>` identity would break every workspace call. See
-`channels-research.md` §8.
+```
+workspaceIdentity = "runner:<runnerId>:<runner-local absolute path>"
+workspacePath     = runner-local absolute path (cwd, file ops, display)
+```
 
-Consequences and rules:
-
-- A workspace path must be unique across connected runners. When a second
-  runner announces a path that is already served, the server rejects that
-  workspace (logs a warning, excludes it from routing and listings) and keeps
-  the first owner. Proper multi-machine identity (`remote:` registration) is
-  post-MVP.
-- The server owns one routing table `workspacePath → runnerId`, built from
-  runner `hello` frames. All forwarded calls are routed through it.
-- Workspace discovery in the UI: `server-info.workspaces` (index 0 auto-opens)
-  and `setting.get().recentProjects`, which the server fills with every routed
-  workspace path, so all runners' workspaces appear in the recent-projects list.
+- Built by the server from runner `hello` (`next/server/internal/runners/identity.go`),
+  never parsed by runners.
+- Forwarded `nex-agent` / `nex-task` / `nex-session` calls and their listens
+  route by identity first, then by a uniquely served `workspacePath`. An
+  offline/unknown runner fails with `runner offline`; several owners without an
+  identity fail with `ambiguous workspace path; workspaceIdentity required`.
+- Duplicate paths across runners are legal. `server-info.workspaces[]` carries
+  `{path, label, workspaceIdentity, runnerId, runnerName, runnerOs}`;
+  `setting.recentProjects` stays path-only and deduplicated.
+- Server routing details: `next/server/README.md`.
 
 ## Runner link protocol (server ⇄ runner)
 
@@ -97,8 +95,12 @@ Rules:
   (`ProxyChannel` sends `[arg0, ...]`); runners unwrap it. Undefined values are
   `{"$undef":true}`, buffers `{"$buf":"<base64>","$vs":bool}` (see
   `next/server/internal/rpcwire/README.md`).
-- Workspace-less forwarded calls (`model-selection.*`, `provider-settings.*`,
-  `nex-task.listPinnedTaskIds`) go to the first connected runner.
+- Workspace-less forwarded calls (`provider-settings.*` operations without a
+  workspace target, `model-selection` operations other than a targeted
+  `getView`, `nex-task.listPinnedTaskIds`) go to the first connected runner.
+- A forwarded call whose argument carries a `runner:<runnerId>:<path>`
+  `workspaceIdentity` goes to that runner; an offline/unknown runner returns
+  `runner offline` and never falls back to another machine.
 - Ids are server-generated strings, unique per runner connection.
 - On disconnect, the server fails pending calls with `runner offline` and drops
   listens; the browser's v4 layer resubscribes (snapshot) when the runner returns.
@@ -119,8 +121,10 @@ Implemented by the server itself:
 - `setting` (full default AppSettings; `recentProjects` = routed workspaces),
   `broadcast`
 - `window-controller` (empty pinned list; controller snapshots on subscribe)
-- `model-selection`, `provider-settings`: forwarded to the first connected
-  runner for MVP (the model catalog lives on runners).
+- `model-selection`, `provider-settings`: `getView` forwards to the runner named
+  by the optional `workspaceIdentity` in its input, else to the first connected
+  runner; `onDidChange` stays on the first connected runner (the model catalog
+  lives on runners).
 - Stubs that keep the UI quiet: `system`, `git`, `mcp-sync`,
   `coding-plan-subscription`, `settings-sync` (`getFirstRunPromptState →
 {handled:true}`), `subagents`, `client-scenes`, `onboarding-record`
@@ -131,7 +135,8 @@ Implemented by the server itself:
   `initializeConversationV4`, `syncAppRuntimePreferences`, …) are answered
   locally from a fixed table.
 
-Forwarded by `workspacePath` to the owning runner:
+Forwarded to the owning runner, by `workspaceIdentity` first and
+`workspacePath` as the legacy fallback (see "Workspace identity"):
 
 - `nex-agent`: v4 conversation subscribe/resync/unsubscribe/command/rowsRange,
   `onDynamicConversationFrame`, sessions-index subscribe/resync/unsubscribe,

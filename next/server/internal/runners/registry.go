@@ -1,5 +1,6 @@
-// Package runners tracks connected agent runners, the workspacePath routing
-// table and browser listen bindings that survive runner reconnects.
+// Package runners tracks connected agent runners, the workspace identity and
+// path routing tables, and browser listen bindings that survive runner
+// reconnects.
 package runners
 
 import (
@@ -45,12 +46,25 @@ type Link interface {
 	Done() <-chan struct{}
 }
 
+// Target identifies the runner a forwarded call or listen must reach.
+//
+// WorkspaceIdentity wins when it parses as `runner:<runnerId>:<path>`;
+// otherwise WorkspacePath is the legacy (unique-path) routing key.
+type Target struct {
+	WorkspacePath     string
+	WorkspaceIdentity string
+}
+
 // ErrNoRunnerForWorkspace means no connected runner serves the requested
 // workspace path.
 var ErrNoRunnerForWorkspace = errors.New("no runner for workspace")
 
 // ErrNoRunnerConnected means no runner is connected at all.
 var ErrNoRunnerConnected = errors.New("no runner connected")
+
+// ErrAmbiguousWorkspacePath means several connected runners serve the path and
+// the caller did not supply a workspace identity.
+var ErrAmbiguousWorkspacePath = errors.New("ambiguous workspace path; workspaceIdentity required")
 
 // OfflineError reports a call that could not complete because its runner
 // disconnected. Its message is the stable "runner offline" used by the UI.
@@ -70,8 +84,12 @@ func (e *RemoteError) Error() string { return e.Message }
 
 // WorkspaceInfo is the server-info projection of one routed workspace.
 type WorkspaceInfo struct {
-	Path  string `json:"path"`
-	Label string `json:"label"`
+	Path              string `json:"path"`
+	Label             string `json:"label"`
+	WorkspaceIdentity string `json:"workspaceIdentity"`
+	RunnerID          string `json:"runnerId"`
+	RunnerName        string `json:"runnerName"`
+	RunnerOS          string `json:"runnerOs"`
 }
 
 type runner struct {
@@ -88,9 +106,12 @@ type binding struct {
 	event         string
 	arg           json.RawMessage
 	workspacePath string
+	// workspaceIdentity is set for identity-routed listens. It is the
+	// reconnect key: only the runner with this id may ever receive the stream.
+	workspaceIdentity string
 	// firstRunner marks a channel with no workspace in its argument
-	// (model-selection/provider-settings): it follows whichever runner is
-	// connected first.
+	// (model-selection/provider-settings onDidChange): it follows whichever
+	// runner is connected first.
 	firstRunner bool
 	emit        func(json.RawMessage)
 	runner      *runner
@@ -180,25 +201,53 @@ func (r *Registry) planLocked() []listenRequest {
 			requests = append(requests, listenRequest{id: b.id, link: first.link, bind: b})
 			continue
 		}
-		if owner, ok := r.paths[b.workspacePath]; ok {
-			b.runner = owner
-			requests = append(requests, listenRequest{id: b.id, link: owner.link, bind: b})
+		entry := r.bindingRunnerLocked(b)
+		if entry == nil {
+			continue
 		}
+		b.runner = entry
+		requests = append(requests, listenRequest{id: b.id, link: entry.link, bind: b})
 	}
 	return requests
 }
 
-// Registry owns the connected runner set, the path routing table and the
-// browser listen bindings.
+// bindingRunnerLocked returns the live runner a non-first-runner binding may
+// attach to, or nil when it must wait.
+//
+// Identity bindings are pinned to the runner id parsed from the identity:
+// another runner that happens to serve the same path must never receive the
+// stream. Path bindings attach only while exactly one runner serves the path.
+func (r *Registry) bindingRunnerLocked(b *binding) *runner {
+	if b.workspaceIdentity != "" {
+		runnerID, _, ok := ParseIdentity(b.workspaceIdentity)
+		if !ok {
+			return nil
+		}
+		return r.runners[runnerID]
+	}
+	owners := r.paths[b.workspacePath]
+	if len(owners) == 1 {
+		return owners[0]
+	}
+	return nil
+}
+
+// Registry owns the connected runner set, the identity/path routing tables and
+// the browser listen bindings.
 //
 // Lock ordering: Registry.mu is never held while calling Link methods that can
 // block; Listen/Unlisten are non-blocking sends, but they are still invoked
 // outside the lock to keep the invariant simple.
 type Registry struct {
-	mu        sync.Mutex
-	logger    *slog.Logger
-	runners   map[string]*runner
-	paths     map[string]*runner
+	mu      sync.Mutex
+	logger  *slog.Logger
+	runners map[string]*runner
+	// identities maps server-built `runner:<runnerId>:<path>` identities to
+	// their runner. This is the primary routing table.
+	identities map[string]*runner
+	// paths maps a runner-local path to every runner serving it. Duplicate
+	// paths across runners are legal; legacy path routing requires uniqueness.
+	paths     map[string][]*runner
 	bindings  map[string]*binding
 	nextOrder int64
 	subs      map[int64]func()
@@ -211,11 +260,12 @@ func NewRegistry(logger *slog.Logger) *Registry {
 		logger = slog.Default()
 	}
 	return &Registry{
-		logger:   logger,
-		runners:  make(map[string]*runner),
-		paths:    make(map[string]*runner),
-		bindings: make(map[string]*binding),
-		subs:     make(map[int64]func()),
+		logger:     logger,
+		runners:    make(map[string]*runner),
+		identities: make(map[string]*runner),
+		paths:      make(map[string][]*runner),
+		bindings:   make(map[string]*binding),
+		subs:       make(map[int64]func()),
 	}
 }
 
@@ -223,12 +273,17 @@ func NewRegistry(logger *slog.Logger) *Registry {
 // returned link (if non-nil) has already been closed; it is returned so callers
 // can log the displacement. Closing it before re-issuing listens guarantees the
 // old socket cannot deliver duplicate events for the same bindings.
-// Workspace paths already owned by another runner are rejected and logged; the
-// first owner keeps them. Pending browser listens for now-routed paths are
-// re-issued.
+//
+// Duplicate workspace paths across runners are accepted (each runner gets its
+// own identity). A hello may repeat a path; the repeat is ignored. Pending
+// browser listens whose identity or unique path now resolves are re-issued.
 func (r *Registry) Register(info Info, link Link) (displaced Link) {
 	info.RunnerID = strings.TrimSpace(info.RunnerID)
-	if info.RunnerID == "" || link == nil {
+	if link == nil {
+		return nil
+	}
+	if !ValidRunnerID(info.RunnerID) {
+		r.logger.Warn("runner hello rejected: invalid runnerId", "runnerId", info.RunnerID)
 		return nil
 	}
 
@@ -255,11 +310,6 @@ func (r *Registry) Register(info Info, link Link) (displaced Link) {
 			continue
 		}
 		seenPaths[path] = struct{}{}
-		if owner, taken := r.paths[path]; taken {
-			r.logger.Warn("workspace path already served by another runner, rejecting",
-				"path", path, "owner", owner.info.RunnerID, "rejected", info.RunnerID)
-			continue
-		}
 		accepted = append(accepted, Workspace{Path: path, Label: strings.TrimSpace(workspace.Label)})
 	}
 
@@ -278,7 +328,8 @@ func (r *Registry) Register(info Info, link Link) (displaced Link) {
 	}
 	r.runners[info.RunnerID] = entry
 	for _, workspace := range accepted {
-		r.paths[workspace.Path] = entry
+		r.identities[BuildIdentity(info.RunnerID, workspace.Path)] = entry
+		r.paths[workspace.Path] = append(r.paths[workspace.Path], entry)
 	}
 
 	requests = r.planLocked()
@@ -336,13 +387,26 @@ func (r *Registry) Unregister(id string, link Link) {
 	r.notify()
 }
 
-// removeLocked detaches a runner and its paths. Bindings keep their spec but
-// lose the runner assignment.
+// removeLocked detaches a runner and its identities/paths. Bindings keep their
+// spec but lose the runner assignment.
 func (r *Registry) removeLocked(id string, entry *runner) {
 	delete(r.runners, id)
 	for _, workspace := range entry.info.Workspaces {
-		if owner, ok := r.paths[workspace.Path]; ok && owner == entry {
+		identity := BuildIdentity(id, workspace.Path)
+		if owner, ok := r.identities[identity]; ok && owner == entry {
+			delete(r.identities, identity)
+		}
+		owners := r.paths[workspace.Path]
+		remaining := owners[:0]
+		for _, owner := range owners {
+			if owner != entry {
+				remaining = append(remaining, owner)
+			}
+		}
+		if len(remaining) == 0 {
 			delete(r.paths, workspace.Path)
+		} else {
+			r.paths[workspace.Path] = remaining
 		}
 	}
 	for _, b := range r.bindings {
@@ -363,24 +427,85 @@ func (r *Registry) Runner(id string) (Link, bool) {
 	return entry.link, true
 }
 
-// RunnerIDForPath returns the runner currently serving workspacePath.
+// RunnerIDForPath returns the runner serving workspacePath when exactly one
+// runner does. It reports false for unknown and ambiguous paths.
 func (r *Registry) RunnerIDForPath(workspacePath string) (string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	entry, ok := r.paths[strings.TrimSpace(workspacePath)]
+	owners := r.paths[strings.TrimSpace(workspacePath)]
+	if len(owners) != 1 {
+		return "", false
+	}
+	return owners[0].info.RunnerID, true
+}
+
+// RunnerIDsForPath returns every runner serving workspacePath in registration
+// order.
+func (r *Registry) RunnerIDsForPath(workspacePath string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	owners := r.paths[strings.TrimSpace(workspacePath)]
+	ids := make([]string, 0, len(owners))
+	for _, owner := range owners {
+		ids = append(ids, owner.info.RunnerID)
+	}
+	return ids
+}
+
+// RunnerIDForIdentity returns the live runner for a server-built identity.
+func (r *Registry) RunnerIDForIdentity(identity string) (string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	entry, ok := r.identities[strings.TrimSpace(identity)]
 	if !ok {
 		return "", false
 	}
 	return entry.info.RunnerID, true
 }
 
-// Call forwards a call to the runner that owns workspacePath.
-func (r *Registry) Call(ctx context.Context, workspacePath, channel, method string, arg json.RawMessage) (json.RawMessage, error) {
+// resolveLocked maps a target to a live runner.
+//
+// A valid runner identity is authoritative: if its runner is not connected the
+// call fails with OfflineError and never falls back to another runner. Without
+// a valid runner identity the legacy path rule applies and requires a unique
+// owner.
+func (r *Registry) resolveLocked(target Target) (*runner, error) {
+	if identity := strings.TrimSpace(target.WorkspaceIdentity); identity != "" {
+		if runnerID, _, ok := ParseIdentity(identity); ok {
+			// The identity table is the fast path. A live runner id is still
+			// authoritative for a path it no longer advertises: the runner owns
+			// its filesystem, so the identity remains valid there (a stale tab
+			// survives a hello whose workspace list changed).
+			if entry, catalogued := r.identities[identity]; catalogued && r.runners[runnerID] == entry {
+				return entry, nil
+			}
+			if entry, live := r.runners[runnerID]; live {
+				return entry, nil
+			}
+			return nil, OfflineError{}
+		}
+		// Not a server-built runner identity (e.g. a desktop `remote:` one):
+		// fall through to legacy path routing.
+	}
+	path := strings.TrimSpace(target.WorkspacePath)
+	owners := r.paths[path]
+	switch len(owners) {
+	case 0:
+		return nil, fmt.Errorf("%w: %q", ErrNoRunnerForWorkspace, target.WorkspacePath)
+	case 1:
+		return owners[0], nil
+	default:
+		return nil, ErrAmbiguousWorkspacePath
+	}
+}
+
+// CallWorkspace forwards a call to the runner selected by target.
+func (r *Registry) CallWorkspace(ctx context.Context, target Target, channel, method string, arg json.RawMessage) (json.RawMessage, error) {
 	r.mu.Lock()
-	entry, ok := r.paths[strings.TrimSpace(workspacePath)]
+	entry, err := r.resolveLocked(target)
 	r.mu.Unlock()
-	if !ok {
-		return nil, fmt.Errorf("%w: %q", ErrNoRunnerForWorkspace, workspacePath)
+	if err != nil {
+		return nil, err
 	}
 	return entry.link.Call(ctx, channel, method, arg)
 }
@@ -418,24 +543,45 @@ func (r *Registry) firstLocked() *runner {
 	return first
 }
 
-// RegisterListen stores a browser listen spec and starts it when the
-// workspace currently has an owner. The binding outlives runner disconnects.
-func (r *Registry) RegisterListen(owner string, ownerListenID uint32, channel, event, workspacePath string, arg json.RawMessage, emit func(json.RawMessage)) {
+// RegisterListen stores a browser listen spec and starts it when the target
+// currently resolves to a runner. The binding outlives runner disconnects.
+//
+// An ambiguous legacy path is rejected: the browser cannot be told which runner
+// its stream would come from. Identity targets are always stored so they can be
+// rebound to the same runner id after a reconnect.
+func (r *Registry) RegisterListen(owner string, ownerListenID uint32, target Target, channel, event string, arg json.RawMessage, emit func(json.RawMessage)) error {
 	id := fmt.Sprintf("%s:%d", owner, ownerListenID)
-	first := workspacePath == ""
+	workspacePath := strings.TrimSpace(target.WorkspacePath)
+	workspaceIdentity := strings.TrimSpace(target.WorkspaceIdentity)
+	// A non-runner identity (desktop `remote:`) is not a server routing key; it
+	// is dropped so the binding behaves like a legacy path listen.
+	if _, _, ok := ParseIdentity(workspaceIdentity); !ok {
+		workspaceIdentity = ""
+	}
+	first := workspacePath == "" && workspaceIdentity == ""
+
 	b := &binding{
-		id:            id,
-		owner:         owner,
-		ownerListenID: ownerListenID,
-		channel:       channel,
-		event:         event,
-		arg:           arg,
-		workspacePath: strings.TrimSpace(workspacePath),
-		firstRunner:   first,
-		emit:          emit,
+		id:                id,
+		owner:             owner,
+		ownerListenID:     ownerListenID,
+		channel:           channel,
+		event:             event,
+		arg:               arg,
+		workspacePath:     workspacePath,
+		workspaceIdentity: workspaceIdentity,
+		firstRunner:       first,
+		emit:              emit,
 	}
 
 	r.mu.Lock()
+	if !first && workspaceIdentity == "" {
+		// Legacy path listen: reject ambiguity up front instead of silently
+		// attaching the stream to an arbitrary machine.
+		if len(r.paths[workspacePath]) > 1 {
+			r.mu.Unlock()
+			return ErrAmbiguousWorkspacePath
+		}
+	}
 	var previousLink Link
 	if previous, ok := r.bindings[id]; ok && previous.runner != nil {
 		previousLink = previous.runner.link
@@ -446,7 +592,7 @@ func (r *Registry) RegisterListen(owner string, ownerListenID uint32, channel, e
 			b.runner = entry
 			link = entry.link
 		}
-	} else if entry, ok := r.paths[b.workspacePath]; ok {
+	} else if entry := r.bindingRunnerLocked(b); entry != nil {
 		b.runner = entry
 		link = entry.link
 	}
@@ -465,17 +611,18 @@ func (r *Registry) RegisterListen(owner string, ownerListenID uint32, channel, e
 		if err := link.Listen(id, channel, event, arg, emit); err != nil {
 			r.logger.Warn("starting browser listen failed", "channel", channel, "event", event, "error", err)
 			r.clearBindingRunner(b, link)
-			return
+			return nil
 		}
 		// The browser may have disconnected (UnregisterOwner) or replaced this
 		// listen while the runner call was in flight. Without the cleanup the
 		// runner would keep an orphan stream that no later unlisten can reach.
 		if r.bindingRemoved(b) {
 			link.Unlisten(id)
-			return
+			return nil
 		}
 		r.ensureLatest(b, link)
 	}
+	return nil
 }
 
 // ensureLatest re-issues the listen when a newer binding for the same id was
@@ -552,19 +699,28 @@ func (r *Registry) BindingsForRunner(id string) []string {
 }
 
 // Workspaces returns every accepted workspace ordered by runner registration
-// order and then path.
+// order and then path. Duplicate paths on different runners are separate rows
+// with distinct identities.
 func (r *Registry) Workspaces() []WorkspaceInfo {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	type ordered struct {
-		order     int64
-		runner    string
-		workspace Workspace
+		order      int64
+		runnerID   string
+		runnerName string
+		runnerOS   string
+		workspace  Workspace
 	}
 	var all []ordered
 	for _, entry := range r.runners {
 		for _, workspace := range entry.info.Workspaces {
-			all = append(all, ordered{order: entry.order, runner: entry.info.Name, workspace: workspace})
+			all = append(all, ordered{
+				order:      entry.order,
+				runnerID:   entry.info.RunnerID,
+				runnerName: entry.info.Name,
+				runnerOS:   entry.info.OS,
+				workspace:  workspace,
+			})
 		}
 	}
 	sort.Slice(all, func(i, j int) bool {
@@ -576,17 +732,21 @@ func (r *Registry) Workspaces() []WorkspaceInfo {
 	out := make([]WorkspaceInfo, 0, len(all))
 	for _, item := range all {
 		out = append(out, WorkspaceInfo{
-			Path:  item.workspace.Path,
-			Label: labelFor(item.runner, item.workspace),
+			Path:              item.workspace.Path,
+			Label:             labelFor(item.runnerName, item.runnerID, item.workspace),
+			WorkspaceIdentity: BuildIdentity(item.runnerID, item.workspace.Path),
+			RunnerID:          item.runnerID,
+			RunnerName:        item.runnerName,
+			RunnerOS:          item.runnerOS,
 		})
 	}
 	return out
 }
 
-// labelFor builds the server-info label per specs: "<runnerName>: <basename>".
+// labelFor builds the server-info label per spec: "<runnerName>: <basename>".
 // The runner-provided label is not used, so every workspace looks consistent
-// in the UI's folder list.
-func labelFor(runnerName string, workspace Workspace) string {
+// in the UI's folder list. A runner that reports no name falls back to its id.
+func labelFor(runnerName, runnerID string, workspace Workspace) string {
 	base := workspace.Path
 	if idx := strings.LastIndexAny(strings.TrimRight(base, "/\\"), "/\\"); idx >= 0 {
 		base = base[idx+1:]
@@ -595,18 +755,29 @@ func labelFor(runnerName string, workspace Workspace) string {
 	if base == "" {
 		base = workspace.Path
 	}
-	if strings.TrimSpace(runnerName) == "" {
+	name := strings.TrimSpace(runnerName)
+	if name == "" {
+		name = runnerID
+	}
+	if name == "" {
 		return base
 	}
-	return strings.TrimSpace(runnerName) + ": " + base
+	return name + ": " + base
 }
 
-// Paths returns routed workspace paths in the same order as Workspaces.
+// Paths returns routed workspace paths in the same order as Workspaces,
+// deduplicated. recentProjects stays path-only, so a path served by two
+// machines appears once there.
 func (r *Registry) Paths() []string {
 	workspaces := r.Workspaces()
-	out := make([]string, len(workspaces))
-	for i, workspace := range workspaces {
-		out[i] = workspace.Path
+	out := make([]string, 0, len(workspaces))
+	seen := make(map[string]struct{}, len(workspaces))
+	for _, workspace := range workspaces {
+		if _, duplicate := seen[workspace.Path]; duplicate {
+			continue
+		}
+		seen[workspace.Path] = struct{}{}
+		out = append(out, workspace.Path)
 	}
 	return out
 }

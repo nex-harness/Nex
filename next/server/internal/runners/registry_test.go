@@ -3,6 +3,7 @@ package runners_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"sync"
@@ -61,6 +62,12 @@ func (f *fakeLink) listenFor(id string) string {
 	return f.listens[id]
 }
 
+func (f *fakeLink) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.calls)
+}
+
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
@@ -70,7 +77,20 @@ func info(id string, paths ...string) runners.Info {
 	for i, path := range paths {
 		workspaces[i] = runners.Workspace{Path: path}
 	}
-	return runners.Info{RunnerID: id, Name: id, Workspaces: workspaces}
+	return runners.Info{RunnerID: id, Name: id, OS: "linux", Workspaces: workspaces}
+}
+
+func callTarget(t *testing.T, registry *runners.Registry, target runners.Target) error {
+	t.Helper()
+	_, err := registry.CallWorkspace(context.Background(), target, "nex-task", "listTasks", json.RawMessage("null"))
+	return err
+}
+
+func mustCallTarget(t *testing.T, registry *runners.Registry, target runners.Target) {
+	t.Helper()
+	if err := callTarget(t, registry, target); err != nil {
+		t.Fatalf("CallWorkspace(%+v): %v", target, err)
+	}
 }
 
 func TestRoutingTableAndWorkspaceListing(t *testing.T) {
@@ -78,26 +98,57 @@ func TestRoutingTableAndWorkspaceListing(t *testing.T) {
 	a := newFakeLink("a")
 	b := newFakeLink("b")
 	registry.Register(info("a", "/w/a", "/w/shared"), a)
-	registry.Register(info("b", "/w/b", "/w/shared"), b)
+	registry.Register(info("b", "/w/shared"), b)
 
+	// Unique paths still route by path; duplicate paths are ambiguous.
 	id, ok := registry.RunnerIDForPath("/w/a")
 	if !ok || id != "a" {
 		t.Fatalf("RunnerIDForPath(/w/a) = %q,%v", id, ok)
 	}
-	if _, ok := registry.RunnerIDForPath("/w/shared"); !ok {
-		t.Fatal("shared path must keep its first owner")
+	if ids := registry.RunnerIDsForPath("/w/shared"); len(ids) != 2 || ids[0] != "a" || ids[1] != "b" {
+		t.Fatalf("RunnerIDsForPath(/w/shared) = %v", ids)
 	}
-	registry.Call(context.Background(), "/w/shared", "c", "m", json.RawMessage("null"))
-	if len(a.calls) != 1 || len(b.calls) != 0 {
-		t.Fatalf("shared path routed to %v/%v, want first owner", a.calls, b.calls)
+	if _, ok := registry.RunnerIDForPath("/w/shared"); ok {
+		t.Fatal("ambiguous path must not report a single owner")
+	}
+	ambiguous := callTarget(t, registry, runners.Target{WorkspacePath: "/w/shared"})
+	if !errors.Is(ambiguous, runners.ErrAmbiguousWorkspacePath) {
+		t.Fatalf("ambiguous call error = %v", ambiguous)
+	}
+
+	// Identities route deterministically even when paths collide.
+	mustCallTarget(t, registry, runners.Target{
+		WorkspacePath:     "/w/shared",
+		WorkspaceIdentity: runners.BuildIdentity("b", "/w/shared"),
+	})
+	if a.callCount() != 0 || b.callCount() != 1 {
+		t.Fatalf("calls = a:%d b:%d, want only b", a.callCount(), b.callCount())
 	}
 
 	workspaces := registry.Workspaces()
 	if len(workspaces) != 3 {
-		t.Fatalf("workspaces = %+v, want 3 accepted entries", workspaces)
+		t.Fatalf("workspaces = %+v, want 3 entries", workspaces)
 	}
-	if workspaces[0].Label != "a: a" {
-		t.Fatalf("label = %q, want 'a: a'", workspaces[0].Label)
+	if workspaces[0].Path != "/w/a" || workspaces[0].Label != "a: a" {
+		t.Fatalf("workspaces[0] = %+v", workspaces[0])
+	}
+	shared := workspaces[1:]
+	if shared[0].Path != "/w/shared" || shared[1].Path != "/w/shared" {
+		t.Fatalf("shared rows = %+v", shared)
+	}
+	if shared[0].WorkspaceIdentity != "runner:a:/w/shared" || shared[1].WorkspaceIdentity != "runner:b:/w/shared" {
+		t.Fatalf("shared identities = %q, %q", shared[0].WorkspaceIdentity, shared[1].WorkspaceIdentity)
+	}
+	if shared[0].RunnerID != "a" || shared[1].RunnerID != "b" {
+		t.Fatalf("shared runner ids = %q, %q", shared[0].RunnerID, shared[1].RunnerID)
+	}
+	if shared[0].RunnerName != "a" || shared[0].RunnerOS != "linux" {
+		t.Fatalf("shared runner metadata = %+v", shared[0])
+	}
+
+	// recentProjects stays path-only and deduplicated.
+	if paths := registry.Paths(); len(paths) != 2 || paths[0] != "/w/a" || paths[1] != "/w/shared" {
+		t.Fatalf("Paths() = %v, want [/w/a /w/shared]", paths)
 	}
 }
 
@@ -116,12 +167,66 @@ func TestDuplicateRunnerDisplacesOldLink(t *testing.T) {
 		t.Fatalf("FirstRunnerID = %q", fi)
 	}
 	// The caller closes the displaced link; the registry routing uses the new
-	// link for the same path.
+	// link for the same identity.
 	displaced.Close()
-	registry.Call(context.Background(), "/w", "c", "m", json.RawMessage("null"))
-	if len(second.calls) != 1 {
-		t.Fatalf("new link did not receive the call")
+	mustCallTarget(t, registry, runners.Target{
+		WorkspacePath:     "/w",
+		WorkspaceIdentity: "runner:r:/w",
+	})
+	if second.callCount() != 1 || first.callCount() != 0 {
+		t.Fatalf("calls = second:%d first:%d, want the new link only", second.callCount(), first.callCount())
 	}
+}
+
+func TestDuplicateRunnerNewestWinsForIdentity(t *testing.T) {
+	registry := runners.NewRegistry(testLogger())
+	first := newFakeLink("first")
+	registry.Register(info("r", "/w"), first)
+	second := newFakeLink("second")
+	registry.Register(info("r", "/w"), second)
+
+	id, ok := registry.RunnerIDForIdentity("runner:r:/w")
+	if !ok || id != "r" {
+		t.Fatalf("RunnerIDForIdentity = %q,%v", id, ok)
+	}
+	mustCallTarget(t, registry, runners.Target{WorkspaceIdentity: "runner:r:/w"})
+	if second.callCount() != 1 || first.callCount() != 0 {
+		t.Fatalf("calls = second:%d first:%d", second.callCount(), first.callCount())
+	}
+}
+
+func TestOfflineRunnerIdentityNeverFallsBack(t *testing.T) {
+	registry := runners.NewRegistry(testLogger())
+	alpha := newFakeLink("alpha")
+	beta := newFakeLink("beta")
+	registry.Register(info("alpha", "/w"), alpha)
+	registry.Register(info("beta", "/w"), beta)
+
+	registry.Unregister("beta", beta)
+
+	// The identity of the offline runner must fail, not fall back to alpha or
+	// to the equally served path.
+	err := callTarget(t, registry, runners.Target{WorkspacePath: "/w", WorkspaceIdentity: "runner:beta:/w"})
+	var offline runners.OfflineError
+	if !errors.As(err, &offline) {
+		t.Fatalf("offline identity error = %v, want runner offline", err)
+	}
+	if err.Error() != "runner offline" {
+		t.Fatalf("offline message = %q", err.Error())
+	}
+	if alpha.callCount() != 0 {
+		t.Fatal("offline identity fell back to another runner")
+	}
+
+	// An identity for a runner id that is not connected reports offline: the
+	// caller cannot fall back to a different machine.
+	if err := callTarget(t, registry, runners.Target{WorkspaceIdentity: "runner:gamma:/w"}); !errors.As(err, &offline) {
+		t.Fatalf("unknown runner identity error = %v, want runner offline", err)
+	}
+	// A live runner id is authoritative even when the hello did not advertise
+	// that exact path (the runner owns its filesystem).
+	registry.Register(info("gamma", "/other"), newFakeLink("gamma"))
+	mustCallTarget(t, registry, runners.Target{WorkspaceIdentity: "runner:gamma:/w"})
 }
 
 func TestOfflineAndReconnectRelisten(t *testing.T) {
@@ -129,8 +234,11 @@ func TestOfflineAndReconnectRelisten(t *testing.T) {
 	link := newFakeLink("first")
 	registry.Register(info("r", "/w"), link)
 
-	registry.RegisterListen("conn", 7, "nex-agent", "onDynamicConversationFrame", "/w",
-		json.RawMessage(`[{"workspacePath":"/w"}]`), func(json.RawMessage) {})
+	if err := registry.RegisterListen("conn", 7, runners.Target{WorkspacePath: "/w"},
+		"nex-agent", "onDynamicConversationFrame",
+		json.RawMessage(`[{"workspacePath":"/w"}]`), func(json.RawMessage) {}); err != nil {
+		t.Fatalf("RegisterListen: %v", err)
+	}
 	if got := link.listenFor("conn:7"); got != "nex-agent.onDynamicConversationFrame" {
 		t.Fatalf("listen = %q", got)
 	}
@@ -153,6 +261,75 @@ func TestOfflineAndReconnectRelisten(t *testing.T) {
 	}
 	if ids := registry.BindingsForRunner("r"); len(ids) != 1 || ids[0] != "conn:7" {
 		t.Fatalf("bindings after reconnect = %v", ids)
+	}
+}
+
+// Identity listens must rebind to the same runner id after a reconnect, and a
+// different runner serving the same path must never receive them.
+func TestIdentityListenRebindsToSameRunnerOnly(t *testing.T) {
+	registry := runners.NewRegistry(testLogger())
+	alpha := newFakeLink("alpha")
+	beta := newFakeLink("beta")
+	registry.Register(info("alpha", "/w"), alpha)
+	registry.Register(info("beta", "/w"), beta)
+
+	if err := registry.RegisterListen("conn", 3, runners.Target{
+		WorkspacePath:     "/w",
+		WorkspaceIdentity: "runner:beta:/w",
+	}, "nex-agent", "onDynamicConversationFrame",
+		json.RawMessage(`[{"workspacePath":"/w","workspaceIdentity":"runner:beta:/w"}]`),
+		func(json.RawMessage) {}); err != nil {
+		t.Fatalf("RegisterListen: %v", err)
+	}
+	if got := beta.listenFor("conn:3"); got != "nex-agent.onDynamicConversationFrame" {
+		t.Fatalf("identity listen = %q, want beta", got)
+	}
+	if got := alpha.listenFor("conn:3"); got != "" {
+		t.Fatalf("alpha received an identity listen for beta: %q", got)
+	}
+
+	registry.Unregister("beta", beta)
+	// alpha is still connected and serves the same path, but must not inherit
+	// the identity-bound stream.
+	if got := alpha.listenFor("conn:3"); got != "" {
+		t.Fatalf("alpha inherited beta's listen on disconnect: %q", got)
+	}
+
+	beta2 := newFakeLink("beta2")
+	registry.Register(info("beta", "/w"), beta2)
+	if got := beta2.listenFor("conn:3"); got != "nex-agent.onDynamicConversationFrame" {
+		t.Fatalf("identity listen after reconnect = %q, want beta's replacement", got)
+	}
+	if got := alpha.listenFor("conn:3"); got != "" {
+		t.Fatalf("alpha received beta's re-issued listen: %q", got)
+	}
+
+	// An identity listen for an offline runner is stored, and only attaches
+	// when that exact runner reconnects.
+	registry.Unregister("alpha", alpha)
+	if err := registry.RegisterListen("conn", 4, runners.Target{WorkspaceIdentity: "runner:alpha:/w"},
+		"nex-task", "onDynamicWorkspaceEvent", json.RawMessage("null"), func(json.RawMessage) {}); err != nil {
+		t.Fatalf("RegisterListen while offline: %v", err)
+	}
+	if got := beta2.listenFor("conn:4"); got != "" {
+		t.Fatalf("offline identity listen attached to beta: %q", got)
+	}
+	alpha2 := newFakeLink("alpha2")
+	registry.Register(info("alpha", "/w"), alpha2)
+	if got := alpha2.listenFor("conn:4"); got != "nex-task.onDynamicWorkspaceEvent" {
+		t.Fatalf("offline identity listen did not attach on reconnect: %q", got)
+	}
+}
+
+func TestAmbiguousPathListenRejected(t *testing.T) {
+	registry := runners.NewRegistry(testLogger())
+	registry.Register(info("a", "/w"), newFakeLink("a"))
+	registry.Register(info("b", "/w"), newFakeLink("b"))
+
+	err := registry.RegisterListen("conn", 1, runners.Target{WorkspacePath: "/w"},
+		"nex-agent", "onDynamicConversationFrame", json.RawMessage("null"), func(json.RawMessage) {})
+	if !errors.Is(err, runners.ErrAmbiguousWorkspacePath) {
+		t.Fatalf("ambiguous listen error = %v", err)
 	}
 }
 
@@ -194,7 +371,7 @@ func TestFirstRunnerIsRegistrationOrder(t *testing.T) {
 	// A first-runner listen is assigned to the first runner and re-issued after
 	// a reconnect.
 	listenLink := newFakeLink("listen")
-	registry.RegisterListen("conn", 1, "model-selection", "onDidChange", "",
+	registry.RegisterListen("conn", 1, runners.Target{}, "model-selection", "onDidChange",
 		json.RawMessage("null"), func(json.RawMessage) {})
 	if got := listenLink.listenFor("conn:1"); got != "" {
 		t.Fatal("first-runner listen must not attach to an unrelated link")
@@ -213,7 +390,7 @@ func TestFirstRunnerListenMovesOnDisconnect(t *testing.T) {
 	registry.Register(info("a", "/a"), first)
 	registry.Register(info("b", "/b"), second)
 
-	registry.RegisterListen("conn", 1, "model-selection", "onDidChange", "",
+	registry.RegisterListen("conn", 1, runners.Target{}, "model-selection", "onDidChange",
 		json.RawMessage("null"), func(json.RawMessage) {})
 	if got := first.listenFor("conn:1"); got != "model-selection.onDidChange" {
 		t.Fatalf("initial listen = %q", got)
@@ -235,8 +412,11 @@ func TestRegisterClosesDisplacedBeforeRelisten(t *testing.T) {
 	registry := runners.NewRegistry(testLogger())
 	first := newFakeLink("first")
 	registry.Register(info("r", "/w"), first)
-	registry.RegisterListen("conn", 1, "nex-agent", "onDynamicConversationFrame", "/w",
-		json.RawMessage(`[{"workspacePath":"/w"}]`), func(json.RawMessage) {})
+	if err := registry.RegisterListen("conn", 1, runners.Target{WorkspacePath: "/w"},
+		"nex-agent", "onDynamicConversationFrame",
+		json.RawMessage(`[{"workspacePath":"/w"}]`), func(json.RawMessage) {}); err != nil {
+		t.Fatalf("RegisterListen: %v", err)
+	}
 
 	second := newFakeLink("second")
 	displaced := registry.Register(info("r", "/w"), second)
@@ -258,10 +438,13 @@ func TestRegisterListenReplaceSameLinkKeepsNewStream(t *testing.T) {
 	link := newFakeLink("link")
 	registry.Register(info("r", "/w"), link)
 
-	registry.RegisterListen("conn", 1, "nex-agent", "onDynamicConversationFrame", "/w",
-		json.RawMessage(`[{"workspacePath":"/w"}]`), func(json.RawMessage) {})
-	registry.RegisterListen("conn", 1, "nex-agent", "onDynamicConversationFrame", "/w",
-		json.RawMessage(`[{"workspacePath":"/w"}]`), func(json.RawMessage) {})
+	for range 2 {
+		if err := registry.RegisterListen("conn", 1, runners.Target{WorkspacePath: "/w"},
+			"nex-agent", "onDynamicConversationFrame",
+			json.RawMessage(`[{"workspacePath":"/w"}]`), func(json.RawMessage) {}); err != nil {
+			t.Fatalf("RegisterListen: %v", err)
+		}
+	}
 
 	if got := link.listenFor("conn:1"); got != "nex-agent.onDynamicConversationFrame" {
 		t.Fatalf("stream after replace = %q, want the new listen", got)
@@ -271,8 +454,8 @@ func TestRegisterListenReplaceSameLinkKeepsNewStream(t *testing.T) {
 	}
 }
 
-// The runner's hello may repeat a path, and a re-register after losing a path
-// to another runner must not leave duplicate listing rows.
+// The runner's hello may repeat a path; it is listed once. Two runners may
+// advertise the same path and each gets its own row and identity.
 func TestDuplicateWorkspacePathInHelloIsListedOnce(t *testing.T) {
 	registry := runners.NewRegistry(testLogger())
 	registry.Register(runners.Info{
@@ -281,8 +464,25 @@ func TestDuplicateWorkspacePathInHelloIsListedOnce(t *testing.T) {
 			{Path: "/w"}, {Path: "/w"}, {Path: " /w "},
 		},
 	}, newFakeLink("r"))
+	registry.Register(info("other", "/w"), newFakeLink("other"))
 
-	if workspaces := registry.Workspaces(); len(workspaces) != 1 || workspaces[0].Path != "/w" {
-		t.Fatalf("workspaces = %+v, want one /w row", workspaces)
+	workspaces := registry.Workspaces()
+	if len(workspaces) != 2 {
+		t.Fatalf("workspaces = %+v, want one row per runner", workspaces)
+	}
+	if workspaces[0].WorkspaceIdentity != "runner:r:/w" || workspaces[1].WorkspaceIdentity != "runner:other:/w" {
+		t.Fatalf("identities = %q, %q", workspaces[0].WorkspaceIdentity, workspaces[1].WorkspaceIdentity)
+	}
+}
+
+func TestInvalidRunnerIDRejected(t *testing.T) {
+	registry := runners.NewRegistry(testLogger())
+	for _, id := range []string{"", "a:b", "a b"} {
+		if displaced := registry.Register(info(id, "/w"), newFakeLink(id)); displaced != nil {
+			t.Fatalf("Register(%q) displaced a link", id)
+		}
+	}
+	if workspaces := registry.Workspaces(); len(workspaces) != 0 {
+		t.Fatalf("invalid runner ids were registered: %+v", workspaces)
 	}
 }

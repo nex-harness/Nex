@@ -191,6 +191,12 @@ func (c *Conn) handshake(ctx context.Context) error {
 	if hello.RunnerID == "" {
 		return errors.New("hello.runnerId is required")
 	}
+	// The runner id is embedded in every workspace identity
+	// (`runner:<runnerId>:<path>`), so the separator and whitespace would make
+	// identities ambiguous. Reject them at the handshake.
+	if !runners.ValidRunnerID(hello.RunnerID) {
+		return fmt.Errorf("hello.runnerId %q must not contain ':' or whitespace", hello.RunnerID)
+	}
 
 	c.info = runners.Info{
 		RunnerID:   hello.RunnerID,

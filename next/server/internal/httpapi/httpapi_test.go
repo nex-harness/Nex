@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/tylinux/nex-next/server/internal/app"
+	"github.com/tylinux/nex-next/server/internal/runners"
 )
 
 const (
@@ -38,6 +40,23 @@ func newTestServer(t *testing.T) (*httptest.Server, *app.App, string) {
 	t.Cleanup(server.Close)
 	return server, application, dataDir
 }
+
+// noopLink satisfies runners.Link for registry-only server-info tests.
+type noopLink struct{}
+
+func (noopLink) Call(context.Context, string, string, json.RawMessage) (json.RawMessage, error) {
+	return nil, nil
+}
+
+func (noopLink) Listen(string, string, string, json.RawMessage, func(json.RawMessage)) error {
+	return nil
+}
+
+func (noopLink) Unlisten(string) {}
+
+func (noopLink) Close() {}
+
+func (noopLink) Done() <-chan struct{} { return nil }
 
 func noRedirectClient(t *testing.T) *http.Client {
 	t.Helper()
@@ -317,8 +336,27 @@ func TestQueryTokenMintsCookieOnPageRequests(t *testing.T) {
 }
 
 func TestServerInfoShape(t *testing.T) {
-	server, _, _ := newTestServer(t)
+	server, application, _ := newTestServer(t)
 	client := noRedirectClient(t)
+
+	// Two runners advertising the same path must both appear, each with its
+	// own identity and runner metadata.
+	application.Registry.Register(runners.Info{
+		RunnerID: "runner_0123456789abcdef",
+		Name:     "mac-mini",
+		OS:       "darwin",
+		Workspaces: []runners.Workspace{
+			{Path: "/home/me/app", Label: "ignored"},
+		},
+	}, noopLink{})
+	application.Registry.Register(runners.Info{
+		RunnerID: "alpha",
+		Name:     "win-box",
+		OS:       "win32",
+		Workspaces: []runners.Workspace{
+			{Path: "/home/me/app"},
+		},
+	}, noopLink{})
 
 	response := get(t, client, server.URL+"/api/server-info?token=browser-secret")
 	defer response.Body.Close()
@@ -344,6 +382,52 @@ func TestServerInfoShape(t *testing.T) {
 	}
 	if capabilities["desktopContinuous"] != true || capabilities["websocketRpc"] != true {
 		t.Fatalf("capabilities = %+v", capabilities)
+	}
+	workspaces, ok := payload["workspaces"].([]any)
+	if !ok || len(workspaces) != 2 {
+		t.Fatalf("workspaces = %+v, want two runner rows", payload["workspaces"])
+	}
+	first, _ := workspaces[0].(map[string]any)
+	second, _ := workspaces[1].(map[string]any)
+	want := []map[string]any{
+		{
+			"path":              "/home/me/app",
+			"label":             "mac-mini: app",
+			"workspaceIdentity": "runner:runner_0123456789abcdef:/home/me/app",
+			"runnerId":          "runner_0123456789abcdef",
+			"runnerName":        "mac-mini",
+			"runnerOs":          "darwin",
+		},
+		{
+			"path":              "/home/me/app",
+			"label":             "win-box: app",
+			"workspaceIdentity": "runner:alpha:/home/me/app",
+			"runnerId":          "alpha",
+			"runnerName":        "win-box",
+			"runnerOs":          "win32",
+		},
+	}
+	for key, value := range want[0] {
+		if first[key] != value {
+			t.Fatalf("workspaces[0].%s = %v, want %v", key, first[key], value)
+		}
+	}
+	for key, value := range want[1] {
+		if second[key] != value {
+			t.Fatalf("workspaces[1].%s = %v, want %v", key, second[key], value)
+		}
+	}
+}
+
+func TestServerInfoEmptyWorkspacesIsArray(t *testing.T) {
+	server, _, _ := newTestServer(t)
+	client := noRedirectClient(t)
+
+	response := get(t, client, server.URL+"/api/server-info?token=browser-secret")
+	defer response.Body.Close()
+	var payload map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
 	}
 	workspaces, ok := payload["workspaces"].([]any)
 	if !ok || len(workspaces) != 0 {
