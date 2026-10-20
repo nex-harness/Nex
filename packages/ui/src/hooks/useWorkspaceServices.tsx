@@ -227,3 +227,26 @@ export function useWorkspaceServices(
     remoteTarget,
   ).services;
 }
+
+/**
+ * 有 workspacePath 时按 workspace 解析服务，否则用当前 context services。
+ *
+ * 修复：useNexSessionService / useNexTaskService / useNexAgentService 曾各自写成
+ * `workspacePath ? useWorkspaceServices(...) : useServices()`。OnboardingDialog 的
+ * workspacePath 会在首个 workspace tab 挂载后从 undefined 变成真实路径，同一组件前后两次
+ * 渲染的 hook 顺序不同，React 抛出 "prevDeps.join is not a function" 并让该子树崩溃。
+ * 这里无条件调用两个 hook，只在结果上做选择，保证 hook 顺序稳定。
+ */
+export function useOptionalWorkspaceServices(
+  workspacePath?: string | null,
+  preferredRemoteSessionId?: string | null,
+  workspaceIdentity?: string | null,
+): IServiceAccessor {
+  const contextServices = useServices();
+  const workspaceServices = useWorkspaceServices(
+    workspacePath,
+    preferredRemoteSessionId,
+    workspaceIdentity,
+  );
+  return workspacePath ? workspaceServices : contextServices;
+}

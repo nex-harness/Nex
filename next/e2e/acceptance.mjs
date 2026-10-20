@@ -315,6 +315,20 @@ try {
   }
 }
 
+const significantErrors = logs.filter((line) => {
+  if (line.startsWith("PAGEERROR")) return true;
+  if (!/CONSOLE\[(error|warning)\]/.test(line)) return false;
+  // Known web-only noise unrelated to the acceptance path: the external client-config
+  // fetch is blocked by CORS, Tooltip controlled/uncontrolled dev warnings, and the
+  // one-off projection-vs-ACK race warning that self-recovers via snapshot.
+  return !/zcode\.z\.ai|ERR_FAILED|Tooltip is changing|accepted input projection silent/u.test(line);
+});
+const crashes = significantErrors.filter((line) =>
+  /PAGEERROR|React subtree crashed|change in the order of Hooks/u.test(line),
+);
+checks.noReactCrashes = crashes.length === 0;
+if (!checks.noReactCrashes) failures.push("noReactCrashes");
+
 summary = {
   ok: failures.length === 0,
   baseUrl: BASE_URL,
@@ -323,14 +337,7 @@ summary = {
   checks,
   failures,
   details,
-  significantErrors: logs.filter((line) => {
-    if (line.startsWith("PAGEERROR")) return false; // reported through consoleErrors
-    if (!/CONSOLE\[(error|warning)\]/.test(line)) return false;
-    // Pre-existing web-only UI noise unrelated to the MVP acceptance path.
-    return !/zcode\.z\.ai|ERR_FAILED|Tooltip is changing|onboarding-record|bots|Hook|areHookInputsEqual|ScopedErrorBoundary:onboarding-dialog|onboarding-dialog|useNexSessionService|accepted input projection silent/u.test(
-      line,
-    );
-  }),
+  significantErrors,
   consoleErrors,
 };
 
