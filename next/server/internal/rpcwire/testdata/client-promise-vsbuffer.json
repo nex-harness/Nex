@@ -1,0 +1,22 @@
+{
+  "name": "client-promise-vsbuffer",
+  "description": "Promise request with a VSBuffer argument (tag 3)",
+  "direction": "client-to-server",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "request",
+    "type": 100,
+    "id": 0,
+    "channel": "demo",
+    "name": "echo",
+    "arg": {
+      "t": "buf",
+      "v": "3q2+7w==",
+      "vs": true
+    }
+  }
+}

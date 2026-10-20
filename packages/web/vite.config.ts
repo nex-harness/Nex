@@ -29,6 +29,8 @@ export default defineConfig(({ mode }) => {
     NEX_ENV: nexEnv,
   };
   const nexEndpointOrigin = resolveRuntimeNexEndpointOrigin(endpointEnv);
+  const devServerOrigin = env.NEX_WEB_DEV_SERVER_ORIGIN?.trim() || "http://localhost:3030";
+  const devServerWsOrigin = devServerOrigin.replace(/^http/, "ws");
 
   return {
     plugins: [pdfJsCMapsPlugin(), react(), tailwindcss(), thirdPartyNoticesVitePlugin()],
@@ -46,11 +48,11 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      port: 5173,
+      port: Number(env.NEX_WEB_DEV_PORT) || 5173,
       proxy: {
-        // 将 /ws 和 /api 请求代理到 server（默认 3030 端口）
-        "/ws": { target: "ws://localhost:3030", ws: true },
-        "/api": { target: "http://localhost:3030" },
+        // 将 /ws 和 /api 请求代理到 server（默认 3030 端口，NEX_WEB_DEV_SERVER_ORIGIN 可覆盖）
+        "/ws": { target: devServerWsOrigin, ws: true },
+        "/api": { target: devServerOrigin },
       },
     },
     optimizeDeps: {

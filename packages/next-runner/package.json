@@ -1,0 +1,32 @@
+{
+  "name": "@nex/next-runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent runner for the next server: connects to ws://.../runner and serves pi-backed sessions.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "start": "node --import tsx src/main.ts",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "1.3.0",
+    "@earendil-works/pi-coding-agent": "1.3.0",
+    "@nex/shared": "workspace:*",
+    "ws": "^8.20.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@nex/provider": "workspace:*",
+    "@nex/rpc": "workspace:*",
+    "@types/node": "^25.5.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.19.4",
+    "typescript": "^6.0.2"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

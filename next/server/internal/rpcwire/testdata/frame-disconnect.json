@@ -1,0 +1,13 @@
+{
+  "name": "frame-disconnect",
+  "description": "Frame header for ProtocolMessageType.disconnect; defined by the enum but ignored by SocketProtocol",
+  "direction": "synthetic",
+  "frame": {
+    "type": 5,
+    "id": 16909060,
+    "ack": 84281096
+  },
+  "expected": {
+    "kind": "frame"
+  }
+}

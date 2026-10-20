@@ -1,0 +1,18 @@
+{
+  "name": "client-event-dispose",
+  "description": "EventDispose request emitted when the last listener unsubscribes",
+  "direction": "client-to-server",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "request",
+    "type": 103,
+    "id": 0,
+    "arg": {
+      "t": "undef"
+    }
+  }
+}

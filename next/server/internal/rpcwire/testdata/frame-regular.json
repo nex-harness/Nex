@@ -1,0 +1,13 @@
+{
+  "name": "frame-regular",
+  "description": "Regular frame with a 5-byte payload; the only type SocketProtocol sends or delivers",
+  "direction": "synthetic",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "frame"
+  }
+}

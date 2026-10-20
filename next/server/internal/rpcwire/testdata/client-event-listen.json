@@ -1,0 +1,23 @@
+{
+  "name": "client-event-listen",
+  "description": "EventListen request emitted when the first listener subscribes",
+  "direction": "client-to-server",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "request",
+    "type": 102,
+    "id": 0,
+    "channel": "demo",
+    "name": "onDidChange",
+    "arg": {
+      "t": "obj",
+      "v": {
+        "topic": "workspace"
+      }
+    }
+  }
+}

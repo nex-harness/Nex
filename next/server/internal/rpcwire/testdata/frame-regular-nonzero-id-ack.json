@@ -1,0 +1,13 @@
+{
+  "name": "frame-regular-nonzero-id-ack",
+  "description": "Regular frame with non-zero id/ack; SocketProtocol still delivers the payload",
+  "direction": "synthetic",
+  "frame": {
+    "type": 1,
+    "id": 16909060,
+    "ack": 84281096
+  },
+  "expected": {
+    "kind": "frame"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "frame-regular-initialize",
+  "description": "Regular frame carrying a server Initialize payload",
+  "direction": "synthetic",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "frame"
+  }
+}

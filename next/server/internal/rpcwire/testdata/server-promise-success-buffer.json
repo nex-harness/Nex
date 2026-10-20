@@ -1,0 +1,20 @@
+{
+  "name": "server-promise-success-buffer",
+  "description": "PromiseSuccess with a Uint8Array body",
+  "direction": "server-to-client",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "response",
+    "type": 201,
+    "id": 0,
+    "body": {
+      "t": "buf",
+      "v": "CgsM/w==",
+      "vs": false
+    }
+  }
+}

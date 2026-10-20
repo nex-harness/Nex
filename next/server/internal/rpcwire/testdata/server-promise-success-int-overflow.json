@@ -1,0 +1,19 @@
+{
+  "name": "server-promise-success-int-overflow",
+  "description": "PromiseSuccess with 2^31, which TypeScript serializes via the JSON fallback",
+  "direction": "server-to-client",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "response",
+    "type": 201,
+    "id": 0,
+    "body": {
+      "t": "jsonnum",
+      "v": "2147483648"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "frame-control",
+  "description": "Frame header for ProtocolMessageType.control; defined by the enum but ignored by SocketProtocol",
+  "direction": "synthetic",
+  "frame": {
+    "type": 2,
+    "id": 16909060,
+    "ack": 84281096
+  },
+  "expected": {
+    "kind": "frame"
+  }
+}

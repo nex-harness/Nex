@@ -61,6 +61,7 @@
     ".agents/skills",
     "packages/formal-proof",
     "apps/nex-cli",
-    "docs/electron"
+    "docs/electron",
+    "next/server/internal/rpcwire/testdata"
   ]
 }

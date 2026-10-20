@@ -1,0 +1,20 @@
+{
+  "name": "client-promise-undefined",
+  "description": "Promise request with no argument (undefined tag 0)",
+  "direction": "client-to-server",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "request",
+    "type": 100,
+    "id": 0,
+    "channel": "demo",
+    "name": "echo",
+    "arg": {
+      "t": "undef"
+    }
+  }
+}

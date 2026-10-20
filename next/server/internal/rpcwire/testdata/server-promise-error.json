@@ -1,0 +1,27 @@
+{
+  "name": "server-promise-error",
+  "description": "PromiseError with message, name and stack",
+  "direction": "server-to-client",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "response",
+    "type": 202,
+    "id": 0,
+    "body": {
+      "t": "obj",
+      "v": {
+        "message": "boom \"quoted\"\nsecond line",
+        "name": "BoomError",
+        "stack": [
+          "BoomError: boom",
+          "    at alpha (file:///app/alpha.ts:1:2)",
+          "    at beta (file:///app/beta.ts:3:4)"
+        ]
+      }
+    }
+  }
+}

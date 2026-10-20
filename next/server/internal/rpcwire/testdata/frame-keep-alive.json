@@ -1,0 +1,13 @@
+{
+  "name": "frame-keep-alive",
+  "description": "Frame header for ProtocolMessageType.keep-alive; defined by the enum but ignored by SocketProtocol",
+  "direction": "synthetic",
+  "frame": {
+    "type": 9,
+    "id": 16909060,
+    "ack": 84281096
+  },
+  "expected": {
+    "kind": "frame"
+  }
+}

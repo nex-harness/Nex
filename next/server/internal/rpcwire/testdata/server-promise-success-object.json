@@ -1,0 +1,29 @@
+{
+  "name": "server-promise-success-object",
+  "description": "PromiseSuccess with a plain object body",
+  "direction": "server-to-client",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "response",
+    "type": 201,
+    "id": 0,
+    "body": {
+      "t": "obj",
+      "v": {
+        "ok": true,
+        "items": [
+          1,
+          2,
+          3
+        ],
+        "nested": {
+          "name": "nested"
+        }
+      }
+    }
+  }
+}

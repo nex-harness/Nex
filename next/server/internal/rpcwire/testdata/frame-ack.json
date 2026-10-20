@@ -1,0 +1,13 @@
+{
+  "name": "frame-ack",
+  "description": "Frame header for ProtocolMessageType.ack; defined by the enum but ignored by SocketProtocol",
+  "direction": "synthetic",
+  "frame": {
+    "type": 3,
+    "id": 16909060,
+    "ack": 84281096
+  },
+  "expected": {
+    "kind": "frame"
+  }
+}

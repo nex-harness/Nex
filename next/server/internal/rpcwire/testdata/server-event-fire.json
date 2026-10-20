@@ -1,0 +1,22 @@
+{
+  "name": "server-event-fire",
+  "description": "EventFire response for a subscribed event",
+  "direction": "server-to-client",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "response",
+    "type": 204,
+    "id": 0,
+    "body": {
+      "t": "obj",
+      "v": {
+        "kind": "tick",
+        "n": 1
+      }
+    }
+  }
+}

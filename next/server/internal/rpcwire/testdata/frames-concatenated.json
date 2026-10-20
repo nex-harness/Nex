@@ -1,0 +1,25 @@
+{
+  "name": "frames-concatenated",
+  "description": "Two complete frames in one byte stream; receivers must decode both",
+  "direction": "synthetic",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "frames",
+    "frames": [
+      {
+        "type": 1,
+        "id": 0,
+        "ack": 0
+      },
+      {
+        "type": 1,
+        "id": 0,
+        "ack": 0
+      }
+    ]
+  }
+}

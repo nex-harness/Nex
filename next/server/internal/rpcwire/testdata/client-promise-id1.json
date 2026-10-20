@@ -1,0 +1,21 @@
+{
+  "name": "client-promise-id1",
+  "description": "Promise request with request id 1 (second call on the same client)",
+  "direction": "client-to-server",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "request",
+    "type": 100,
+    "id": 1,
+    "channel": "demo",
+    "name": "echo",
+    "arg": {
+      "t": "str",
+      "v": "second"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "server-initialize",
+  "description": "Initialize response sent on connect",
+  "direction": "server-to-client",
+  "frame": {
+    "type": 1,
+    "id": 0,
+    "ack": 0
+  },
+  "expected": {
+    "kind": "response",
+    "type": 200,
+    "body": {
+      "t": "undef"
+    }
+  }
+}
