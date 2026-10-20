@@ -37,6 +37,7 @@ import { useTaskInteractionAutoResolutionSnooze } from "@/hooks/useTaskInteracti
 import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceReadOnly } from "@/store/tabStore.js";
 import { TaskTitleOverflowText } from "@/components/TaskTitleOverflowText.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 
 function GroupedTaskRowComponent({
   task,
@@ -102,8 +103,10 @@ function GroupedTaskRowComponent({
   const hasPendingInteraction = Boolean(task.pendingInteraction) || taskAttention !== null;
   // 远端 session 未就绪时打开文件树必然会被 resolver 拒绝，因此不要暴露
   // 无效 action；本地 task 不需要 remoteSessionId，仍保持入口可用。
+  // 只有 `remote:` task 依赖 remoteSessionId；runner task 走 base services 的文件服务。
   const canOpenFileTree =
-    Boolean(onOpenFileTree) && (!task.workspaceIdentity?.trim() || Boolean(remoteSessionId));
+    Boolean(onOpenFileTree) &&
+    (!isClientRemoteWorkspaceIdentity(task.workspaceIdentity) || Boolean(remoteSessionId));
   const taskAttentionLabel = taskAttention
     ? intl.formatMessage({
         id: taskAttention.kind === "userInput" ? "taskList.userInputTag" : "taskList.permissionTag",

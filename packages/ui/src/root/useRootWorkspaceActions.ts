@@ -8,6 +8,8 @@ import { isRendererReloadNavigation } from "@/lib/rendererNavigation.js";
 import { parseWslUncWorkspacePath } from "@/lib/wslUncWorkspace.js";
 import { logger } from "@/logger.js";
 import { openFolderFromWorkspaceEntry } from "@/root/openWorkspaceFolderEntry.js";
+import { hasSelectableRunnerWorkspaces } from "@/lib/runnerWorkspaceOptions.js";
+import { useRunnerWorkspaceDirectoryStore } from "@/store/runnerWorkspaceDirectoryStore.js";
 import { useConversationWorkspaceActions } from "@/root/useConversationWorkspaceActions.js";
 import { useNexSessionStore } from "@/store/nexSessionStore.js";
 import { isWorkspaceReadOnly, type TabStore, type TabStoreState } from "@/store/tabStore.js";
@@ -31,6 +33,16 @@ interface OpenRemoteConnectionPreference {
 interface NewTaskTargetResolution {
   workspacePath: string;
   workspaceIdentity: string | null;
+}
+
+/**
+ * 读取 store 当前的 runner workspace 目录，判断是否值得先展示机器选择器。
+ *
+ * 这里用 getState 而不是订阅：该判断只发生在“打开文件夹”这个一次性动作里，
+ * 订阅会让 Root 因后台列表刷新重渲染。
+ */
+function hasSelectableRunnerWorkspacesFromStore(): boolean {
+  return hasSelectableRunnerWorkspaces(useRunnerWorkspaceDirectoryStore.getState().workspaces);
 }
 
 /**
@@ -71,6 +83,7 @@ export function useRootWorkspaceActions({
   allowOpenWorkspace,
   preferDirectoryBrowser,
   openDirectoryBrowser,
+  openRunnerWorkspacePicker,
   onOpenRemoteConnection,
   workbenchGroupClientMode = "desktop-continuous",
 }: {
@@ -85,6 +98,8 @@ export function useRootWorkspaceActions({
   allowOpenWorkspace: NonNullable<RootProps["allowOpenWorkspace"]>;
   preferDirectoryBrowser: boolean;
   openDirectoryBrowser?: () => void;
+  /** web：打开机器 → workspace 选择器；未提供或列表为空时回落目录浏览。 */
+  openRunnerWorkspacePicker?: () => void;
   onOpenRemoteConnection?: (preference?: OpenRemoteConnectionPreference) => void;
   workbenchGroupClientMode?: NexTaskClientMode;
 }) {
@@ -262,8 +277,9 @@ export function useRootWorkspaceActions({
   );
 
   const handleSelectProject = useCallback(
-    async (path: string) => {
+    async (path: string, workspaceIdentity?: string) => {
       logger.info("[Root] handleSelectProject called with path:", path);
+      const normalizedIdentity = workspaceIdentity?.trim() || undefined;
       try {
         const wslUncWorkspace = parseWslUncWorkspacePath(path);
         if (wslUncWorkspace && onOpenRemoteConnection) {
@@ -298,11 +314,12 @@ export function useRootWorkspaceActions({
           return;
         }
 
-        // 新增 tab（如果已在本窗口打开则激活它）
-        addTab(path);
+        // 新增 tab（如果已在本窗口打开则激活它）。
+        // runner workspace 必须带上 `runner:` 身份，否则同路径会落到默认 server/机器。
+        addTab(path, normalizedIdentity ? { workspaceIdentity: normalizedIdentity } : undefined);
         // 打开 workspace 是 workspace-only 意图，不是“继续上次会话”。
         // 即使命中已存在 tab，也必须清掉该 workspace 的 activeTaskId 并回到单 pane 草稿。
-        startDraftInWorkspace(path);
+        startDraftInWorkspace(path, normalizedIdentity);
         setWorkspaceActionError(null);
 
         // 更新最近项目列表
@@ -349,6 +366,11 @@ export function useRootWorkspaceActions({
     setWorkspaceActionError(null);
 
     if (preferDirectoryBrowser) {
+      // web：server 上报了 runner workspaces 时先让用户选机器，否则维持目录浏览。
+      if (openRunnerWorkspacePicker && hasSelectableRunnerWorkspacesFromStore()) {
+        openRunnerWorkspacePicker();
+        return;
+      }
       void openFolderFromWorkspaceEntry({
         preferDirectoryBrowser,
         openDirectoryBrowser,
@@ -381,6 +403,7 @@ export function useRootWorkspaceActions({
     handleEnsureConversationWorkspace,
     handleSelectProject,
     openDirectoryBrowser,
+    openRunnerWorkspacePicker,
     platform,
     preferDirectoryBrowser,
     supportsSettings,
@@ -395,6 +418,10 @@ export function useRootWorkspaceActions({
     // 空态 workspace 菜单的 Open folder 需要复用根级打开工作区动作。
     // 因此这里调用同一个入口函数，只把 Root 里的 selectDirectory 与项目选择回调注入进去。
     if (preferDirectoryBrowser) {
+      if (openRunnerWorkspacePicker && hasSelectableRunnerWorkspacesFromStore()) {
+        openRunnerWorkspacePicker();
+        return;
+      }
       void openFolderFromWorkspaceEntry({
         preferDirectoryBrowser,
         openDirectoryBrowser,

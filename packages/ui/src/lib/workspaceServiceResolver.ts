@@ -1,5 +1,6 @@
 import type { IServiceAccessor } from "@nex/services";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 
 interface WorkspaceServiceTarget {
   workspacePath: string;
@@ -46,7 +47,12 @@ export function isRemoteWorkspaceTarget(
   target: WorkspaceServiceTarget,
   resolvedRemoteSessionId?: string,
 ): boolean {
-  return Boolean(target.workspaceIdentity || target.remoteTarget || resolvedRemoteSessionId);
+  // 只有 `remote:` 身份需要远程 session；`runner:` 身份由 server 路由，按本地处理。
+  return Boolean(
+    isClientRemoteWorkspaceIdentity(target.workspaceIdentity) ||
+    target.remoteTarget ||
+    resolvedRemoteSessionId,
+  );
 }
 
 export function resolveWorkspaceServices(

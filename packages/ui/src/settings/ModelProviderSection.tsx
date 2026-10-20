@@ -22,15 +22,18 @@ export {
 } from "./model-provider-section/utils.js";
 
 /**
- * 模型 Provider 设置只由 SettingsPage 注入 Local Host；这里不接收 workspaceIdentity，
- * 防止远程 workspace 误将 Provider Settings 的读写路由到远端 Environment。
+ * 模型 Provider 设置只由 SettingsPage 注入 Local Host；这里不接收用于切换 Host 的
+ * workspaceIdentity。`routingWorkspaceIdentity` 仅作为 server 转发提示传给 getView
+ * （web 多 runner），不会改变本组件使用的 ServiceProvider。
  */
 export function ModelProviderSection({
   workspacePath = "",
+  routingWorkspaceIdentity,
   connectivityWorkspacePath,
   connectivityWorkspaceRequired = false,
 }: {
   workspacePath?: string;
+  routingWorkspaceIdentity?: string;
   connectivityWorkspacePath?: string;
   connectivityWorkspaceRequired?: boolean;
 } = {}) {
@@ -60,6 +63,7 @@ export function ModelProviderSection({
     providerSettingsView,
   } = useModelProviders({
     workspacePath,
+    workspaceIdentity: routingWorkspaceIdentity,
     connectivityWorkspacePath,
     connectivityWorkspaceRequired,
     connectivityUnavailableMessage: intl.formatMessage({

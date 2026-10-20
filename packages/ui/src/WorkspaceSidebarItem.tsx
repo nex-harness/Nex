@@ -89,6 +89,7 @@ import {
 } from "@/lib/workspaceRemovalSafety.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { toast } from "@/components/ui/toast.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 
 export type SortableBindings = Pick<ReturnType<typeof useSortable>, "attributes" | "listeners">;
 
@@ -224,8 +225,12 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
       ? intl.formatMessage({ id: "workspaceSidebar.unavailableLocalDirectory" })
       : undefined;
   const remoteWorkspaceKey = buildWorkspaceSessionKey(tab);
+  // `runner:` 身份不是 remote session：它由 server 路由，失去 remoteSessionId 也不代表
+  // 断连，因此不能显示重连入口或锁定文件树入口。
   const isRemoteWorkspace = Boolean(
-    tab.remoteSessionId || tab.remoteTarget || tab.workspaceIdentity,
+    tab.remoteSessionId ||
+    tab.remoteTarget ||
+    isClientRemoteWorkspaceIdentity(tab.workspaceIdentity),
   );
   const isDisconnectedRemoteWorkspace = Boolean(isRemoteWorkspace && !tab.remoteSessionId);
   const isReconnectPending = Boolean(
@@ -510,7 +515,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
         resolvedTitleLength: meta.title.length,
       });
       upsertOptimisticTaskListItem(tab.workspacePath, meta, tab.workspaceIdentity);
-      if (tab.workspaceIdentity) {
+      if (isClientRemoteWorkspaceIdentity(tab.workspaceIdentity)) {
         useRemoteTimelineTaskStore.getState().upsertTask(meta);
       }
       applyTaskQueryCacheMutation({
@@ -545,13 +550,13 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
       if (previousTask) {
         // workspace 内 pin 以前等远端/本地 RPC 返回后才更新全局 pinned 缓存，
         // pin 区会先消失再补回来。这里先乐观同步列表成员关系，失败时回滚。
-        if (tab.workspaceIdentity && pinned) {
+        if (isClientRemoteWorkspaceIdentity(tab.workspaceIdentity) && pinned) {
           useRemotePinnedTaskStore.getState().upsertTask(previousTask);
           useRemoteTimelineTaskStore
             .getState()
             .removeTask(tab.workspacePath, taskId, tab.workspaceIdentity);
         }
-        if (tab.workspaceIdentity && !pinned) {
+        if (isClientRemoteWorkspaceIdentity(tab.workspaceIdentity) && !pinned) {
           useRemotePinnedTaskStore
             .getState()
             .removeTask(tab.workspacePath, taskId, tab.workspaceIdentity);
@@ -572,13 +577,13 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
           ...(tab.workspaceIdentity ? { workspaceIdentity: tab.workspaceIdentity } : {}),
         });
         removeOptimisticTaskListItem(tab.workspacePath, taskId, tab.workspaceIdentity);
-        if (tab.workspaceIdentity && pinned) {
+        if (isClientRemoteWorkspaceIdentity(tab.workspaceIdentity) && pinned) {
           useRemotePinnedTaskStore.getState().upsertTask(meta);
           useRemoteTimelineTaskStore
             .getState()
             .removeTask(tab.workspacePath, taskId, tab.workspaceIdentity);
         }
-        if (tab.workspaceIdentity && !pinned) {
+        if (isClientRemoteWorkspaceIdentity(tab.workspaceIdentity) && !pinned) {
           useRemotePinnedTaskStore
             .getState()
             .removeTask(tab.workspacePath, taskId, tab.workspaceIdentity);
@@ -593,13 +598,13 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
         return meta;
       } catch (error) {
         if (previousTask) {
-          if (tab.workspaceIdentity && pinned) {
+          if (isClientRemoteWorkspaceIdentity(tab.workspaceIdentity) && pinned) {
             useRemotePinnedTaskStore
               .getState()
               .removeTask(tab.workspacePath, taskId, tab.workspaceIdentity);
             useRemoteTimelineTaskStore.getState().upsertTask(previousTask);
           }
-          if (tab.workspaceIdentity && !pinned) {
+          if (isClientRemoteWorkspaceIdentity(tab.workspaceIdentity) && !pinned) {
             useRemotePinnedTaskStore.getState().upsertTask(previousTask);
             useRemoteTimelineTaskStore
               .getState()
@@ -637,7 +642,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
         ...(tab.workspaceIdentity ? { workspaceIdentity: tab.workspaceIdentity } : {}),
       });
       removeTaskState(tab.workspacePath, taskId, tab.workspaceIdentity);
-      if (tab.workspaceIdentity) {
+      if (isClientRemoteWorkspaceIdentity(tab.workspaceIdentity)) {
         useRemoteTimelineTaskStore
           .getState()
           .removeTask(tab.workspacePath, taskId, tab.workspaceIdentity);
@@ -677,7 +682,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
       });
       setTaskUnreadIndicator(tab.workspacePath, taskId, unread, tab.workspaceIdentity);
       upsertOptimisticTaskListItem(tab.workspacePath, meta, tab.workspaceIdentity);
-      if (tab.workspaceIdentity) {
+      if (isClientRemoteWorkspaceIdentity(tab.workspaceIdentity)) {
         useRemoteTimelineTaskStore.getState().upsertTask(meta);
       }
       applyTaskQueryCacheMutation({
@@ -815,6 +820,10 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
                 role="button"
                 tabIndex={0}
                 data-testid={testId(TID_WORKSPACE_ITEM, tab.workspacePath)}
+                // 多 runner：同一路径可能同时属于多台机器，testid 只能按路径生成；
+                // 暴露 identity 让 E2E/诊断能精确选中某一台机器的 workspace 行。
+                data-workspace-path={tab.workspacePath}
+                data-workspace-identity={tab.workspaceIdentity ?? undefined}
                 className={cn(
                   buttonVariants({ variant: "ghost", size: "default" }),
                   /*

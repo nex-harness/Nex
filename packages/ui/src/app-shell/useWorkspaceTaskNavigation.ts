@@ -24,6 +24,7 @@ import { taskNavigationTargetExists } from "@/lib/taskNavigationTarget.js";
 import { getRemoteWorkspaceSession } from "@/store/remoteWorkspaceSessionStore.js";
 import { useTabStoreApi } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 import { bumpTaskListMembershipVersion } from "@/v4/taskListMembershipVersion.js";
 
 export interface AutomationsNavigationTarget {
@@ -135,12 +136,16 @@ export function useWorkspaceTaskNavigation({
       const expectedUnreadAt =
         typeof selectedRowUnreadAt === "number" ? selectedRowUnreadAt : previousUnreadAt;
       const shouldClearUnread = typeof expectedUnreadAt === "number";
+      // `runner:` 身份走 base services，只有 `remote:` identity 或真实 remote session
+      // 才需要从 remote session 注册表取 services 来写 unread。
       const isRemoteWorkspace = Boolean(
-        targetWorkspaceIdentity ||
+        isClientRemoteWorkspaceIdentity(targetWorkspaceIdentity) ||
         (activeTab &&
           isWorkspaceTab(activeTab) &&
           activeWorkspaceTabMatchesTarget &&
-          (activeTab.remoteSessionId || activeTab.remoteTarget)),
+          (activeTab.remoteSessionId ||
+            activeTab.remoteTarget ||
+            isClientRemoteWorkspaceIdentity(activeTab.workspaceIdentity))),
       );
 
       if (shouldClearUnread) {
@@ -225,9 +230,7 @@ export function useWorkspaceTaskNavigation({
   }, [onNavigateToPluginStore, taskNavPushPluginStore, workspaceAbsPath, workspaceIdentity]);
 
   const handleTaskNavBack = useCallback(() => {
-    const currentWorkspaceState = useNexSessionStore
-      .getState()
-      .getWorkspaceState(workspaceAbsPath);
+    const currentWorkspaceState = useNexSessionStore.getState().getWorkspaceState(workspaceAbsPath);
     if (
       shouldBlockTaskSelectionDuringModelRestart(
         currentWorkspaceState.modelSwitchPending,
@@ -312,9 +315,7 @@ export function useWorkspaceTaskNavigation({
   ]);
 
   const handleTaskNavForward = useCallback(() => {
-    const currentWorkspaceState = useNexSessionStore
-      .getState()
-      .getWorkspaceState(workspaceAbsPath);
+    const currentWorkspaceState = useNexSessionStore.getState().getWorkspaceState(workspaceAbsPath);
     if (
       shouldBlockTaskSelectionDuringModelRestart(
         currentWorkspaceState.modelSwitchPending,

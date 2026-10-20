@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { getWorkspaceKey } from "@/lib/workspaceKey.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 
 export function getPluginWorkspaceKey(tab: WorkspaceTabState): string {
@@ -24,8 +25,11 @@ export function isPluginScopeWorkspaceConnected(tab: WorkspaceTabState): boolean
   if (tab.availability === "unavailable-local-directory") {
     return false;
   }
+  // `runner:` 身份由 server 路由，不需要 remoteSessionId 即可用；只有 `remote:` 才是断连远端。
   const isRemote = Boolean(
-    tab.workspaceIdentity?.trim() || tab.remoteTarget || tab.remoteSessionId,
+    isClientRemoteWorkspaceIdentity(tab.workspaceIdentity) ||
+    tab.remoteTarget ||
+    tab.remoteSessionId,
   );
   if (!isRemote) {
     return true;

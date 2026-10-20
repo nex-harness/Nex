@@ -26,7 +26,17 @@ export function useModelProviders(target: {
   connectivityUnavailableMessage?: string;
 }) {
   const { providerSettingsService } = useServices();
-  const providerSettingsRead = useProviderSettingsServiceView(providerSettingsService);
+  const providerSettingsRead = useProviderSettingsServiceView(
+    providerSettingsService,
+    // 多 runner：web 上 provider-settings 由 server 转发；带上当前 workspace 目标
+    // 才能读到目标机器配置。desktop Host 忽略该参数，设置页语义不变。
+    target.workspacePath?.trim() || target.workspaceIdentity?.trim()
+      ? {
+          workspacePath: target.workspacePath,
+          ...(target.workspaceIdentity ? { workspaceIdentity: target.workspaceIdentity } : {}),
+        }
+      : undefined,
+  );
   const providerSettingsView =
     providerSettingsRead.state.status === "ready" ? providerSettingsRead.state.view : null;
   const effectiveModelProviders = useMemo(

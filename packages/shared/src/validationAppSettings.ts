@@ -107,6 +107,10 @@ const appWorkspaceSessionEntrySchema = z.discriminatedUnion("kind", [
     kind: z.literal("local"),
     workspacePath: nonEmptyStringSchema,
     workspacePurpose: z.enum(["project", "conversation"]).default("project"),
+    // 多 runner 拓扑：web 上打开的服务端 workspace 仍是本地 tab（走同一条 server 连接），
+    // 但需要持久化 `runner:<id>:<path>` 才能在重启后回到同一台机器。
+    // 旧设置没有该字段；remote 条目继续使用自己的 workspaceIdentity。
+    workspaceIdentity: nonEmptyStringSchema.optional(),
   }),
   z.object({
     kind: z.literal("remote"),
@@ -345,6 +349,12 @@ function migrateLegacyWorkspaceSession(value: unknown): unknown {
                 workspacePath: rawEntry.workspacePath,
                 workspacePurpose:
                   rawEntry.workspacePurpose === "conversation" ? "conversation" : "project",
+                // 迁移阶段只重建分类字段，不能让 runner 身份在这里被丢掉：
+                // 该 preprocess 每次读取设置都会执行，漏掉后持久化的机器选择会在下一次读取时消失。
+                ...(typeof rawEntry.workspaceIdentity === "string" &&
+                rawEntry.workspaceIdentity.trim()
+                  ? { workspaceIdentity: rawEntry.workspaceIdentity }
+                  : {}),
               },
             ];
           }

@@ -34,6 +34,7 @@ import { TaskTitleOverflowText } from "@/components/TaskTitleOverflowText.js";
 import { createTaskWorkbenchDragPreview } from "@/lib/taskWorkbenchDragPreview.js";
 import { TaskRowActionButton } from "@/workspace-grouped-tasks/task-row-action-button.js";
 import { TaskWorkflowRunLines } from "@/components/workflow-run-line/TaskWorkflowRunLines.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 
 type TaskListItemIntl = {
   formatMessage: (desc: { id: string }, values?: Record<string, string>) => string;
@@ -348,7 +349,8 @@ export const MemoTaskItem = memo(function TaskListItem({
   const shouldSuppressWorkspaceTaskMetadata = hoverActionsVisible || focusActionsVisible;
   const taskTimeLabel = formatTaskRelativeTime(task.updatedAt, intl);
   const taskChangeSummary = getTaskChangeSummary(task);
-  const isRemoteTask = Boolean(task.workspaceIdentity?.trim());
+  // `runner:` 身份走 base services；CloudUpload 只表示跨 Host（`remote:`）上传。
+  const isRemoteTask = isClientRemoteWorkspaceIdentity(task.workspaceIdentity);
   const archiveLabel = intl.formatMessage({
     id: isArchiveConfirming ? "common.confirm" : "taskList.archive",
   });
@@ -431,8 +433,10 @@ export const MemoTaskItem = memo(function TaskListItem({
   ) : null;
   // 远端 task 的 session 未就绪时 resolver 会拒绝打开；渲染层同步隐藏入口，
   // 避免展示一个点击后无反馈的按钮。本地 task 不依赖已打开 tab，仍可直接按路径打开。
+  // 只有 `remote:` task 需要 remoteSessionId；runner task 用 base services 的文件服务。
   const canOpenFileTree =
-    Boolean(onOpenFileTree) && (!task.workspaceIdentity?.trim() || Boolean(remoteSessionId));
+    Boolean(onOpenFileTree) &&
+    (!isClientRemoteWorkspaceIdentity(task.workspaceIdentity) || Boolean(remoteSessionId));
   const fileTreeActionNode =
     canOpenFileTree &&
     !workspaceActionsDisabled &&

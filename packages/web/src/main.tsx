@@ -194,6 +194,33 @@ function createWebPlatform(mcpSyncService: WebMcpSyncService): IPlatformService 
     listWSLDistros: () => Promise.resolve([]),
     listDockerContainers: () => Promise.resolve([]),
     listSSHConfigAliases: () => Promise.resolve([]),
+    // 多 runner：web 只能通过 server-info 获得“机器 → workspace”；这里集中取数，
+    // UI 组件不直接 fetch。desktop 平台不实现该方法，保持原 SSH/WSL/Docker 行为。
+    listServerWorkspaces: async () => {
+      const response = await fetch("/api/server-info", { cache: "no-store" });
+      if (!response.ok) {
+        return [];
+      }
+      const serverInfo = (await response.json()) as Partial<ServerRemoteInfo>;
+      return Array.isArray(serverInfo.workspaces)
+        ? serverInfo.workspaces.flatMap((workspace) =>
+            workspace?.path
+              ? [
+                  {
+                    path: workspace.path,
+                    ...(workspace.label ? { label: workspace.label } : {}),
+                    ...(workspace.workspaceIdentity
+                      ? { workspaceIdentity: workspace.workspaceIdentity }
+                      : {}),
+                    ...(workspace.runnerId ? { runnerId: workspace.runnerId } : {}),
+                    ...(workspace.runnerName ? { runnerName: workspace.runnerName } : {}),
+                    ...(workspace.runnerOs ? { runnerOs: workspace.runnerOs } : {}),
+                  },
+                ]
+              : [],
+          )
+        : [];
+    },
     ...createWebMcpPlatform(mcpSyncService),
     migrateLegacyCommonMcp: () =>
       Promise.resolve({

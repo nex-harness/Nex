@@ -1,3 +1,5 @@
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
+
 interface WorkspaceTabIdentityLike {
   workspacePath: string;
   remoteSessionId?: string;
@@ -10,7 +12,9 @@ interface WorkspaceTabMatchOptions {
 }
 
 function hasRemoteTabIdentity(tab: WorkspaceTabIdentityLike): boolean {
-  return Boolean(tab.workspaceIdentity || tab.remoteSessionId);
+  // `runner:` 身份是 server 路由键，不是桌面 remote session；只在缺省 identity 的
+  // 旧调用里按 path 复用 tab 时，不能把 runner tab 当成“远端 tab”排除。
+  return Boolean(isClientRemoteWorkspaceIdentity(tab.workspaceIdentity) || tab.remoteSessionId);
 }
 
 function isLocalWorkspaceTab(tab: WorkspaceTabIdentityLike): boolean {

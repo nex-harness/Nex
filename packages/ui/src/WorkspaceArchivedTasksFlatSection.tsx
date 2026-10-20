@@ -19,6 +19,7 @@ import { removeTaskFromTaskCaches } from "@/lib/taskListMetaSync.js";
 import { TaskListRemoteSyncHint } from "@/TaskListRemoteSyncHint.js";
 import { TaskListLoadingHint } from "@/TaskListLoadingHint.js";
 import { buildWorkspaceServiceLookup } from "@/lib/workspaceServiceResolver.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 import { DeleteAllArchivedTasksButton } from "@/DeleteAllArchivedTasksButton.js";
 
 export function WorkspaceArchivedTasksFlatSection({
@@ -136,7 +137,8 @@ export function WorkspaceArchivedTasksFlatSection({
           const workspaceKey = buildTaskWorkspaceKey(task.workspacePath, task.workspaceIdentity);
           const workspaceLabel =
             workspaceLabelByKey.get(workspaceKey) ?? getPathLeaf(task.workspacePath);
-          const isRemoteTask = Boolean(task.workspaceIdentity?.trim());
+          // `runner:` 身份仍由 base services 处理，只有 `remote:` 才是跨 Host task。
+          const isRemoteTask = isClientRemoteWorkspaceIdentity(task.workspaceIdentity);
           const unarchiveLabel = intl.formatMessage({ id: "taskList.unarchive" });
           const deleteLabel = intl.formatMessage({ id: "taskList.delete" });
           // archived 平铺列表同样是跨 workspace 视图，选中态要按 workspaceKey 隔离。

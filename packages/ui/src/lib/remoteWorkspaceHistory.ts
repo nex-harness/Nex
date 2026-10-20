@@ -8,6 +8,7 @@ import type {
 } from "@nex/shared";
 import type { WindowTabState } from "@/store/tabStore.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 
 const REMOTE_WORKSPACE_SESSION_LIMIT = 20;
 
@@ -44,12 +45,23 @@ function collectRemoteWorkspaceCredentialKeys(snapshot: RemoteTargetSnapshot): s
   return [];
 }
 
+/**
+ * 是否是桌面 remote session 实体（有 remoteSessionId / remoteTarget），或用 `remote:`
+ * identity 标识的旧版远端条目。
+ *
+ * 多 runner 的 `runner:` identity 也走同一服务端连接，不是 remote session；
+ * 这里不能只按 identity 非空判断，否则 runner tab 会被当成远端并从本地持久化中漏掉。
+ */
 export function hasRemoteWorkspaceIdentity(entry: {
   remoteSessionId?: string;
   remoteTarget?: RemoteTarget;
   workspaceIdentity?: string;
 }): boolean {
-  return Boolean(entry.remoteSessionId || entry.remoteTarget || entry.workspaceIdentity);
+  return Boolean(
+    entry.remoteSessionId ||
+    entry.remoteTarget ||
+    isClientRemoteWorkspaceIdentity(entry.workspaceIdentity),
+  );
 }
 
 type WslRemoteTargetLike = Extract<RemoteTarget | RemoteTargetSnapshot, { kind: "wsl" }>;
@@ -425,6 +437,9 @@ export function buildPersistedWorkspaceSessionEntries(
       kind: "local",
       workspacePath: tab.workspacePath,
       ...(tab.workspacePurpose ? { workspacePurpose: tab.workspacePurpose } : {}),
+      // 多 runner：runner workspace 在 UI 上是本地 tab，但必须带上 `runner:` 身份，
+      // 否则重启后同路径会恢复成“默认 runner”而不是用户选中的机器。
+      ...(tab.workspaceIdentity ? { workspaceIdentity: tab.workspaceIdentity } : {}),
     });
     return entries;
   }, []);

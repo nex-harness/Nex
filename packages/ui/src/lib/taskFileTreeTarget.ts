@@ -2,6 +2,7 @@ import type { NexTaskMeta } from "@nex/shared";
 import { getPathLeaf } from "@/lib/path.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 
 interface TaskFileTreeTarget {
   workspacePath: string;
@@ -16,9 +17,12 @@ function resolveTaskFileTreeTarget(
 ): TaskFileTreeTarget | null {
   // 旧本地 task 没有 workspaceIdentity，key 会回退到 workspacePath；如果同路径
   // 远程 tab 也缺 identity，仅按 key 会误带远程 session。匹配前必须先保证本地/远程类型一致。
-  const taskIsRemote = Boolean(task.workspaceIdentity?.trim());
+  // `runner:` 身份走 base services，与无身份的本地 task 同属“非 remote session”一侧。
+  const taskIsRemote = isClientRemoteWorkspaceIdentity(task.workspaceIdentity);
   const tabIsRemote = Boolean(
-    tab?.workspaceIdentity?.trim() || tab?.remoteTarget || tab?.remoteSessionId,
+    isClientRemoteWorkspaceIdentity(tab?.workspaceIdentity) ||
+    tab?.remoteTarget ||
+    tab?.remoteSessionId,
   );
   const matchingTab =
     tab &&
@@ -31,7 +35,9 @@ function resolveTaskFileTreeTarget(
     return null;
   }
   const isRemoteWorkspace = Boolean(
-    task.workspaceIdentity?.trim() || matchingTab?.remoteTarget || matchingTab?.remoteSessionId,
+    isClientRemoteWorkspaceIdentity(task.workspaceIdentity) ||
+    matchingTab?.remoteTarget ||
+    matchingTab?.remoteSessionId,
   );
   // 远端 task 的 workspacePath 可能和本地 workspace 相同。缺少对应 remoteSessionId
   // 时禁止打开文件树，否则文件读取会错误降级到本地 service。
@@ -63,7 +69,7 @@ export function resolveTaskFileTreeTargetFromTabs(
   }
   // 本地 task 不依赖已打开 tab；所属 workspace 已关闭时仍应按路径打开文件树。
   // 远程 task 则必须命中 tab 以取得受身份隔离的 remoteSessionId，禁止同样回退。
-  if (!task.workspaceIdentity?.trim()) {
+  if (!isClientRemoteWorkspaceIdentity(task.workspaceIdentity)) {
     return resolveTaskFileTreeTarget(task, undefined);
   }
   return null;

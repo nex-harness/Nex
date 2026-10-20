@@ -5,6 +5,8 @@ export {
   IModelSelectionService,
   IProviderSettingsService,
   type ModelInfoLookupResult,
+  type ModelProviderWorkspaceTarget,
+  type ModelSelectionGetViewInput,
   type ModelSelectionView,
   type ModelSelectionViewInput,
   type ProviderSettingsProviderView,

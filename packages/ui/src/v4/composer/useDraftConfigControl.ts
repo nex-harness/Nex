@@ -8,12 +8,7 @@ import { applyComposerPermissionGrant } from "@/v4/composer/composerPermissionGr
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NEX_AGENT_PROVIDER, resolveExecutionState } from "@nex/shared";
 import { applyComposerPlanTransition } from "@/v4/composer/composerPlanTransition.js";
-import type {
-  NexConfigOption,
-  ModelSelection,
-  NexProvider,
-  NexSlashCommand,
-} from "@nex/shared";
+import type { NexConfigOption, ModelSelection, NexProvider, NexSlashCommand } from "@nex/shared";
 import type { SessionConfigState } from "@nex/shared/nex-protocol-v4";
 import type { IModelSelectionService } from "@nex/services";
 import { completeNewModelSelection } from "@nex/provider";
@@ -147,6 +142,8 @@ export function useDraftConfigControl(params: {
     {
       selection: draft.modelSelection ?? null,
     },
+    // 多 runner：草稿归属的机器必须参与 getView 路由，否则机器 B 会展示机器 A 的模型。
+    { workspacePath, workspaceIdentity },
   );
   const modelSelectionView =
     modelSelectionRead.state.status === "ready" ? modelSelectionRead.state.view : null;

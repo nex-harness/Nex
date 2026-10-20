@@ -40,8 +40,17 @@ export function buildRemoteWorkspacePersistPatch(
     (entry) => !serializedRemoteWorkspaceKeys.has(buildWorkspaceSessionKey(entry)),
   );
   const workspaceTabs = state.tabs.filter((tab) => tab.kind === "workspace");
-  const activeIndex = state.activeWorkspacePath
-    ? workspaceTabs.findIndex((tab) => tab.workspacePath === state.activeWorkspacePath)
+  // 多 runner 下同一路径可能属于两台机器；active 索引用 workspaceKey 匹配，
+  // 否则 lastActiveTabIndex 会落在同路径的另一台机器上。
+  const activeWorkspaceKey = state.activeWorkspacePath
+    ? state.activeWorkspaceIdentity?.trim() || state.activeWorkspacePath
+    : null;
+  const activeIndex = activeWorkspaceKey
+    ? workspaceTabs.findIndex(
+        (tab) =>
+          (tab.kind === "workspace" ? tab.workspaceIdentity?.trim() || tab.workspacePath : "") ===
+          activeWorkspaceKey,
+      )
     : 0;
 
   return {
@@ -109,9 +118,14 @@ export function restorePersistedRemoteWorkspaceSessions({
         continue;
       }
 
-      if (seenLocalWorkspacePaths.has(persistedEntry.workspacePath)) {
+      // 多 runner 下同一路径可以属于多台机器，去重必须按 workspaceKey（identity 优先），
+      // 否则 `runner:a:/src` 会把 `runner:b:/src` 当成重复项丢掉。
+      const localWorkspaceKey =
+        persistedEntry.workspaceIdentity?.trim() || persistedEntry.workspacePath;
+      if (seenLocalWorkspacePaths.has(localWorkspaceKey)) {
         logger.warn("[Root] 跳过重复的本地 workspace 恢复", {
           workspacePath: persistedEntry.workspacePath,
+          workspaceIdentity: persistedEntry.workspaceIdentity,
         });
         continue;
       }
@@ -120,20 +134,26 @@ export function restorePersistedRemoteWorkspaceSessions({
       const workspacePurpose = isConversationWorkspace
         ? "conversation"
         : persistedEntry.workspacePurpose;
+      // conversation backing path 是本地 app-owned cwd，不携带 runner 身份。
+      const workspaceIdentity =
+        !isConversationWorkspace && persistedEntry.workspaceIdentity?.trim()
+          ? persistedEntry.workspaceIdentity.trim()
+          : undefined;
       const availability =
         !isConversationWorkspace && persistedEntry.workspacePath === unavailableWorkspacePath
           ? "unavailable-local-directory"
           : undefined;
       restoredTabs.push(
-        workspacePurpose || availability
+        workspacePurpose || availability || workspaceIdentity
           ? {
               workspacePath: persistedEntry.workspacePath,
               workspacePurpose,
               availability,
+              ...(workspaceIdentity ? { workspaceIdentity } : {}),
             }
           : persistedEntry.workspacePath,
       );
-      seenLocalWorkspacePaths.add(persistedEntry.workspacePath);
+      seenLocalWorkspacePaths.add(localWorkspaceKey);
       const restoredIndex = restoredTabs.length - 1;
       if (isConversationWorkspace) {
         canonicalConversationRestoredIndex = restoredIndex;

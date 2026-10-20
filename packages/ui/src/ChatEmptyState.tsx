@@ -34,6 +34,7 @@ import {
   formatRemoteWorkspaceTargetSubtitle,
   hasRemoteWorkspaceIdentity,
 } from "@/lib/remoteWorkspaceHistory.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 import { logger } from "@/logger.js";
 import { SSHDialog } from "@/SSHDialog.js";
 import {
@@ -132,6 +133,8 @@ function filterVisibleWorkspaceMenuTabs({
 
   return workspaceTabs
     .filter((workspaceTab) => {
+      // hasRemoteWorkspaceIdentity 只对 `remote:` 身份成立；runner workspace 走同一
+      // server 连接，不是“断连远端”，不能从空态菜单里隐藏。
       const isDisconnectedRemoteWorkspace = Boolean(
         hasRemoteWorkspaceIdentity(workspaceTab) && !workspaceTab.remoteSessionId,
       );
@@ -235,7 +238,9 @@ export function ChatEmptyWorkspacePreviewMenu({
     isConversationWorkspace ||
     currentWorkspaceTab?.remoteSessionId ||
     currentWorkspaceTab?.remoteTarget ||
-    currentWorkspaceTab?.workspaceIdentity
+    // `runner:` 身份仍是服务器本地 workspace，可作为 SSH 连接的 localWorkspacePath；
+    // 只有真正的 `remote:` 身份才需要隐藏。
+    isClientRemoteWorkspaceIdentity(currentWorkspaceTab?.workspaceIdentity)
       ? undefined
       : workspacePath;
   const homeWorkspacePath = inferWorkspaceHomePath(workspacePath);

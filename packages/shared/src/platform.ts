@@ -328,6 +328,21 @@ export interface SSHConfigAliasOption {
   source?: string;
 }
 
+/**
+ * 一个可由 UI 直接打开的 server 路由 workspace（多 runner 拓扑）。
+ *
+ * `workspaceIdentity` 是 server 生成的 `runner:<runnerId>:<path>`；缺失时退回
+ * 仅按 path 打开（单 runner/旧 server 的兼容路径）。
+ */
+export interface ServerWorkspaceOption {
+  path: string;
+  label?: string;
+  workspaceIdentity?: string;
+  runnerId?: string;
+  runnerName?: string;
+  runnerOs?: string;
+}
+
 export interface NexStdioTapDevState {
   enabled: boolean;
   visible: boolean;
@@ -610,6 +625,16 @@ export interface IPlatformService {
 
   /** 列出当前机器 SSH config 中可用于快速填表的 alias */
   listSSHConfigAliases(): Promise<SSHConfigAliasOption[]>;
+
+  /**
+   * 列出当前 server（或桌面宿主）对外提供的 runner workspace 候选。
+   *
+   * 仅 Web 平台实现：数据来自 `GET /api/server-info` 的 `workspaces[]`。
+   * 普通 Web 目录选择器（DirectoryBrowser）只能浏览 server 本机目录，无法表达
+   * “哪台 runner”，所以把机器列表交给平台层集中取数，UI 不直接 fetch。
+   * Desktop 不实现（返回 undefined），保持原有 SSH/WSL/Docker 入口行为不变。
+   */
+  listServerWorkspaces?(): Promise<ServerWorkspaceOption[]>;
 
   /** 读取宿主环境中的原生 MCP 用户目录配置；手机远控通过已连接桌面 host 转发。 */
   loadMcpFromUserDirectory?(

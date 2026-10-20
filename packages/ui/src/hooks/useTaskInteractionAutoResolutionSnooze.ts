@@ -3,6 +3,7 @@ import { ensureAgentV4ConnectionHandshake } from "@/v4/agentV4ConnectionHandshak
 import { useOptionalServices } from "@/hooks/useServices.js";
 import { logger } from "@/logger.js";
 import { resolveWorkspaceRemoteSessionId } from "@/lib/workspaceServiceResolver.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 import { useRemoteWorkspaceSessionStore } from "@/store/remoteWorkspaceSessionStore.js";
 import { sendInteractionAutoResolutionSnooze } from "@/v4/interactionAutoResolutionCommand.js";
 
@@ -24,7 +25,10 @@ export function useTaskInteractionAutoResolutionSnooze(
   const contextServices = useOptionalServices();
   const workspaceIdentity = target.workspaceIdentity?.trim() || undefined;
   const remoteSessionId = target.remoteSessionId?.trim() || undefined;
-  const isRemoteTarget = Boolean(workspaceIdentity || remoteSessionId);
+  // `runner:` 身份仍走 base services（server 路由），只有 `remote:` 身份需要 remote session。
+  const isRemoteTarget = Boolean(
+    isClientRemoteWorkspaceIdentity(workspaceIdentity) || remoteSessionId,
+  );
   const selectTargetServices = useCallback(
     (state: ReturnType<typeof useRemoteWorkspaceSessionStore.getState>) => {
       if (!isRemoteTarget) {

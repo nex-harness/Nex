@@ -91,8 +91,18 @@ runner's tasks again after it reconnects (server re-issues listens).
 ## Runner changes
 
 Echo `workspaceIdentity` from the request: `nex-task` rows and workspace events,
-`readWorkspacePresentation.workspace.workspaceKey`, sessions-index `workspaceId`
-(`identity ?? path`). The sidebar joins task rows by `buildTaskWorkspaceKey(path, identity)`.
+`readWorkspacePresentation.workspace.workspaceKey` (and `workspaceIdentity`),
+sessions-index snapshot `workspaceId` and topic (`identity?.trim() || path`). The sidebar
+joins task rows by `buildTaskWorkspaceKey(path, identity)`.
+
+The runner also enforces its own workspace boundary: every registered call/listen whose
+argument carries a `workspacePath` must match one of the runner's configured workspaces
+(normalized absolute paths), otherwise it fails with
+`workspace not served by this runner: <path>`. This is one wrapper around registration
+(`createWorkspaceGuardedRegistry` in `packages/next-runner/src/channels/register.ts`), not
+a per-handler check, because a stale tab can carry this runner's id for a path it never
+advertised in `hello`. Calls with no workspace in the argument (model catalog,
+`listPinnedTaskIds`) are unaffected.
 
 ## Acceptance
 
@@ -100,7 +110,12 @@ Echo `workspaceIdentity` from the request: `nex-task` rows and workspace events,
   paths, server-info fields.
 - UI: unit tests for the predicate (remote vs runner vs empty identity) and persistence
   round-trip.
+- Runner: unit tests for identity echo (`readWorkspacePresentation`, sessions-index
+  `workspaceId`/topic, `nex-task` rows) validated with the real `@nex/shared` schemas, and
+  for rejecting unserved workspace paths.
 - Browser E2E `next/e2e/multi-runner.mjs`: two runners (`alpha`, `beta`) both serving the
   same path → picker lists both → create a session on `beta` → it appears only under
   `beta` → reload restores both tabs with the right machine → existing acceptance still
-  passes.
+  passes. `next/dev.sh --e2e=multi` starts the second runner; `--e2e=all` runs acceptance,
+  permissions and multi in that order. Both E2E runners advertise the demo workspace first
+  so the auto-opened tab (and the acceptance "0 tasks before send") stays deterministic.

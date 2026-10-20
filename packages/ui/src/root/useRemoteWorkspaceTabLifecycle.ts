@@ -9,9 +9,16 @@ import {
   unregisterRemoteWorkspaceSession,
 } from "@/store/remoteWorkspaceSessionStore.js";
 import { isWorkspaceTab, type WindowTabState, type WorkspaceTabState } from "@/store/tabStore.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 
 function remoteWorkspaceKey(tab: WorkspaceTabState): string | null {
-  if (!tab.workspaceIdentity?.trim() && !tab.remoteSessionId && !tab.remoteTarget) {
+  // 只有 `remote:` 身份会注册 remote session 并可被 dispose；`runner:` 身份由
+  // server 路由，关闭 tab 不能触发 platform.disposeRemoteSession。
+  if (
+    !isClientRemoteWorkspaceIdentity(tab.workspaceIdentity) &&
+    !tab.remoteSessionId &&
+    !tab.remoteTarget
+  ) {
     return null;
   }
 

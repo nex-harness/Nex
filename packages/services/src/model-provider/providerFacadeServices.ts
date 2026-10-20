@@ -36,9 +36,21 @@ export interface ModelInfoLookupResult {
   readonly config: ModelConfigObject;
 }
 
+/**
+ * `getView` 的 workspace 路由目标（多 runner）。
+ *
+ * server 按 `workspaceIdentity`（`runner:<id>:<path>`）把调用路由到对应 runner，
+ * 否则回落到“第一个连接的 runner”。桌面 Host 的 provider 实现会忽略这两个字段，
+ * 行为与旧版一致；这里只扩展传输参数，不改变本地 Registry 语义。
+ */
+export interface ModelProviderWorkspaceTarget {
+  readonly workspacePath?: string;
+  readonly workspaceIdentity?: string;
+}
+
 export interface IProviderSettingsService {
   readonly onDidChange: Event<ProviderSettingsView>;
-  getView(): Promise<ProviderSettingsView>;
+  getView(input?: ModelProviderWorkspaceTarget): Promise<ProviderSettingsView>;
   refresh(reason: string): Promise<ProviderSettingsView>;
   createPersonalProvider(
     input?: Parameters<ProviderSettingsFacade["createPersonalProvider"]>[0],
@@ -107,7 +119,18 @@ export type ProviderSettingsConnectivityTester = (
 
 export interface IModelSelectionService {
   readonly onDidChange: Event<ModelSelectionView>;
-  getView(input?: ModelSelectionViewInput): Promise<ModelSelectionView>;
+  getView(input?: ModelSelectionGetViewInput): Promise<ModelSelectionView>;
+}
+
+/**
+ * `model-selection.getView` 的传输参数：可选选择意图 + 可选 workspace 路由目标。
+ *
+ * 合并成一个对象是为了让 server 在同一个 RPC 参数里同时读到 `selection` 与
+ * `workspaceIdentity`；本地 Host 实现只消费 `selection`，workspace 字段被忽略。
+ * `selection` 在只做路由探测时可省略（等价于 `{selection: null}`）。
+ */
+export interface ModelSelectionGetViewInput extends ModelProviderWorkspaceTarget {
+  readonly selection?: ModelSelection | null;
 }
 
 export interface ModelSelectionConfiguredDefaultSource {
@@ -137,6 +160,7 @@ export function createProviderSettingsService(
       if (!provider) throw new Error(`Provider not found: ${providerId}`);
       return fetchRemoteModelList(provider.effectiveConfig);
     },
+    // workspace 目标只影响 server 路由；本地 Host 忽略入参，View 语义与旧版一致。
     getView: async () => {
       await ensureReady();
       return facade.getView();
@@ -242,14 +266,17 @@ export function createModelSelectionService(
   let revision = 0;
   let disposed = false;
   const listeners = new Set<(view: ModelSelectionView) => void>();
-  const getView = async (input?: ModelSelectionViewInput): Promise<ModelSelectionView> => {
+  // `workspacePath`/`workspaceIdentity` 只用于 server 侧路由；本地 Host 只消费 selection。
+  const getView = async (input?: ModelSelectionGetViewInput): Promise<ModelSelectionView> => {
     await ensureReady();
     if (disposed) throw new Error("ModelSelectionService 已 dispose");
     const configuredDefault = await configuredDefaultSource?.read();
     if (disposed) throw new Error("ModelSelectionService 已 dispose");
     const base = facade.getView(configuredDefault);
     if (revision < base.revision) revision = base.revision;
-    return facade.getView(configuredDefault, revision, input);
+    // 把传输参数收窄回 Facade 的输入契约；workspace 目标不参与本地解析。
+    const facadeInput = input ? { selection: input.selection ?? null } : undefined;
+    return facade.getView(configuredDefault, revision, facadeInput);
   };
   const emit = (): void => {
     if (disposed) return;

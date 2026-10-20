@@ -1,8 +1,16 @@
 import { useMemo } from "react";
 import { isWorkspaceTab, type WorkspaceTabState } from "@/store/tabStore.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 
 function isLocalWorkspaceTab(tab: WorkspaceTabState): boolean {
-  return !tab.remoteSessionId && !tab.remoteTarget && !tab.workspaceIdentity;
+  // `runner:` 身份走同一 server 连接，仍属于本地 shard：window-controller 会按
+  // scope 里的 identity 交给 server 路由；把它排除会让 runner workspace 的
+  // pinned/timeline 分组永远为空。
+  return (
+    !tab.remoteSessionId &&
+    !tab.remoteTarget &&
+    !isClientRemoteWorkspaceIdentity(tab.workspaceIdentity)
+  );
 }
 
 export function useLocalWorkspaceScopes({

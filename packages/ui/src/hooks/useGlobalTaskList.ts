@@ -9,6 +9,7 @@ import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 import { selectWorkspaceNexState, useNexSessionStore } from "@/store/nexSessionStore.js";
 import { attachTaskListRowActivity } from "@/v4/taskListRowActivity.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 import { stabilizeTaskListItems } from "@/v4/taskListItemStabilization.js";
 import { getWindowControllerTaskListRegistry } from "@/v4/windowControllerTaskListRegistry.js";
 import type { WindowControllerTaskListVersion } from "@/v4/windowControllerTaskListRegistry.js";
@@ -201,7 +202,10 @@ export function useGlobalTaskList(params: {
     });
   }, [controllerRevision, load, taskListVersionSignature, workspaceSourceGenerationSignature]);
 
-  const hasRemoteScope = params.workspaceTabs.some((tab) => Boolean(tab.workspaceIdentity));
+  // `runner:` scope 也走 base services，不需要显示“远端同步中”。
+  const hasRemoteScope = params.workspaceTabs.some((tab) =>
+    isClientRemoteWorkspaceIdentity(tab.workspaceIdentity),
+  );
   return {
     items,
     total,

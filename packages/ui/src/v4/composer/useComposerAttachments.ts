@@ -43,6 +43,7 @@ import {
   type ComposerAttachmentUploadStatus,
 } from "@/store/composerAttachmentUploadStore.js";
 import { uploadComposerAttachment, type AttachmentPutFn } from "@/v4/composer/attachmentUpload.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 
 const COMPOSER_ATTACHMENT_UPLOAD_CONCURRENCY = 2;
 const COMPOSER_ATTACHMENT_AUTO_RETRY_DELAY_MS = 500;
@@ -179,9 +180,19 @@ function progressPercent(uploadedBytes: number, totalBytes: number): number {
 function isRemoteAttachmentTarget(
   target: Pick<UploadTarget, "remoteSessionId" | "workspaceIdentity">,
 ) {
-  // 这里曾要求 workspaceIdentity 能被当前解析器识别。远端 identity 新增格式或
-  // 暂时非规范时，在 remoteSessionId 注入前会被误判为本地 workspace，使 host localPath
-  // 直接走零复制交给远端 Agent。identity 只承担隔离语义；任意非空值都必须按远端 fail closed。
+  // 只有桌面 remote session 需要 transferService + remoteSessionId；`runner:` 身份走
+  // 同一条 server 连接，用 attachmentPut 事务把字节交给 runner。把它当成 remote session
+  // 会让上传永远停在 waitingSession（runner tab 没有 remoteSessionId）。
+  return Boolean(
+    target.remoteSessionId?.trim() || isClientRemoteWorkspaceIdentity(target.workspaceIdentity),
+  );
+}
+
+function isNonHostAttachmentTarget(
+  target: Pick<UploadTarget, "remoteSessionId" | "workspaceIdentity">,
+) {
+  // 零复制只在“文件和 Agent 在同一台机器”时成立。任何非空 identity（包括 runner:）
+  // 都表示 workspace 属于另一台机器，不能把宿主 localPath 直接交给 Agent。
   return Boolean(target.remoteSessionId?.trim() || target.workspaceIdentity?.trim());
 }
 
@@ -641,7 +652,7 @@ export function useComposerAttachments(
       const items: ComposerAttachmentUploadItem[] = accepted.map((attachment) => {
         // 远端 identity 往往早于 remoteSessionId 注入；这段窗口不能退化为本地路径直读。
         const localZeroCopy = Boolean(
-          attachment.localPath && target && !isRemoteAttachmentTarget(target),
+          attachment.localPath && target && !isNonHostAttachmentTarget(target),
         );
         return {
           ...attachment,

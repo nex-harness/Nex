@@ -6,6 +6,11 @@ export const serverRemoteWorkspaceInfoSchema = z.object({
   path: z.string().trim().min(1),
   label: z.string().trim().min(1).optional(),
   workspaceIdentity: z.string().trim().min(1).optional(),
+  // 多 runner 拓扑新增字段；旧 server 不返回这些键时保持 undefined，
+  // web 客户端据此回退到目录浏览器，不能把缺失当成“runner 已连接但没有 workspace”。
+  runnerId: z.string().trim().min(1).optional(),
+  runnerName: z.string().trim().min(1).optional(),
+  runnerOs: z.string().trim().min(1).optional(),
 });
 
 export const serverRemoteInfoSchema = z.object({

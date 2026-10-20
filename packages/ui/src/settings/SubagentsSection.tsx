@@ -65,6 +65,7 @@ import {
 } from "@/settings/PluginScopeMenu.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab, type WorkspaceTabState } from "@/store/tabStore.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 import {
   PluginInstallEmptyState,
   PluginLoadingState,
@@ -1274,7 +1275,12 @@ export function SubagentsSection({ onManageModels }: SubagentsSectionProps) {
         .filter(isWorkspaceTab)
         .filter(isPluginScopeWorkspaceConnected)
         // Subagent Settings 只管理 Local Environment；远程配置浏览/编辑是独立产品能力。
-        .filter((tab) => !tab.remoteTarget && !tab.remoteSessionId && !tab.workspaceIdentity)
+        .filter(
+          (tab) =>
+            !tab.remoteTarget &&
+            !tab.remoteSessionId &&
+            !isClientRemoteWorkspaceIdentity(tab.workspaceIdentity),
+        )
         .filter((tab) => {
           const key = getPluginWorkspaceKey(tab);
           if (seen.has(key)) return false;

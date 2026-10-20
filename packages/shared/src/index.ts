@@ -81,6 +81,7 @@ export * from "./nex-protocol-legacy-types.js";
 export * from "./nex-task-types-core.js";
 export * from "./task-realtime-core.js";
 export * from "./remote-workspace-identity.js";
+export * from "./server-workspace-identity.js";
 export * from "./nex-api-retry-status.js";
 export * from "./nex-network-debug-status.js";
 export * from "./nex-session-visible-content.js";
@@ -182,6 +183,7 @@ export type {
   RemoteSessionClosedEvent,
   RemoteServiceSession,
   SSHConfigAliasOption,
+  ServerWorkspaceOption,
   TaskNotificationPayload,
   TaskNotificationPermission,
   UpdateCheckResultPayload,

@@ -13,6 +13,9 @@ import { PlatformProvider } from "@/hooks/usePlatform.js";
 import { ServiceProvider } from "@/hooks/useServices.js";
 import { useDynamicWorkflowAvailabilityLoader } from "@/hooks/useDynamicWorkflowAvailability.js";
 import { DirectoryBrowser } from "@/DirectoryBrowser.js";
+import { RunnerWorkspacePicker } from "@/RunnerWorkspacePicker.js";
+import { useRunnerWorkspaceDirectory } from "@/hooks/useRunnerWorkspaceDirectory.js";
+import { useRunnerWorkspaceDirectoryStore } from "@/store/runnerWorkspaceDirectoryStore.js";
 import { useTabPersistence } from "@/hooks/useTabPersistence.js";
 import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
@@ -64,6 +67,7 @@ import { RootStartupLoading } from "@/root/RootStartupLoading.js";
 import { resolveProviderAvailabilityState } from "@/lib/modelProviderAvailability.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import { CLOSE_ACTIVE_CONTEXT_REQUEST_EVENT } from "@/lib/closeActiveContext.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 import { AssistantCodeCommentFeatureProvider } from "@/AssistantCodeCommentFeatureProvider.js";
 
 const DEFAULT_LUCIDE_STROKE_WIDTH = 1.5;
@@ -164,6 +168,7 @@ function RootInner({
   const [remoteConnectionOpenPreference, setRemoteConnectionOpenPreference] =
     useState<RemoteConnectionOpenPreference | null>(null);
   const [directoryBrowserOpen, setDirectoryBrowserOpen] = useState(false);
+  const [runnerWorkspacePickerOpen, setRunnerWorkspacePickerOpen] = useState(false);
   const [remoteConnectionInProgress, setRemoteConnectionInProgress] = useState(false);
   const [remoteConnectionRequestId, setRemoteConnectionRequestId] = useState<string | null>(null);
   const [isCreatingFallbackWorkspace, setIsCreatingFallbackWorkspace] = useState(false);
@@ -177,6 +182,11 @@ function RootInner({
   const didRequestFallbackWorkspaceRef = useRef(false);
   const rootInnerMountedRef = useRef(true);
   const [hasEnteredNativeThemeSyncSurface, setHasEnteredNativeThemeSyncSurface] = useState(false);
+  // runner 目录只在实现 listServerWorkspaces 的平台（web）拉取；desktop 保持 undefined。
+  const reloadRunnerWorkspaceDirectory = useRunnerWorkspaceDirectory(platform);
+  // 拆成两个原子 selector：返回新对象会让 useSyncExternalStore 在每次渲染判定变化。
+  const runnerWorkspaces = useRunnerWorkspaceDirectoryStore((state) => state.workspaces);
+  const runnerWorkspacesLoading = useRunnerWorkspaceDirectoryStore((state) => state.loading);
 
   useEffect(() => {
     return () => {
@@ -304,7 +314,8 @@ function RootInner({
       !isWorkspaceTab(activeTab) ||
       activeTab.remoteSessionId ||
       activeTab.remoteTarget ||
-      activeTab.workspaceIdentity ||
+      // `runner:` 身份仍是服务端本地 workspace，可作为 remote connection 的 localWorkspacePath。
+      isClientRemoteWorkspaceIdentity(activeTab.workspaceIdentity) ||
       activeTab.workspacePurpose === "conversation"
     ) {
       return undefined;
@@ -342,8 +353,15 @@ function RootInner({
     setRemoteConnectionDialogOpen(true);
   }, []);
   const handleOpenDirectoryBrowser = useCallback(() => {
+    setRunnerWorkspacePickerOpen(false);
     setDirectoryBrowserOpen(true);
   }, []);
+  const handleOpenRunnerWorkspacePicker = useCallback(() => {
+    setDirectoryBrowserOpen(false);
+    setRunnerWorkspacePickerOpen(true);
+    // runner 可能在页面加载后才连上 server；打开选择器时刷新一次列表。
+    void reloadRunnerWorkspaceDirectory();
+  }, [reloadRunnerWorkspaceDirectory]);
   const {
     setWorkspaceActionError,
     startDraftInWorkspace,
@@ -369,6 +387,7 @@ function RootInner({
     allowOpenWorkspace,
     preferDirectoryBrowser: shouldPreferDirectoryBrowser,
     openDirectoryBrowser: handleOpenDirectoryBrowser,
+    openRunnerWorkspacePicker: handleOpenRunnerWorkspacePicker,
     onOpenRemoteConnection: allowRemoteWorkspace ? handleOpenRemoteConnection : undefined,
   });
   const handleRemoteWorkspaceActivated = useCallback(
@@ -677,6 +696,30 @@ function RootInner({
       />
     </ScopedErrorBoundary>
   ) : null;
+  // 只有实现 listServerWorkspaces 的平台（web）才挂载选择器；desktop 结构保持原样。
+  const runnerWorkspacePickerDialog = platform.listServerWorkspaces ? (
+    <ScopedErrorBoundary
+      scope="runner-workspace-picker"
+      resetKeys={["runner-workspace-picker"]}
+      variant="silent"
+    >
+      <RunnerWorkspacePicker
+        open={runnerWorkspacePickerOpen}
+        workspaces={runnerWorkspaces ?? []}
+        loading={runnerWorkspacesLoading}
+        onOpenChange={setRunnerWorkspacePickerOpen}
+        onBrowseDirectory={handleOpenDirectoryBrowser}
+        onSelect={(workspace) => {
+          setRunnerWorkspacePickerOpen(false);
+          // 选择机器后与目录浏览器走同一条打开路径，只额外携带 runner 身份。
+          void handleSelectProject(
+            workspace.path,
+            workspace.workspaceIdentity?.trim() || undefined,
+          );
+        }}
+      />
+    </ScopedErrorBoundary>
+  ) : null;
 
   useEffect(() => {
     const wasInProgress = previousRemoteConnectionInProgressRef.current;
@@ -704,6 +747,7 @@ function RootInner({
         {rootModelSelectionErrorNode}
         {remoteConnectionDialog}
         {directoryBrowserDialog}
+        {runnerWorkspacePickerDialog}
         {/* HTML 启动壳已经展示 Nex SVG，但 React 接管 root 后旧壳会被整棵替换。
             之前阻塞恢复 tab / 初始 workspace 注入时重新渲染纯文字“加载中...”，所以启动被拆成两套 loading。
             这里复用同一套 SVG 启动画面，只把文案保留到 aria-label，保证视觉始终连续且不牺牲可访问性。 */}
@@ -725,6 +769,7 @@ function RootInner({
         {rootModelSelectionErrorNode}
         {initialWorkspaceLoadingFallback}
         {directoryBrowserDialog}
+        {runnerWorkspacePickerDialog}
       </RootShell>
     );
   }
@@ -734,6 +779,7 @@ function RootInner({
       {rootModelSelectionErrorNode}
       {remoteConnectionDialog}
       {directoryBrowserDialog}
+      {runnerWorkspacePickerDialog}
       <OccupationOnboarding
         showWindowControls={Boolean(isWindowsDesktop || (isDesktop && !isMacDesktop))}
         showChildrenWhileLoading={!workspaceShellPath && isSettingsTabActive}

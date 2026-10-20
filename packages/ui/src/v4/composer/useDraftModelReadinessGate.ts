@@ -94,7 +94,9 @@ export function useDraftModelReadinessGate(params: {
     });
     const initialReadVersion = registryEventVersion;
     void modelSelectionService
-      .getView()
+      // 门禁判断的是“目标机器上有没有模型”；缺少 workspace 目标会让 server
+      // 回落到第一个连接的 runner，机器 B 的草稿会读到机器 A 的门禁结果。
+      .getView(buildModelSelectionWorkspaceTarget())
       .then((view) => {
         // 读取在变更事件之前发起、之后才返回时，事件快照更新；禁止旧读取覆盖新状态。
         if (registryEventVersion !== initialReadVersion) return;
@@ -103,6 +105,13 @@ export function useDraftModelReadinessGate(params: {
       .catch((error) => {
         handleReadinessFailure(error);
       });
+
+    function buildModelSelectionWorkspaceTarget() {
+      return {
+        ...(workspacePath?.trim() ? { workspacePath } : {}),
+        ...(workspaceIdentity?.trim() ? { workspaceIdentity } : {}),
+      };
+    }
 
     function handleReadinessFailure(error: unknown) {
       if (disposed) return;
@@ -119,7 +128,14 @@ export function useDraftModelReadinessGate(params: {
       disposed = true;
       subscription?.dispose();
     };
-  }, [commitStatus, enabled, modelSelectionService, workspaceKey]);
+  }, [
+    commitStatus,
+    enabled,
+    modelSelectionService,
+    workspaceIdentity,
+    workspaceKey,
+    workspacePath,
+  ]);
 
   const effectiveState: DraftModelReadinessState =
     state.gateKey === gateKey
@@ -133,7 +149,11 @@ export function useDraftModelReadinessGate(params: {
   const ensureReadyForSend = useCallback(async (): Promise<boolean> => {
     if (!enabled) return true;
     try {
-      const view = await modelSelectionService.getView();
+      // 首发复查同样按目标机器读取，避免 server 回落到第一个 runner。
+      const view = await modelSelectionService.getView({
+        ...(workspacePath?.trim() ? { workspacePath } : {}),
+        ...(workspaceIdentity?.trim() ? { workspaceIdentity } : {}),
+      });
       const status = resolveModelSelectionReadinessStatus(view);
       commitStatus(status, { revealMissing: status === "missing" });
       if (status === "missing") {
@@ -154,7 +174,14 @@ export function useDraftModelReadinessGate(params: {
       });
       return true;
     }
-  }, [commitStatus, enabled, modelSelectionService, workspaceKey]);
+  }, [
+    commitStatus,
+    enabled,
+    modelSelectionService,
+    workspaceIdentity,
+    workspaceKey,
+    workspacePath,
+  ]);
 
   const error = useMemo(
     () =>

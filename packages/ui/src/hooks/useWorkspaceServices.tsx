@@ -10,6 +10,7 @@ import { useResolvedRemoteWorkspaceSessionId } from "@/hooks/useResolvedRemoteWo
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 import { REMOTE_WORKSPACE_DISCONNECTED_ERROR_CODE } from "@/lib/remoteWorkspaceServiceError.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 
 let disconnectedRemoteServices: IServiceAccessor | null = null;
 
@@ -79,8 +80,12 @@ function resolveBaseWorkspaceServices(
 }
 
 function hasRemoteWorkspaceMetadata(tab: WorkspaceServiceTargetTab | null | undefined): boolean {
+  // 只有 `remote:` 身份属于桌面 remote session；`runner:` 身份走同一 server 连接，
+  // 必须继续按 local/base services 解析，否则会被误送进断连代理。
   return Boolean(
-    tab?.workspaceIdentity?.trim() || tab?.remoteSessionId?.trim() || tab?.remoteTarget,
+    isClientRemoteWorkspaceIdentity(tab?.workspaceIdentity) ||
+    tab?.remoteSessionId?.trim() ||
+    tab?.remoteTarget,
   );
 }
 
@@ -93,7 +98,10 @@ function resolveWorkspaceServiceIsRemoteTarget(params: {
   activeTab?: WorkspaceServiceTargetTab | null;
   workspaceTabs?: readonly WorkspaceServiceTargetTab[];
 }): boolean {
-  if (params.workspaceIdentity?.trim() || params.preferredRemoteSessionId?.trim()) {
+  if (
+    isClientRemoteWorkspaceIdentity(params.workspaceIdentity) ||
+    params.preferredRemoteSessionId?.trim()
+  ) {
     return true;
   }
 
@@ -103,7 +111,7 @@ function resolveWorkspaceServiceIsRemoteTarget(params: {
   }
 
   if (params.activeWorkspacePath === params.workspacePath) {
-    if (params.activeWorkspaceIdentity?.trim()) {
+    if (isClientRemoteWorkspaceIdentity(params.activeWorkspaceIdentity)) {
       return true;
     }
 

@@ -4485,6 +4485,17 @@ const enUS: Record<string, string> = {
   "chat.empty.createWorkspace.error.required": "Workspace name is required.",
   "chat.empty.createWorkspace.error.separator": "Workspace name cannot contain / or \\.",
   "chat.empty.createWorkspace.error.createFailed": "Could not create workspace.",
+  "runnerWorkspacePicker.title": "Open folder",
+  "runnerWorkspacePicker.description":
+    "Choose a workspace on one of the connected machines. The same path may exist on multiple machines.",
+  "runnerWorkspacePicker.localMachine": "This machine",
+  "runnerWorkspacePicker.os.macos": "macOS",
+  "runnerWorkspacePicker.os.windows": "Windows",
+  "runnerWorkspacePicker.os.linux": "Linux",
+  "runnerWorkspacePicker.browseDirectory": "Browse server folders…",
+  "runnerWorkspacePicker.empty": "No runner workspaces reported by the server.",
+  "runnerWorkspacePicker.loading": "Loading machines…",
+  "workspaceHeader.runnerMachine": "Machine: {name}",
   "chat.emptyResult.title": "No visible output",
   "chat.emptyResult.description":
     "This task finished without any chat content. It may have been stopped before the model produced a response.",

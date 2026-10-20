@@ -183,6 +183,11 @@ export interface LocalWorkspaceSessionEntry {
   workspacePath: string;
   /** 项目展示分类；旧数据缺省为 project，conversation 仍使用真实 workspacePath 作为 cwd/key。 */
   workspacePurpose?: WorkspacePurpose;
+  /**
+   * 服务端路由身份（`runner:<runnerId>:<path>`）。web 上打开 runner workspace 时写入，
+   * 使重启恢复能回到同一台机器；桌面本地/远程条目保持 undefined。
+   */
+  workspaceIdentity?: string;
 }
 
 export interface RemoteWorkspaceSessionEntry extends RemoteWorkspaceSessionSnapshot {

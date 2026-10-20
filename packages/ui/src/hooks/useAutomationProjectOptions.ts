@@ -3,6 +3,7 @@ import type { WorkspacePurpose } from "@nex/shared";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab, type WorkspaceTabState } from "@/store/tabStore.js";
 import { useLocalWorkspaceScopes } from "@/hooks/useLocalWorkspaceScopes.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 
 interface AutomationProjectOption {
   workspacePath: string;
@@ -11,7 +12,12 @@ interface AutomationProjectOption {
 }
 
 export function isRemoteAutomationWorkspace(tab: WorkspaceTabState | undefined): boolean {
-  return Boolean(tab?.remoteSessionId || tab?.remoteTarget || tab?.workspaceIdentity);
+  // `runner:` 身份走 base services，与本地 workspace 同属可绑定一侧。
+  return Boolean(
+    tab?.remoteSessionId ||
+    tab?.remoteTarget ||
+    isClientRemoteWorkspaceIdentity(tab?.workspaceIdentity),
+  );
 }
 
 interface AutomationProjectOptionsConfig {

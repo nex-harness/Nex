@@ -89,8 +89,14 @@ function buildRestoredRecentProjectPaths(
 
 function buildDefaultPersistPatch(state: TabStoreState): Partial<AppSettings> {
   const workspaceTabs = state.tabs.filter(isWorkspaceTab).filter((tab) => !tab.remoteSessionId);
-  const activeIndex = state.activeWorkspacePath
-    ? workspaceTabs.findIndex((tab) => tab.workspacePath === state.activeWorkspacePath)
+  // 同路径多机器时必须按 workspaceKey 找 active，否则会持久化错机器。
+  const activeWorkspaceKey = state.activeWorkspacePath
+    ? state.activeWorkspaceIdentity?.trim() || state.activeWorkspacePath
+    : null;
+  const activeIndex = activeWorkspaceKey
+    ? workspaceTabs.findIndex(
+        (tab) => (tab.workspaceIdentity?.trim() || tab.workspacePath) === activeWorkspaceKey,
+      )
     : 0;
 
   return {
@@ -98,6 +104,8 @@ function buildDefaultPersistPatch(state: TabStoreState): Partial<AppSettings> {
       kind: "local" as const,
       workspacePath: tab.workspacePath,
       ...(tab.workspacePurpose ? { workspacePurpose: tab.workspacePurpose } : {}),
+      // runner workspace 必须连同 `runner:` 身份一起写回，重启后才能回到同一台机器。
+      ...(tab.workspaceIdentity ? { workspaceIdentity: tab.workspaceIdentity } : {}),
     })),
     lastActiveTabIndex: Math.max(activeIndex, 0),
   };
@@ -184,10 +192,16 @@ export function useTabPersistence({
           const tabs = readPersistedWorkspaceSessionEntries(settings).flatMap((entry) =>
             entry.kind === "local"
               ? [
-                  entry.workspacePurpose
+                  entry.workspacePurpose || entry.workspaceIdentity
                     ? {
                         workspacePath: entry.workspacePath,
-                        workspacePurpose: entry.workspacePurpose,
+                        ...(entry.workspacePurpose
+                          ? { workspacePurpose: entry.workspacePurpose }
+                          : {}),
+                        // 恢复 runner 身份，避免同路径退回默认机器。
+                        ...(entry.workspaceIdentity
+                          ? { workspaceIdentity: entry.workspaceIdentity }
+                          : {}),
                       }
                     : entry.workspacePath,
                 ]

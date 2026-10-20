@@ -1007,6 +1007,9 @@ export function SettingsPage({
                             {/* 模型配置属于本机全局事实源；激活远端 workspace 时也不能注入远端 Host。 */}
                             <ModelProviderSection
                               workspacePath={activeWorkspacePath ?? captionWorkspacePath ?? ""}
+                              // 仅 web 多 runner：作为 getView 的 server 路由提示；
+                              // desktop Host 忽略，仍是本机全局配置。
+                              routingWorkspaceIdentity={activeWorkspaceIdentity}
                               connectivityWorkspacePath={
                                 localModelProviderConnectivityWorkspacePath
                               }

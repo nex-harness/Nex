@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type {
   IModelSelectionService,
+  ModelProviderWorkspaceTarget,
+  ModelSelectionGetViewInput,
   ModelSelectionView,
   ModelSelectionViewInput,
 } from "@nex/services";
@@ -54,11 +56,26 @@ export function useModelSelectionServiceView(
   enabled = true,
   unavailableReason: "remote-waiting" | "missing-target" = "remote-waiting",
   input?: ModelSelectionViewInput,
+  workspaceTarget?: ModelProviderWorkspaceTarget,
 ): ModelSelectionRead {
   const normalizedService = service ?? null;
   // 调用方可每次 render 创建参数对象；所有权按选择内容绑定，不按对象引用反复订阅。
-  const inputKey = input === undefined ? undefined : JSON.stringify(input);
-  const stableInput = useMemo(() => input, [inputKey]);
+  // workspace 目标参与 key：同一 Host 上不同 runner workspace 的模型视图不能互相复用。
+  const requestInput = useMemo<ModelSelectionGetViewInput | undefined>(() => {
+    const workspacePath = workspaceTarget?.workspacePath?.trim();
+    const workspaceIdentity = workspaceTarget?.workspaceIdentity?.trim();
+    if (!workspacePath && !workspaceIdentity) {
+      return input;
+    }
+    return {
+      ...(input ?? { selection: null }),
+      // server 只认 `runner:` 身份；remote: 身份在 web 上不会出现，传空即可。
+      ...(workspacePath ? { workspacePath } : {}),
+      ...(workspaceIdentity ? { workspaceIdentity } : {}),
+    };
+  }, [input, workspaceTarget?.workspaceIdentity, workspaceTarget?.workspacePath]);
+  const inputKey = requestInput === undefined ? undefined : JSON.stringify(requestInput);
+  const stableInput = useMemo(() => requestInput, [inputKey]);
   const [reloadVersion, reload] = useReducer((value: number) => value + 1, 0);
   const [owned, setOwned] = useState<OwnedModelSelectionState>(() => ({
     service: normalizedService,
@@ -192,5 +209,10 @@ export function useModelSelectionView(
     hasTarget && !remoteWaiting,
     hasTarget ? "remote-waiting" : "missing-target",
     input,
+    // 多 runner：同一 server 连接下不同 workspace 属于不同机器，View 必须按目标路由。
+    {
+      workspacePath: workspacePath ?? undefined,
+      workspaceIdentity: workspaceIdentity ?? undefined,
+    },
   );
 }

@@ -31,6 +31,9 @@ import {
   formatRemoteWorkspaceHeaderHostLabel,
 } from "@/lib/remoteWorkspaceHistory.js";
 import { resolveWorkspaceHeaderProvider } from "@/lib/workspaceHeaderProvider.js";
+import { resolveRunnerWorkspaceMachineLabel } from "@/lib/runnerWorkspaceOptions.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
+import { useRunnerWorkspaceDirectoryStore } from "@/store/runnerWorkspaceDirectoryStore.js";
 import { toast } from "@/components/ui/toast.js";
 import { useModelTrajectoryStore } from "@/store/modelTrajectoryStore.js";
 import { resolveGitBranchTriggerLabel } from "@/git-branch-switcher/display.js";
@@ -113,6 +116,10 @@ export function WorkspaceHeaderTitleSection({
     (state) => state.removeOptimisticTaskListItem,
   );
   const setTaskUnreadIndicator = useNexSessionStore((state) => state.setTaskUnreadIndicator);
+  // server-info 缓存只用于展示机器名；未拉取到（desktop / 旧 server）时回退 runnerId。
+  const runnerNameByIdentity = useRunnerWorkspaceDirectoryStore(
+    (state) => state.runnerNameByIdentity,
+  );
   const [taskMenuOpen, setTaskMenuOpen] = useState(false);
   const [workspaceContextOpen, setWorkspaceContextOpen] = useState(false);
   const [renamingTaskId, setRenamingTaskId] = useState<string | null>(null);
@@ -180,13 +187,22 @@ export function WorkspaceHeaderTitleSection({
   const remoteWorkspaceHostLabel = remoteTarget
     ? formatRemoteWorkspaceHeaderHostLabel(remoteTarget)
     : null;
+  // 多 runner：`runner:` 身份不是 remote，但需要显示机器名，否则同路径的两台机器
+  // 在 header 上完全无法区分。名字来自 server-info 缓存，未知时回退 runnerId。
+  const runnerMachineLabel = resolveRunnerWorkspaceMachineLabel(
+    workspaceIdentity,
+    runnerNameByIdentity,
+  );
   const workspaceDisplayLabel = formatRemoteWorkspaceDisplayLabel(projectName, remoteTarget);
   const showRemoteWorkspaceHostLabel = Boolean(
     remoteWorkspaceHostLabel && workspaceDisplayLabel === projectName,
   );
-  const workspaceContextLabel = showRemoteWorkspaceHostLabel
-    ? `${workspaceDisplayLabel} @ ${remoteWorkspaceHostLabel}`
-    : workspaceDisplayLabel;
+  const workspaceContextLabel = runnerMachineLabel
+    ? // 与 SSH host 展示同形：`项目 @ 机器`，避免只显示机器名而丢失项目上下文。
+      `${workspaceDisplayLabel} @ ${runnerMachineLabel}`
+    : showRemoteWorkspaceHostLabel
+      ? `${workspaceDisplayLabel} @ ${remoteWorkspaceHostLabel}`
+      : workspaceDisplayLabel;
   const workspaceBranchLabel = gitSummary.isRepository
     ? resolveGitBranchTriggerLabel({
         headRefType: gitSummary.headRefType,
@@ -196,7 +212,9 @@ export function WorkspaceHeaderTitleSection({
       })
     : null;
   const isRemoteWorkspace = Boolean(
-    remoteWorkspaceHostLabel || workspaceIdentity?.trim() || remoteSessionId,
+    remoteWorkspaceHostLabel ||
+    isClientRemoteWorkspaceIdentity(workspaceIdentity) ||
+    remoteSessionId,
   );
   const showRemoteSkillSyncAction = shouldShowRemoteSkillSyncAction({
     remoteSessionId,
@@ -267,7 +285,7 @@ export function WorkspaceHeaderTitleSection({
         ...(workspaceIdentity ? { workspaceIdentity } : {}),
       });
       upsertOptimisticTaskListItem(workspaceAbsPath, renamedTask, workspaceIdentity);
-      if (workspaceIdentity) {
+      if (isClientRemoteWorkspaceIdentity(workspaceIdentity)) {
         if (isPinned) {
           useRemotePinnedTaskStore.getState().upsertTask(renamedTask);
         } else {
@@ -324,7 +342,7 @@ export function WorkspaceHeaderTitleSection({
         // Header 更多菜单不能只依赖 nexTaskMetaMerge：归档后只有旧列表状态被更新。
         // 这里改成和 Sidebar 一样同步清理运行态与 sqlite cache，避免 Header 操作后列表不刷新。
         removeTaskState(workspaceAbsPath, resolvedTaskActionTaskId, workspaceIdentity);
-        if (workspaceIdentity) {
+        if (isClientRemoteWorkspaceIdentity(workspaceIdentity)) {
           useRemotePinnedTaskStore
             .getState()
             .removeTask(workspaceAbsPath, resolvedTaskActionTaskId, workspaceIdentity);
@@ -388,6 +406,17 @@ export function WorkspaceHeaderTitleSection({
                   <span className="min-w-0 break-words [overflow-wrap:anywhere]">
                     {workspaceContextLabel}
                   </span>
+                  {runnerMachineLabel ? (
+                    <span
+                      data-testid="workspace-header-runner-machine"
+                      className="min-w-0 break-words text-ui-sm font-normal text-foreground-subtle [overflow-wrap:anywhere]"
+                    >
+                      {intl.formatMessage(
+                        { id: "workspaceHeader.runnerMachine" },
+                        { name: runnerMachineLabel },
+                      )}
+                    </span>
+                  ) : null}
                   {workspaceContextOpen ? (
                     <WorkspaceContextPath
                       workspacePath={workspaceAbsPath}
@@ -504,13 +533,13 @@ export function WorkspaceHeaderTitleSection({
                   if (optimisticTask) {
                     // Header 里切换 pin 以前只等 RPC 成功后更新列表缓存，
                     // pinned 区会在请求期间被旧查询结果覆盖。先乐观切换，失败再回滚。
-                    if (workspaceIdentity && !isPinned) {
+                    if (isClientRemoteWorkspaceIdentity(workspaceIdentity) && !isPinned) {
                       useRemotePinnedTaskStore.getState().upsertTask(optimisticTask);
                       useRemoteTimelineTaskStore
                         .getState()
                         .removeTask(workspaceAbsPath, resolvedTaskActionTaskId, workspaceIdentity);
                     }
-                    if (workspaceIdentity && isPinned) {
+                    if (isClientRemoteWorkspaceIdentity(workspaceIdentity) && isPinned) {
                       useRemotePinnedTaskStore
                         .getState()
                         .removeTask(workspaceAbsPath, resolvedTaskActionTaskId, workspaceIdentity);
@@ -536,7 +565,7 @@ export function WorkspaceHeaderTitleSection({
                         resolvedTaskActionTaskId,
                         workspaceIdentity,
                       );
-                      if (workspaceIdentity && !isPinned) {
+                      if (isClientRemoteWorkspaceIdentity(workspaceIdentity) && !isPinned) {
                         useRemotePinnedTaskStore.getState().upsertTask(meta);
                         useRemoteTimelineTaskStore
                           .getState()
@@ -546,7 +575,7 @@ export function WorkspaceHeaderTitleSection({
                             workspaceIdentity,
                           );
                       }
-                      if (workspaceIdentity && isPinned) {
+                      if (isClientRemoteWorkspaceIdentity(workspaceIdentity) && isPinned) {
                         useRemotePinnedTaskStore
                           .getState()
                           .removeTask(
@@ -565,7 +594,7 @@ export function WorkspaceHeaderTitleSection({
                     })
                     .catch(() => {
                       if (optimisticTask) {
-                        if (workspaceIdentity && !isPinned) {
+                        if (isClientRemoteWorkspaceIdentity(workspaceIdentity) && !isPinned) {
                           useRemotePinnedTaskStore
                             .getState()
                             .removeTask(
@@ -575,7 +604,7 @@ export function WorkspaceHeaderTitleSection({
                             );
                           useRemoteTimelineTaskStore.getState().upsertTask(optimisticTask);
                         }
-                        if (workspaceIdentity && isPinned) {
+                        if (isClientRemoteWorkspaceIdentity(workspaceIdentity) && isPinned) {
                           useRemotePinnedTaskStore.getState().upsertTask(optimisticTask);
                           useRemoteTimelineTaskStore
                             .getState()
@@ -618,7 +647,7 @@ export function WorkspaceHeaderTitleSection({
                         workspaceIdentity,
                       );
                       upsertOptimisticTaskListItem(workspaceAbsPath, meta, workspaceIdentity);
-                      if (workspaceIdentity) {
+                      if (isClientRemoteWorkspaceIdentity(workspaceIdentity)) {
                         if (isPinned) {
                           useRemotePinnedTaskStore.getState().upsertTask(meta);
                         } else {

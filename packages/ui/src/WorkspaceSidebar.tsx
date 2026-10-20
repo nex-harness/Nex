@@ -76,6 +76,7 @@ import { NewTaskButtonGroup } from "@/NewTaskButtonGroup.js";
 import { selectWorkspaceNexState, useNexSessionStore } from "@/store/nexSessionStore.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceReadOnly, isWorkspaceTab, type WorkspaceTabState } from "@/store/tabStore.js";
+import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 import { useWorkspaceTaskLists } from "@/hooks/useWorkspaceTaskLists.js";
 import {
   persistSidebarTaskPreferences,
@@ -177,7 +178,11 @@ const EMPTY_RECONNECTING_REMOTE_WORKSPACE_LOGS_BY_WORKSPACE_KEY: Record<
 > = {};
 
 function WorkspaceDragOverlay({ tab, width }: { tab: WorkspaceTabState; width: number | null }) {
-  const isRemote = Boolean(tab.remoteSessionId || tab.remoteTarget || tab.workspaceIdentity);
+  const isRemote = Boolean(
+    tab.remoteSessionId ||
+    tab.remoteTarget ||
+    isClientRemoteWorkspaceIdentity(tab.workspaceIdentity),
+  );
   return (
     <div
       data-testid="workspace-drag-overlay"

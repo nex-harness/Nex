@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
-import type { IProviderSettingsService, ProviderSettingsView } from "@nex/services";
+import type {
+  IProviderSettingsService,
+  ModelProviderWorkspaceTarget,
+  ProviderSettingsView,
+} from "@nex/services";
 import { logger } from "@/logger.js";
 import {
   getProviderSettingsSnapshot,
@@ -42,6 +46,9 @@ interface OwnedProviderSettingsState {
 /** Settings 编辑器按当前 ServiceProvider 读取目标 Environment，并显式暴露失败与重试。 */
 export function useProviderSettingsServiceView(
   service: IProviderSettingsService,
+  // 多 runner：web 上 provider-settings 由 server 转发，带上目标 workspace 才能读到
+  // 对应机器的配置；desktop Host 忽略该参数，行为不变。
+  workspaceTarget?: ModelProviderWorkspaceTarget,
 ): ProviderSettingsServiceRead {
   const [reloadVersion, reload] = useReducer((value: number) => value + 1, 0);
   const [owned, setOwned] = useState<OwnedProviderSettingsState>({
@@ -96,17 +103,36 @@ export function useProviderSettingsServiceView(
       }
     };
     const subscription = service.onDidChange(commit);
-    void service.getView().then(commit, (cause) => {
-      if (generation !== generationRef.current) return;
-      const error = cause instanceof Error ? cause : new Error(String(cause));
-      logger.warn("[ProviderSettings] 加载目标 Environment 失败", { error });
-      if (!hasReadyView) setOwned({ service, state: { status: "error", error } });
-    });
+    void service
+      .getView(
+        workspaceTarget?.workspacePath?.trim() || workspaceTarget?.workspaceIdentity?.trim()
+          ? {
+              ...(workspaceTarget.workspacePath?.trim()
+                ? { workspacePath: workspaceTarget.workspacePath }
+                : {}),
+              ...(workspaceTarget.workspaceIdentity?.trim()
+                ? { workspaceIdentity: workspaceTarget.workspaceIdentity }
+                : {}),
+            }
+          : undefined,
+      )
+      .then(commit, (cause) => {
+        if (generation !== generationRef.current) return;
+        const error = cause instanceof Error ? cause : new Error(String(cause));
+        logger.warn("[ProviderSettings] 加载目标 Environment 失败", { error });
+        if (!hasReadyView) setOwned({ service, state: { status: "error", error } });
+      });
     return () => {
       generationRef.current += 1;
       subscription.dispose();
     };
-  }, [commitView, reloadVersion, service]);
+  }, [
+    commitView,
+    reloadVersion,
+    service,
+    workspaceTarget?.workspaceIdentity,
+    workspaceTarget?.workspacePath,
+  ]);
 
   return {
     state: visibleState,
