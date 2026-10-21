@@ -9,7 +9,8 @@
     "start": "node --import tsx src/main.ts",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint"
+    "lint": "oxlint",
+    "bundle": "node scripts/bundle.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.3.0",
@@ -23,6 +24,7 @@
     "@nex/rpc": "workspace:*",
     "@types/node": "^25.5.0",
     "@types/ws": "^8.18.1",
+    "esbuild": "^0.27.7",
     "tsx": "^4.19.4",
     "typescript": "^6.0.2"
   },

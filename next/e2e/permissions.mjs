@@ -12,9 +12,17 @@
 //   NEX_E2E_OUT       Screenshot + summary dir   (default <repo>/next/e2e/out)
 //   NEX_E2E_WORKSPACE Runner workspace path      (default $NEX_DEMO_WORKSPACE or
 //                                                  $TMPDIR/nex-next-demo)
+//   NEX_E2E_FILE_CHECK_CMD  optional shell command that prints a file from the
+//                            runner host, e.g. "ssh host 'cat {file}'". The
+//                            literal {file} is replaced with a shell-quoted
+//                            absolute path (or the path is passed in
+//                            $NEX_E2E_FILE when the placeholder is absent).
+//                            When set, file assertions run through it instead of
+//                            the local filesystem (workspace on another box).
 //
 // Exit code 0 only when every check passes. A JSON summary is always printed.
 
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -40,6 +48,44 @@ const CARD_TIMEOUT_MS = Number(process.env.NEX_E2E_CARD_TIMEOUT_MS) || 180_000;
 const ALLOW_FILE = path.join(WORKSPACE, "perm-ok.txt");
 const DENY_FILE = path.join(WORKSPACE, "perm-denied.txt");
 const EDIT_FILE = path.join(WORKSPACE, "perm-edit.txt");
+const FILE_CHECK_CMD = process.env.NEX_E2E_FILE_CHECK_CMD?.trim() ?? "";
+
+/**
+ * File existence/content checks normally run locally. With NEX_E2E_FILE_CHECK_CMD
+ * the workspace may be on another machine, so the caller supplies a command that
+ * prints the file content (or nothing when it is absent). It receives the absolute
+ * path in $NEX_E2E_FILE.
+ */
+function shellQuote(value) {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+function remoteFileContent(file) {
+  if (!FILE_CHECK_CMD) return null;
+  const command = FILE_CHECK_CMD.includes("{file}")
+    ? FILE_CHECK_CMD.replaceAll("{file}", shellQuote(file))
+    : FILE_CHECK_CMD;
+  try {
+    const output = execSync(command, {
+      encoding: "utf8",
+      env: { ...process.env, NEX_E2E_FILE: file },
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return output;
+  } catch {
+    return "";
+  }
+}
+
+function fileExists(file) {
+  if (FILE_CHECK_CMD) return remoteFileContent(file).length > 0;
+  return fs.existsSync(file);
+}
+
+function fileContent(file) {
+  if (FILE_CHECK_CMD) return remoteFileContent(file).trim();
+  return fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim() : "";
+}
 
 function failConfig(message) {
   console.error(`[permissions] ${message}`);
@@ -128,7 +174,9 @@ function removeIfExists(file) {
 }
 
 // The demo workspace is shared with acceptance.mjs; reset only the files this run owns.
-for (const file of [ALLOW_FILE, DENY_FILE, EDIT_FILE]) removeIfExists(file);
+if (!FILE_CHECK_CMD) {
+  for (const file of [ALLOW_FILE, DENY_FILE, EDIT_FILE]) removeIfExists(file);
+}
 
 const browser = await chromium.launch({ executablePath: chromePath, headless: true });
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
@@ -226,27 +274,48 @@ async function setMode(mode) {
  * Never click `conversation-new-task`: it switches the composer to the
  * conversation scope, which no runner serves.
  */
+let workspaceEnsured = false;
 async function ensureRunnerWorkspace() {
+  // 只在第一次发送前选一次 workspace：选择器会新建 draft，重复选择会把上一次
+  // setMode() 选好的权限模式重置回 build，表现为 edit 模式仍然弹出审批卡。
+  if (workspaceEnsured) return;
   const expectedName = path.basename(WORKSPACE);
-  const deadline = Date.now() + 90_000;
-  while (Date.now() < deadline) {
-    const options = page.locator('[data-testid="runner-workspace-option"]');
-    if ((await options.count()) > 0) {
-      const matching = options.filter({ hasText: expectedName }).first();
-      if ((await matching.count()) > 0) {
-        await matching.click();
-        await page.waitForTimeout(4_000);
-      }
-      break;
+  // Match the exact absolute path from the machine picker. Matching the sidebar
+  // by basename is not enough on a multi-machine deployment: another machine can
+  // be the restored tab and short names ("ws") appear in unrelated UI text.
+  const options = page.locator('[data-testid="runner-workspace-option"]');
+  for (let attempt = 0; attempt < 3 && (await options.count()) === 0; attempt += 1) {
+    const addProject = page.locator('[data-testid="project-add"]').first();
+    if ((await addProject.count()) === 0) break;
+    try {
+      await addProject.click({ timeout: 5_000 });
+      await page.getByText("Open folder", { exact: true }).first().click({ timeout: 5_000 });
+      await page.waitForTimeout(1_500);
+    } catch {
+      // A transient overlay may close the menu; retry below.
     }
-    const body = await bodyText();
-    if (body.includes(expectedName)) break;
-    await page.waitForTimeout(1_000);
+  }
+  const exact = options
+    .filter({
+      has: page.locator(`span[title="${WORKSPACE}"]`),
+    })
+    .first();
+  let selected = false;
+  if ((await exact.count()) > 0) {
+    await exact.click();
+    await page
+      .locator('[data-testid="runner-workspace-picker"]')
+      .waitFor({ state: "hidden", timeout: 15_000 })
+      .catch(() => {});
+    await page.waitForTimeout(5_000);
+    selected = true;
+    workspaceEnsured = true;
   }
   const body = await bodyText();
-  check("runnerWorkspaceSelected", body.includes(expectedName), {
-    expectedName,
-    tail: body.slice(-500),
+  check("runnerWorkspaceSelected", selected || body.includes(WORKSPACE), {
+    workspace: WORKSPACE,
+    selected,
+    tail: body.slice(-400),
   });
 }
 
@@ -307,7 +376,7 @@ try {
   await shot("perm-01-card-allow");
   check("approvalCardAppearsInBuildMode", cardShown, { body: (await bodyText()).slice(-600) });
   check("cardMentionsWrite", /Write|perm-ok\.txt/i.test(await bodyText()));
-  check("fileNotCreatedWhilePending", !fs.existsSync(ALLOW_FILE));
+  check("fileNotCreatedWhilePending", !fileExists(ALLOW_FILE));
 
   if (cardShown) {
     await optionButton("allowOnce").click();
@@ -316,14 +385,11 @@ try {
   await shot("perm-02-allowed");
   // The write happens after the allow; wait for the file instead of the reply text.
   const allowDeadline = Date.now() + 60_000;
-  while (Date.now() < allowDeadline && !fs.existsSync(ALLOW_FILE)) {
+  while (Date.now() < allowDeadline && !fileExists(ALLOW_FILE)) {
     await page.waitForTimeout(500);
   }
-  check("fileCreatedAfterAllow", fs.existsSync(ALLOW_FILE), { path: ALLOW_FILE });
-  check(
-    "fileContentIsOK",
-    fs.existsSync(ALLOW_FILE) && fs.readFileSync(ALLOW_FILE, "utf8").trim() === "OK",
-  );
+  check("fileCreatedAfterAllow", fileExists(ALLOW_FILE), { path: ALLOW_FILE });
+  check("fileContentIsOK", fileContent(ALLOW_FILE) === "OK", { path: ALLOW_FILE });
   check("cardDismissedAfterAllow", await waitForNoCard(), { tail: allowed.slice(-400) });
 
   // ── 2. build mode: write asks, Deny leaves the file absent ──
@@ -340,7 +406,9 @@ try {
   await waitForNoCard();
   await page.waitForTimeout(6_000);
   await shot("perm-04-denied");
-  check("fileNotCreatedAfterDeny", !fs.existsSync(DENY_FILE), { path: DENY_FILE });
+  // Deny must not create the file; a file left by an earlier run would invalidate
+  // this, so remote runs require a clean workspace (see docs).
+  check("fileNotCreatedAfterDeny", !fileExists(DENY_FILE), { path: DENY_FILE });
 
   // ── 3. edit mode: write runs without a card ──
   await setMode("edit");
@@ -348,11 +416,11 @@ try {
     "Use the write tool to create perm-edit.txt containing exactly AUTO. Do not use bash, do not use any other tool.",
   );
   const editDeadline = Date.now() + REPLY_TIMEOUT_MS;
-  while (Date.now() < editDeadline && !fs.existsSync(EDIT_FILE)) {
+  while (Date.now() < editDeadline && !fileExists(EDIT_FILE)) {
     await page.waitForTimeout(1_000);
   }
   await shot("perm-05-edit-mode");
-  check("fileCreatedInEditModeWithoutCard", fs.existsSync(EDIT_FILE), { path: EDIT_FILE });
+  check("fileCreatedInEditModeWithoutCard", fileExists(EDIT_FILE), { path: EDIT_FILE });
   check("noCardInEditMode", (await optionButton("allowOnce").count()) === 0);
 
   // ── 4. read-only ls runs without a card in build mode ──

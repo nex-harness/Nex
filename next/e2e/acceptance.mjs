@@ -16,6 +16,14 @@
 //   NEX_E2E_TOKEN     Browser login token        (required)
 //   NEX_E2E_CHROME    Chrome/Chromium executable (default: auto-detect)
 //   NEX_E2E_OUT       Screenshot + summary dir   (default <repo>/next/e2e/out)
+//   NEX_E2E_EXPECT_TEXT      notes.txt content the agent must echo
+//                            (default "hello from demo")
+//   NEX_E2E_ALLOW_EXISTING_TASKS  when "1", do not require an empty sidebar
+//                            before the send; assert that exactly one new task
+//                            row appears instead (deployed stacks keep sessions)
+//   NEX_E2E_WORKSPACE        absolute workspace path on the runner to open via
+//                            the machine picker (default: use the restored tab)
+//   NEX_E2E_OPTION_TIMEOUT_MS  how long to wait for that picker entry (default 60000)
 //
 // Exit code 0 only when every check passes. A JSON summary is always printed.
 
@@ -34,6 +42,10 @@ const OUT_DIR = path.resolve(
   REPO_ROOT,
   process.env.NEX_E2E_OUT?.trim() || path.join("next", "e2e", "out"),
 );
+const EXPECT_TEXT = process.env.NEX_E2E_EXPECT_TEXT?.trim() || "hello from demo";
+const ALLOW_EXISTING_TASKS = process.env.NEX_E2E_ALLOW_EXISTING_TASKS === "1";
+const WORKSPACE = process.env.NEX_E2E_WORKSPACE?.trim() ?? "";
+const OPTION_TIMEOUT_MS = Number(process.env.NEX_E2E_OPTION_TIMEOUT_MS) || 60_000;
 const PROMPT =
   "Use the read tool to read notes.txt, then run `ls -la` with bash, then reply with one short sentence.";
 const REPLY_TIMEOUT_MS = Number(process.env.NEX_E2E_REPLY_TIMEOUT_MS) || 180_000;
@@ -139,8 +151,31 @@ page.on("websocket", (socket) => {
 });
 
 const shot = (name) => page.screenshot({ path: path.join(OUT_DIR, `${name}.png`) });
-const bodyText = () => page.locator("body").innerText();
+/**
+ * Code blocks render inside a @pierre/diffs shadow root, so `body.innerText`
+ * never contains their text. Walk open shadow roots and append their text.
+ */
+const bodyText = () =>
+  page.evaluate(() => {
+    let text = document.body.innerText;
+    const visit = (root) => {
+      for (const element of root.querySelectorAll("*")) {
+        if (!element.shadowRoot) continue;
+        text += `\n${element.shadowRoot.textContent ?? ""}`;
+        visit(element.shadowRoot);
+      }
+    };
+    visit(document);
+    return text;
+  });
 const taskRows = () => page.locator("[data-testid^='task-item-']").count();
+/** Task rows expose `<workspaceKey>:<taskId>`; the new key identifies this run. */
+const taskItemKeys = () =>
+  page.evaluate(() =>
+    [...document.querySelectorAll("[data-testid^='task-item-']")].map(
+      (element) => element.getAttribute("data-task-item-key") ?? "",
+    ),
+  );
 
 function decodeFrame(payload) {
   const buf = Buffer.from(payload, "latin1");
@@ -191,6 +226,28 @@ try {
   const composer = page.locator('[data-testid="chat-input"], [contenteditable="true"]').first();
   await composer.waitFor({ state: "visible", timeout: 90_000 });
   await page.waitForTimeout(9_000);
+
+  // Deployed stacks may restore a tab on a different machine. When the caller
+  // names a workspace, open it through the same machine picker a user would.
+  if (WORKSPACE) {
+    const addProject = page.locator('[data-testid="project-add"]').first();
+    await addProject.waitFor({ state: "visible", timeout: 30_000 });
+    await addProject.click();
+    await page.getByText("Open folder", { exact: true }).first().click();
+    await page
+      .locator('[data-testid="runner-workspace-picker"]')
+      .waitFor({ state: "visible", timeout: 20_000 });
+    const option = page
+      .locator('[data-testid="runner-workspace-option"]')
+      .filter({ has: page.locator(`span[title="${WORKSPACE}"]`) })
+      .first();
+    await option.waitFor({ state: "visible", timeout: OPTION_TIMEOUT_MS });
+    await option.click();
+    await page
+      .locator('[data-testid="runner-workspace-picker"]')
+      .waitFor({ state: "hidden", timeout: 15_000 });
+    await page.waitForTimeout(6_000);
+  }
   await shot("final-01-loaded");
 
   const initialBody = await bodyText();
@@ -198,7 +255,12 @@ try {
   check("modelSelectedBeforeSend", initialModel.selected, initialModel);
 
   const taskRowsBefore = await taskRows();
-  check("onlyRealTasksBeforeSend", taskRowsBefore === 0, { count: taskRowsBefore });
+  const taskKeysBefore = await taskItemKeys();
+  if (ALLOW_EXISTING_TASKS) {
+    details.existingTaskRowsBeforeSend = taskRowsBefore;
+  } else {
+    check("onlyRealTasksBeforeSend", taskRowsBefore === 0, { count: taskRowsBefore });
+  }
 
   const editor = page.locator('[data-testid="chat-input"], [contenteditable="true"]').first();
   await editor.waitFor({ timeout: 20_000 });
@@ -212,23 +274,25 @@ try {
   while (Date.now() < deadline) {
     await page.waitForTimeout(3_000);
     body = await bodyText();
-    if (/hello from demo/i.test(body) && !/Stop|停止/.test(body)) break;
+    if (body.includes(EXPECT_TEXT) && !/Stop|停止/.test(body)) break;
   }
   await page.waitForTimeout(4_000);
   await shot("final-03-reply");
   body = await bodyText();
-  check("replyRendered", /hello from demo/i.test(body), { tail: body.slice(-800) });
+  check("replyRendered", body.includes(EXPECT_TEXT), { tail: body.slice(-800) });
 
   // Tool cards live inside the collapsed "Worked for …" assistant-history group,
   // nested under the "Explore" summary.
+  // DOM click instead of a pointer click: on long sidebar histories a transient
+  // overlay can hit-test over the trigger, and this expansion is diagnostic only.
   const trigger = page.locator("[data-testid^='chat-assistant-history-trigger']").first();
   if (await trigger.count()) {
-    await trigger.click();
+    await trigger.evaluate((element) => element.click());
     await page.waitForTimeout(1_500);
   }
   const explore = page.locator("text=Explore").first();
   if (await explore.count()) {
-    await explore.click();
+    await explore.evaluate((element) => element.click());
     await page.waitForTimeout(1_200);
   }
   await shot("final-04-tools-expanded");
@@ -247,7 +311,20 @@ try {
   });
 
   const taskRowsAfterSend = await taskRows();
-  check("oneRealTaskAfterSend", taskRowsAfterSend === 1, { count: taskRowsAfterSend });
+  let newTaskKey = "";
+  if (ALLOW_EXISTING_TASKS) {
+    const keysAfterSend = await taskItemKeys();
+    const added = keysAfterSend.filter((key) => !taskKeysBefore.includes(key));
+    newTaskKey = added.length === 1 ? added[0] : "";
+    details.newTaskKey = newTaskKey;
+    check("oneNewTaskAfterSend", added.length === 1, {
+      before: taskRowsBefore,
+      after: taskRowsAfterSend,
+      added,
+    });
+  } else {
+    check("oneRealTaskAfterSend", taskRowsAfterSend === 1, { count: taskRowsAfterSend });
+  }
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForTimeout(9_000);
@@ -257,13 +334,28 @@ try {
   check("sessionListedAfterReload", /Use the read tool/.test(afterReloadBody), {
     count: sidebarTasksAfterReload,
   });
-  check("oneRealTaskAfterReload", sidebarTasksAfterReload === 1, {
-    count: sidebarTasksAfterReload,
-  });
+  if (ALLOW_EXISTING_TASKS) {
+    check(
+      "oneNewTaskAfterReload",
+      Boolean(newTaskKey) && (await taskItemKeys()).includes(newTaskKey),
+      { newTaskKey, keys: await taskItemKeys() },
+    );
+  } else {
+    check("oneRealTaskAfterReload", sidebarTasksAfterReload === 1, {
+      count: sidebarTasksAfterReload,
+    });
+  }
 
-  const row = page.locator("[data-testid^='task-item-']").first();
+  // Deployed stacks keep earlier sessions, so `first()` may be a different task.
+  // Prefer the exact key observed above; fall back to the newest matching row.
+  const row = newTaskKey
+    ? page.locator(`[data-task-item-key="${newTaskKey}"]`).first()
+    : page
+        .locator("[data-testid^='task-item-']")
+        .filter({ hasText: /Use the read tool to read notes\.txt, then run/ })
+        .first();
   let reopened = false;
-  if (await row.count()) {
+  if ((await row.count()) > 0) {
     await row.click();
     await page.waitForTimeout(6_000);
     reopened = true;
@@ -272,7 +364,7 @@ try {
   const reopenedBody = await bodyText();
   check(
     "transcriptAfterReopen",
-    reopened && /Use the read tool/.test(reopenedBody) && /hello from demo/i.test(reopenedBody),
+    reopened && /Use the read tool/.test(reopenedBody) && reopenedBody.includes(EXPECT_TEXT),
     { reopened, tail: reopenedBody.slice(-800) },
   );
   const reopenedModel = await modelSelectionState(reopenedBody);
@@ -321,7 +413,9 @@ const significantErrors = logs.filter((line) => {
   // Known web-only noise unrelated to the acceptance path: the external client-config
   // fetch is blocked by CORS, Tooltip controlled/uncontrolled dev warnings, and the
   // one-off projection-vs-ACK race warning that self-recovers via snapshot.
-  return !/zcode\.z\.ai|ERR_FAILED|Tooltip is changing|accepted input projection silent/u.test(line);
+  return !/zcode\.z\.ai|ERR_FAILED|Tooltip is changing|accepted input projection silent/u.test(
+    line,
+  );
 });
 const crashes = significantErrors.filter((line) =>
   /PAGEERROR|React subtree crashed|change in the order of Hooks/u.test(line),
