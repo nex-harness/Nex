@@ -1,19 +1,45 @@
 import type { NexTaskMeta, NexWorkspaceEvent } from "@nex/shared";
+import { nexTaskMetaSchema } from "@nex/shared";
 import type { Engine, EngineSessionState } from "../engine/types.js";
 import type { Logger } from "../logger.js";
+import { diffTaskSnapshots, isProjectRow, isTerminalPhase, toNexTaskMeta } from "./nexTaskRows.js";
 
 interface WorkspaceSnapshot {
   deleted: string[];
+  /** Every non-draft session (archived/pinned included) so transitions stay diffable. */
   byId: Map<string, EngineSessionState>;
   /** Identity the UI used for this scope; rows must echo it for workspaceKey grouping. */
   workspaceIdentity?: string;
 }
 
+export interface NexTaskChannelOptions {
+  /** Every workspace this runner serves; workspace-less list calls span them. */
+  workspacePaths?: readonly string[];
+  /**
+   * True while a browser is subscribed to the session's conversation. A terminal run in
+   * the foreground must not raise an unread badge (docs/next/task-state.md).
+   */
+  isSessionWatched?: (sessionId: string) => boolean;
+}
+
+interface TaskTarget {
+  taskId: string;
+  workspacePath: string;
+  workspaceIdentity?: string;
+}
+
 /**
- * `nex-task` is the sidebar's row source. The runner derives one NexTaskMeta per live
- * session and keeps deleted ids in the negative-membership list. Events use reasons the
- * UI's refresh policy treats as membership changes (`task_created`, `task_deleted`,
- * `task_meta_changed`).
+ * `nex-task` is the sidebar's row source and the runner-side owner of sidebar task state
+ * (docs/next/task-state.md). Rows derive from the engine's metadata store; every mutation
+ * goes through the engine, and its `onSessionsChanged` diff emits the
+ * `workspace_task_list_changed` reasons the UI's refresh policy expects:
+ *
+ * - `task_created` / `task_deleted` — membership add/remove
+ * - `task_archived` / `task_unarchived` / `task_pinned` / `task_unpinned` — membership move
+ * - `task_title_changed` — detail only (title)
+ * - `task_meta_changed` — unread/activity (membership refetch, low frequency)
+ * - `task_status_changed` — phase; `unreadSignal: "background_terminal"` for a completion
+ *   the user was not watching
  *
  * The calls carry a `workspaceIdentity` (`runner:<id>:<path>`) from the server's routing
  * table. Rows and events must echo it: the UI groups sidebar rows by
@@ -24,26 +50,36 @@ export class NexTaskChannel {
   private readonly snapshots = new Map<string, WorkspaceSnapshot>();
   private readonly watchers = new Map<string, Set<(event: NexWorkspaceEvent) => void>>();
   private readonly identities = new Map<string, string | undefined>();
+  /** Serializes refreshes per workspace: a mutation emits re-entrantly via the engine. */
+  private readonly refreshTails = new Map<string, Promise<void>>();
   private readonly engineUnsubscribe: () => void;
+  private readonly workspacePaths: readonly string[];
+  private readonly isSessionWatched: (sessionId: string) => boolean;
 
   constructor(
     private readonly engine: Engine,
     private readonly logger: Logger,
+    options: NexTaskChannelOptions = {},
   ) {
+    this.workspacePaths = options.workspacePaths ?? [];
+    this.isSessionWatched = options.isSessionWatched ?? (() => false);
     this.engineUnsubscribe = engine.onSessionsChanged((workspacePath) => {
-      void this.refresh(workspacePath, this.identities.get(workspacePath));
+      this.scheduleRefresh(workspacePath, this.identities.get(workspacePath));
     });
   }
 
+  // ── reads ──
+
+  /** Project list: real (non-draft), live rows that are neither pinned nor archived. */
   async listTasks(params: {
     workspacePath: string;
     workspaceIdentity?: string;
   }): Promise<NexTaskMeta[]> {
     this.rememberIdentity(params.workspacePath, params.workspaceIdentity);
-    const sessions = await this.listVisibleSessions(params.workspacePath);
-    return sessions.map((session) =>
-      toNexTaskMeta(params.workspacePath, session, params.workspaceIdentity),
-    );
+    const sessions = await this.engine.listSessions(params.workspacePath);
+    return sessions
+      .filter(isProjectRow)
+      .map((session) => toNexTaskMeta(params.workspacePath, session, params.workspaceIdentity));
   }
 
   async listPinnedTasks(params?: {
@@ -51,7 +87,7 @@ export class NexTaskChannel {
     workspaceIdentity?: string;
   }): Promise<NexTaskMeta[]> {
     this.rememberIdentity(params?.workspacePath, params?.workspaceIdentity);
-    return [];
+    return this.collectTasks(params, (session) => session.pinned === true && !session.archived);
   }
 
   async listArchivedTasks(params?: {
@@ -59,11 +95,16 @@ export class NexTaskChannel {
     workspaceIdentity?: string;
   }): Promise<NexTaskMeta[]> {
     this.rememberIdentity(params?.workspacePath, params?.workspaceIdentity);
-    return [];
+    return this.collectTasks(params, (session) => session.archived === true);
   }
 
+  /** Pinned ids across every served workspace (supplemental hint; see the spec). */
   async listPinnedTaskIds(): Promise<string[]> {
-    return [];
+    const tasks = await this.collectTasks(
+      undefined,
+      (session) => session.pinned === true && !session.archived,
+    );
+    return tasks.map((task) => task.taskId);
   }
 
   async listDeletedTaskIds(params: { workspacePath: string }): Promise<string[]> {
@@ -88,6 +129,90 @@ export class NexTaskChannel {
     return { provider: null, path: null, exists: false };
   }
 
+  // ── mutations (docs/next/task-state.md) ──
+
+  async archiveTask(params: TaskTarget): Promise<NexTaskMeta> {
+    return this.writeState(params, { archived: true });
+  }
+
+  async unarchiveTask(params: TaskTarget): Promise<NexTaskMeta> {
+    return this.writeState(params, { archived: false });
+  }
+
+  async setTaskPinned(params: TaskTarget & { pinned: boolean }): Promise<NexTaskMeta> {
+    return this.writeState(params, { pinned: params.pinned });
+  }
+
+  async setTaskUnread(
+    params: TaskTarget & { unread: boolean; expectedUnreadAt?: number },
+  ): Promise<NexTaskMeta> {
+    this.rememberIdentity(params.workspacePath, params.workspaceIdentity);
+    await this.engine.setTaskUnread(
+      params.workspacePath,
+      params.taskId,
+      params.unread ? Date.now() : null,
+      params.unread ? undefined : params.expectedUnreadAt,
+    );
+    return this.readTaskMeta(params);
+  }
+
+  /**
+   * Same write path as v4 `renameSession`: engine.rename writes the metadata row and the pi
+   * session name, then fires one `onSessionsChanged` that republishes the sessions index,
+   * patches an open conversation snapshot and drives `task_title_changed` here.
+   */
+  async renameTask(params: TaskTarget & { title: string }): Promise<NexTaskMeta> {
+    this.rememberIdentity(params.workspacePath, params.workspaceIdentity);
+    // A restored-but-unopened session must be open before pi can hold the new name.
+    await this.engine.openSession(params.workspacePath, params.taskId);
+    await this.engine.rename(params.taskId, params.title);
+    return this.readTaskMeta(params);
+  }
+
+  /** Soft delete = the tombstone `deleteSession` writes; the transcript is removed too. */
+  async deleteTask(params: TaskTarget): Promise<void> {
+    this.rememberIdentity(params.workspacePath, params.workspaceIdentity);
+    await this.engine.deleteSession(params.workspacePath, params.taskId);
+  }
+
+  async deleteArchivedTask(params: TaskTarget): Promise<boolean> {
+    this.rememberIdentity(params.workspacePath, params.workspaceIdentity);
+    return this.engine.deleteTaskIfArchived(params.workspacePath, params.taskId);
+  }
+
+  async deleteArchivedTasks(params: {
+    workspacePath: string;
+    workspaceIdentity?: string;
+    taskIds: string[];
+  }): Promise<{ deletedTaskIds: string[]; skippedTaskIds: string[]; failedTaskIds: string[] }> {
+    this.rememberIdentity(params.workspacePath, params.workspaceIdentity);
+    const result: {
+      deletedTaskIds: string[];
+      skippedTaskIds: string[];
+      failedTaskIds: string[];
+    } = { deletedTaskIds: [], skippedTaskIds: [], failedTaskIds: [] };
+    for (const taskId of new Set(params.taskIds)) {
+      try {
+        // 逐项事务：一项失败不能回滚其它成功项，也不能把失败项提前从列表隐藏。
+        if (await this.engine.deleteTaskIfArchived(params.workspacePath, taskId)) {
+          result.deletedTaskIds.push(taskId);
+        } else {
+          result.skippedTaskIds.push(taskId);
+        }
+      } catch (error) {
+        result.failedTaskIds.push(taskId);
+        this.logger.warn("archived task delete failed", {
+          workspacePath: params.workspacePath,
+          taskId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return result;
+  }
+
+  // ── events ──
+
   onDynamicWorkspaceEvent(
     workspacePath: string,
     emit: (event: NexWorkspaceEvent) => void,
@@ -97,11 +222,15 @@ export class NexTaskChannel {
     const listeners = this.watchers.get(workspacePath) ?? new Set();
     listeners.add(emit);
     this.watchers.set(workspacePath, listeners);
-    void this.refresh(workspacePath, workspaceIdentity);
+    this.scheduleRefresh(workspacePath, workspaceIdentity);
     return {
       dispose: () => {
         listeners.delete(emit);
-        if (listeners.size === 0) this.watchers.delete(workspacePath);
+        if (listeners.size === 0) {
+          this.watchers.delete(workspacePath);
+          // 无观察者时丢掉基线：下次订阅从当前状态开始，不回放无人观察期间的变更。
+          this.snapshots.delete(workspacePath);
+        }
       },
     };
   }
@@ -109,23 +238,81 @@ export class NexTaskChannel {
   dispose(): void {
     this.engineUnsubscribe();
     this.watchers.clear();
+    this.snapshots.clear();
   }
 
-  /**
-   * 侧栏只能看到真实任务：`draft` 是 createSession 预热载体（无输入、无标题），
-   * 一旦发给 sidebar 就会以 “New task” 行出现，且每次预热/丢弃都会新增一行。
-   * 修复依据：UI 的 tasks-index syncer 会显式跳过 `phase === "draft"` 的 summary
-   * （packages/services/src/nex-agent/nexTaskIndexSyncer.ts），runner 作为同一
-   * 事实源必须保持一致；sendText 后 phase 变 running，行自然出现。
-   */
-  private async listVisibleSessions(workspacePath: string): Promise<EngineSessionState[]> {
-    const sessions = await this.engine.listSessions(workspacePath);
-    return sessions.filter((session) => session.phase !== "draft");
+  // ── internals ──
+
+  private async writeState(
+    params: TaskTarget,
+    patch: { pinned?: boolean; archived?: boolean },
+  ): Promise<NexTaskMeta> {
+    this.rememberIdentity(params.workspacePath, params.workspaceIdentity);
+    await this.engine.setTaskState(params.workspacePath, params.taskId, patch);
+    return this.readTaskMeta(params);
+  }
+
+  /** Reads one row back after a write; the row must satisfy `nexTaskMetaSchema`. */
+  private async readTaskMeta(params: TaskTarget): Promise<NexTaskMeta> {
+    const sessions = await this.engine.listSessions(params.workspacePath);
+    const session = sessions.find((item) => item.sessionId === params.taskId);
+    if (!session) throw new Error(`Task ${params.taskId} not found`);
+    return nexTaskMetaSchema.parse(
+      toNexTaskMeta(params.workspacePath, session, params.workspaceIdentity),
+    );
+  }
+
+  private async collectTasks(
+    params: { workspacePath?: string; workspaceIdentity?: string } | undefined,
+    predicate: (session: EngineSessionState) => boolean,
+  ): Promise<NexTaskMeta[]> {
+    const targets = params?.workspacePath
+      ? [
+          {
+            workspacePath: params.workspacePath,
+            workspaceIdentity:
+              params.workspaceIdentity ?? this.identities.get(params.workspacePath),
+          },
+        ]
+      : this.workspacePaths.map((workspacePath) => ({
+          workspacePath,
+          workspaceIdentity: this.identities.get(workspacePath),
+        }));
+    const results: NexTaskMeta[] = [];
+    for (const target of targets) {
+      try {
+        const sessions = await this.engine.listSessions(target.workspacePath);
+        for (const session of sessions) {
+          if (session.phase === "draft" || !predicate(session)) continue;
+          results.push(
+            nexTaskMetaSchema.parse(
+              toNexTaskMeta(target.workspacePath, session, target.workspaceIdentity),
+            ),
+          );
+        }
+      } catch (error) {
+        // One unreadable workspace must not fail the whole (workspace-less) query.
+        this.logger.warn("nex-task list failed", {
+          workspacePath: target.workspacePath,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return results;
   }
 
   private rememberIdentity(workspacePath: string | undefined, identity: string | undefined): void {
     if (!workspacePath || !identity?.trim()) return;
     this.identities.set(workspacePath, identity.trim());
+  }
+
+  private scheduleRefresh(workspacePath: string, workspaceIdentity?: string): void {
+    const previous = this.refreshTails.get(workspacePath) ?? Promise.resolve();
+    const next = previous.then(() => this.refresh(workspacePath, workspaceIdentity));
+    this.refreshTails.set(
+      workspacePath,
+      next.catch(() => undefined),
+    );
   }
 
   private async refresh(workspacePath: string, workspaceIdentity?: string): Promise<void> {
@@ -134,7 +321,7 @@ export class NexTaskChannel {
     let sessions: EngineSessionState[];
     let deleted: string[];
     try {
-      sessions = await this.listVisibleSessions(workspacePath);
+      sessions = await this.listSnapshotSessions(workspacePath);
       deleted = await this.engine.listDeletedSessionIds(workspacePath);
     } catch (error) {
       this.logger.warn("nex-task refresh failed", {
@@ -144,54 +331,58 @@ export class NexTaskChannel {
       return;
     }
     const identity = workspaceIdentity ?? this.identities.get(workspacePath);
+    const previous = this.snapshots.get(workspacePath);
+
+    // Background completion → unread, decided before the diff and re-read afterwards so
+    // the emitted meta already carries the marker the UI copies into its query cache.
+    const backgroundCompletions = previous
+      ? sessions.filter((session) => {
+          const before = previous.byId.get(session.sessionId);
+          return (
+            before !== undefined &&
+            (before.phase === "running" || before.phase === "prewarming") &&
+            isTerminalPhase(session.phase) &&
+            typeof session.unreadAt !== "number" &&
+            !this.isSessionWatched(session.sessionId)
+          );
+        })
+      : [];
+    const unreadSignalIds = new Set<string>();
+    if (backgroundCompletions.length > 0) {
+      try {
+        for (const session of backgroundCompletions) {
+          const state = await this.engine.setTaskUnread(
+            workspacePath,
+            session.sessionId,
+            Date.now(),
+          );
+          if (typeof state.unreadAt === "number") unreadSignalIds.add(session.sessionId);
+        }
+        sessions = await this.listSnapshotSessions(workspacePath);
+      } catch (error) {
+        // 未读写入失败不能挡住状态/列表事件；下一轮终态仍会重试（期间 unreadAt 仍缺省）。
+        this.logger.warn("nex-task unread write failed", {
+          workspacePath,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     const next: WorkspaceSnapshot = {
       deleted,
       byId: new Map(sessions.map((session) => [session.sessionId, session])),
       ...(identity ? { workspaceIdentity: identity } : {}),
     };
-    const previous = this.snapshots.get(workspacePath);
     this.snapshots.set(workspacePath, next);
     if (!previous) return;
 
-    const events: NexWorkspaceEvent[] = [];
-    for (const session of sessions) {
-      const before = previous.byId.get(session.sessionId);
-      if (!before) {
-        events.push({
-          type: "workspace_task_list_changed",
-          workspacePath,
-          ...(identity ? { workspaceIdentity: identity } : {}),
-          taskId: session.sessionId,
-          reason: "task_created",
-          taskMeta: toNexTaskMeta(workspacePath, session, identity),
-        });
-        continue;
-      }
-      if (
-        before.title !== session.title ||
-        before.phase !== session.phase ||
-        before.lastActivityAt !== session.lastActivityAt
-      ) {
-        events.push({
-          type: "workspace_task_list_changed",
-          workspacePath,
-          ...(identity ? { workspaceIdentity: identity } : {}),
-          taskId: session.sessionId,
-          reason: "task_meta_changed",
-          taskMeta: toNexTaskMeta(workspacePath, session, identity),
-        });
-      }
-    }
-    for (const deletedId of deleted) {
-      if (previous.deleted.includes(deletedId)) continue;
-      events.push({
-        type: "workspace_task_list_changed",
-        workspacePath,
-        ...(identity ? { workspaceIdentity: identity } : {}),
-        taskId: deletedId,
-        reason: "task_deleted",
-      });
-    }
+    const events = diffTaskSnapshots({
+      workspacePath,
+      ...(identity ? { workspaceIdentity: identity } : {}),
+      previous,
+      next,
+      unreadSignalIds,
+    });
     for (const event of events) {
       for (const listener of listeners) {
         try {
@@ -204,30 +395,9 @@ export class NexTaskChannel {
       }
     }
   }
-}
 
-export function toNexTaskMeta(
-  workspacePath: string,
-  session: EngineSessionState,
-  workspaceIdentity?: string,
-): NexTaskMeta {
-  return {
-    taskId: session.sessionId,
-    traceId: session.sessionId,
-    title: session.title,
-    ...(session.titleSource === "custom" ? { titleOverridden: true } : {}),
-    workspacePath,
-    ...(workspaceIdentity ? { workspaceIdentity } : {}),
-    createdAt: session.createdAt,
-    updatedAt: session.lastActivityAt,
-    mode: "build",
-    ...(session.model ? { model: session.model.modelId } : {}),
-    ...(session.model ? { thoughtLevel: session.model.thought } : {}),
-    status:
-      session.phase === "error"
-        ? "error"
-        : session.phase === "running" || session.phase === "prewarming"
-          ? "running"
-          : "completed",
-  };
+  private async listSnapshotSessions(workspacePath: string): Promise<EngineSessionState[]> {
+    const sessions = await this.engine.listSessions(workspacePath);
+    return sessions.filter((session) => session.phase !== "draft");
+  }
 }

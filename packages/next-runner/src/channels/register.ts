@@ -32,7 +32,10 @@ export function registerChannels(
   // 逐个重复。server 可能按 `runner:<id>:<path>` 把一个本 runner 从未声明过的路径转发
   // 过来（例如跨 runner 的陈旧 tab），runner 必须拒绝，而不是在别人的 cwd 上执行。
   const registry = createWorkspaceGuardedRegistry(linkRegistry, options.workspacePaths);
-  const nexTask = new NexTaskChannel(engine, logger);
+  const nexTask = new NexTaskChannel(engine, logger, {
+    workspacePaths: options.workspacePaths,
+    isSessionWatched: (sessionId) => publisher.sessions.isWatched(sessionId),
+  });
   let modelRevision = 0;
 
   const requireWorkspace = (arg: JsonValue): string => {
@@ -59,6 +62,14 @@ export function registerChannels(
     }
     const identity = workspaceIdentityFromArg(arg);
     return { workspacePath: path, ...(identity ? { workspaceIdentity: identity } : {}) };
+  };
+
+  /** nex-task mutations: workspace target plus the row id. */
+  const requireTaskTarget = (
+    arg: JsonValue,
+  ): { workspacePath: string; workspaceIdentity?: string; taskId: string } => {
+    const target = requireWorkspaceTarget(arg);
+    return { ...target, taskId: requireStringField(arg, "taskId") };
   };
 
   // ── nex-agent: v4 conversation ──
@@ -195,6 +206,54 @@ export function registerChannels(
   });
   // Routed to the first connected runner, no workspace in the arg.
   registry.call("nex-task", "listPinnedTaskIds", async () => nexTask.listPinnedTaskIds());
+
+  // Sidebar task state (docs/next/task-state.md). Every method carries the workspace
+  // target so the server routes it to the owning runner.
+  registry.call("nex-task", "archiveTask", async (arg) => {
+    const target = requireTaskTarget(arg);
+    return nexTask.archiveTask(target);
+  });
+  registry.call("nex-task", "unarchiveTask", async (arg) => {
+    const target = requireTaskTarget(arg);
+    return nexTask.unarchiveTask(target);
+  });
+  registry.call("nex-task", "setTaskPinned", async (arg) => {
+    const target = requireTaskTarget(arg);
+    return nexTask.setTaskPinned({ ...target, pinned: requireBoolean(arg, "pinned") });
+  });
+  registry.call("nex-task", "setTaskUnread", async (arg) => {
+    const target = requireTaskTarget(arg);
+    const record = asRecord(arg);
+    const expected = record["expectedUnreadAt"];
+    return nexTask.setTaskUnread({
+      ...target,
+      unread: requireBoolean(arg, "unread"),
+      // CAS 只在调用方给出数字标记时启用；其余保持无条件写入语义。
+      ...(typeof expected === "number" ? { expectedUnreadAt: expected } : {}),
+    });
+  });
+  registry.call("nex-task", "renameTask", async (arg) => {
+    const target = requireTaskTarget(arg);
+    return nexTask.renameTask({ ...target, title: requireStringField(arg, "title") });
+  });
+  registry.call("nex-task", "deleteTask", async (arg) => {
+    const target = requireTaskTarget(arg);
+    await nexTask.deleteTask(target);
+    return undefined;
+  });
+  registry.call("nex-task", "deleteArchivedTask", async (arg) => {
+    const target = requireTaskTarget(arg);
+    return nexTask.deleteArchivedTask(target);
+  });
+  registry.call("nex-task", "deleteArchivedTasks", async (arg) => {
+    const target = requireTaskTarget(arg);
+    const record = asRecord(arg);
+    const taskIds = Array.isArray(record["taskIds"])
+      ? record["taskIds"].filter((item): item is string => typeof item === "string")
+      : [];
+    return nexTask.deleteArchivedTasks({ ...target, taskIds });
+  });
+
   registry.listen("nex-task", "onDynamicWorkspaceEvent", (arg, emit) => {
     const target = requireWorkspaceTarget(arg);
     return nexTask.onDynamicWorkspaceEvent(
@@ -355,6 +414,20 @@ function requireString(value: unknown, name: string): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`${name} is required`);
   }
+  return value;
+}
+
+function requireStringField(arg: JsonValue, name: string): string {
+  const value = asRecord(arg)[name];
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${name} is required`);
+  }
+  return value;
+}
+
+function requireBoolean(arg: JsonValue, name: string): boolean {
+  const value = asRecord(arg)[name];
+  if (typeof value !== "boolean") throw new Error(`${name} must be a boolean`);
   return value;
 }
 

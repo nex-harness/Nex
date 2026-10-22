@@ -70,7 +70,7 @@ func New(options Options, logger *slog.Logger) (*App, error) {
 	localRegistry := local.NewRegistry()
 	localRegistry.Register("setting", settings)
 	localRegistry.Register("broadcast", local.NewBroadcast())
-	localRegistry.Register("window-controller", local.NewWindowController())
+	localRegistry.Register("window-controller", local.NewWindowController(registry, logger))
 	for name, channel := range local.StubChannels() {
 		localRegistry.Register(name, channel)
 	}

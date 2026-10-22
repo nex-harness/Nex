@@ -8,7 +8,8 @@
 #   next/dev.sh --e2e=acceptance   # same as --e2e
 #   next/dev.sh --e2e=permissions  # run the permissions E2E (approval card flow)
 #   next/dev.sh --e2e=multi        # run the multi-runner E2E (two runners, same path)
-#   next/dev.sh --e2e=all          # run acceptance, permissions and multi
+#   next/dev.sh --e2e=tasks        # run the task-state E2E (pin/archive/rename/delete)
+#   next/dev.sh --e2e=all          # run acceptance, permissions, tasks and multi
 #
 # Environment:
 #   NEX_NEXT_PORT           Go server port                 (default 3031)
@@ -21,9 +22,10 @@
 #
 # The demo workspace always contains notes.txt ("hello from demo"), which the
 # acceptance E2E reads. The permissions E2E owns perm-*.txt in the same workspace
-# and removes them at the start of a run. Multi/all modes additionally start a
-# second runner (`beta`); both E2E runners serve NEX_MULTI_WORKSPACE, which is
-# recreated fresh for every E2E run.
+# and removes them at the start of a run. The tasks E2E creates its own throwaway
+# chats in that workspace and archives/deletes them. Multi/all modes additionally
+# start a second runner (`beta`); both E2E runners serve NEX_MULTI_WORKSPACE, which
+# is recreated fresh for every E2E run.
 
 set -euo pipefail
 
@@ -38,9 +40,10 @@ for arg in "$@"; do
     --e2e=acceptance) E2E_MODE="acceptance" ;;
     --e2e=permissions) E2E_MODE="permissions" ;;
     --e2e=multi) E2E_MODE="multi" ;;
+    --e2e=tasks) E2E_MODE="tasks" ;;
     --e2e=all) E2E_MODE="all" ;;
     -h | --help)
-      sed -n '2,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -294,6 +297,7 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   set +e
   acceptance_status=0
   permissions_status=0
+  tasks_status=0
   multi_status=0
   if [[ "$E2E_MODE" == "acceptance" || "$E2E_MODE" == "all" ]]; then
     (
@@ -316,6 +320,22 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
     permissions_status=$?
     log "permissions E2E exited with $permissions_status"
   fi
+  if [[ "$E2E_MODE" == "tasks" || "$E2E_MODE" == "all" ]]; then
+    (
+      cd "$REPO_ROOT"
+      # `all` runs acceptance first, so the sidebar already has rows by the time the
+      # task suite starts; it then asserts "exactly one new row" instead of "empty".
+      tasks_allow_existing=0
+      [[ "$E2E_MODE" == "all" ]] && tasks_allow_existing=1
+      NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
+        NEX_E2E_TOKEN="$BROWSER_TOKEN" \
+        NEX_E2E_WORKSPACE="$WORKSPACE" \
+        NEX_E2E_ALLOW_EXISTING_TASKS="$tasks_allow_existing" \
+        node next/e2e/task-actions.mjs
+    )
+    tasks_status=$?
+    log "task-actions E2E exited with $tasks_status"
+  fi
   if [[ "$E2E_MODE" == "multi" || "$E2E_MODE" == "all" ]]; then
     (
       cd "$REPO_ROOT"
@@ -337,6 +357,9 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   fi
   if [[ "$permissions_status" -ne 0 ]]; then
     exit "$permissions_status"
+  fi
+  if [[ "$tasks_status" -ne 0 ]]; then
+    exit "$tasks_status"
   fi
   exit "$multi_status"
 fi

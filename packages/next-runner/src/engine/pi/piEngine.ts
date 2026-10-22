@@ -3,8 +3,6 @@ import {
   ModelRuntime,
   SessionManager,
   SettingsManager,
-  getAgentDir,
-  type AgentSession,
   type AgentSessionEvent,
 } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
@@ -18,31 +16,28 @@ import type {
   EngineEventSubscription,
   EngineMessage,
   EngineSessionState,
+  EngineUnreadState,
   PermissionMode,
   ResolveApprovalResult,
   SubmitOptions,
   SubmitOutcome,
 } from "../types.js";
 import { SessionMetaStore } from "./metaStore.js";
+import { toEngineSessionStates, teardownSession } from "./sessionViews.js";
+import {
+  deleteTaskIfArchivedImpl,
+  deleteTaskImpl,
+  setTaskStateImpl,
+  setTaskUnreadImpl,
+  type TaskStateHooks,
+} from "./taskStateOps.js";
 import { EMPTY_USAGE, defaultTitle, selectionFor, usageFromSession } from "./sessionHelpers.js";
 import { buildCatalog, resolveModel } from "./modelCatalog.js";
 import { toEngineHistory } from "./translate.js";
-import { PermissionGate } from "../permissions/gate.js";
 import { normalizeMode } from "../permissions/policy.js";
-import { createPiSessionWithGate } from "./piSessionFactory.js";
+import { openPiSession, type OpenSession } from "./sessionLifecycle.js";
 import { findSessionFile as findSessionFileInDir, sessionDirFor } from "./piSessionFiles.js";
 import { applyModelSelection, handlePiSessionEvent, startPromptRun } from "./piSessionOps.js";
-
-interface OpenSession {
-  workspacePath: string;
-  session: AgentSession;
-  gate: PermissionGate;
-  unsubscribe: () => void;
-  /** Subscribers of translated pi events plus gate events (approval/mode). */
-  listeners: Set<(event: EngineEvent) => void>;
-  /** prompt() awaits the whole run; link calls must never await this. */
-  inflight: Promise<void> | null;
-}
 
 export interface PiEngineOptions {
   dataDir: string;
@@ -94,7 +89,12 @@ export class PiEngine implements Engine {
     const sessionDir = this.sessionDir(workspacePath);
     await mkdir(sessionDir, { recursive: true });
     const sessionManager = SessionManager.create(workspacePath, sessionDir);
-    const { session, open } = await this.openPiSession(workspacePath, sessionManager, model);
+    const { session, open } = await openPiSession(
+      this.sessionFactoryDeps(),
+      workspacePath,
+      sessionManager,
+      model,
+    );
     const sessionId = session.sessionId;
     const now = Date.now();
     const selection = model ? selectionFor(session) : undefined;
@@ -126,7 +126,8 @@ export class PiEngine implements Engine {
     const restoredModel = meta?.model
       ? (runtime.getModel(meta.model.providerId, meta.model.modelId) as Model<never> | undefined)
       : undefined;
-    const { session, gate, open } = await this.openPiSession(
+    const { session, gate, open } = await openPiSession(
+      this.sessionFactoryDeps(),
       workspacePath,
       sessionManager,
       restoredModel,
@@ -148,48 +149,31 @@ export class PiEngine implements Engine {
 
   async deleteSession(workspacePath: string, sessionId: string): Promise<void> {
     await this.init();
-    const open = this.sessions.get(sessionId);
-    if (open) {
-      try {
-        await open.session.abort();
-      } catch {
-        // Abort is best-effort; disposal below still ends the in-process session.
-      }
-      open.gate.dispose();
-      open.unsubscribe();
-      open.session.dispose();
-      this.sessions.delete(sessionId);
-    }
-    const file = await this.findSessionFile(workspacePath, sessionId);
-    if (file) await unlink(file).catch(() => undefined);
-    await this.metadata.markDeleted(workspacePath, sessionId);
-    this.emitSessionsChanged(workspacePath);
+    await deleteTaskImpl(this.taskStateHooks(), workspacePath, sessionId);
   }
 
   async listSessions(workspacePath: string): Promise<EngineSessionState[]> {
     await this.init();
     const entries = await this.metadata.list(workspacePath);
-    const states: EngineSessionState[] = [];
-    for (const entry of entries) {
-      if (entry.deleted) continue;
-      const open = this.sessions.get(entry.sessionId);
-      states.push({
-        sessionId: entry.sessionId,
-        workspacePath,
-        title: entry.title,
-        titleSource: entry.titleSource,
-        createdAt: entry.createdAt,
-        lastActivityAt: entry.lastActivityAt,
-        phase: open?.session.isStreaming ? "running" : entry.phase,
-        model: open ? selectionFor(open.session) : (entry.model ?? null),
-        usage: open ? usageFromSession(open.session) : (entry.usage ?? EMPTY_USAGE),
-        isRunning: open?.session.isStreaming ?? false,
-        mode: open ? open.gate.getMode().mode : (entry.mode ?? "build"),
-        planEnabled: open ? open.gate.getMode().planEnabled : (entry.planEnabled ?? false),
-      });
-    }
-    states.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
-    return states;
+    return toEngineSessionStates(
+      workspacePath,
+      entries,
+      (sessionId) => {
+        const open = this.sessions.get(sessionId);
+        if (!open) return undefined;
+        return {
+          session: open.session,
+          streaming: open.session.isStreaming,
+          mode: open.gate.getMode().mode,
+          planEnabled: open.gate.getMode().planEnabled,
+        };
+      },
+      {
+        selectionFor,
+        usageFromSession,
+        emptyUsage: EMPTY_USAGE,
+      },
+    );
   }
 
   async listDeletedSessionIds(workspacePath: string): Promise<string[]> {
@@ -290,6 +274,40 @@ export class PiEngine implements Engine {
     await this.applySelection(sessionId, selection);
   }
 
+  /**
+   * Sidebar pin/archive (docs/next/task-state.md). The metadata row is the single source
+   * the list filters and the event diff read.
+   */
+  async setTaskState(
+    workspacePath: string,
+    sessionId: string,
+    patch: { pinned?: boolean; archived?: boolean },
+  ): Promise<void> {
+    await this.init();
+    await setTaskStateImpl(this.taskStateHooks(), workspacePath, sessionId, patch);
+  }
+
+  async setTaskUnread(
+    workspacePath: string,
+    sessionId: string,
+    unreadAt: number | null,
+    expectedUnreadAt?: number,
+  ): Promise<EngineUnreadState> {
+    await this.init();
+    return setTaskUnreadImpl(
+      this.taskStateHooks(),
+      workspacePath,
+      sessionId,
+      unreadAt,
+      expectedUnreadAt,
+    );
+  }
+
+  async deleteTaskIfArchived(workspacePath: string, sessionId: string): Promise<boolean> {
+    await this.init();
+    return deleteTaskIfArchivedImpl(this.taskStateHooks(), workspacePath, sessionId);
+  }
+
   async catalog(): Promise<EngineCatalog> {
     await this.init();
     if (this.catalogCache) return this.catalogCache;
@@ -305,53 +323,12 @@ export class PiEngine implements Engine {
   }
 
   async dispose(): Promise<void> {
-    for (const open of this.sessions.values()) {
-      open.gate.dispose();
-      open.unsubscribe();
-      open.session.dispose();
-    }
+    for (const open of this.sessions.values()) void teardownSession(open);
     this.sessions.clear();
     this.listeners.clear();
   }
 
   // ── internals ──
-
-  /**
-   * Builds the pi session with the inline permission-gate extension. pi's SDK does not
-   * reload a supplied resource loader, so the loader is reloaded here; inline extensions
-   * load after disk extensions and therefore see every `tool_call` last.
-   */
-  private async openPiSession(
-    workspacePath: string,
-    sessionManager: SessionManager,
-    model: Model<never> | undefined,
-  ): Promise<{ session: AgentSession; gate: PermissionGate; open: OpenSession }> {
-    const settingsManager =
-      this.options.createSettingsManager?.(workspacePath) ??
-      this.settingsManager ??
-      SettingsManager.create(workspacePath, getAgentDir());
-    const sessionIdRef = { current: "" };
-    const created = await createPiSessionWithGate({
-      workspacePath,
-      sessionManager,
-      model,
-      modelRuntime: this.requireRuntime(),
-      settingsManager,
-      onPiEvent: (event) => {
-        void this.onPiEvent(workspacePath, sessionIdRef.current, event);
-      },
-    });
-    sessionIdRef.current = created.session.sessionId;
-    const open: OpenSession = {
-      workspacePath,
-      session: created.session,
-      gate: created.gate,
-      listeners: created.listeners,
-      inflight: null,
-      unsubscribe: created.unsubscribe,
-    };
-    return { session: created.session, gate: created.gate, open };
-  }
 
   private attach(open: OpenSession): void {
     const sessionId = open.session.sessionId;
@@ -433,5 +410,37 @@ export class PiEngine implements Engine {
 
   private emitSessionsChanged(workspacePath: string): void {
     for (const listener of this.listeners) listener(workspacePath);
+  }
+
+  private sessionFactoryDeps(): Parameters<typeof openPiSession>[0] {
+    return {
+      ...(this.options.createSettingsManager
+        ? { createSettingsManager: this.options.createSettingsManager }
+        : {}),
+      fallbackSettings: () => this.settingsManager ?? SettingsManager.create(process.cwd()),
+      modelRuntime: () => this.requireRuntime(),
+      onPiEvent: (workspacePath, sessionId, event) => {
+        void this.onPiEvent(workspacePath, sessionId, event);
+      },
+    };
+  }
+
+  /** Task-state hooks: the store stays the single writer; the engine owns session lives. */
+  private taskStateHooks(): TaskStateHooks {
+    return {
+      metadata: this.metadata,
+      sessionFor: (sessionId) => this.sessions.get(sessionId)?.session,
+      closeSession: (sessionId) => {
+        const open = this.sessions.get(sessionId);
+        if (!open) return;
+        this.sessions.delete(sessionId);
+        void teardownSession(open);
+      },
+      removeSessionFile: async (workspacePath, sessionId) => {
+        const file = await this.findSessionFile(workspacePath, sessionId);
+        if (file) await unlink(file).catch(() => undefined);
+      },
+      sessionsChanged: (workspacePath) => this.emitSessionsChanged(workspacePath),
+    };
   }
 }

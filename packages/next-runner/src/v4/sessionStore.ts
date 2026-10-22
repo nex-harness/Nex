@@ -170,6 +170,16 @@ export class SessionRuntimeStore {
     return this.engine.listSessions(workspacePath);
   }
 
+  /**
+   * True while at least one browser holds a conversation subscription. Background
+   * completions of unwatched sessions raise the sidebar unread badge
+   * (docs/next/task-state.md).
+   */
+  isWatched(sessionId: string): boolean {
+    const runtime = this.runtimes.get(sessionId);
+    return runtime !== undefined && !runtime.disposed && runtime.subscribers.size > 0;
+  }
+
   disposeRuntime(sessionId: string): void {
     const runtime = this.runtimes.get(sessionId);
     if (!runtime) return;

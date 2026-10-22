@@ -211,6 +211,18 @@ For a brand-new running session use `liveStatus:"running"` and `meta.status:"run
 
 **Minimal stub:** `subscribeControllerV4 → {ack:{subscriptionId:"ctl",mode:"snapshot",logEpoch:"ctl-epoch"}}` then emit the snapshot above; `resyncControllerV4` → same ack plus snapshot; `unsubscribeControllerV4 → null`; `listTaskList` filtered by `kind`: pinned/archived empty, timeline/active include the row; `onDynamicControllerFrame → Event.None` is not enough if you want pin state, but `{items:[],total:0,hasMore:false}` is enough to avoid errors.
 
+**Implemented behavior (server):** `listTaskList` fans out per scope to the
+owning runner (`nex-task.listPinnedTasks` / `listArchivedTasks` / `listTasks`),
+merges rows, applies the `kind` predicate (`pinned` = pinned && !archived,
+`archived` = archived, `timeline` = neither, `active` = !archived), sorts by
+`createdAt`/`updatedAt` desc with `taskId` tiebreak, filters `search` as a
+case-insensitive title substring, and returns `{items,total,hasMore}`. Rows are
+`NexTaskMeta & {sourceAvailability:"online", liveStatus}`. The server subscribes
+itself to each scope's `nex-task.onDynamicWorkspaceEvent` and pushes a fresh
+snapshot frame after any mutation (debounced per workspace), so pinned/archived
+views update without reload. `deleteArchivedTask(s)`/`mutateTask` forward to the
+owning runner. Semantics: `task-state.md`.
+
 ## 4. `model-selection` and `provider-settings`
 
 **Interfaces:** `packages/services/src/model-provider/providerFacadeServices.ts:39-99` (provider settings), `:108-111` (model selection), descriptors `:118-120`.

@@ -169,7 +169,7 @@ func TestBroadcastFanOutAndClaims(t *testing.T) {
 }
 
 func TestWindowControllerSubscribeEmitsEmptySnapshot(t *testing.T) {
-	controller := local.NewWindowController()
+	controller := local.NewWindowController(nil, nil)
 	env := &local.Env{ConnectionID: "conn-1"}
 	frames := make(chan rpcwire.Value, 4)
 	if _, err := controller.Listen(context.Background(), env, "onDynamicControllerFrame", rpcwire.Undefined{}, func(value rpcwire.Value) {
@@ -242,7 +242,7 @@ func TestWindowControllerSubscribeEmitsEmptySnapshot(t *testing.T) {
 // A resync carries only the subscriptionId; the controller must remember which
 // topic that subscription belongs to instead of defaulting to tasks-index.
 func TestWindowControllerResyncKeepsTopic(t *testing.T) {
-	controller := local.NewWindowController()
+	controller := local.NewWindowController(nil, nil)
 	env := &local.Env{ConnectionID: "conn-resync"}
 	frames := make(chan rpcwire.Value, 8)
 	if _, err := controller.Listen(context.Background(), env, "onDynamicControllerFrame", rpcwire.Undefined{}, func(value rpcwire.Value) {

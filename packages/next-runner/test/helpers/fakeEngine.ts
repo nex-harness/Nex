@@ -8,6 +8,7 @@ import type {
   EngineModelInfo,
   EngineModelState,
   EngineSessionState,
+  EngineUnreadState,
   PermissionMode,
   ResolveApprovalResult,
   SubmitOptions,
@@ -161,10 +162,61 @@ export class FakeEngine implements Engine {
     const session = this.sessions.get(sessionId);
     if (session) {
       this.sessions.set(sessionId, { ...session, title, titleSource: "custom" });
+      // Mirrors PiEngine.rename: one metadata write, one sessions-changed fan-out.
+      this.emitSessionsChanged(session.workspacePath);
     }
   }
 
   async setModel(): Promise<void> {}
+
+  /** Sidebar state double: mirrors the metadata store's single-writer semantics. */
+  async setTaskState(
+    workspacePath: string,
+    sessionId: string,
+    patch: { pinned?: boolean; archived?: boolean },
+  ): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new Error(`session ${sessionId} not found`);
+    this.sessions.set(sessionId, { ...session, ...patch });
+    this.emitSessionsChanged(workspacePath);
+  }
+
+  async setTaskUnread(
+    workspacePath: string,
+    sessionId: string,
+    unreadAt: number | null,
+    expectedUnreadAt?: number,
+  ): Promise<EngineUnreadState> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return { cleared: false };
+    if (unreadAt === null && typeof expectedUnreadAt === "number") {
+      if (session.unreadAt !== expectedUnreadAt) {
+        return {
+          cleared: false,
+          ...(typeof session.unreadAt === "number" ? { unreadAt: session.unreadAt } : {}),
+        };
+      }
+    }
+    const next = { ...session };
+    if (typeof unreadAt === "number") next.unreadAt = unreadAt;
+    else delete next.unreadAt;
+    this.sessions.set(sessionId, next);
+    this.emitSessionsChanged(workspacePath);
+    return {
+      cleared: unreadAt === null,
+      ...(typeof next.unreadAt === "number" ? { unreadAt: next.unreadAt } : {}),
+    };
+  }
+
+  async deleteTaskIfArchived(workspacePath: string, sessionId: string): Promise<boolean> {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.archived !== true || this.tombstones.has(sessionId)) return false;
+    this.sessions.delete(sessionId);
+    this.tombstones.add(sessionId);
+    this.deleted.push({ workspacePath, sessionId });
+    this.emitSessionsChanged(workspacePath);
+    return true;
+  }
 
   async catalog(): Promise<EngineCatalog> {
     return this.catalogValue;

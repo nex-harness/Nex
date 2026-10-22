@@ -45,6 +45,19 @@ export interface EngineSessionState {
   /** Last submission's permission mode; seeds the restored projection. */
   mode?: PermissionMode;
   planEnabled?: boolean;
+  /** Sidebar organization state (docs/next/task-state.md). Absent = false. */
+  pinned?: boolean;
+  archived?: boolean;
+  /** Newest unread background completion; absent means read. */
+  unreadAt?: number;
+}
+
+/** Serialized result of a compare-and-clear unread write. */
+export interface EngineUnreadState {
+  /** Marker after the write; absent means read. */
+  unreadAt?: number;
+  /** True only when the expected marker matched and was cleared. */
+  cleared: boolean;
 }
 
 /** Normalized transcript used for restore; mirrors the pi message shapes we consume. */
@@ -240,6 +253,26 @@ export interface Engine {
   abort(sessionId: string): Promise<void>;
 
   rename(sessionId: string, title: string): Promise<void>;
+
+  // ── sidebar task state (docs/next/task-state.md); metadata store is the single writer ──
+
+  /** Sets pinned/archived flags. Returns the persisted row for the caller's event payload. */
+  setTaskState(
+    workspacePath: string,
+    sessionId: string,
+    patch: { pinned?: boolean; archived?: boolean },
+  ): Promise<void>;
+
+  /** Writes the unread marker (a number) or clears it (null). */
+  setTaskUnread(
+    workspacePath: string,
+    sessionId: string,
+    unreadAt: number | null,
+    expectedUnreadAt?: number,
+  ): Promise<EngineUnreadState>;
+
+  /** Conditional tombstone: only while the row is still archived and not deleted. */
+  deleteTaskIfArchived(workspacePath: string, sessionId: string): Promise<boolean>;
 
   setModel(sessionId: string, selection: ModelSelection | undefined): Promise<void>;
 

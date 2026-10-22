@@ -36,6 +36,7 @@ agent-runner (packages/next-runner, Node 24 + pi SDK) × N machines
 | State                                               | Owner                                   | Notes                                                       |
 | --------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------- |
 | Transcript, session list, conversation seq/logEpoch | runner                                  | pi session files under the runner data dir                  |
+| Sidebar task state (pin/archive/unread/rename/delete) | runner (metadata store)               | single writer; see `task-state.md`                          |
 | Model catalog, API keys                             | runner (MVP)                            | read from runner env / pi `auth.json`; server push is later |
 | Which runners/workspaces exist                      | server (in memory, from runner `hello`) | runner is the source; server forgets on disconnect          |
 | UI settings (`setting` channel)                     | server (JSON file)                      |                                                             |
@@ -120,7 +121,11 @@ Implemented by the server itself:
 
 - `setting` (full default AppSettings; `recentProjects` = routed workspaces),
   `broadcast`
-- `window-controller` (empty pinned list; controller snapshots on subscribe)
+- `window-controller`: `listTaskList` fans out to the runner owning each
+  `workspaceScopes[]` entry (`nex-task.listPinnedTasks` / `listArchivedTasks` /
+  `listTasks`), merges/sorts/searches/limits, and pushes snapshot controller
+  frames. `deleteArchivedTask(s)` / `mutateTask` forward to the owning runner's
+  `nex-task` mutations. Task-state semantics: `task-state.md`.
 - `model-selection`, `provider-settings`: `getView` forwards to the runner named
   by the optional `workspaceIdentity` in its input, else to the first connected
   runner; `onDidChange` stays on the first connected runner (the model catalog
@@ -141,9 +146,14 @@ Forwarded to the owning runner, by `workspaceIdentity` first and
 - `nex-agent`: v4 conversation subscribe/resync/unsubscribe/command/rowsRange,
   `onDynamicConversationFrame`, sessions-index subscribe/resync/unsubscribe,
   `onDynamicSessionsIndexFrame`.
-- `nex-task`: `listTasks`, `listPinnedTasks`, `listArchivedTasks`,
-  `listPinnedTaskIds`, `listDeletedTaskIds`, `onDynamicWorkspaceEvent`. The
-  project sidebar builds rows from these, not from the sessions index.
+- `nex-task`: `listTasks` (project rows: not draft/pinned/archived),
+  `listPinnedTasks`, `listArchivedTasks`, `listPinnedTaskIds` (first runner;
+  supplemental), `listDeletedTaskIds`, `archiveTask`, `unarchiveTask`,
+  `setTaskPinned`, `setTaskUnread`, `renameTask`, `deleteTask`,
+  `deleteArchivedTask`, `deleteArchivedTasks`, `onDynamicWorkspaceEvent`. The
+  project sidebar builds rows from these, not from the sessions index. Return
+  values are validated against `nexTaskMetaSchema`; semantics and event reasons
+  are specified in `task-state.md`.
 - `nex-session.readWorkspacePresentation`.
 
 Unknown event names on a known channel return an empty event (never fire).

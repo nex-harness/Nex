@@ -24,6 +24,25 @@ export interface SessionMetaEntry {
   mode?: PermissionMode;
   planEnabled?: boolean;
   seenRequestIds?: string[];
+  /**
+   * Sidebar organization state (docs/next/task-state.md). Files written by older runners
+   * lack these keys; missing means "not pinned / not archived / read" everywhere.
+   */
+  pinned?: boolean;
+  pinnedAt?: number;
+  archived?: boolean;
+  archivedAt?: number;
+  /** Newest unread background completion; missing = read. */
+  unreadAt?: number;
+}
+
+/** Sidebar state patch. `unreadAt: null` clears the field (undefined = leave unchanged). */
+export interface TaskStatePatch {
+  pinned?: boolean;
+  archived?: boolean;
+  unreadAt?: number | null;
+  title?: string;
+  titleSource?: EngineTitleSource;
 }
 
 interface WorkspaceMetaFile {
@@ -104,6 +123,30 @@ export class SessionMetaStore {
     return this.upsert(workspacePath, sessionId, {
       deleted: true,
       lastActivityAt: Date.now(),
+    });
+  }
+
+  /**
+   * Runs one read-modify-write inside the workspace queue and returns the recipe's result.
+   *
+   * 修复依据：归档条件删除和未读 compare-and-clear 的“检查 + 写入”必须与其它写入
+   * 串行（原 tasks-index 用同一写事务保证这一点）。分成先 get 再 upsert 会让另一端
+   * 的 unarchive 插进中间，删掉刚恢复的任务。recipe 返回 `{ next: null }` 表示放弃写入。
+   */
+  update<T>(
+    workspacePath: string,
+    sessionId: string,
+    recipe: (current: SessionMetaEntry | undefined) => { next: SessionMetaEntry | null; result: T },
+  ): Promise<T> {
+    return this.queue.run(workspacePath, async () => {
+      const file = await this.read(workspacePath);
+      const index = file.sessions.findIndex((entry) => entry.sessionId === sessionId);
+      const outcome = recipe(index === -1 ? undefined : (file.sessions[index] as SessionMetaEntry));
+      if (!outcome.next) return outcome.result;
+      if (index === -1) file.sessions.push(outcome.next);
+      else file.sessions[index] = outcome.next;
+      await this.write(workspacePath, file);
+      return outcome.result;
     });
   }
 
