@@ -426,9 +426,15 @@ try {
     reloadedKeys.some((key) => key.startsWith(`${betaIdentity}:`)),
     { reloadedKeys },
   );
-  check("taskTitleVisibleAfterReload", /Reply with exactly: beta-ok/i.test(reloadedBody), {
-    tail: reloadedBody.slice(-600),
-  });
+  // Titles are model-generated (e.g. "beta-4ok"), so assert that the same session row is
+  // still listed under beta rather than matching title text.
+  check(
+    "taskTitleVisibleAfterReload",
+    Boolean(taskId) && reloadedKeys.includes(`${betaIdentity}:${taskId}`),
+    {
+      tail: reloadedBody.slice(-600),
+    },
+  );
   check("reloadKeepsBetaMachine", (await workspaceIdentities()).includes(betaIdentity), {
     identities: await workspaceIdentities(),
   });

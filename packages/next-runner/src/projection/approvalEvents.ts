@@ -1,4 +1,5 @@
 import type { EngineEvent } from "../engine/types.js";
+import { fallbackTurnId } from "./messageIdentity.js";
 import { mapToolInput, toolDisplayName } from "./toolMapping.js";
 import {
   allocateRowId,
@@ -44,7 +45,7 @@ export function applyApprovalRequest(
         ...working.rows,
         {
           rowId: allocated.id,
-          turnId: working.currentTurn?.turnId ?? "turn-1",
+          turnId: working.currentTurn?.turnId ?? fallbackTurnId(working),
           kind: "toolCall",
           toolCallId: approval.toolCallId,
           toolName: toolDisplayName(approval.toolName),

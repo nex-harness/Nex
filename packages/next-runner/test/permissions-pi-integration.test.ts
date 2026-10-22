@@ -79,6 +79,9 @@ async function startSession(mode: string, planEnabled = false): Promise<Harness>
     logger,
     createModelRuntime: makeRuntime,
     createSettingsManager: () => SettingsManager.inMemory(),
+    // These tests script exactly one faux response per agent call; a title request would
+    // consume one. Pinned so an operator's NEX_RUNNER_TITLE_MODEL cannot redirect them.
+    titleSettings: { enabled: false },
   });
   await engine.init();
   const { sessionId } = await engine.createSession(workspace, {

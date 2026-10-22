@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { Logger } from "../../logger.js";
 import { KeyedQueue, writeJsonAtomic } from "../../util/fs.js";
 import type {
+  EngineFollowupMode,
   EngineModelState,
   EnginePhase,
   EngineTitleSource,
@@ -23,6 +24,8 @@ export interface SessionMetaEntry {
   /** Last submission's permission mode; seeds `snapshot.config.mode` after a restart. */
   mode?: PermissionMode;
   planEnabled?: boolean;
+  /** Composer follow-up mode (`queue` | `guide`); absent = runner default. */
+  followupMode?: EngineFollowupMode;
   seenRequestIds?: string[];
   /**
    * Sidebar organization state (docs/next/task-state.md). Files written by older runners

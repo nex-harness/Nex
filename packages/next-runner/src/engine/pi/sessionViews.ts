@@ -65,6 +65,7 @@ export function toEngineSessionStates(
       isRunning: open?.streaming ?? false,
       mode: open ? open.mode : (entry.mode ?? "build"),
       planEnabled: open ? open.planEnabled : (entry.planEnabled ?? false),
+      ...(entry.followupMode ? { followupMode: entry.followupMode } : {}),
       pinned: entry.pinned === true,
       archived: entry.archived === true,
       ...(typeof entry.unreadAt === "number" ? { unreadAt: entry.unreadAt } : {}),

@@ -1,5 +1,7 @@
+import type { RowActions } from "@nex/shared/nex-protocol-v4";
 import type {
   EngineApprovalOutcome,
+  EngineFollowupMode,
   EnginePhase,
   EngineTitleSource,
   EngineUsage,
@@ -12,11 +14,22 @@ export type ProjectedRow =
   | UserInputRowState
   | AssistantTextRowState
   | ReasoningRowState
-  | ToolCallRowState;
+  | ToolCallRowState
+  | TimelineMarkerRowState;
 
 interface RowBase {
   rowId: number;
   turnId: string;
+  /**
+   * Stable identity across runner restarts (`pi:<entryId>`, see `entityIds.ts`). Live rows
+   * get it from the `message_entry` event that follows pi's message persistence; restore
+   * derives the same value from `SessionManager.getBranch()`.
+   */
+  entityId?: string;
+  /** Internal: index of this text/thinking segment inside the assistant message. */
+  segmentIndex?: number;
+  /** Derived per snapshot (docs/next/conversation-features.md decision 1); never stored. */
+  actions?: RowActions;
   createdAt: number;
   createdAtSeq: number;
 }
@@ -65,6 +78,45 @@ export interface ToolCallRowState extends RowBase {
   endedAt?: number;
 }
 
+/** Marker payloads this runner can produce (subset of `timelineMarkerPayloadSchema`). */
+export type TimelineMarker =
+  | {
+      type: "modelChange";
+      fromProvider: string;
+      fromModel: string;
+      toProvider: string;
+      toModel: string;
+      toThought: string;
+    }
+  | {
+      type: "modelChange";
+      toProvider: string;
+      toModel: string;
+      toThought: string;
+    }
+  | {
+      type: "compact";
+      origin: "manual" | "auto";
+      status: "running" | "success" | "failed" | "noop" | "cancelled";
+      tokensBefore?: number;
+      tokensAfter?: number;
+      summaryRef?: string;
+    };
+
+/** Backwards-compatible alias for the modelChange-only payload. */
+export type ModelChangeMarker = Extract<TimelineMarker, { type: "modelChange" }>;
+
+/**
+ * Timeline marker row (rows.ts `timelineMarkerRowSchema`). `modelChange` comes from the
+ * live model switch; `compact` is projected on restore from pi's compaction entries.
+ */
+export interface TimelineMarkerRowState extends RowBase {
+  kind: "timelineMarker";
+  lane?: "assistantWork" | "turnTailBoundary" | "lightBoundary";
+  sourceCommandId?: string;
+  marker: TimelineMarker;
+}
+
 /** Mirrors one live `EngineApprovalRequest`; the gate remains its owner. */
 export interface PendingApprovalState {
   interactionId: string;
@@ -99,6 +151,8 @@ export interface ProjectionState {
   /** Permission mode echoed in `snapshot.config`; the gate is the authority. */
   mode: PermissionMode;
   planEnabled: boolean;
+  /** Composer follow-up mode (snapshot `config.followupMode` + `inputRouting`). */
+  followupMode: EngineFollowupMode;
   rows: ProjectedRow[];
   nextRowId: number;
   currentTurn: {
@@ -110,13 +164,32 @@ export interface ProjectionState {
     responseId: string;
     at: number;
     model?: string;
+    /** Live open text row; cleared when a tool call closes the current text segment. */
     textRowId?: number;
     reasoningRowId?: number;
+    /** Number of text segments already opened for this message (entityId suffix). */
+    textSegments: number;
+    /** Number of thinking segments already opened for this message. */
+    thinkingSegments: number;
   } | null;
   toolRows: Record<string, number>;
+  /**
+   * Assistant messages whose pi entry id has not arrived yet. `message_entry` attaches the
+   * persisted entry id to the rows of the oldest matching group (see `entityIds.ts`).
+   * Internal only — never serialized.
+   */
+  pendingMessageGroups: PendingMessageGroup[];
   /** Live approval cards, keyed by interactionId (insertion order = request order). */
   pendingApprovals: Record<string, PendingApprovalState>;
   lastError: ProjectionError | null;
+}
+
+/** One pi message's rows, waiting for its persisted entry id. */
+export interface PendingMessageGroup {
+  kind: "user" | "assistant";
+  rowIds: number[];
+  /** Only for `user`: the turnHeader created alongside the input row. */
+  headerRowId?: number;
 }
 
 export interface CreateProjectionInput {
@@ -129,6 +202,7 @@ export interface CreateProjectionInput {
   phase?: EnginePhase;
   mode?: PermissionMode;
   planEnabled?: boolean;
+  followupMode?: EngineFollowupMode;
 }
 
 export function createProjection(input: CreateProjectionInput): ProjectionState {
@@ -147,11 +221,13 @@ export function createProjection(input: CreateProjectionInput): ProjectionState 
     usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     mode: input.mode ?? "build",
     planEnabled: input.planEnabled ?? false,
+    followupMode: input.followupMode ?? "queue",
     rows: [],
     nextRowId: 1,
     currentTurn: null,
     currentResponse: null,
     toolRows: {},
+    pendingMessageGroups: [],
     pendingApprovals: {},
     lastError: null,
   };
@@ -159,6 +235,19 @@ export function createProjection(input: CreateProjectionInput): ProjectionState 
 
 export function bump(state: ProjectionState): ProjectionState {
   return { ...state, seq: state.seq + 1, revision: state.revision + 1 };
+}
+
+/**
+ * `seq` advances on every published change (the snapshot watermark), but `revision` is the
+ * CAS token and must follow the old CLI's closed definition
+ * (`projection-state.ts:196-215`): row structure and the revision-bearing A-zone fields.
+ *
+ * This runner has no deltas — it republishes whole snapshots — so the distinction is
+ * expressed as two helpers: `touch` bumps `seq` only (streaming text growth, usage), and
+ * `bump` bumps both (row add/update/remove, meta, config, queue, interactions).
+ */
+export function touch(state: ProjectionState): ProjectionState {
+  return { ...state, seq: state.seq + 1 };
 }
 
 export function allocateRowId(state: ProjectionState): { id: number; next: number } {

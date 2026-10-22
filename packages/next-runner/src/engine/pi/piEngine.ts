@@ -1,11 +1,8 @@
-import { mkdir, unlink } from "node:fs/promises";
 import {
   ModelRuntime,
-  SessionManager,
   SettingsManager,
   type AgentSessionEvent,
 } from "@earendil-works/pi-coding-agent";
-import type { Model } from "@earendil-works/pi-ai";
 import type { ModelSelection } from "@nex/shared";
 import type { Logger } from "../../logger.js";
 import type {
@@ -14,6 +11,7 @@ import type {
   EngineCatalog,
   EngineEvent,
   EngineEventSubscription,
+  EngineFollowupMode,
   EngineMessage,
   EngineSessionState,
   EngineUnreadState,
@@ -21,23 +19,26 @@ import type {
   ResolveApprovalResult,
   SubmitOptions,
   SubmitOutcome,
+  SwitchModelConfigInput,
+  SwitchModelConfigOutcome,
 } from "../types.js";
 import { SessionMetaStore } from "./metaStore.js";
 import { toEngineSessionStates, teardownSession } from "./sessionViews.js";
-import {
-  deleteTaskIfArchivedImpl,
-  deleteTaskImpl,
-  setTaskStateImpl,
-  setTaskUnreadImpl,
-  type TaskStateHooks,
-} from "./taskStateOps.js";
+import { createTaskStateApi, deleteTaskImpl } from "./taskStateOps.js";
 import { EMPTY_USAGE, defaultTitle, selectionFor, usageFromSession } from "./sessionHelpers.js";
-import { buildCatalog, resolveModel } from "./modelCatalog.js";
-import { toEngineHistory } from "./translate.js";
+import { buildCatalog } from "./modelCatalog.js";
+import { toEngineBranchHistory } from "./translate.js";
+import { reportMessageEntry } from "./messageEntries.js";
 import { normalizeMode } from "../permissions/policy.js";
 import { openPiSession, type OpenSession } from "./sessionLifecycle.js";
-import { findSessionFile as findSessionFileInDir, sessionDirFor } from "./piSessionFiles.js";
-import { applyModelSelection, handlePiSessionEvent, startPromptRun } from "./piSessionOps.js";
+import { handlePiSessionEvent } from "./piSessionOps.js";
+import { applyEngineSelection, startEnginePrompt, type PromptOpsDeps } from "./promptOps.js";
+import type { SessionConfigOps } from "./sessionConfigOps.js";
+import { createEngineOps } from "./engineOps.js";
+import { createEngineSession, restoreEngineSession } from "./sessionCreateOps.js";
+import { createHookFactories, sessionDirFactory } from "./engineHooks.js";
+import type { TitleCompletionRequest, TitleGenerationSettings } from "./titleGenerator.js";
+import type { TitleCoordinator } from "./titleRunner.js";
 
 export interface PiEngineOptions {
   dataDir: string;
@@ -46,6 +47,10 @@ export interface PiEngineOptions {
   createModelRuntime?: () => Promise<ModelRuntime>;
   /** Test seam: in-memory settings instead of the user's settings.json. */
   createSettingsManager?: (workspacePath: string) => SettingsManager;
+  /** Test seam: title generation settings instead of `NEX_RUNNER_TITLES` / `NEX_RUNNER_TITLE_MODEL`. */
+  titleSettings?: TitleGenerationSettings;
+  /** Test seam: runs one title completion; the engine resolves the model and context. */
+  completeTitle?: (request: TitleCompletionRequest) => Promise<string>;
 }
 
 /**
@@ -58,6 +63,11 @@ export class PiEngine implements Engine {
   private readonly sessions = new Map<string, OpenSession>();
   private readonly listeners = new Set<(workspacePath: string) => void>();
   private readonly metadata: SessionMetaStore;
+  private readonly configOps: SessionConfigOps;
+  private readonly titleSettings: TitleGenerationSettings;
+  private readonly titles: TitleCoordinator;
+  private readonly taskApi: ReturnType<typeof createTaskStateApi>;
+  private readonly hooks: ReturnType<typeof createHookFactories>;
   private modelRuntime: ModelRuntime | null = null;
   private settingsManager: SettingsManager | null = null;
   private catalogCache: EngineCatalog | null = null;
@@ -65,6 +75,31 @@ export class PiEngine implements Engine {
 
   constructor(private readonly options: PiEngineOptions) {
     this.metadata = new SessionMetaStore(options.dataDir, options.logger);
+    this.hooks = createHookFactories({
+      dataDir: options.dataDir,
+      metadata: this.metadata,
+      sessions: this.sessions,
+      sessionDir: sessionDirFactory(options.dataDir),
+      attach: (open) => this.attach(open),
+      teardown: teardownSession,
+      sessionsChanged: (workspacePath) => this.emitSessionsChanged(workspacePath),
+      factoryDeps: () => this.sessionFactoryDeps(),
+      runtime: () => this.requireRuntime(),
+    });
+    this.taskApi = createTaskStateApi(this.hooks.taskStateHooks());
+    const ops = createEngineOps({
+      logger: options.logger,
+      metadata: this.metadata,
+      ...(options.titleSettings ? { titleSettings: options.titleSettings } : {}),
+      ...(options.completeTitle ? { completeTitle: options.completeTitle } : {}),
+      runtime: () => this.requireRuntime(),
+      sessionFor: (sessionId) => this.sessions.get(sessionId)?.session,
+      emit: (sessionId, event) => this.emitEngineEvent(sessionId, event),
+      sessionsChanged: (workspacePath) => this.emitSessionsChanged(workspacePath),
+    });
+    this.configOps = ops.configOps;
+    this.titles = ops.titles;
+    this.titleSettings = ops.titleSettings;
   }
 
   async init(): Promise<void> {
@@ -84,72 +119,18 @@ export class PiEngine implements Engine {
     options: CreateEngineSessionOptions,
   ): Promise<{ sessionId: string; inputId?: string }> {
     await this.init();
-    const runtime = this.requireRuntime();
-    const model = await resolveModel(options.modelSelection, runtime);
-    const sessionDir = this.sessionDir(workspacePath);
-    await mkdir(sessionDir, { recursive: true });
-    const sessionManager = SessionManager.create(workspacePath, sessionDir);
-    const { session, open } = await openPiSession(
-      this.sessionFactoryDeps(),
-      workspacePath,
-      sessionManager,
-      model,
-    );
-    const sessionId = session.sessionId;
-    const now = Date.now();
-    const selection = model ? selectionFor(session) : undefined;
-    await this.metadata.upsert(workspacePath, sessionId, {
-      createdAt: now,
-      lastActivityAt: now,
-      phase: "draft",
-      title: "",
-      titleSource: "default",
-      deleted: false,
-      mode: "build",
-      planEnabled: false,
-      ...(selection ? { model: selection } : {}),
-    });
-    this.attach(open);
-    this.emitSessionsChanged(workspacePath);
-    return { sessionId };
+    return createEngineSession(this.hooks.sessionCreateDeps(), workspacePath, options);
   }
 
   async openSession(workspacePath: string, sessionId: string): Promise<void> {
     await this.init();
     if (this.sessions.has(sessionId)) return;
-    const meta = await this.metadata.get(workspacePath, sessionId);
-    if (meta?.deleted) throw new Error(`Session ${sessionId} is deleted`);
-    const sessionFile = await this.findSessionFile(workspacePath, sessionId);
-    if (!sessionFile) throw new Error(`Session ${sessionId} not found`);
-    const sessionManager = SessionManager.open(sessionFile, this.sessionDir(workspacePath));
-    const runtime = this.requireRuntime();
-    const restoredModel = meta?.model
-      ? (runtime.getModel(meta.model.providerId, meta.model.modelId) as Model<never> | undefined)
-      : undefined;
-    const { session, gate, open } = await openPiSession(
-      this.sessionFactoryDeps(),
-      workspacePath,
-      sessionManager,
-      restoredModel,
-    );
-    if (meta?.model?.thought) {
-      session.setThinkingLevel(meta.model.thought as never);
-    }
-    gate.setMode(meta?.mode ?? "build", meta?.planEnabled ?? false);
-    this.attach(open);
-    await this.metadata.upsert(workspacePath, sessionId, {
-      createdAt: meta?.createdAt ?? Date.now(),
-      lastActivityAt: meta?.lastActivityAt ?? Date.now(),
-      title: meta?.title ?? "",
-      titleSource: meta?.titleSource ?? "default",
-      model: selectionFor(session) ?? meta?.model,
-      phase: session.isStreaming ? "running" : (meta?.phase ?? "completedSuccess"),
-    });
+    await restoreEngineSession(this.hooks.sessionCreateDeps(), workspacePath, sessionId);
   }
 
   async deleteSession(workspacePath: string, sessionId: string): Promise<void> {
     await this.init();
-    await deleteTaskImpl(this.taskStateHooks(), workspacePath, sessionId);
+    await deleteTaskImpl(this.hooks.taskStateHooks(), workspacePath, sessionId);
   }
 
   async listSessions(workspacePath: string): Promise<EngineSessionState[]> {
@@ -184,8 +165,10 @@ export class PiEngine implements Engine {
 
   async history(sessionId: string): Promise<EngineMessage[]> {
     const open = this.requireOpen(sessionId);
-    open.session.refreshContext();
-    return toEngineHistory(open.session.messages);
+    // 修复依据（research §0-b）：`session.messages` 是喂给模型的投影上下文——压缩后旧消息
+    // 被 summary 取代、`branch()` 后废弃分支消失。restore 必须读 pi 的原始分支，才能把压缩
+    // 边界投影成 marker、并保留压缩前的行；每条 message 还带稳定 entryId 供 entityId 派生。
+    return toEngineBranchHistory(open.session.sessionManager.getBranch());
   }
 
   subscribe(sessionId: string, listener: (event: EngineEvent) => void): EngineEventSubscription {
@@ -222,6 +205,10 @@ export class PiEngine implements Engine {
     });
     if (text.trim().length > 0) {
       const inputId = await this.startPrompt(workspacePath, sessionId, text, options.requestId);
+      // 标题生成在首条 prompt 启动后以 fire-and-forget 进行（docs/next/
+      // conversation-features.md 决策 8，旧 CLI 同样是首条 query 落库后并发启动）：
+      // 永不 await、永不改变本次 turn 的结果，失败只记 warn。
+      this.titles.maybeStart(workspacePath, sessionId, text, meta);
       return { status: "accepted", inputId };
     }
     this.emitSessionsChanged(workspacePath);
@@ -274,6 +261,22 @@ export class PiEngine implements Engine {
     await this.applySelection(sessionId, selection);
   }
 
+  async switchModelConfig(
+    workspacePath: string,
+    sessionId: string,
+    input: SwitchModelConfigInput,
+  ): Promise<SwitchModelConfigOutcome> {
+    return this.configOps.switchModelConfig(workspacePath, sessionId, input);
+  }
+
+  async setFollowupMode(
+    workspacePath: string,
+    sessionId: string,
+    mode: EngineFollowupMode,
+  ): Promise<{ previous: EngineFollowupMode; mode: EngineFollowupMode }> {
+    return this.configOps.setFollowupMode(workspacePath, sessionId, mode);
+  }
+
   /**
    * Sidebar pin/archive (docs/next/task-state.md). The metadata row is the single source
    * the list filters and the event diff read.
@@ -284,7 +287,7 @@ export class PiEngine implements Engine {
     patch: { pinned?: boolean; archived?: boolean },
   ): Promise<void> {
     await this.init();
-    await setTaskStateImpl(this.taskStateHooks(), workspacePath, sessionId, patch);
+    await this.taskApi.setTaskState(workspacePath, sessionId, patch);
   }
 
   async setTaskUnread(
@@ -294,18 +297,12 @@ export class PiEngine implements Engine {
     expectedUnreadAt?: number,
   ): Promise<EngineUnreadState> {
     await this.init();
-    return setTaskUnreadImpl(
-      this.taskStateHooks(),
-      workspacePath,
-      sessionId,
-      unreadAt,
-      expectedUnreadAt,
-    );
+    return this.taskApi.setTaskUnread(workspacePath, sessionId, unreadAt, expectedUnreadAt);
   }
 
   async deleteTaskIfArchived(workspacePath: string, sessionId: string): Promise<boolean> {
     await this.init();
-    return deleteTaskIfArchivedImpl(this.taskStateHooks(), workspacePath, sessionId);
+    return this.taskApi.deleteTaskIfArchived(workspacePath, sessionId);
   }
 
   async catalog(): Promise<EngineCatalog> {
@@ -341,6 +338,13 @@ export class PiEngine implements Engine {
     sessionId: string,
     event: AgentSessionEvent,
   ): Promise<void> {
+    // Row identity (docs/next/conversation-features.md decision 1): pi persists the
+    // message right after this listener returns, so a microtask resolves the entry id.
+    reportMessageEntry(
+      event,
+      () => this.sessions.get(sessionId),
+      (identity) => this.emitEngineEvent(sessionId, identity),
+    );
     return handlePiSessionEvent(
       {
         metadata: this.metadata,
@@ -354,39 +358,41 @@ export class PiEngine implements Engine {
     );
   }
 
+  private promptOps(): PromptOpsDeps {
+    return {
+      metadata: this.metadata,
+      logger: this.options.logger,
+      sessionsChanged: (path) => this.emitSessionsChanged(path),
+      runtime: () => this.requireRuntime(),
+      configOps: this.configOps,
+    };
+  }
+
   private async startPrompt(
     workspacePath: string,
     sessionId: string,
     text: string,
     requestId?: string,
   ): Promise<string> {
-    const open = this.requireOpen(sessionId);
-    const inputId = requestId ?? `input_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    await this.metadata.upsert(workspacePath, sessionId, {
-      lastActivityAt: Date.now(),
-      phase: "running",
-    });
-    startPromptRun(
-      {
-        metadata: this.metadata,
-        logger: this.options.logger,
-        sessionsChanged: (path) => this.emitSessionsChanged(path),
-      },
-      open,
+    return startEnginePrompt(
+      this.promptOps(),
+      this.requireOpen(sessionId),
       workspacePath,
       sessionId,
       text,
+      requestId,
     );
-    this.emitSessionsChanged(workspacePath);
-    return inputId;
   }
 
   private async applySelection(sessionId: string, selection: ModelSelection): Promise<void> {
-    const open = this.requireOpen(sessionId);
-    const runtime = this.requireRuntime();
-    await applyModelSelection(open.session, selection, (providerId, modelId) =>
-      runtime.getModel(providerId, modelId),
-    );
+    await applyEngineSelection(this.promptOps(), this.requireOpen(sessionId), sessionId, selection);
+  }
+
+  /** Synthetic engine events (title/model/followup) travel the same stream as pi events. */
+  private emitEngineEvent(sessionId: string, event: EngineEvent): void {
+    const open = this.sessions.get(sessionId);
+    if (!open) return;
+    for (const listener of open.listeners) listener(event);
   }
 
   private requireRuntime(): ModelRuntime {
@@ -398,14 +404,6 @@ export class PiEngine implements Engine {
     const open = this.sessions.get(sessionId);
     if (!open) throw new Error(`Session ${sessionId} is not open`);
     return open;
-  }
-
-  private sessionDir(workspacePath: string): string {
-    return sessionDirFor(this.options.dataDir, workspacePath);
-  }
-
-  private findSessionFile(workspacePath: string, sessionId: string): Promise<string | undefined> {
-    return findSessionFileInDir(this.sessionDir(workspacePath), sessionId);
   }
 
   private emitSessionsChanged(workspacePath: string): void {
@@ -422,25 +420,6 @@ export class PiEngine implements Engine {
       onPiEvent: (workspacePath, sessionId, event) => {
         void this.onPiEvent(workspacePath, sessionId, event);
       },
-    };
-  }
-
-  /** Task-state hooks: the store stays the single writer; the engine owns session lives. */
-  private taskStateHooks(): TaskStateHooks {
-    return {
-      metadata: this.metadata,
-      sessionFor: (sessionId) => this.sessions.get(sessionId)?.session,
-      closeSession: (sessionId) => {
-        const open = this.sessions.get(sessionId);
-        if (!open) return;
-        this.sessions.delete(sessionId);
-        void teardownSession(open);
-      },
-      removeSessionFile: async (workspacePath, sessionId) => {
-        const file = await this.findSessionFile(workspacePath, sessionId);
-        if (file) await unlink(file).catch(() => undefined);
-      },
-      sessionsChanged: (workspacePath) => this.emitSessionsChanged(workspacePath),
     };
   }
 }

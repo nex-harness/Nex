@@ -1,5 +1,26 @@
-import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { AgentSessionEvent, SessionManager } from "@earendil-works/pi-coding-agent";
 import type { EngineEvent, EngineStopReason } from "../types.js";
+
+/**
+ * Finds the persisted session entry id of a message pi just appended.
+ *
+ * pi persists `message_end` messages in `_handleAgentEvent` *after* emitting the event to
+ * subscribers (`agent-session.ts:1148-1170`), and it emits `entry_appended` only for
+ * custom/boundary/compaction entries — never for ordinary messages. The message object
+ * identity is preserved by `SessionManager.appendMessage`, so a reverse scan of the branch
+ * finds the entry pi just wrote.
+ */
+export function findMessageEntryId(
+  sessionManager: SessionManager,
+  message: unknown,
+): string | undefined {
+  const branch = sessionManager.getBranch();
+  for (let index = branch.length - 1; index >= 0; index -= 1) {
+    const entry = branch[index];
+    if (entry?.type === "message" && entry.message === message) return entry.id;
+  }
+  return undefined;
+}
 
 /**
  * pi AgentSessionEvent → engine events. `message_update` carries a cumulative

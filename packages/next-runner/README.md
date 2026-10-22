@@ -25,16 +25,18 @@ pnpm dev
 
 ### Environment
 
-| Variable                | Required    | Default                      | Meaning                                                          |
-| ----------------------- | ----------- | ---------------------------- | ---------------------------------------------------------------- |
-| `NEX_SERVER_URL`        | no          | `ws://127.0.0.1:3030/runner` | ws/wss URL; `/runner` is appended when missing                   |
-| `NEX_RUNNER_TOKEN`      | recommended | —                            | Bearer token for the upgrade request (`Authorization: Bearer …`) |
-| `NEX_RUNNER_ID`         | no          | persisted random id          | Stable identity; persisted in `<data>/runner-id.json`            |
-| `NEX_RUNNER_NAME`       | no          | hostname                     | Display name in the server registry                              |
-| `NEX_RUNNER_WORKSPACES` | **yes**     | —                            | Absolute paths, `,`- or path-delimiter-separated (at least one)  |
-| `NEX_RUNNER_DATA_DIR`   | no          | `~/.nex-next/runner`         | Sessions + per-workspace metadata                                |
-| `NEX_RUNNER_LOG_LEVEL`  | no          | `info`                       | `debug` / `info` / `warn` / `error`                              |
-| `NEX_RUNNER_VERSION`    | no          | package version              | Reported in `hello`                                              |
+| Variable                 | Required    | Default                      | Meaning                                                          |
+| ------------------------ | ----------- | ---------------------------- | ---------------------------------------------------------------- |
+| `NEX_SERVER_URL`         | no          | `ws://127.0.0.1:3030/runner` | ws/wss URL; `/runner` is appended when missing                   |
+| `NEX_RUNNER_TOKEN`       | recommended | —                            | Bearer token for the upgrade request (`Authorization: Bearer …`) |
+| `NEX_RUNNER_ID`          | no          | persisted random id          | Stable identity; persisted in `<data>/runner-id.json`            |
+| `NEX_RUNNER_NAME`        | no          | hostname                     | Display name in the server registry                              |
+| `NEX_RUNNER_WORKSPACES`  | **yes**     | —                            | Absolute paths, `,`- or path-delimiter-separated (at least one)  |
+| `NEX_RUNNER_DATA_DIR`    | no          | `~/.nex-next/runner`         | Sessions + per-workspace metadata                                |
+| `NEX_RUNNER_LOG_LEVEL`   | no          | `info`                       | `debug` / `info` / `warn` / `error`                              |
+| `NEX_RUNNER_VERSION`     | no          | package version              | Reported in `hello`                                              |
+| `NEX_RUNNER_TITLES`      | no          | on                           | `off` disables model-generated session titles                    |
+| `NEX_RUNNER_TITLE_MODEL` | no          | session model                | `provider/modelId` used only for title generation                |
 
 Logs go to stderr. Tokens and API keys are never logged; the model catalog view exposes
 an empty `apiKey` placeholder only.
@@ -99,9 +101,14 @@ src/
     toolEvents.ts         EngineEvent → ProjectionState (tool rows)
     approvalEvents.ts     approval_request/settled → pendingApproval rows + cards
     toolMapping.ts        pi tool name/args → UI tool name/args
-    restore.ts            transcript → ProjectionState (restart recovery)
+    restore.ts            pi branch → ProjectionState (restart recovery, incl. compact markers)
+    entityIds.ts          pi entry id → row entityId (`pi:<entryId>`) derivation
+    messageIdentity.ts    `message_entry` → row entityId attachment (live path)
+    rowActions.ts         edit/retry/fork affordances (old CLI materializeCommandRowActions)
+    availability.ts       snapshot.availability + inputRouting table
     snapshot.ts           ProjectionState → v4 ConversationSnapshot
   v4/
+    revisionCas.ts        baseRevision/baseLogEpoch CAS gate (stale ACKs)
     publisher.ts          facade: conversation + sessions-index + commands
     sessionStore.ts       per-session projection owner, throttled snapshot frames
     indexPublisher.ts     sessions-index snapshots
@@ -165,6 +172,31 @@ Rows are numbered monotonically within a session's `logEpoch`. A runner restart 
 new `logEpoch`; the UI resyncs on epoch change. Every published frame is a full snapshot
 (`fromSeq: 0`, `toSeq: seq`, `snapshot.seq === toSeq`) throttled to ≤ 10 fps per session
 with a trailing flush.
+
+### Row identity, actions and revision
+
+- Every row carries `entityId` = `pi:<pi entry id>` (`pi:<entry>:text:<n>` for the nth text
+  part, `pi:<entry>:thinking:<n>` for thinking, `pi:tool:<toolCallId>` for tool calls,
+  `pi:turn:<entry>` for the turnHeader). Live rows learn it from the `message_entry` engine
+  event emitted right after pi persists the message; restore derives the same value from
+  `SessionManager.getBranch()`. rowIds are per-epoch, entityIds are not — that is what makes
+  an action target survive a restart.
+- Every row also carries `productTurnId = turnId` and `visibility:"visible"`.
+- `actions` is derived per snapshot (never stored): `canEdit`+`editDisposition:"rewind"` on
+  the newest user row, `canRetry` on the newest complete assistant with a user cause,
+  `canFork` on a turn's last complete text segment when that turn ended `completedSuccess`.
+- `seq` advances on every published change; `revision` follows the old CLI's closed rule
+  (row add/update/remove and meta/config/queue/interaction changes, **not** append-only text
+  growth). Commands in `COMMANDS_REQUIRING_BASE_REVISION` are answered `stale` with the real
+  `revisionAtDecision` when `baseRevision`/`baseLogEpoch` does not match.
+
+### History is the raw pi branch
+
+`Engine.history()` reads `sessionManager.getBranch()`, not `session.messages`: the latter is
+the projected model context and drops summarized messages after compaction. Restore projects
+`message` entries 1:1, a `compaction` entry into a `timelineMarker` compact row (lane
+`assistantWork`, status `success`, origin `manual`/`auto`), and skips `branch_summary`
+entries (old CLI parity).
 
 ## Permissions ("Ask before changes")
 
@@ -249,8 +281,16 @@ heuristics understand `oldText`/`newText` pairs.
 | `provider-settings` | `getView`, `onDidChange` (never fires)                                                                                                                                                                                                                                                                                                                    |
 
 Commands: `createSession` (with or without `firstInput`; draft prewarm works),
-`sendText`, `deleteSession`, `renameSession`, `stop`, `resolveInteraction`. Unknown
-commands return `rejected` with `reasonCode:"unsupported_command"`.
+`sendText`, `deleteSession`, `renameSession`, `stop`, `resolveInteraction`,
+`switchModelConfig`, `setFollowupMode`. Unknown commands return `rejected` with
+`reasonCode:"unsupported_command"`.
+
+`switchModelConfig {provider, model, thought}` applies pi's `setModel` + clamped
+`setThinkingLevel`, persists the selection, and appends a `timelineMarker`
+(`modelChange`, lane `lightBoundary`) when the model identity changes. Identical values
+return `noop` (`config.unchanged`); an unknown provider/model returns `failed`
+(`provider.notInRegistry`). `setFollowupMode {mode}` stores `queue`/`guide` in metadata and
+the snapshot's `config.followupMode`; pi's own follow-up drain granularity is untouched.
 
 `resolveInteraction {interactionId, answer:{optionId, freeText?}}` forwards the answer to
 the session's `PermissionGate`. ACK: `accepted` with
@@ -336,11 +376,21 @@ publisher tests; an in-process `ws` server drives the link test.
   list, so sessions created by running `pi` directly in the same workspace are not listed.
 - **No attachments** (`attachment*` / `conversationFileChangesV4` etc. are not
   implemented); the composer's happy path does not need them.
+- **Conversation actions are advertised but not served yet.** `actions` renders edit /
+  retry / fork affordances and `availability` allows only `switchModelConfig` and
+  `setFollowupMode`; `editUserQuery`, `retryTurn` and `forkAssistant` are answered
+  `rejected` (`unsupported_command`) until their batches land. `inputRouting` reports
+  `enqueue`/`guide` for a busy session, but the runner-owned queue (and its drain) arrives
+  with batch 2c: busy text still goes to pi's follow-up channel.
 - **Permissions are session-scoped and in memory.** Pending approvals do not survive a
   runner restart, and "Always allow in this session" is a per-gate set (no project rules,
   no persistence). Plan mode is a hard deny, not a planning UI.
-- **Titles are not model-generated.** Default is the first user message truncated to 60
-  chars (`titleSource:"default"`); rename sets `"custom"`.
+- **Titles are model-generated on the first prompt.** A title is generated once per session
+  when the first input is ≥ 10 chars and the title is not `custom`, using the session model
+  (or `NEX_RUNNER_TITLE_MODEL`) with the old CLI's title prompt. It is fire-and-forget: it
+  never blocks the turn, failures are `warn` logs, and a user rename during generation wins.
+  `NEX_RUNNER_TITLES=off` disables it. The default is the first user message truncated to
+  60 chars (`titleSource:"default"`); rename sets `"custom"`.
 - **`thinkingLevel` mapping uses pi's own capability set**; levels beyond
   `off|minimal|low|medium|high` (`xhigh`, `max`) are exposed only when pi reports them.
 - **Workspace path uniqueness is the server's job.** The runner just announces its list.

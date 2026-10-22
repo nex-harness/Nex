@@ -4,6 +4,7 @@ import type {
   EngineCatalog,
   EngineEvent,
   EngineEventSubscription,
+  EngineFollowupMode,
   EngineMessage,
   EngineModelInfo,
   EngineModelState,
@@ -13,6 +14,8 @@ import type {
   ResolveApprovalResult,
   SubmitOptions,
   SubmitOutcome,
+  SwitchModelConfigInput,
+  SwitchModelConfigOutcome,
 } from "../../src/engine/types.js";
 
 /**
@@ -44,6 +47,11 @@ export class FakeEngine implements Engine {
   };
 
   async init(): Promise<void> {}
+
+  /** Test hook: adds a catalog model so a switch can change the model identity. */
+  registerModel(info: EngineModelInfo): void {
+    this.catalogValue = { ...this.catalogValue, models: [...this.catalogValue.models, info] };
+  }
 
   async createSession(
     workspacePath: string,
@@ -168,6 +176,80 @@ export class FakeEngine implements Engine {
   }
 
   async setModel(): Promise<void> {}
+
+  /**
+   * Model double: mirrors the real engine's outcome shape. `switchModelConfig` updates the
+   * session model and emits `model_changed` (+ a `model_change_marker` when the identity
+   * changed) so projection/CAS tests exercise the same event path.
+   */
+  async switchModelConfig(
+    workspacePath: string,
+    sessionId: string,
+    input: SwitchModelConfigInput,
+  ): Promise<SwitchModelConfigOutcome> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return { status: "failed", reasonCode: "session.notOpen" };
+    const providerId = input.provider.trim();
+    const modelId = input.model.trim();
+    const known = this.catalogValue.models.find(
+      (model) => model.providerId === providerId && model.modelId === modelId,
+    );
+    if (!known) return { status: "failed", reasonCode: "provider.notInRegistry" };
+    const current = session.model;
+    const previous = current ? { provider: current.providerId, model: current.modelId } : undefined;
+    const identityChanged =
+      !current || current.providerId !== providerId || current.modelId !== modelId;
+    const thought = input.thought.trim() || current?.thought || "off";
+    if (!identityChanged && thought === current?.thought) {
+      return {
+        status: "unchanged",
+        reasonCode: "config.unchanged",
+        ...(current ? { model: current } : {}),
+        modelIdentityChanged: false,
+        ...(previous ? { previous } : {}),
+      };
+    }
+    const model: EngineModelState = {
+      providerId,
+      modelId,
+      displayName: known.modelName,
+      thought,
+      thoughtLevels: known.reasoningLevels,
+    };
+    this.sessions.set(sessionId, { ...session, model });
+    this.emit(sessionId, { type: "model_changed", at: Date.now(), model });
+    if (identityChanged) {
+      this.emit(sessionId, {
+        type: "model_change_marker",
+        at: Date.now(),
+        ...(previous ? { from: previous } : {}),
+        to: { provider: providerId, model: modelId, thought },
+      });
+    }
+    this.emitSessionsChanged(workspacePath);
+    return {
+      status: "changed",
+      model,
+      modelIdentityChanged: identityChanged,
+      ...(previous ? { previous } : {}),
+    };
+  }
+
+  async setFollowupMode(
+    workspacePath: string,
+    sessionId: string,
+    mode: EngineFollowupMode,
+  ): Promise<{ previous: EngineFollowupMode; mode: EngineFollowupMode }> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return { previous: "queue", mode };
+    const previous = session.followupMode ?? "queue";
+    if (previous !== mode) {
+      this.sessions.set(sessionId, { ...session, followupMode: mode });
+      this.emit(sessionId, { type: "followup_mode_changed", at: Date.now(), mode });
+      this.emitSessionsChanged(workspacePath);
+    }
+    return { previous, mode };
+  }
 
   /** Sidebar state double: mirrors the metadata store's single-writer semantics. */
   async setTaskState(

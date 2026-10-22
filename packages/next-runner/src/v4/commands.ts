@@ -1,13 +1,20 @@
-import type {
-  CommandAck,
-  CommandEnvelope,
-  ConversationSnapshot,
-  ModelSelection,
+import {
+  COMMANDS_REQUIRING_BASE_REVISION,
+  type CommandAck,
+  type CommandEnvelope,
+  type ConversationSnapshot,
+  type ModelSelection,
 } from "@nex/shared/nex-protocol-v4";
 import type { Logger } from "../logger.js";
 import type { Engine } from "../engine/types.js";
 import { normalizeMode } from "../engine/permissions/policy.js";
 import { buildConversationSnapshot } from "../projection/snapshot.js";
+import {
+  handleSetFollowupMode,
+  handleSwitchModelConfig,
+  type ConfigCommandContext,
+} from "./configCommands.js";
+import { checkRevisionCas } from "./revisionCas.js";
 import type { SessionRuntime, SessionRuntimeStore } from "./sessionStore.js";
 import {
   acceptedAck,
@@ -45,6 +52,20 @@ export class CommandHandler {
         previous.result,
       );
     }
+    // CAS gate (decision 3): every command that carries a base revision must match the
+    // projection's current revision, and row-targeting commands must be in the same log
+    // epoch. `revisionAtDecision` is the runner's real revision, so the client's stale-retry
+    // converges instead of guessing. Restored sessions are hydrated first: the history fold
+    // decides the base revision, and comparing against the pre-hydrate 0 would be a lie.
+    const casRuntime =
+      envelope.sessionId && COMMANDS_REQUIRING_BASE_REVISION.has(envelope.type)
+        ? this.sessions.ensure(workspacePath, envelope.sessionId)
+        : undefined;
+    if (casRuntime) {
+      await casRuntime.ready;
+      const stale = checkRevisionCas(casRuntime, envelope);
+      if (stale) return stale;
+    }
     switch (envelope.type) {
       case "createSession":
         return this.createSession(workspacePath, envelope);
@@ -58,6 +79,10 @@ export class CommandHandler {
         return this.stop(workspacePath, envelope);
       case "resolveInteraction":
         return this.resolveInteraction(workspacePath, envelope);
+      case "switchModelConfig":
+        return handleSwitchModelConfig(this.configContext(), workspacePath, envelope);
+      case "setFollowupMode":
+        return handleSetFollowupMode(this.configContext(), workspacePath, envelope);
       default:
         return rejectedAck(
           envelope.commandId,
@@ -350,6 +375,14 @@ export class CommandHandler {
       mode: nextMode,
       planEnabled: nextPlan,
       lastActivityAt: Date.now(),
+    };
+  }
+
+  private configContext(): ConfigCommandContext {
+    return {
+      engine: this.engine,
+      sessions: this.sessions,
+      remember: (runtime, commandId, ack) => runtime.acceptedCommands.set(commandId, ack),
     };
   }
 

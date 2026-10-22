@@ -62,6 +62,40 @@ pi agent_settled ─▶ drain: item reserved → promoting → prompt(item.text)
              snapshot: queue.items -= item, new turn rows
 ```
 
+## Batch 2a — implemented (row identity, history, revision CAS, availability)
+
+Status: implemented in `packages/next-runner`. It is the shared prerequisite for every
+other batch; nothing here changes the wire schema.
+
+- **Row identity.** `entityId = pi:<entryId>` (`pi:<entry>:text:<n>` /
+  `:thinking:<n>` for segments, `pi:tool:<toolCallId>`, `pi:turn:<entry>` for the
+  turnHeader). Live rows learn the entry id from a new engine event
+  `message_entry{entryId, role}`, emitted from a microtask after `message_end` because pi
+  persists messages *after* notifying subscribers and never emits `entry_appended` for
+  them. Restore derives the same ids from `SessionManager.getBranch()`, so an action target
+  survives a restart; `productTurnId = turnId` and `visibility:"visible"` on every row.
+  Turn numbering (`turn-<n>`, header ordinal) is shared by both paths — it is the UI's
+  render-unit key.
+- **Actions.** `projection/rowActions.ts` is a pure function over the row set, ported from
+  `materializeCommandRowActions`; `entityId` presence replaces the old CLI's message-id
+  table check.
+- **History.** `Engine.history()` returns the raw branch: messages keep their entry ids, a
+  `compaction` entry becomes a `timelineMarker` compact row (lane `assistantWork`, status
+  `success`, `origin` from `fromHook`, `tokensBefore`), `branch_summary` is skipped.
+- **Revision CAS.** `revision` follows `deltaBumpsRevision`: row structure and
+  meta/config/queue/interaction changes count, append-only text growth does not. Commands
+  in `COMMANDS_REQUIRING_BASE_REVISION` are compared after hydration and answered
+  `stale` (`proto.staleRevision` / `proto.staleLogEpoch`) with the real
+  `revisionAtDecision`; the UI retries config commands with that value.
+- **Availability / routing.** `fork`, `compact`, `queueEdit` and `sendQueuedNow` are denied
+  (`guard.actionUnavailable`, or `sendQueuedNowRequiresRunning` when idle); goal commands
+  are denied (`noGoalToPause` / `noGoalToResume`); `switchModelConfig` and
+  `setFollowupMode` stay allowed. `inputRouting` is `startNow` when idle,
+  `enqueue`/`guide` by `followupMode` while running, and never `choice` (held queue is
+  batch 2c).
+- **Not served yet.** `editUserQuery`, `retryTurn`, `forkAssistant` remain `rejected`
+  (`unsupported_command`); the affordances render so the later batches only add handlers.
+
 ## Acceptance
 
 - Unit tests per feature; every emitted snapshot/ACK validated with the real zod schemas.

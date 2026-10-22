@@ -156,6 +156,15 @@ export function resolveInteractionResult(clientId: string, optionId?: string): C
   };
 }
 
+/** CAS mismatch: the client's base revision/epoch is behind the runner's projection. */
+export function staleAck(
+  commandId: string,
+  revisionAtDecision: number,
+  reasonCode: string,
+): CommandAck {
+  return { commandId, status: "stale", reasonCode, revisionAtDecision };
+}
+
 export function noopAck(
   commandId: string,
   revisionAtDecision: number,

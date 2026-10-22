@@ -1,6 +1,15 @@
 import type { EngineEvent } from "../engine/types.js";
+import { toolEntityId } from "./entityIds.js";
+import { fallbackTurnId } from "./messageIdentity.js";
 import { jsonText, mapToolInput, toolDisplayName } from "./toolMapping.js";
-import { allocateRowId, bump, type ProjectionState, type ToolCallRowState } from "./state.js";
+import {
+  allocateRowId,
+  bump,
+  touch,
+  type ProjectedRow,
+  type ProjectionState,
+  type ToolCallRowState,
+} from "./state.js";
 
 type CurrentResponse = NonNullable<ProjectionState["currentResponse"]>;
 
@@ -11,8 +20,24 @@ function ensureResponse(state: ProjectionState, at: number, model?: string): Cur
       responseId: `resp-${state.seq + 1}`,
       at,
       ...(model ? { model } : {}),
+      textSegments: 0,
+      thinkingSegments: 0,
     }
   );
+}
+
+/** Registers a new tool row with the newest unfinished assistant message group. */
+function withToolRowGroup(
+  groups: ProjectionState["pendingMessageGroups"],
+  rowId: number,
+): ProjectionState["pendingMessageGroups"] {
+  for (let index = groups.length - 1; index >= 0; index -= 1) {
+    if (groups[index]?.kind !== "assistant") continue;
+    return groups.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, rowIds: [...item.rowIds, rowId] } : item,
+    );
+  }
+  return groups;
 }
 
 export function startToolCall(
@@ -39,17 +64,12 @@ export function startToolCall(
           }
         : row,
     );
-    return bump({
-      ...state,
-      rows,
-      currentResponse: { ...response, model: response.model },
-      lastActivityAt: event.at,
-    });
+    return bump({ ...state, rows, currentResponse: response, lastActivityAt: event.at });
   }
   const allocated = allocateRowId(state);
   const row: ToolCallRowState = {
     rowId: allocated.id,
-    turnId: state.currentTurn?.turnId ?? "turn-1",
+    turnId: state.currentTurn?.turnId ?? fallbackTurnId(state),
     kind: "toolCall",
     assistantResponseId: response.responseId,
     toolCallId: event.toolCallId,
@@ -57,16 +77,27 @@ export function startToolCall(
     status: "running",
     inputText: jsonText(input),
     input,
+    // toolCallId is pi-stable and unique, so the identity never depends on the message.
+    entityId: toolEntityId(event.toolCallId),
     startedAt: event.at,
     createdAt: event.at,
     createdAtSeq: state.seq + 1,
   };
   return bump({
     ...state,
-    rows: [...state.rows, row],
+    rows: [...state.rows, row] as ProjectedRow[],
     nextRowId: allocated.next,
     toolRows: { ...state.toolRows, [event.toolCallId]: allocated.id },
-    currentResponse: { ...response, model: response.model },
+    // A tool call ends the current text segment; later text becomes a new row
+    // (rows.ts comment on assistantText: appends only continue the open streaming row).
+    currentResponse: {
+      responseId: response.responseId,
+      at: response.at,
+      ...(response.model ? { model: response.model } : {}),
+      textSegments: response.textSegments,
+      thinkingSegments: response.thinkingSegments,
+    },
+    pendingMessageGroups: withToolRowGroup(state.pendingMessageGroups, allocated.id),
     phase: "running",
     lastActivityAt: event.at,
   });
@@ -83,7 +114,7 @@ export function updateToolInput(
       ? { ...row, inputText: row.inputText + event.delta }
       : row,
   );
-  return bump({ ...state, rows, lastActivityAt: event.at });
+  return touch({ ...state, rows, lastActivityAt: event.at });
 }
 
 export function updateToolOutput(
@@ -97,7 +128,7 @@ export function updateToolOutput(
       ? { ...row, outputText: event.text }
       : row,
   );
-  return bump({ ...state, rows, lastActivityAt: event.at });
+  return touch({ ...state, rows, lastActivityAt: event.at });
 }
 
 export function endToolCall(

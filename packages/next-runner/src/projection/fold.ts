@@ -4,6 +4,8 @@ import {
   applyApprovalSettled,
   clearPendingApprovals,
 } from "./approvalEvents.js";
+import { turnEntityId, userEntityId } from "./entityIds.js";
+import { addRowToAssistantGroup, attachEntryId, fallbackTurnId } from "./messageIdentity.js";
 import {
   endToolCall as endToolCallEvent,
   startToolCall as startToolCallEvent,
@@ -11,21 +13,38 @@ import {
   updateToolOutput as updateToolOutputEvent,
 } from "./toolEvents.js";
 export { mapToolInput, mapToolName, toolDisplayName } from "./toolMapping.js";
+import { appendTimelineMarker } from "./markerEvents.js";
+import { applyFollowupModeChanged, applyModelChanged, applyTitleChanged } from "./configEvents.js";
 import {
   addUsage,
   allocateRowId,
   bump,
+  touch,
   type ProjectedRow,
   type ProjectionState,
   type ReasoningRowState,
 } from "./state.js";
 
+function countTurns(state: ProjectionState): number {
+  let count = 0;
+  for (const row of state.rows) if (row.kind === "turnHeader") count += 1;
+  return count;
+}
+
 export function applyUserInput(
   state: ProjectionState,
   text: string,
-  options: { at: number; sourceCommandId: string },
+  options: {
+    at: number;
+    sourceCommandId: string;
+    /** pi session entry id when already known (`message_entry` arrived first). */
+    entryId?: string;
+  },
 ): ProjectionState {
-  const turnId = `turn-${state.seq + 1}`;
+  // Turn numbering must match `projectHistory`'s (`turn-<n>` by turnHeader ordinal), not
+  // `seq`: after a restore the two paths would otherwise disagree and a session would carry
+  // two numbering schemes, which the UI uses as its render-unit key (productTurnId).
+  const turnId = `turn-${countTurns(state) + 1}`;
   const turnIdHeader = allocateRowId(state);
   const header: ProjectedRow = {
     rowId: turnIdHeader.id,
@@ -46,12 +65,31 @@ export function applyUserInput(
     createdAt: options.at,
     createdAtSeq: state.seq + 1,
   };
+  const withEntryId = options.entryId
+    ? {
+        header: { ...header, entityId: turnEntityId(options.entryId, 0) },
+        input: { ...inputRow, entityId: userEntityId(options.entryId) },
+      }
+    : { header, input: inputRow };
+  // A user message's persisted entry id arrives after `message_end` (see
+  // `EngineEvent.message_entry`); remember the rows that identity belongs to.
+  const groups = options.entryId
+    ? state.pendingMessageGroups
+    : [
+        ...state.pendingMessageGroups,
+        {
+          kind: "user" as const,
+          rowIds: [inputRow.rowId],
+          headerRowId: header.rowId,
+        },
+      ];
   return bump({
     ...state,
-    rows: [...state.rows, header, inputRow],
+    rows: [...state.rows, withEntryId.header, withEntryId.input],
     nextRowId: inputRowId.next,
     currentTurn: { turnId, headerRowId: turnIdHeader.id, startedAt: options.at },
     currentResponse: null,
+    pendingMessageGroups: groups,
     lastActivityAt: options.at,
     phase: "running",
     lastError: null,
@@ -65,6 +103,8 @@ export function applyEngineEvent(state: ProjectionState, event: EngineEvent): Pr
         at: event.at,
         sourceCommandId: "",
       });
+    case "message_entry":
+      return attachEntryId(state, event.entryId, event.role);
     case "assistant_start":
       return startResponse(state, event.at, event.model);
     case "text_delta":
@@ -92,6 +132,14 @@ export function applyEngineEvent(state: ProjectionState, event: EngineEvent): Pr
         planEnabled: event.planEnabled,
         lastActivityAt: event.at,
       });
+    case "title_changed":
+      return applyTitleChanged(state, event);
+    case "model_changed":
+      return applyModelChanged(state, event);
+    case "model_change_marker":
+      return appendTimelineMarker(state, event);
+    case "followup_mode_changed":
+      return applyFollowupModeChanged(state, event);
     case "approval_request":
       return applyApprovalRequest(state, event);
     case "approval_settled":
@@ -113,28 +161,35 @@ export function applyEngineEvent(state: ProjectionState, event: EngineEvent): Pr
 }
 
 function startResponse(state: ProjectionState, at: number, model?: string): ProjectionState {
+  const responseId = `resp-${state.seq + 1}`;
   return bump({
     ...state,
     phase: "running",
     lastActivityAt: at,
     currentResponse: {
-      responseId: `resp-${state.seq + 1}`,
+      responseId,
       at,
-      model,
+      ...(model ? { model } : {}),
+      textSegments: 0,
+      thinkingSegments: 0,
     },
+    pendingMessageGroups: [...state.pendingMessageGroups, { kind: "assistant", rowIds: [] }],
   });
 }
 
 type CurrentResponse = NonNullable<ProjectionState["currentResponse"]>;
 
 function ensureResponse(state: ProjectionState, at: number, model?: string): CurrentResponse {
-  return (
-    state.currentResponse ?? {
+  const response =
+    state.currentResponse ??
+    ({
       responseId: `resp-${state.seq + 1}`,
       at,
       ...(model ? { model } : {}),
-    }
-  );
+      textSegments: 0,
+      thinkingSegments: 0,
+    } satisfies CurrentResponse);
+  return response;
 }
 
 function appendText(state: ProjectionState, delta: string, at: number): ProjectionState {
@@ -149,17 +204,22 @@ function appendText(state: ProjectionState, delta: string, at: number): Projecti
         ? { ...row, text: row.text + delta }
         : row,
     );
-    return bump({ ...state, rows, currentResponse: response, lastActivityAt: at });
+    // Append-only text growth is `row.delta` in the old CLI (`delta.ts:100`), which is
+    // deliberately NOT revision-bearing (`deltaBumpsRevision`): bumping here would make
+    // every CAS command stale for as long as the model streams.
+    return touch({ ...state, rows, currentResponse: response, lastActivityAt: at });
   }
   const allocated = allocateRowId(state);
+  const segmentIndex = response.textSegments;
   const row: ProjectedRow = {
     rowId: allocated.id,
-    turnId: state.currentTurn?.turnId ?? "turn-1",
+    turnId: state.currentTurn?.turnId ?? fallbackTurnId(state),
     kind: "assistantText",
     assistantResponseId: response.responseId,
     text: delta,
     state: "streaming",
     ...(response.model ? { model: response.model } : {}),
+    segmentIndex,
     createdAt: at,
     createdAtSeq: state.seq + 1,
   };
@@ -167,7 +227,12 @@ function appendText(state: ProjectionState, delta: string, at: number): Projecti
     ...state,
     rows: [...state.rows, row],
     nextRowId: allocated.next,
-    currentResponse: { ...response, textRowId: allocated.id },
+    currentResponse: {
+      ...response,
+      textRowId: allocated.id,
+      textSegments: segmentIndex + 1,
+    },
+    pendingMessageGroups: addRowToAssistantGroup(state.pendingMessageGroups, allocated.id),
     phase: "running",
     lastActivityAt: at,
   });
@@ -185,16 +250,18 @@ function appendThinking(state: ProjectionState, delta: string, at: number): Proj
         ? { ...row, text: row.text + delta }
         : row,
     );
-    return bump({ ...state, rows, currentResponse: response, lastActivityAt: at });
+    return touch({ ...state, rows, currentResponse: response, lastActivityAt: at });
   }
   const allocated = allocateRowId(state);
+  const segmentIndex = response.thinkingSegments;
   const row: ProjectedRow = {
     rowId: allocated.id,
-    turnId: state.currentTurn?.turnId ?? "turn-1",
+    turnId: state.currentTurn?.turnId ?? fallbackTurnId(state),
     kind: "reasoning",
     assistantResponseId: response.responseId,
     text: delta,
     state: "streaming",
+    segmentIndex,
     createdAt: at,
     createdAtSeq: state.seq + 1,
   };
@@ -202,7 +269,12 @@ function appendThinking(state: ProjectionState, delta: string, at: number): Proj
     ...state,
     rows: [...state.rows, row],
     nextRowId: allocated.next,
-    currentResponse: { ...response, reasoningRowId: allocated.id },
+    currentResponse: {
+      ...response,
+      reasoningRowId: allocated.id,
+      thinkingSegments: segmentIndex + 1,
+    },
+    pendingMessageGroups: addRowToAssistantGroup(state.pendingMessageGroups, allocated.id),
     phase: "running",
     lastActivityAt: at,
   });
@@ -226,6 +298,8 @@ function endResponse(
     }
     return row;
   });
+  // The assistant message is now complete; its entry id arrives with the next
+  // `message_entry`. Keep the row group queued and reset the segment cursor.
   const next: ProjectionState = {
     ...state,
     rows,

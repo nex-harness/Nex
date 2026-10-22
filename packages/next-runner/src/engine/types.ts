@@ -16,6 +16,9 @@ export type EnginePhase =
 
 export type EngineTitleSource = "default" | "generated" | "custom";
 
+/** Composer follow-up mode for input sent while a run is active (docs/next/conversation-features.md §9). */
+export type EngineFollowupMode = "queue" | "guide";
+
 export interface EngineUsage {
   input: number;
   output: number;
@@ -45,6 +48,8 @@ export interface EngineSessionState {
   /** Last submission's permission mode; seeds the restored projection. */
   mode?: PermissionMode;
   planEnabled?: boolean;
+  /** Persisted composer follow-up mode; absent means the runner default (`queue`). */
+  followupMode?: EngineFollowupMode;
   /** Sidebar organization state (docs/next/task-state.md). Absent = false. */
   pinned?: boolean;
   archived?: boolean;
@@ -60,9 +65,15 @@ export interface EngineUnreadState {
   cleared: boolean;
 }
 
-/** Normalized transcript used for restore; mirrors the pi message shapes we consume. */
+/**
+ * Normalized transcript used for restore; mirrors the pi message shapes we consume.
+ *
+ * `entryId` is pi's session entry id (`SessionEntryBase.id`). Restore derives the row
+ * `entityId` from it (`pi:<entryId>`), so it must match the id the live projection learned
+ * through `message_entry` — otherwise action targets change identity across a restart.
+ */
 export type EngineMessage =
-  | { role: "user"; at: number; text: string }
+  | { role: "user"; at: number; text: string; entryId?: string }
   | {
       role: "assistant";
       at: number;
@@ -70,6 +81,7 @@ export type EngineMessage =
       usage?: EngineUsage;
       stopReason: EngineStopReason;
       errorMessage?: string;
+      entryId?: string;
       parts: EngineAssistantPart[];
     }
   | {
@@ -80,7 +92,25 @@ export type EngineMessage =
       text: string;
       isError: boolean;
       durationMs?: number;
-    };
+      entryId?: string;
+    }
+  /**
+   * A pi compaction boundary. Restore projects it as a `timelineMarker` row so the
+   * pre-compaction transcript stays visible (research §0-b): `session.messages` is the
+   * projected model context and drops exactly those rows.
+   */
+  | {
+      role: "compaction";
+      at: number;
+      entryId: string;
+      summary: string;
+      tokensBefore: number;
+      firstKeptEntryId: string;
+      /** `manual` | `auto` when known; absent = unknown. */
+      origin?: "manual" | "auto";
+    }
+  /** A branch summary left by pi's `navigateTree`; restore skips it (old CLI parity). */
+  | { role: "branchSummary"; at: number; entryId: string; summary: string };
 
 export type EngineAssistantPart =
   | { type: "text"; text: string }
@@ -117,6 +147,14 @@ export interface EngineApprovalRequest {
  */
 export type EngineEvent =
   | { type: "user_input"; at: number; text: string }
+  /**
+   * A message became a persisted pi session entry. pi emits `message_end` before
+   * `appendMessage`, so the row already exists; this event carries the persisted entry id
+   * that turns row identity into `pi:<entryId>` (docs/next/conversation-features.md
+   * decision 1). Events arrive in persistence order, so the projection pairs each id with
+   * the oldest row group of the same role.
+   */
+  | { type: "message_entry"; at: number; entryId: string; role: "user" | "assistant" }
   | { type: "assistant_start"; at: number; model?: string }
   | { type: "text_delta"; at: number; delta: string }
   | { type: "thinking_delta"; at: number; delta: string }
@@ -154,6 +192,23 @@ export type EngineEvent =
     }
   | { type: "settled"; at: number; aborted: boolean }
   | { type: "phase"; at: number; phase: EnginePhase }
+  /** Generated/renamed title; projection updates `meta` without another snapshot source. */
+  | { type: "title_changed"; at: number; title: string; titleSource: EngineTitleSource }
+  | { type: "model_changed"; at: number; model: EngineModelState }
+  /** Mid-session switch marker; `from` is absent for the explicit ∅→X boundary. */
+  | {
+      type: "model_change_marker";
+      at: number;
+      from?: { provider: string; model: string };
+      to: { provider: string; model: string; thought: string };
+      sourceCommandId?: string;
+    }
+  | {
+      type: "followup_mode_changed";
+      at: number;
+      mode: EngineFollowupMode;
+      sourceCommandId?: string;
+    }
   | { type: "mode_changed"; at: number; mode: PermissionMode; planEnabled: boolean }
   | { type: "approval_request"; at: number; approval: EngineApprovalRequest }
   | {
@@ -208,6 +263,29 @@ export interface ResolveApprovalResult {
 export interface SubmitOutcome {
   status: "accepted" | "duplicate";
   inputId: string;
+}
+
+/** Payload of the v4 `switchModelConfig` command (`command.ts`). */
+export interface SwitchModelConfigInput {
+  provider: string;
+  model: string;
+  thought: string;
+}
+
+/**
+ * `unchanged` is the old CLI's `noop config.unchanged`; `failed` carries the reason code
+ * (`provider.notInRegistry`) and leaves the session untouched.
+ */
+export interface SwitchModelConfigOutcome {
+  status: "changed" | "unchanged" | "failed";
+  reasonCode?: string;
+  message?: string;
+  /** Effective model after the switch (absent on failure). */
+  model?: EngineModelState;
+  /** True when the model identity changed, so the caller emits a `modelChange` marker. */
+  modelIdentityChanged?: boolean;
+  /** Model identity before the switch, for the marker's `from` fields. */
+  previous?: { provider: string; model: string };
 }
 
 export interface EngineEventSubscription {
@@ -275,6 +353,24 @@ export interface Engine {
   deleteTaskIfArchived(workspacePath: string, sessionId: string): Promise<boolean>;
 
   setModel(sessionId: string, selection: ModelSelection | undefined): Promise<void>;
+
+  /**
+   * Mid-session model/thought switch (`switchModelConfig`). Applies pi's `setModel` +
+   * clamped `setThinkingLevel`, persists the selection in metadata, and reports whether the
+   * model identity changed so the caller can append the `modelChange` marker row.
+   */
+  switchModelConfig(
+    workspacePath: string,
+    sessionId: string,
+    input: SwitchModelConfigInput,
+  ): Promise<SwitchModelConfigOutcome>;
+
+  /** Persists the follow-up mode (`queue` | `guide`); the projection derives inputRouting. */
+  setFollowupMode(
+    workspacePath: string,
+    sessionId: string,
+    mode: EngineFollowupMode,
+  ): Promise<{ previous: EngineFollowupMode; mode: EngineFollowupMode }>;
 
   catalog(): Promise<EngineCatalog>;
 

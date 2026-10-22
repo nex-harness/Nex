@@ -81,6 +81,26 @@ test(
           await new Promise((resolve) => setTimeout(resolve, 200));
         }
         assert.match(found, /pong/iu, "assistant text must contain pong");
+
+        // Generated titles (decision 8) also run with real credentials. Report the result
+        // instead of asserting: the session model may ignore the JSON instruction.
+        const titleDeadline = Date.now() + 120_000;
+        let titled: { title: string; titleSource: string } | undefined;
+        while (Date.now() < titleDeadline) {
+          const session = (await engine.listSessions(workspace)).find(
+            (item) => item.sessionId === sessionId,
+          );
+          if (session?.titleSource === "generated") {
+            titled = { title: session.title, titleSource: session.titleSource };
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        console.log(
+          titled
+            ? `[pi smoke] generated title: ${JSON.stringify(titled.title)}`
+            : "[pi smoke] no generated title (model reply was not a title; default kept)",
+        );
       } finally {
         subscription.dispose();
         await engine.abort(sessionId);

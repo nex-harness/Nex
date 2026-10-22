@@ -52,51 +52,121 @@ export function toEngineModelInfo(
 export function toEngineHistory(messages: readonly unknown[]): EngineMessage[] {
   const result: EngineMessage[] = [];
   for (const raw of messages) {
+    const message = toEngineMessage(raw);
+    if (message) result.push(message);
+  }
+  return result;
+}
+
+/**
+ * Rebuild history from pi's raw branch (`SessionManager.getBranch()`), not
+ * `session.messages`.
+ *
+ * 修复依据（research §0-b）：`session.messages` 是喂给模型的投影上下文——压缩后旧消息被
+ * summary 取代、`branch()` 后废弃分支消失——用它重建会丢行、也看不到压缩边界。
+ * `getBranch()` 返回当前 leaf 的完整路径（含 message/compaction/branch_summary），
+ * 每条 message 都带稳定的 `entryId`，用它派生行 `entityId`（`pi:<entryId>`），
+ * 与 live 投影从 `message_end` 学到的 id 一致。
+ */
+export function toEngineBranchHistory(entries: readonly unknown[]): EngineMessage[] {
+  const result: EngineMessage[] = [];
+  for (const raw of entries) {
     if (typeof raw !== "object" || raw === null) continue;
-    const message = raw as Record<string, unknown>;
-    const role = message["role"];
-    if (role === "user") {
+    const entry = raw as Record<string, unknown>;
+    const entryId = typeof entry["id"] === "string" ? entry["id"] : undefined;
+    const at = entryTimestamp(entry);
+    const type = entry["type"];
+    if (type === "message") {
+      const message = toEngineMessage(entry["message"], entryId);
+      if (message) result.push(message);
+      continue;
+    }
+    if (type === "compaction") {
       result.push({
-        role: "user",
-        at: typeof message["timestamp"] === "number" ? message["timestamp"] : Date.now(),
-        text: contentText(message["content"]),
+        role: "compaction",
+        at,
+        entryId: entryId ?? "",
+        summary: typeof entry["summary"] === "string" ? entry["summary"] : "",
+        tokensBefore: num(entry["tokensBefore"]),
+        firstKeptEntryId:
+          typeof entry["firstKeptEntryId"] === "string" ? entry["firstKeptEntryId"] : "",
+        // pi 不在 compaction entry 上记录 manual/auto；`fromHook` 只表示由扩展生成。
+        // 默认 auto（pi 的自动压缩是常态），batch 3 的直播 compact 会用命令来源覆盖。
+        origin: entry["fromHook"] === true ? "manual" : "auto",
       });
       continue;
     }
-    if (role === "assistant") {
+    if (type === "branch_summary") {
+      // 旧 CLI 的 branch summary 不产生 v4 行；restore 跳过以保持行集合一致。
       result.push({
-        role: "assistant",
-        at: typeof message["timestamp"] === "number" ? message["timestamp"] : Date.now(),
-        model: typeof message["model"] === "string" ? message["model"] : undefined,
-        usage:
-          typeof message["usage"] === "object" && message["usage"] !== null
-            ? {
-                input: num((message["usage"] as Record<string, unknown>)["input"]),
-                output: num((message["usage"] as Record<string, unknown>)["output"]),
-                cacheRead: num((message["usage"] as Record<string, unknown>)["cacheRead"]),
-                cacheWrite: num((message["usage"] as Record<string, unknown>)["cacheWrite"]),
-              }
-            : undefined,
-        stopReason: (message["stopReason"] as EngineStopReason) ?? "stop",
-        errorMessage:
-          typeof message["errorMessage"] === "string" ? message["errorMessage"] : undefined,
-        parts: assistantParts(message["content"]),
-      });
-      continue;
-    }
-    if (role === "toolResult") {
-      result.push({
-        role: "toolResult",
-        at: typeof message["timestamp"] === "number" ? message["timestamp"] : Date.now(),
-        toolCallId: String(message["toolCallId"] ?? ""),
-        toolName: String(message["toolName"] ?? ""),
-        text: contentText(message["content"]),
-        isError: message["isError"] === true,
-        durationMs: typeof message["durationMs"] === "number" ? message["durationMs"] : undefined,
+        role: "branchSummary",
+        at,
+        entryId: entryId ?? "",
+        summary: typeof entry["summary"] === "string" ? entry["summary"] : "",
       });
     }
   }
   return result;
+}
+
+function entryTimestamp(entry: Record<string, unknown>): number {
+  const raw = entry["timestamp"];
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string") {
+    const parsed = Date.parse(raw);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return Date.now();
+}
+
+/** One pi message → one engine message; shared by the branch and legacy paths. */
+function toEngineMessage(raw: unknown, entryId?: string): EngineMessage | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const message = raw as Record<string, unknown>;
+  const role = message["role"];
+  const id = entryId ? { entryId } : {};
+  if (role === "user") {
+    return {
+      role: "user",
+      at: typeof message["timestamp"] === "number" ? message["timestamp"] : Date.now(),
+      text: contentText(message["content"]),
+      ...id,
+    };
+  }
+  if (role === "assistant") {
+    return {
+      role: "assistant",
+      at: typeof message["timestamp"] === "number" ? message["timestamp"] : Date.now(),
+      model: typeof message["model"] === "string" ? message["model"] : undefined,
+      usage:
+        typeof message["usage"] === "object" && message["usage"] !== null
+          ? {
+              input: num((message["usage"] as Record<string, unknown>)["input"]),
+              output: num((message["usage"] as Record<string, unknown>)["output"]),
+              cacheRead: num((message["usage"] as Record<string, unknown>)["cacheRead"]),
+              cacheWrite: num((message["usage"] as Record<string, unknown>)["cacheWrite"]),
+            }
+          : undefined,
+      stopReason: (message["stopReason"] as EngineStopReason) ?? "stop",
+      errorMessage:
+        typeof message["errorMessage"] === "string" ? message["errorMessage"] : undefined,
+      parts: assistantParts(message["content"]),
+      ...id,
+    };
+  }
+  if (role === "toolResult") {
+    return {
+      role: "toolResult",
+      at: typeof message["timestamp"] === "number" ? message["timestamp"] : Date.now(),
+      toolCallId: String(message["toolCallId"] ?? ""),
+      toolName: String(message["toolName"] ?? ""),
+      text: contentText(message["content"]),
+      isError: message["isError"] === true,
+      durationMs: typeof message["durationMs"] === "number" ? message["durationMs"] : undefined,
+      ...id,
+    };
+  }
+  return undefined;
 }
 
 function assistantParts(content: unknown): EngineAssistantPart[] {

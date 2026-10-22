@@ -4,6 +4,7 @@ import type {
   ModelSelection,
   PendingInteraction,
   PermissionRequestPayload,
+  RowActions,
 } from "@nex/shared/nex-protocol-v4";
 import type { EnginePhase } from "../engine/types.js";
 import type {
@@ -12,10 +13,13 @@ import type {
   ProjectedRow,
   ProjectionState,
   ReasoningRowState,
+  TimelineMarkerRowState,
   ToolCallRowState,
   TurnHeaderRowState,
   UserInputRowState,
 } from "./state.js";
+import { computeAvailability, computeInputRouting } from "./availability.js";
+import { deriveRowActions } from "./rowActions.js";
 import { mapToolInput, toolDisplayName } from "./toolMapping.js";
 
 const TAIL_WINDOW = 200;
@@ -35,7 +39,12 @@ export function buildConversationSnapshot(
   state: ProjectionState,
   options: SnapshotOptions = {},
 ): ConversationSnapshot {
-  const windowRows = state.rows.slice(-TAIL_WINDOW).map((row) => toSnapshotRow(row, state));
+  // Action affordances are derived per snapshot from the whole row set (never stored), so
+  // the "newest row" rules stay correct as rows stream in and after a restore.
+  const actions = deriveRowActions(state);
+  const windowRows = state.rows
+    .slice(-TAIL_WINDOW)
+    .map((row) => toSnapshotRow(row, state, actions.get(row.rowId)));
   const firstRowId = windowRows.length > 0 ? (windowRows[0]?.rowId ?? null) : null;
   const phase = state.phase;
   const running = phase === "running" || phase === "prewarming";
@@ -60,7 +69,7 @@ export function buildConversationSnapshot(
     model: state.model?.modelId ?? "",
     thought: normalizedThought,
     thoughtLevels,
-    followupMode: "queue" as const,
+    followupMode: state.followupMode,
     // Echo the session's permission mode so the composer seeds itself after reopen; the
     // gate stays the authority, this is projection only.
     mode: state.mode,
@@ -91,17 +100,8 @@ export function buildConversationSnapshot(
         : null,
       apiRetry: null,
     },
-    availability: {
-      fork: { allowed: true },
-      compact: { allowed: true },
-      switchModelConfig: { allowed: true },
-      setFollowupMode: { allowed: true },
-      queueEdit: { allowed: true },
-      sendQueuedNow: { allowed: true },
-      pauseGoal: { allowed: true },
-      resumeGoal: { allowed: true },
-    },
-    inputRouting: { mode: "startNow" },
+    availability: computeAvailability(state),
+    inputRouting: computeInputRouting(state),
     meta: { title: state.title, titleSource: state.titleSource },
     config,
     modelTransition: null,
@@ -190,25 +190,71 @@ function isEnded(phase: EnginePhase): boolean {
 function toSnapshotRow(
   row: ProjectedRow,
   state: ProjectionState,
+  actions: RowActions | undefined,
 ): ConversationSnapshot["rows"]["window"][number] {
+  const identity = rowIdentity(row, actions);
   switch (row.kind) {
     case "turnHeader":
-      return turnHeaderRow(row);
+      return turnHeaderRow(row, identity);
     case "userInput":
-      return userInputRow(row);
+      return userInputRow(row, identity);
     case "assistantText":
-      return assistantTextRow(row);
+      return assistantTextRow(row, identity);
     case "reasoning":
-      return reasoningRow(row);
+      return reasoningRow(row, identity);
     case "toolCall":
-      return toolCallRow(row, state);
+      return toolCallRow(row, state, identity);
+    case "timelineMarker":
+      return timelineMarkerRow(row, identity);
   }
 }
 
-function turnHeaderRow(row: TurnHeaderRowState): ConversationSnapshot["rows"]["window"][number] {
+/**
+ * Row identity every row carries (docs/next/conversation-features.md decision 1):
+ * `entityId` when known, `productTurnId = turnId`, and `visibility:"visible"`.
+ * `actions` is only added when non-empty; the schema forbids `false` values.
+ */
+interface RowIdentity {
+  entityId?: string;
+  productTurnId: string;
+  visibility: "visible";
+  actions?: RowActions;
+}
+
+function rowIdentity(row: ProjectedRow, actions: RowActions | undefined): RowIdentity {
+  return {
+    ...(row.entityId ? { entityId: row.entityId } : {}),
+    productTurnId: row.turnId,
+    visibility: "visible",
+    ...(actions ? { actions } : {}),
+  };
+}
+
+function timelineMarkerRow(
+  row: TimelineMarkerRowState,
+  identity: RowIdentity,
+): ConversationSnapshot["rows"]["window"][number] {
   return {
     rowId: row.rowId,
     turnId: row.turnId,
+    ...identity,
+    kind: "timelineMarker",
+    ...(row.lane ? { lane: row.lane } : {}),
+    ...(row.sourceCommandId ? { sourceCommandId: row.sourceCommandId } : {}),
+    marker: row.marker,
+    createdAt: row.createdAt,
+    createdAtSeq: row.createdAtSeq,
+  };
+}
+
+function turnHeaderRow(
+  row: TurnHeaderRowState,
+  identity: RowIdentity,
+): ConversationSnapshot["rows"]["window"][number] {
+  return {
+    rowId: row.rowId,
+    turnId: row.turnId,
+    ...identity,
     kind: "turnHeader",
     origin: "userInput",
     executionKind: "agent",
@@ -220,10 +266,14 @@ function turnHeaderRow(row: TurnHeaderRowState): ConversationSnapshot["rows"]["w
   };
 }
 
-function userInputRow(row: UserInputRowState): ConversationSnapshot["rows"]["window"][number] {
+function userInputRow(
+  row: UserInputRowState,
+  identity: RowIdentity,
+): ConversationSnapshot["rows"]["window"][number] {
   return {
     rowId: row.rowId,
     turnId: row.turnId,
+    ...identity,
     kind: "userInput",
     text: row.text,
     origin: "realUser",
@@ -235,10 +285,12 @@ function userInputRow(row: UserInputRowState): ConversationSnapshot["rows"]["win
 
 function assistantTextRow(
   row: AssistantTextRowState,
+  identity: RowIdentity,
 ): ConversationSnapshot["rows"]["window"][number] {
   return {
     rowId: row.rowId,
     turnId: row.turnId,
+    ...identity,
     kind: "assistantText",
     assistantResponseId: row.assistantResponseId,
     text: row.text,
@@ -249,10 +301,14 @@ function assistantTextRow(
   };
 }
 
-function reasoningRow(row: ReasoningRowState): ConversationSnapshot["rows"]["window"][number] {
+function reasoningRow(
+  row: ReasoningRowState,
+  identity: RowIdentity,
+): ConversationSnapshot["rows"]["window"][number] {
   return {
     rowId: row.rowId,
     turnId: row.turnId,
+    ...identity,
     kind: "reasoning",
     assistantResponseId: row.assistantResponseId,
     text: row.text,
@@ -265,11 +321,13 @@ function reasoningRow(row: ReasoningRowState): ConversationSnapshot["rows"]["win
 function toolCallRow(
   row: ToolCallRowState,
   _state: ProjectionState,
+  identity: RowIdentity,
 ): ConversationSnapshot["rows"]["window"][number] {
   const outputText = row.outputText ?? "";
   const base = {
     rowId: row.rowId,
     turnId: row.turnId,
+    ...identity,
     kind: "toolCall" as const,
     ...(row.assistantResponseId ? { assistantResponseId: row.assistantResponseId } : {}),
     toolCallId: row.toolCallId,
