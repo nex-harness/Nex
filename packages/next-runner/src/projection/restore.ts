@@ -2,6 +2,7 @@ import type { EngineAssistantPart, EngineMessage, EngineSessionState } from "../
 import {
   assistantPartEntityId,
   compactionEntityId,
+  runnerMarkerEntityId,
   toolEntityId,
   turnEntityId,
   userEntityId,
@@ -102,6 +103,27 @@ export function projectHistory(
   };
 
   for (const message of messages) {
+    if (message.role === "runnerMarker") {
+      // `nex.fork` custom entry → the child's head notice (decision 6). It belongs to no
+      // product turn, so it renders before the first turn header under `turn-0`.
+      const rowId = allocate();
+      rows.push({
+        rowId,
+        turnId: "turn-0",
+        kind: "timelineMarker",
+        entityId: runnerMarkerEntityId(message.entryId),
+        lane: "lightBoundary",
+        marker: {
+          type: "forkNotice",
+          parentSessionId: message.parentSessionId,
+          parentRowId: message.parentRowId,
+        },
+        createdAt: message.at,
+        createdAtSeq: rowId,
+      });
+      lastAt = Math.max(lastAt, message.at);
+      continue;
+    }
     if (message.role === "compaction") {
       // The boundary sits between turns: close the current one, then place the marker in
       // that turn's assistantWork lane (the UI folds it into "already worked"), matching
@@ -115,6 +137,7 @@ export function projectHistory(
         kind: "timelineMarker",
         entityId: compactionEntityId(message.entryId),
         lane: "assistantWork",
+        ...(message.sourceCommandId ? { sourceCommandId: message.sourceCommandId } : {}),
         marker: compactionMarker(message),
         createdAt: message.at,
         createdAtSeq: rowId,

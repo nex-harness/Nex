@@ -45,11 +45,21 @@ export function compactionEntityId(entryId: string): string {
   return `${ENTITY_ID_PREFIX}${entryId}`;
 }
 
+/**
+ * Runner-written custom entry (`nex.fork`): its id is not a message id, so the marker row
+ * gets its own identity — stable across restore like every other pi entry.
+ */
+export function runnerMarkerEntityId(entryId: string): string {
+  return `${ENTITY_ID_PREFIX}marker:${entryId}`;
+}
+
 /** Extracts the pi entry id from an entityId built by the helpers above. */
 export function entryIdFromEntityId(entityId: string | undefined): string | undefined {
   if (!entityId?.startsWith(ENTITY_ID_PREFIX)) return undefined;
   const rest = entityId.slice(ENTITY_ID_PREFIX.length);
-  if (rest.startsWith("turn:") || rest.startsWith("tool:")) return undefined;
+  if (rest.startsWith("turn:") || rest.startsWith("tool:") || rest.startsWith("marker:")) {
+    return undefined;
+  }
   const [entryId] = rest.split(":");
   return entryId || undefined;
 }

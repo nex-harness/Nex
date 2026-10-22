@@ -282,8 +282,36 @@ heuristics understand `oldText`/`newText` pairs.
 
 Commands: `createSession` (with or without `firstInput`; draft prewarm works),
 `sendText`, `deleteSession`, `renameSession`, `stop`, `resolveInteraction`,
-`switchModelConfig`, `setFollowupMode`. Unknown commands return `rejected` with
-`reasonCode:"unsupported_command"`.
+`switchModelConfig`, `setFollowupMode`, `compact`, `editUserQuery`, `retryTurn`,
+`forkAssistant`, `deleteQueueItem`, `editQueueItem`, `reorderQueueItem`, `sendQueuedNow`,
+`setAutoDrain`. Unknown commands return `rejected` with `reasonCode:"unsupported_command"`.
+
+### Conversation features (batch 2d)
+
+Spec: [`docs/next/conversation-features.md`](../../docs/next/conversation-features.md)
+(decisions 5-7, "Batch 2d — implemented").
+
+- **compact.** `compact` (no payload, no CAS) admits through the queue: a running/queued
+  compact → `rejected compactOperationLock`; busy → a `kind:"compact"` queue item (ACK
+  `accepted`) drained in FIFO order; idle → started now. `v4/compactOwner.ts` writes the
+  `timelineMarker` compact row (`running` → `success|noop|cancelled|failed`, origin
+  `manual|auto`, `tokensBefore`/`tokensAfter`, `sourceCommandId`) and owns
+  `engine.compact()`. pi's automatic compaction (`compaction_start/end` with reason
+  `threshold|overflow`) gets the same `origin:"auto"` marker through the fold. Stop aborts
+  a compaction (`canStop` while only compaction runs); a failed/cancelled manual compact
+  pauses a non-empty queue. `activeWorks` includes `kind:"compact"`.
+- **edit / retry (rewind).** `editUserQuery {target,newText,workspaceMode?}` rewinds the
+  newest real-user turn: cut rows from its turn header (rowIds stay monotonic), branch pi
+  to the parent of that user entry, `refreshContext()`, prompt the new text in the same
+  session; ACK `{type:"editUserQuery", disposition:"rewind", sessionId}`. `workspaceMode
+:"rewind"` → `blocked` + `guard.workspaceRewindUnavailable` + an empty preview.
+  `retryTurn {target}` reuses the primitive with the original user text (guarded to the
+  newest complete assistant). The rewritten turn carries the original command lineage.
+- **fork.** `forkAssistant {target}` copies the conversation up to a stable completed
+  reply into a new session file (second `SessionManager`, `createBranchedSession`), writes
+  the `nex.fork` custom entry, titles it `Fork of <parent>` (`generated`), registers it in
+  metadata/sessions index, and ACKs `{type:"forkAssistant", sessionId}`. The child's
+  restore shows a `forkNotice` marker; the parent is never modified.
 
 `switchModelConfig {provider, model, thought}` applies pi's `setModel` + clamped
 `setThinkingLevel`, persists the selection, and appends a `timelineMarker`
@@ -332,6 +360,14 @@ The permission suite runs with the default `pnpm test` (no env vars):
 - `test/permissions-pi-integration.test.ts` — the **real** pi engine and pi-ai's faux
   provider drive a `write` through the inline `tool_call` hook: allow writes the file,
   deny blocks it, edit mode skips the card, abort settles a pending card.
+- `test/conversation-features.test.ts` — batch 2d through the command handler + projection
+  over the engine double: compact lifecycle (success/noop/cancelled/failed, lock, queued
+  drain, pause on failure), edit/retry guards and rewind, fork guards, availability, the
+  auto marker fold and the forkNotice restore.
+- `test/conversation-pi-integration.test.ts` — the **real** pi engine + faux provider:
+  compact success then noop, small-session noop, Stop-cancelled compaction, queued compact
+  draining after a run, edit + restore (old rows stay gone), retry, fork (child file,
+  fork notice, parent bytes unchanged), and pi's own overflow compaction (`origin:"auto"`).
 
 Opt-in real-model smoke test (uses `~/.pi/agent` credentials):
 
@@ -366,33 +402,31 @@ publisher tests; an in-process `ws` server drives the link test.
 
 ## Known gaps (MVP)
 
-- **Full snapshots only.** No deltas; large sessions resend up to the tail window on every
-  flush (`snapshotTailWindowRows`-sized cap of 200 rows).
-- **`conversationRowsRangeV4` returns an empty page.** Since `rows.firstRowId` is the
-  window head, the UI never asks for older rows; very long sessions will show only the
-  tail window.
+- **Full snapshots only.** No deltas; a change republishes the whole snapshot (rows capped
+  at a 200-row tail window).
+- **`conversationRowsRangeV4` returns an empty page.** `rows.firstRowId` is the window
+  head, so the UI never asks for older rows; very long sessions show only the tail window.
 - **`conversationPlansV4` is always empty**; pi has no ExitPlanMode catalog.
-- **Sessions index is rebuilt from the runner metadata file**, not from pi's own session
-  list, so sessions created by running `pi` directly in the same workspace are not listed.
+- **Sessions index is rebuilt from the runner metadata file**, not pi's own session list,
+  so sessions created by running `pi` directly in the same workspace are not listed.
 - **No attachments** (`attachment*` / `conversationFileChangesV4` etc. are not
-  implemented); the composer's happy path does not need them.
-- **Conversation actions are advertised but not served yet.** `actions` renders edit /
-  retry / fork affordances and `availability` allows only `switchModelConfig` and
-  `setFollowupMode`; `editUserQuery`, `retryTurn` and `forkAssistant` are answered
-  `rejected` (`unsupported_command`) until their batches land. `inputRouting` reports
-  `enqueue`/`guide` for a busy session, but the runner-owned queue (and its drain) arrives
-  with batch 2c: busy text still goes to pi's follow-up channel.
+  implemented). `editUserQuery` therefore refuses a non-empty `attachments` list
+  (`guard.attachmentsUnsupported`); omitted = keep and `[]` = none are accepted.
+- **No workspace file rewind.** `editUserQuery` with `workspaceMode:"rewind"` answers
+  `blocked` (`guard.workspaceRewindUnavailable`) with an empty preview: there are no file
+  checkpoints yet. `applyFileRewind` is not served.
+- **Auto-compaction is marker-complete, not manual.** pi's threshold/overflow compaction
+  shows an `origin:"auto"` marker, but the runner cannot queue it (pi decides). A manual
+  `compact` runs only from the runner queue.
+- **`setAssistantFeedback` / goal commands are not served.** Feedback is a no-op on the
+  runner; `pauseGoal`/`resumeGoal` stay denied (`noGoalToPause`/`noGoalToResume`).
 - **Permissions are session-scoped and in memory.** Pending approvals do not survive a
-  runner restart, and "Always allow in this session" is a per-gate set (no project rules,
-  no persistence). Plan mode is a hard deny, not a planning UI.
-- **Titles are model-generated on the first prompt.** A title is generated once per session
-  when the first input is ≥ 10 chars and the title is not `custom`, using the session model
-  (or `NEX_RUNNER_TITLE_MODEL`) with the old CLI's title prompt. It is fire-and-forget: it
-  never blocks the turn, failures are `warn` logs, and a user rename during generation wins.
-  `NEX_RUNNER_TITLES=off` disables it. The default is the first user message truncated to
-  60 chars (`titleSource:"default"`); rename sets `"custom"`.
+  runner restart, and "Always allow in this session" is a per-gate set. Plan mode is a hard
+  deny, not a planning UI.
+- **Titles are model-generated on the first prompt** (decision 8); `NEX_RUNNER_TITLES=off`
+  disables them and a rename (`custom`) is never overwritten.
 - **`thinkingLevel` mapping uses pi's own capability set**; levels beyond
-  `off|minimal|low|medium|high` (`xhigh`, `max`) are exposed only when pi reports them.
+  `off|minimal|low|medium|high` are exposed only when pi reports them.
 - **Workspace path uniqueness is the server's job.** The runner just announces its list.
 
 ## Spec ambiguities resolved

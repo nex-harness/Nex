@@ -2,8 +2,73 @@ import { clampThinkingLevel } from "@earendil-works/pi-ai";
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { ModelSelection } from "@nex/shared";
 import type { Logger } from "../../logger.js";
-import type { SessionMetaStore } from "./metaStore.js";
-import { selectionFor, usageFromSession } from "./sessionHelpers.js";
+import { normalizeMode } from "../permissions/policy.js";
+import type { PermissionMode, SubmitOptions, SubmitOutcome } from "../types.js";
+import { defaultTitle, selectionFor, usageFromSession } from "./sessionHelpers.js";
+import type { SessionMetaEntry, SessionMetaStore } from "./metaStore.js";
+
+export interface SubmitHooks {
+  metadata: SessionMetaStore;
+  /** Title generation is fire-and-forget after the first prompt (decision 8). */
+  titles: {
+    maybeStart: (
+      workspacePath: string,
+      sessionId: string,
+      text: string,
+      meta: SessionMetaEntry | undefined,
+    ) => void;
+  };
+  sessionsChanged: (workspacePath: string) => void;
+  startPrompt: (text: string, requestId: string) => Promise<string>;
+  applySelection: (selection: ModelSelection) => Promise<void>;
+}
+
+export interface SubmitTarget {
+  workspacePath: string;
+  gate: { setMode(mode: PermissionMode, planEnabled: boolean): void };
+  session: AgentSession;
+}
+
+/**
+ * `submit` body. Order is contractual: idempotency (`seenRequestIds`) → model selection →
+ * gate mode → metadata → prompt, so the turn's first tool call already sees its mode.
+ * Title generation is fire-and-forget after the prompt started (decision 8).
+ */
+export async function submitPrompt(
+  hooks: SubmitHooks,
+  target: SubmitTarget,
+  text: string,
+  options: SubmitOptions,
+): Promise<SubmitOutcome> {
+  const sessionId = target.session.sessionId;
+  const { workspacePath } = target;
+  const meta = await hooks.metadata.get(workspacePath, sessionId);
+  if (meta?.seenRequestIds?.includes(options.requestId)) {
+    return { status: "duplicate", inputId: options.requestId };
+  }
+  if (options.modelSelection) await hooks.applySelection(options.modelSelection);
+  const mode = normalizeMode(options.mode ?? meta?.mode);
+  const planEnabled = options.planEnabled ?? (options.mode ? false : (meta?.planEnabled ?? false));
+  target.gate.setMode(mode, planEnabled);
+  const selection = selectionFor(target.session);
+  await hooks.metadata.upsert(workspacePath, sessionId, {
+    lastActivityAt: Date.now(),
+    phase: text.trim() ? "running" : (meta?.phase ?? "draft"),
+    title: meta?.title || defaultTitle(text),
+    titleSource: meta?.titleSource ?? "default",
+    mode,
+    planEnabled,
+    seenRequestId: options.requestId,
+    ...(selection ? { model: selection } : {}),
+  });
+  if (text.trim().length === 0) {
+    hooks.sessionsChanged(workspacePath);
+    return { status: "accepted", inputId: options.requestId };
+  }
+  const inputId = await hooks.startPrompt(text, options.requestId);
+  hooks.titles.maybeStart(workspacePath, sessionId, text, meta);
+  return { status: "accepted", inputId };
+}
 
 export interface SessionMetadataHooks {
   metadata: SessionMetaStore;

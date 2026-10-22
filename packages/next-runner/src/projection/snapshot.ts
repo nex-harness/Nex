@@ -48,6 +48,7 @@ export function buildConversationSnapshot(
   const firstRowId = windowRows.length > 0 ? (windowRows[0]?.rowId ?? null) : null;
   const phase = state.phase;
   const running = phase === "running" || phase === "prewarming";
+  const compacting = Object.keys(state.compactOperations).length > 0;
   const thoughtLevels =
     state.model && state.model.thoughtLevels.length > 0 ? state.model.thoughtLevels : ["off"];
   const thought = state.model?.thought ?? "off";
@@ -85,10 +86,14 @@ export function buildConversationSnapshot(
     control: {
       phase,
       sessionEnded: isEnded(phase),
-      canStop: running,
+      // Stop also cancels a compaction (pi's abort does both), so an idle-but-compacting
+      // session still offers it — the old CLI's `cancelManualCompact` path does the same.
+      canStop: running || compacting,
       stopState: running ? "stoppable" : "idle",
-      stopTargetKind: running ? "assistant" : "unknown",
-      activeWorks: running ? primaryWork(state) : [],
+      stopTargetKind: running ? "assistant" : compacting ? "compact" : "unknown",
+      // A compaction runs over the session even when idle; during a turn it is extra work
+      // alongside the primary turn (the old CLI pushes `compact` as its own entry).
+      activeWorks: [...(running ? primaryWork(state) : []), ...compactWork(state)],
       lastError: state.lastError
         ? {
             code: state.lastError.code,
@@ -98,7 +103,7 @@ export function buildConversationSnapshot(
             source: state.lastError.source,
           }
         : null,
-      apiRetry: null,
+      apiRetry: state.apiRetry ? { ...state.apiRetry } : null,
     },
     availability: computeAvailability(state),
     inputRouting: computeInputRouting(state),
@@ -183,6 +188,26 @@ function primaryWork(state: ProjectionState): ActiveWorkSummary[] {
   return [summary];
 }
 
+/**
+ * An idle session with compaction in flight has no run work but is not settled: the UI's
+ * loading shimmer binds `activeWorks.kind === "compact"` (research §1).
+ */
+function compactWork(state: ProjectionState): ActiveWorkSummary[] {
+  const running = Object.values(state.compactOperations);
+  if (running.length === 0) return [];
+  const startedAt = Math.min(
+    ...running.map((operation) => {
+      const row = state.rows.find((item) => item.rowId === operation.rowId);
+      return row?.createdAt ?? state.lastActivityAt;
+    }),
+  );
+  return running.map((operation) => ({
+    kind: "compact" as const,
+    foregroundExecutionId: operation.operationId,
+    startedAt,
+  }));
+}
+
 function isEnded(phase: EnginePhase): boolean {
   return phase === "completedSuccess" || phase === "completedInterrupted" || phase === "error";
 }
@@ -258,6 +283,7 @@ function turnHeaderRow(
     kind: "turnHeader",
     origin: "userInput",
     executionKind: "agent",
+    ...(row.sourceCommandId ? { sourceCommandId: row.sourceCommandId } : {}),
     state: row.state,
     startedAt: row.startedAt,
     ...(row.endedAt !== undefined ? { endedAt: row.endedAt } : {}),

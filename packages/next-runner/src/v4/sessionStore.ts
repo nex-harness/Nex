@@ -18,6 +18,7 @@ import {
   buildConversationFrame,
   conversationTopic,
 } from "./envelopes.js";
+import { CompactOwner } from "./compactOwner.js";
 import { SessionQueue } from "./queue.js";
 import type { SessionPendingInteraction } from "./sessionsIndex.js";
 import { SnapshotThrottle } from "./throttle.js";
@@ -45,6 +46,8 @@ export interface SessionRuntime {
    * for the lifetime of this runtime; a runner restart starts it empty.
    */
   queue: SessionQueue;
+  /** Single writer of compact markers + the manual `engine.compact()` path (decision 7). */
+  compact: CompactOwner;
   disposed: boolean;
 }
 
@@ -114,8 +117,22 @@ export class SessionRuntimeStore {
       acceptedCommands: new Map(),
       // Assigned below: the queue needs the runtime for its projection read/write ports.
       queue: null as unknown as SessionQueue,
+      compact: null as unknown as CompactOwner,
       disposed: false,
     };
+    runtime.compact = new CompactOwner({
+      engine: this.engine,
+      sessionId,
+      logger: this.logger,
+      projection: () => runtime.projection,
+      apply: (next) => {
+        runtime.projection = next;
+      },
+      requestPublish: () => {
+        runtime.throttle.request();
+      },
+      pauseQueueAfterFailure: () => runtime.queue.pauseAfterCompactFailure(),
+    });
     runtime.queue = new SessionQueue({
       engine: this.engine,
       sessionId,
@@ -129,6 +146,7 @@ export class SessionRuntimeStore {
       requestPublish: () => {
         runtime.throttle.request();
       },
+      runQueuedCompact: (sourceCommandId) => runtime.compact.runQueued(sourceCommandId),
     });
     this.runtimes.set(sessionId, runtime);
     runtime.ready = this.hydrate(runtime);
@@ -245,6 +263,7 @@ export class SessionRuntimeStore {
       for (const event of buffered) {
         runtime.projection = applyEngineEvent(runtime.projection, event);
         runtime.queue.afterEvent(event, runtime.projection);
+        runtime.compact.afterEvent(runtime.projection);
       }
       if (
         buffered.some(
@@ -271,8 +290,10 @@ export class SessionRuntimeStore {
     }
     runtime.projection = applyEngineEvent(runtime.projection, event);
     // The queue owner observes the same ordered stream after the fold: it needs the folded
-    // phase (error vs aborted settle) and pi's queue_update (guide consumption).
+    // phase (error vs aborted settle) and pi's queue_update (guide consumption). The
+    // compact owner drains auto-compaction outcomes at the same point.
     runtime.queue.afterEvent(event, runtime.projection);
+    runtime.compact.afterEvent(runtime.projection);
     runtime.throttle.request();
     // Only approvals change the sidebar attention dot; every other event keeps the set.
     if (event.type === "approval_request" || event.type === "approval_settled") {

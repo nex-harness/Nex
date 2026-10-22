@@ -17,26 +17,31 @@ import type { ProjectionState } from "./state.js";
  *
  * | flag               | state |
  * | ------------------ | ----- |
- * | fork               | denied `guard.actionUnavailable` (forkAssistant lands in a later batch) |
- * | compact            | denied `guard.actionUnavailable` (batch 3) |
+ * | fork               | allowed unless a compact is running/queued (`compactOperationLock`) |
+ * | compact            | allowed unless a compact is running/queued (`compactOperationLock`) |
  * | switchModelConfig  | allowed — implemented by batch 2a |
  * | setFollowupMode    | allowed — implemented by batch 2a |
  * | queueEdit          | allowed — batch 2c owns the queue |
  * | sendQueuedNow      | allowed while running; `sendQueuedNowRequiresRunning` when idle |
  * | pauseGoal          | denied `noGoalToPause` (this runner has no goal state) |
  * | resumeGoal         | denied `noGoalToResume` |
+ *
+ * `compactOperationLock` is also the ACK reason for a second compact and for a fork while
+ * compacting. The old CLI's `idleCannotCompact` is never advertised: this runner always has
+ * a pi session to compact (a session with nothing to summarize ends `noop` instead).
  */
-const DENIED_ACTION: ActionAvailability = {
-  allowed: false,
-  reasonCode: "guard.actionUnavailable",
-};
-
 export function computeAvailability(state: ProjectionState): SessionActionAvailability {
   const running = state.phase === "running" || state.phase === "prewarming";
-  const unimplemented: ActionAvailability = DENIED_ACTION;
+  const compacting = Object.keys(state.compactOperations).length > 0;
+  const compactQueued = state.queue.items.some((item) => item.kind === "compact");
+  const compactLocked = compacting || compactQueued;
+  const compactLock: ActionAvailability = {
+    allowed: false,
+    reasonCode: "compactOperationLock",
+  };
   return {
-    fork: unimplemented,
-    compact: unimplemented,
+    fork: compactLocked ? compactLock : { allowed: true },
+    compact: compactLocked ? compactLock : { allowed: true },
     // Both are implemented (`engine.switchModelConfig` / `engine.setFollowupMode`); the
     // old CLI always allows them and nothing about phase or compaction gates them.
     ...modelConfigAvailability(state),

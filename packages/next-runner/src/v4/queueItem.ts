@@ -7,6 +7,11 @@ import type { QueueItem } from "@nex/shared/nex-protocol-v4";
  * without an engine.
  */
 
+import type { EngineFollowupMode } from "../engine/types.js";
+
+/** Typed queue text of a compact item (the UI renders it as `/compact`). */
+export const COMPACT_COMMAND_TEXT = "/compact";
+
 /** `auto` = the composer did not override the session routing. */
 export type RequestedDelivery = "auto" | "startNow" | "queue" | "guide";
 export type AdmittedDelivery = "startNow" | "queue" | "guide";
@@ -15,6 +20,8 @@ export interface NewQueueItemInput {
   sourceCommandId: string;
   queueItemId: string;
   clientId: string;
+  /** `compact` items are typed intents (`text:"/compact"`), never a user row (decision 7). */
+  kind?: QueueItem["kind"];
   text: string;
   attachments?: QueueItem["attachments"];
   modelSelection?: QueueItem["modelSelection"];
@@ -38,7 +45,7 @@ export function createQueueItem(input: NewQueueItemInput): QueueItem {
     sourceCommandId: input.sourceCommandId,
     queueItemId: input.queueItemId,
     clientId: input.clientId,
-    kind: "sendText",
+    kind: input.kind ?? "sendText",
     text: input.text,
     attachments: input.attachments ? [...input.attachments] : [],
     ...(input.modelSelection ? { modelSelection: input.modelSelection } : {}),
@@ -141,4 +148,30 @@ export function consumedGuideIds(
     else consumed.push(item.queueItemId);
   }
   return consumed;
+}
+
+/** Only `guide | queue` exist as routing; anything else is the queue default. */
+export function followedUpMode(mode: EngineFollowupMode): EngineFollowupMode {
+  return mode === "guide" ? "guide" : "queue";
+}
+
+export function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Bounded await used by the idle barrier (the caller already adds its own timeout). */
+export function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timed out")), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }

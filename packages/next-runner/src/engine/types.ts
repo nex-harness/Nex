@@ -106,11 +106,31 @@ export type EngineMessage =
       summary: string;
       tokensBefore: number;
       firstKeptEntryId: string;
-      /** `manual` | `auto` when known; absent = unknown. */
+      /**
+       * `manual` when the entry belongs to a manual operation (pi `fromHook`, or the entry
+       * linked to a live manual `compaction_start`); `auto` for threshold/overflow.
+       */
       origin?: "manual" | "auto";
+      /** Manual operation that produced this entry (the v4 commandId); keeps lineage on restore. */
+      sourceCommandId?: string;
     }
   /** A branch summary left by pi's `navigateTree`; restore skips it (old CLI parity). */
-  | { role: "branchSummary"; at: number; entryId: string; summary: string };
+  | { role: "branchSummary"; at: number; entryId: string; summary: string }
+  /** Runner-only product marker stored as a pi custom entry; restore projects it. */
+  | EngineForkMarker;
+
+/**
+ * `nex.fork` custom entry: the fork notice at a child session's head
+ * (docs/next/conversation-features.md decision 6).
+ */
+export interface EngineForkMarker {
+  role: "runnerMarker";
+  kind: "forkNotice";
+  at: number;
+  entryId: string;
+  parentSessionId: string;
+  parentRowId: number;
+}
 
 export type EngineAssistantPart =
   | { type: "text"; text: string }
@@ -216,6 +236,30 @@ export type EngineEvent =
       mode: EngineFollowupMode;
       sourceCommandId?: string;
     }
+  /**
+   * pi began a compaction. `reason:"manual"` is either the runner's own `compact()` call
+   * (linked by `sourceCommandId`, set while a manual operation is in flight) or another
+   * manual trigger; `threshold`/`overflow` are pi's automatic pre-run compaction.
+   */
+  | {
+      type: "compact_start";
+      at: number;
+      reason: "manual" | "threshold" | "overflow";
+      sourceCommandId?: string;
+    }
+  | {
+      type: "compact_end";
+      at: number;
+      reason: "manual" | "threshold" | "overflow";
+      sourceCommandId?: string;
+      /** Present when the compaction completed; absent on failure/cancel. */
+      result?: { tokensBefore: number; tokensAfter?: number };
+      aborted: boolean;
+      errorMessage?: string;
+    }
+  /** Transient API retry (pi `auto_retry_*`); never a row, surfaced for the UI's retry chip. */
+  | { type: "api_retry_start"; at: number; attempt: number; maxAttempts: number; delayMs: number }
+  | { type: "api_retry_end"; at: number; success: boolean }
   | { type: "mode_changed"; at: number; mode: PermissionMode; planEnabled: boolean }
   | { type: "approval_request"; at: number; approval: EngineApprovalRequest }
   | {
@@ -311,6 +355,62 @@ export interface SwitchModelConfigOutcome {
 
 export interface EngineEventSubscription {
   dispose(): void;
+}
+
+/** Outcome of one compaction operation (manual via `compact()`, or pi's automatic one). */
+export interface EngineCompactOutcome {
+  status: "success" | "noop" | "cancelled" | "failed";
+  origin: "manual" | "auto";
+  tokensBefore?: number;
+  tokensAfter?: number;
+  /** `compact.noop` / `compact.failed` / the operation lock when nothing started. */
+  reasonCode?: string;
+  message?: string;
+}
+
+export interface EngineCompactState {
+  /** A manual compact operation started by the runner is in flight. */
+  manualInFlight: boolean;
+  /** A manual compact operation is still queued in the runner queue. */
+  queued: boolean;
+  /** pi is compacting (manual or automatic). */
+  compacting: boolean;
+  /** Manual + auto operations the engine observed and has not yet reported. */
+  pendingOutcomes: EngineCompactOutcome[];
+}
+
+/** Resolves a row entityId one way or the other; the caller only sees pi entry ids. */
+export interface EngineRewindTarget {
+  /** Persisted pi entry id of the user message whose turn is being rewritten. */
+  userEntryId: string;
+  /** Text of that user message (the retry input). */
+  text: string;
+}
+
+export interface EngineRewindRequest {
+  /** Target user entry; the branch is cut to its parent. */
+  target: EngineRewindTarget;
+  newText: string;
+}
+
+export interface EngineRewindOutcome {
+  /** The prompt started (false when `newText` was blank). */
+  started: boolean;
+}
+
+export interface EngineForkRequest {
+  /** Persisted pi entry id of the target assistant message (must be on the active branch). */
+  targetEntryId: string;
+  /** Attachment marker recorded in the child's `nex.fork` entry. */
+  parentSessionId: string;
+  parentRowId: number;
+  title: string;
+}
+
+export interface EngineForkOutcome {
+  sessionId: string;
+  title: string;
+  titleSource: EngineTitleSource;
 }
 
 export interface Engine {
@@ -412,6 +512,46 @@ export interface Engine {
     sessionId: string,
     mode: EngineFollowupMode,
   ): Promise<{ previous: EngineFollowupMode; mode: EngineFollowupMode }>;
+
+  // ── conversation rewind / compact / fork (docs/next/conversation-features.md 5-7) ──
+
+  /** Current compact facts (manual in flight, queued, pi compacting) for both owners. */
+  compactState(sessionId: string): EngineCompactState;
+
+  /**
+   * Manual compaction (`session.compact()`). The caller emits the queued/running marker;
+   * the engine reports the terminal outcome here and through `compact_end` events (so an
+   * automatic compaction reaches the same marker path). Returns once pi settles it.
+   */
+  compact(sessionId: string, sourceCommandId: string): Promise<EngineCompactOutcome>;
+
+  /** Engine-observed, not-yet-reported compact outcomes (drained by the projection owner). */
+  takeCompactOutcomes(sessionId: string): EngineCompactOutcome[];
+
+  /**
+   * Rewind primitive (decision 5): abort + wait idle if running, branch to the parent of
+   * the target user entry, refresh pi's context, then optionally prompt `newText` again in
+   * the same session. The live projection is truncated by the caller *before* this is
+   * called; the outcome reports what it removed.
+   */
+  rewind(sessionId: string, request: EngineRewindRequest): Promise<EngineRewindOutcome>;
+
+  /**
+   * Resolves the active branch's user message that owns the assistant `targetEntryId`
+   * (the rewind anchor for retry). Undefined when the target is not a stable message.
+   */
+  userMessageBefore(sessionId: string, targetEntryId: string): Promise<EngineRewindTarget | null>;
+
+  /**
+   * Fork: copy the conversation up to `targetEntryId` into a new pi session file (second
+   * `SessionManager`, `createBranchedSession`), record the `nex.fork` custom entry, and
+   * register the child. The parent is never touched.
+   */
+  forkAssistant(
+    workspacePath: string,
+    sessionId: string,
+    request: EngineForkRequest,
+  ): Promise<EngineForkOutcome>;
 
   catalog(): Promise<EngineCatalog>;
 

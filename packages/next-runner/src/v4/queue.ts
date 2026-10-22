@@ -4,32 +4,36 @@ import type {
   QueueItem,
   QueueState,
 } from "@nex/shared/nex-protocol-v4";
-import type { Engine, EngineEvent, EngineFollowupMode } from "../engine/types.js";
+import type { Engine, EngineEvent } from "../engine/types.js";
 import type { Logger } from "../logger.js";
 import type { ProjectionState } from "../projection/state.js";
 import { randomId } from "../util/ids.js";
+import { deriveInputRouting } from "../projection/inputRouting.js";
 import {
+  COMPACT_COMMAND_TEXT,
   consumedGuideIds,
   createQueueItem,
   findItem,
+  messageOf,
   moveQueueItem,
   nextDrainableItem,
   removeQueueItem,
   replaceQueueItemText,
   withQueuePositions,
+  withTimeout,
   type AdmittedDelivery,
   type RequestedDelivery,
 } from "./queueItem.js";
 
-/** Bounded wait for pi to release a run after an abort (preemption barrier). */
+/** Bounded preemption barrier: how long to wait for pi to release a run. */
 const IDLE_TIMEOUT_MS = 10_000;
 
 export type HeldQueueDisposition = "clearQueueAndSend" | "keepQueueAndSend";
 
-/** Admission decision for one `sendText`, echoed into the ACK and the projection. */
+/** Admission decision for one `sendText` (echoed into the ACK). */
 export interface SendTextAdmission {
   delivery: AdmittedDelivery;
-  /** Present only when the text actually landed in the runner queue (queue/guide). */
+  /** Present only when the text landed in the runner queue (queue/guide). */
   queueItemId?: string;
 }
 
@@ -42,6 +46,11 @@ export interface SendTextPayload {
   mode?: string;
   planEnabled?: boolean;
 }
+
+/** Outcome of a `compact` admission (decision 7); the handler maps it to an ACK. */
+export type CompactAdmission =
+  | { delivery: "startNow"; sourceCommandId: string }
+  | { delivery: "queue"; queueItemId: string };
 
 export class QueueAdmissionError extends Error {
   constructor(
@@ -65,23 +74,18 @@ export interface SessionQueueDeps {
   commit: (queue: QueueState) => void;
   /** Asks the session store for a throttled snapshot publish. */
   requestPublish: () => void;
+  /** Runs one queued `compact` item (wired to the compact owner; the queue only dispatches). */
+  runQueuedCompact: (sourceCommandId: string) => Promise<void>;
 }
 
 /**
  * Runner-owned queue (docs/next/conversation-features.md decision 4, research §5).
  *
- * **Owner.** This is the single writer of queued text for one session. `projection.queue` is
- * only a cache written through `commit`; nothing else mutates it. pi's own queues are never
- * used for queued text — only `guide`, which pi cannot address by id.
- *
- * **Ordering.** Admission appends in command order; the drain promotes at most one item per
- * `agent_settled` (single-flight), so a promoted prompt can never race a second one. Stop or
- * a failed turn pauses the queue (`autoDrain=false` + `pauseReason`); `setAutoDrain(true)`
- * re-arms it and drains immediately when idle.
- *
- * **Persistence.** Queued items are in-memory only, like the old CLI (`queue` is explicitly
- * not persisted: `snapshot.ts` "queue（不持久化）"). A runner restart drops them and the UI
- * sees them disappear; the user resends.
+ * Single writer of queued items; `projection.queue` is only a cache written through
+ * `commit`, and pi's queues are used for `guide` only. The drain promotes one item per
+ * `agent_settled` (single-flight); Stop or a failed turn pauses (`autoDrain=false` +
+ * `pauseReason`). Items are in-memory only (old CLI parity). A `kind:"compact"` item is a
+ * typed `/compact` intent run by the compact owner, never a user row.
  */
 export class SessionQueue {
   private items: QueueItem[] = [];
@@ -90,7 +94,7 @@ export class SessionQueue {
   private admissionSeq = 0;
   private reservationSeq = 0;
   private draining = false;
-  /** >0 while an explicit preemption owns the next `settled` (startNow / sendQueuedNow). */
+  /** >0 while a preemption (startNow / sendQueuedNow) owns the next `settled`. */
   private preempting = 0;
 
   constructor(private readonly deps: SessionQueueDeps) {}
@@ -109,19 +113,7 @@ export class SessionQueue {
 
   // ── admission ──
 
-  /**
-   * `sendText` admission matrix (spec decision 4):
-   *
-   * | state                          | requested      | result                       |
-   * | ------------------------------ | -------------- | ---------------------------- |
-   * | idle                           | auto           | start now                    |
-   * | idle                           | queue / guide  | start now (nothing to join)  |
-   * | idle (+held queue)             | auto           | choice confirmation, then start |
-   * | running, followupMode=guide    | auto           | steer + pending guide item   |
-   * | running, followupMode=queue    | auto           | enqueue                      |
-   * | running                        | startNow       | abort, wait idle, start      |
-   * | running                        | queue / guide  | that delivery                |
-   */
+  /** `sendText` admission (decision 4; full matrix in docs/next/conversation-features.md). */
   async admitSendText(
     envelope: CommandEnvelope,
     payload: SendTextPayload,
@@ -134,8 +126,7 @@ export class SessionQueue {
     const routing = this.inputRoutingMode();
 
     if (routing === "choice") {
-      // Held queue: the user must pick clear/keep before anything starts, including an
-      // explicit startNow (old CLI applies the disposition on both paths).
+      // Held queue: clear/keep is required before anything starts, startNow included.
       this.applyHeldDisposition(payload);
     }
 
@@ -146,8 +137,7 @@ export class SessionQueue {
     }
 
     if (!busy) {
-      // A requested queue/guide delivery on an idle session still starts now: there is no
-      // active run to join, and the old CLI's Core admission does the same.
+      // queue/guide on an idle session still starts now: there is no run to join.
       await this.startNow(envelope, payload);
       return { delivery: "startNow" };
     }
@@ -167,9 +157,10 @@ export class SessionQueue {
         const item = this.appendItem(envelope, payload, requested, "guide");
         return { delivery: "guide", queueItemId: item.queueItemId };
       }
-      // pi could not take a steer (run already ending): keep the text in the runner queue
-      // instead of dropping it, with the fallback recorded on the item.
-      const item = this.appendItem(envelope, payload, requested, "queue", "guide.notSteerable");
+      // pi could not take a steer (run ending): keep the text queued with the fallback.
+      const item = this.appendItem(envelope, payload, requested, "queue", {
+        fallbackReasonCode: "guide.notSteerable",
+      });
       return { delivery: "queue", queueItemId: item.queueItemId };
     }
 
@@ -177,9 +168,29 @@ export class SessionQueue {
     return { delivery: "queue", queueItemId: item.queueItemId };
   }
 
+  /**
+   * Decision 7: busy → a `kind:"compact"` FIFO item; idle → the caller starts it now. A
+   * running/queued compaction holds the lock (old CLI dedupe: one at a time).
+   */
+  admitCompact(envelope: CommandEnvelope): CompactAdmission {
+    if (this.hasCompactInFlight() || this.compactQueued()) {
+      throw new QueueAdmissionError("compactOperationLock", "a compaction is already active");
+    }
+    if (!this.isBusy()) return { delivery: "startNow", sourceCommandId: envelope.commandId };
+    const item = this.appendItem(envelope, { text: COMPACT_COMMAND_TEXT }, "auto", "queue", {
+      kind: "compact",
+    });
+    return { delivery: "queue", queueItemId: item.queueItemId };
+  }
+
+  /** True while a manual compact is queued (pi's own state is the engine's fact). */
+  compactQueued(): boolean {
+    return this.items.some((item) => item.kind === "compact");
+  }
+
   // ── queue commands ──
 
-  /** Returns false when the id is already gone (concurrent drain / duplicate delete). */
+  /** False when the id is already gone (concurrent drain / duplicate delete). */
   delete(queueItemId: string): boolean {
     const next = removeQueueItem(this.items, queueItemId);
     if (next === null) return false;
@@ -195,10 +206,7 @@ export class SessionQueue {
     return true;
   }
 
-  /**
-   * Protocol-only (the UI restores the composer by deleting instead, research §5). Text
-   * edits keep the position; a compact item is never editable.
-   */
+  /** Protocol-only (the UI restores the composer instead); compact items are not editable. */
   edit(queueItemId: string, newText: string): QueueEditResult {
     const item = findItem(this.items, queueItemId);
     if (!item) return "missing";
@@ -209,7 +217,7 @@ export class SessionQueue {
     return "edited";
   }
 
-  /** Busy: only arms the flag. Idle: re-arms and drains immediately (old CLI parity). */
+  /** Busy: arms the flag. Idle: re-arms and drains immediately (old CLI parity). */
   async setAutoDrain(autoDrain: boolean): Promise<void> {
     if (!autoDrain) {
       this.pause("manual");
@@ -222,12 +230,7 @@ export class SessionQueue {
     await this.drain();
   }
 
-  /**
-   * `sendQueuedNow`: abort the active run, wait for pi to be idle, then reserve → promote the
-   * chosen item. autoDrain is preserved (the user is explicitly steering the queue, not
-   * stopping work). Returns "missing" when the id is gone and "busy" when another writer
-   * already reserved it.
-   */
+  /** `sendQueuedNow`: abort, wait idle, reserve → promote. "missing"/"busy" outcomes. */
   async sendQueuedNow(queueItemId: string): Promise<"promoted" | "missing" | "busy"> {
     const item = findItem(this.items, queueItemId);
     if (!item) return "missing";
@@ -243,10 +246,7 @@ export class SessionQueue {
 
   // ── engine-driven transitions ──
 
-  /**
-   * Called after the projection fold applied an engine event. Ordering guard: the settle
-   * event is the only drain trigger, and a preemption owns it while it waits for idle.
-   */
+  /** The settle event is the only drain trigger; a preemption owns it while waiting. */
   afterEvent(event: EngineEvent, projection: ProjectionState): void {
     if (event.type === "pi_queue_update") {
       this.reconcileGuides(event.steering);
@@ -255,9 +255,8 @@ export class SessionQueue {
     if (event.type !== "settled") return;
     if (this.preempting > 0) return;
     if (event.aborted) {
-      // Stop, or an abort the user did not initiate (turn cancelled): hold the queue so the
-      // remaining items are not silently replayed into a run the user just interrupted.
-      // Pending guides count too — pi would otherwise inject them into the next run.
+      // Stop or any abort holds the queue so items are not replayed into a run the user
+      // just interrupted; pending guides count too (pi would inject them next run).
       if (this.items.length > 0) this.pause("stopped");
       return;
     }
@@ -274,27 +273,29 @@ export class SessionQueue {
     if (this.items.length > 0) this.pause("stopped");
   }
 
+  /** Failed/cancelled compaction holds the remaining items (old CLI `goal-compact.ts`). */
+  pauseAfterCompactFailure(): void {
+    if (this.items.length > 0) this.pause("error");
+  }
+
   // ── internals ──
 
   private isBusy(): boolean {
-    const phase = this.deps.projection().phase;
-    if (phase === "running" || phase === "prewarming") return true;
-    // A promotion is already on its way to pi (`drain` set `draining` before awaiting, and
-    // the item is reserved/promoting): starting another run here would double-submit.
-    if (this.draining || this.items.some((item) => item.dispatch.state !== "queued")) return true;
-    // Phase follows events; pi's streaming flag closes the gap right after a prompt starts
-    // and before the fold sees `user_input` (starting twice would throw in pi).
-    return this.deps.engine.runState(this.deps.sessionId).streaming;
+    // A promotion on its way to pi and pi's streaming flag (before the fold sees
+    // `user_input`) both count: starting another run would double-submit.
+    return (
+      isRunningPhase(this.deps.projection().phase) ||
+      this.draining ||
+      this.items.some((item) => item.dispatch.state !== "queued") ||
+      this.deps.engine.runState(this.deps.sessionId).streaming
+    );
   }
 
+  /** Same table the snapshot publishes (delegated so the two can never disagree). */
   private inputRoutingMode(): "startNow" | "enqueue" | "guide" | "choice" {
-    const state = this.deps.projection();
-    if (this.isBusy()) {
-      return followedUpMode(state.followupMode) === "guide" ? "guide" : "enqueue";
-    }
-    const completed = state.phase === "completedSuccess" || state.phase === "completedInterrupted";
-    if (completed && this.hasDrainable() && !this.autoDrain) return "choice";
-    return "startNow";
+    const { phase, followupMode } = this.deps.projection();
+    const route = deriveInputRouting({ phase, followupMode, queue: this.snapshot() }).mode;
+    return route === "reject" ? "enqueue" : route;
   }
 
   private applyHeldDisposition(payload: SendTextPayload): void {
@@ -305,29 +306,22 @@ export class SessionQueue {
         "held queue requires clearQueueAndSend or keepQueueAndSend",
       );
     }
+    // A concurrent add/delete invalidates what the confirmation dialog showed.
     const expected = payload.expectedHeldQueueItemIds;
-    if (expected) {
-      // The confirmation dialog showed a specific set; a concurrent add/delete invalidates
-      // it so the user never loses an item they did not see.
-      const current = new Set(this.items.map((item) => item.queueItemId));
-      const same = expected.length === current.size && expected.every((id) => current.has(id));
-      if (!same) {
-        throw new QueueAdmissionError(
-          "guard.heldQueueConfirmationStale",
-          "held queue changed after the confirmation was shown",
-        );
-      }
+    const current = new Set(this.items.map((item) => item.queueItemId));
+    if (
+      expected &&
+      (expected.length !== current.size || !expected.every((id) => current.has(id)))
+    ) {
+      throw new QueueAdmissionError(
+        "guard.heldQueueConfirmationStale",
+        "held queue changed after the confirmation was shown",
+      );
     }
-    if (disposition === "clearQueueAndSend") {
-      this.items = [];
-      this.autoDrain = true;
-      this.pauseReason = undefined;
-      this.commit();
-    } else {
-      this.autoDrain = true;
-      this.pauseReason = undefined;
-      this.commit();
-    }
+    if (disposition === "clearQueueAndSend") this.items = [];
+    this.autoDrain = true;
+    this.pauseReason = undefined;
+    this.commit();
   }
 
   private async startNow(envelope: CommandEnvelope, payload: SendTextPayload): Promise<void> {
@@ -348,13 +342,15 @@ export class SessionQueue {
     payload: SendTextPayload,
     requested: RequestedDelivery,
     admitted: AdmittedDelivery,
-    fallbackReasonCode?: string,
+    options: { fallbackReasonCode?: string; kind?: QueueItem["kind"] } = {},
   ): QueueItem {
+    const { fallbackReasonCode, kind } = options;
     this.admissionSeq += 1;
     const item = createQueueItem({
       sourceCommandId: envelope.commandId,
-      queueItemId: this.nextItemId(),
+      queueItemId: randomId("qi"),
       clientId: envelope.clientId || "runner",
+      ...(kind ? { kind } : {}),
       text: payload.text,
       ...(payload.modelSelection ? { modelSelection: payload.modelSelection } : {}),
       ...(payload.mode ? { mode: payload.mode as QueueItem["mode"] } : {}),
@@ -369,12 +365,18 @@ export class SessionQueue {
     return item;
   }
 
-  private nextItemId(): string {
-    return randomId("qi");
-  }
-
   private hasDrainable(): boolean {
     return this.items.some((item) => item.delivery.admitted !== "guide");
+  }
+
+  private hasCompactInFlight(): boolean {
+    // pi's own state plus the projection's open marker both mean "compaction running".
+    const state = this.deps.engine.compactState(this.deps.sessionId);
+    return (
+      state.manualInFlight ||
+      state.compacting ||
+      Object.keys(this.deps.projection().compactOperations).length > 0
+    );
   }
 
   private pause(reason: NonNullable<QueueState["pauseReason"]>): void {
@@ -384,11 +386,7 @@ export class SessionQueue {
     this.commit();
   }
 
-  /**
-   * One promotion per drain invocation (single-flight). Each item is reserved then promoted
-   * before `engine.submit` starts the run, so a crash between the two leaves a visible
-   * `promoting` row instead of a lost message.
-   */
+  /** One promotion per drain (single-flight): reserved → promoting → run → remove. */
   private async drain(): Promise<void> {
     if (this.draining) return;
     const head = this.autoDrain ? nextDrainableItem(this.items) : undefined;
@@ -401,10 +399,7 @@ export class SessionQueue {
     }
   }
 
-  /**
-   * reserved → promoting → submit → remove. Any failure before the prompt starts rolls the
-   * item back to `queued` in place, so nothing is lost and the UI unlocks the row.
-   */
+  /** Any failure before the run starts rolls the item back to `queued` in place. */
   private async promote(queueItemId: string): Promise<boolean> {
     const item = findItem(this.items, queueItemId);
     if (!item || item.dispatch.state !== "queued") return false;
@@ -413,12 +408,17 @@ export class SessionQueue {
     this.markDispatch(queueItemId, { state: "reserved", reservationId });
     this.markDispatch(queueItemId, { state: "promoting", reservationId });
     try {
-      await this.deps.engine.submit(this.deps.sessionId, item.text, {
-        requestId: item.sourceCommandId,
-        ...(item.modelSelection ? { modelSelection: item.modelSelection } : {}),
-        ...(item.mode ? { mode: item.mode } : {}),
-        ...(item.planEnabled !== undefined ? { planEnabled: item.planEnabled } : {}),
-      });
+      if (item.kind === "compact") {
+        // The compact owner runs it and owns the marker; the queue only dispatches.
+        await this.deps.runQueuedCompact(item.sourceCommandId);
+      } else {
+        await this.deps.engine.submit(this.deps.sessionId, item.text, {
+          requestId: item.sourceCommandId,
+          ...(item.modelSelection ? { modelSelection: item.modelSelection } : {}),
+          ...(item.mode ? { mode: item.mode } : {}),
+          ...(item.planEnabled !== undefined ? { planEnabled: item.planEnabled } : {}),
+        });
+      }
     } catch (error) {
       this.deps.logger.warn("queue promotion failed", {
         sessionId: this.deps.sessionId,
@@ -440,10 +440,7 @@ export class SessionQueue {
     this.setItems(next);
   }
 
-  /**
-   * A guide item is consumed when pi emits `queue_update` without its text. pi removes the
-   * steering entry before `message_start`, so absence is the delivery signal.
-   */
+  /** Absence from pi's `queue_update` steering list is the guide-consumed signal. */
   private reconcileGuides(steering: readonly string[]): void {
     const consumed = consumedGuideIds(this.items, steering);
     if (consumed.length === 0) return;
@@ -451,12 +448,7 @@ export class SessionQueue {
     this.setItems(this.items.filter((item) => !drop.has(item.queueItemId)));
   }
 
-  /**
-   * Undelivered guides at settle: pi keeps unconsumed steering messages and would inject them
-   * into the *next* run invisibly. Demote them to normal queued items first, then clear pi's
-   * queue — clearing first would emit `queue_update` and make the still-pending items look
-   * consumed (dropping the text entirely).
-   */
+  /** Demote first, then clear pi's queue (clearing first would look like consumption). */
   private demoteUndeliveredGuides(): void {
     const pending = this.items.filter((item) => item.delivery.admitted === "guide");
     if (pending.length === 0) return;
@@ -474,7 +466,7 @@ export class SessionQueue {
         : item,
     );
     this.setItems(demoted);
-    // Now nothing is admitted as a guide, so `queue_update` cannot consume an item.
+    // Nothing is admitted as a guide now, so `queue_update` cannot consume an item.
     this.deps.engine.clearPiQueue(this.deps.sessionId);
   }
 
@@ -484,12 +476,11 @@ export class SessionQueue {
     try {
       await this.deps.engine.abort(this.deps.sessionId);
       await withTimeout(this.deps.engine.waitForIdle(this.deps.sessionId), IDLE_TIMEOUT_MS).catch(
-        (error: unknown) => {
+        (error: unknown) =>
           this.deps.logger.warn("queue preemption idle wait timed out", {
             sessionId: this.deps.sessionId,
             message: messageOf(error),
-          });
-        },
+          }),
       );
     } finally {
       this.preempting -= 1;
@@ -507,26 +498,6 @@ export class SessionQueue {
   }
 }
 
-function followedUpMode(mode: EngineFollowupMode): EngineFollowupMode {
-  return mode === "guide" ? "guide" : "queue";
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("timed out")), timeoutMs);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
+function isRunningPhase(phase: ProjectionState["phase"]): boolean {
+  return phase === "running" || phase === "prewarming";
 }

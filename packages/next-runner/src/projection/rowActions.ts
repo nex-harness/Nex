@@ -35,11 +35,11 @@ export function deriveRowActions(state: ProjectionState): Map<number, RowActions
     }
   }
 
-  // Compaction does not exist in batch 2a (it lands in batch 3), so no compact work can
-  // be active and nothing is blocked by it. Batch 3 replaces these two constants with the
-  // `activeWorks.kind === "compact"` / `activeWorks.length > 0` derivations.
-  const compactActive = false;
-  const completionBlockingActive = false;
+  // `activeWorks.kind === "compact"` (batch 2d): a rewind would abort the compaction, and
+  // a fork's `createBranchedSession` would copy a half-written boundary. Both entries are
+  // withheld until it ends.
+  const compactActive = Object.keys(state.compactOperations).length > 0;
+  const completionBlockingActive = compactActive;
 
   // Newest editable user row, walking backwards (oldest wins only if newer ones are absent).
   let latestEditable: ProjectedRow | undefined;

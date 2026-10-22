@@ -10,6 +10,7 @@ import type { Model } from "@earendil-works/pi-ai";
 import type { PermissionGate } from "../permissions/gate.js";
 import type { EngineEvent } from "../types.js";
 import { createPiSessionWithGate } from "./piSessionFactory.js";
+import type { PiTranslateContext } from "./events.js";
 
 /** One open pi session plus its approval gate and subscribers. */
 export interface OpenSession {
@@ -29,6 +30,11 @@ export interface SessionFactoryDeps {
   /** Fallback settings manager created at startup. */
   fallbackSettings: () => SettingsManager;
   modelRuntime: () => ModelRuntime;
+  /**
+   * Facts only the engine knows when translating (the manual compact command in flight);
+   * pi's compaction events carry no command id.
+   */
+  translateContext?: (sessionId: string) => PiTranslateContext;
   /** Metadata transitions (phase/title) stay owned by the engine. */
   onPiEvent: (workspacePath: string, sessionId: string, event: AgentSessionEvent) => void;
 }
@@ -58,6 +64,7 @@ export async function openPiSession(
     onPiEvent: (event) => {
       deps.onPiEvent(workspacePath, sessionIdRef.current, event);
     },
+    ...(deps.translateContext ? { translateContext: deps.translateContext } : {}),
   });
   sessionIdRef.current = created.session.sessionId;
   const open: OpenSession = {

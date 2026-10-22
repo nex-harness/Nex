@@ -9,10 +9,17 @@ import type {
   CreateEngineSessionOptions,
   Engine,
   EngineCatalog,
+  EngineCompactOutcome,
+  EngineCompactState,
   EngineEvent,
   EngineEventSubscription,
   EngineFollowupMode,
+  EngineForkOutcome,
+  EngineForkRequest,
   EngineMessage,
+  EngineRewindOutcome,
+  EngineRewindRequest,
+  EngineRewindTarget,
   EngineSessionState,
   EngineRunState,
   EngineUnreadState,
@@ -21,18 +28,27 @@ import type {
   SubmitOptions,
   SubmitOutcome,
   SwitchModelConfigInput,
-  SwitchModelConfigOutcome,
 } from "../types.js";
+import { PiCompactOps } from "./piCompactOps.js";
+import { submitPrompt } from "./piSessionOps.js";
+
+import {
+  compactStateOf,
+  resolveRewindTarget,
+  runFork,
+  runManualCompact,
+  runRewind,
+  type ConversationOpsDeps,
+} from "./piConversationOps.js";
+import type { PiTranslateContext } from "./events.js";
+import { handleEnginePiEvent } from "./piEventHook.js";
 import { SessionMetaStore } from "./metaStore.js";
 import { toEngineSessionStates, teardownSession } from "./sessionViews.js";
 import { createTaskStateApi, deleteTaskImpl } from "./taskStateOps.js";
-import { EMPTY_USAGE, defaultTitle, selectionFor, usageFromSession } from "./sessionHelpers.js";
+import { EMPTY_USAGE, selectionFor, usageFromSession } from "./sessionHelpers.js";
 import { buildCatalog } from "./modelCatalog.js";
 import { toEngineBranchHistory } from "./translate.js";
-import { reportMessageEntry } from "./messageEntries.js";
-import { normalizeMode } from "../permissions/policy.js";
 import { openPiSession, type OpenSession } from "./sessionLifecycle.js";
-import { handlePiSessionEvent } from "./piSessionOps.js";
 import { applyEngineSelection, startEnginePrompt, type PromptOpsDeps } from "./promptOps.js";
 import type { SessionConfigOps } from "./sessionConfigOps.js";
 import { createEngineOps } from "./engineOps.js";
@@ -46,20 +62,13 @@ export interface PiEngineOptions {
   logger: Logger;
   /** Test seam: a faux-backed ModelRuntime instead of `~/.pi/agent` credentials. */
   createModelRuntime?: () => Promise<ModelRuntime>;
-  /** Test seam: in-memory settings instead of the user's settings.json. */
+  /** Test seams: in-memory settings, title settings and a fake completion. */
   createSettingsManager?: (workspacePath: string) => SettingsManager;
-  /** Test seam: title generation settings instead of `NEX_RUNNER_TITLES` / `NEX_RUNNER_TITLE_MODEL`. */
   titleSettings?: TitleGenerationSettings;
-  /** Test seam: runs one title completion; the engine resolves the model and context. */
   completeTitle?: (request: TitleCompletionRequest) => Promise<string>;
 }
 
-/**
- * pi-backed Engine. Owns all mutable session facts:
- * - pi session files under `<dataDir>/sessions/<sha1(workspacePath)>/`
- * - one runner metadata file per workspace (title/phase/tombstones)
- * - the in-process AgentSession map
- */
+/** pi-backed Engine: session files under `<dataDir>/sessions/`, one metadata file per workspace, the in-process session map. */
 export class PiEngine implements Engine {
   private readonly sessions = new Map<string, OpenSession>();
   private readonly listeners = new Set<(workspacePath: string) => void>();
@@ -69,6 +78,9 @@ export class PiEngine implements Engine {
   private readonly titles: TitleCoordinator;
   private readonly taskApi: ReturnType<typeof createTaskStateApi>;
   private readonly hooks: ReturnType<typeof createHookFactories>;
+  private readonly compactOps: PiCompactOps;
+  /** pi entry a manual compaction produced, so its outcome can be persisted with the command. */
+  private readonly compactionEntries = new Map<string, string>();
   private modelRuntime: ModelRuntime | null = null;
   private settingsManager: SettingsManager | null = null;
   private catalogCache: EngineCatalog | null = null;
@@ -88,13 +100,15 @@ export class PiEngine implements Engine {
       runtime: () => this.requireRuntime(),
     });
     this.taskApi = createTaskStateApi(this.hooks.taskStateHooks());
+    const sessionFor = (sessionId: string) => this.sessions.get(sessionId)?.session;
+    this.compactOps = new PiCompactOps({ logger: options.logger, sessionFor });
     const ops = createEngineOps({
       logger: options.logger,
       metadata: this.metadata,
       ...(options.titleSettings ? { titleSettings: options.titleSettings } : {}),
       ...(options.completeTitle ? { completeTitle: options.completeTitle } : {}),
       runtime: () => this.requireRuntime(),
-      sessionFor: (sessionId) => this.sessions.get(sessionId)?.session,
+      sessionFor,
       emit: (sessionId, event) => this.emitEngineEvent(sessionId, event),
       sessionsChanged: (workspacePath) => this.emitSessionsChanged(workspacePath),
     });
@@ -105,8 +119,7 @@ export class PiEngine implements Engine {
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    // Defaults read ~/.pi/agent/auth.json + models.json, so the user's existing pi
-    // credentials are used without any server push.
+    // Defaults read ~/.pi/agent/auth.json + models.json: the user's pi credentials, no push.
     this.modelRuntime = this.options.createModelRuntime
       ? await this.options.createModelRuntime()
       : await ModelRuntime.create();
@@ -115,47 +128,42 @@ export class PiEngine implements Engine {
     this.initialized = true;
   }
 
-  async createSession(
+  createSession(
     workspacePath: string,
     options: CreateEngineSessionOptions,
-  ): Promise<{ sessionId: string; inputId?: string }> {
-    await this.init();
-    return createEngineSession(this.hooks.sessionCreateDeps(), workspacePath, options);
+  ): Promise<{ sessionId: string }> {
+    return this.init().then(() =>
+      createEngineSession(this.hooks.sessionCreateDeps(), workspacePath, options),
+    );
   }
 
-  async openSession(workspacePath: string, sessionId: string): Promise<void> {
-    await this.init();
-    if (this.sessions.has(sessionId)) return;
-    await restoreEngineSession(this.hooks.sessionCreateDeps(), workspacePath, sessionId);
+  openSession(workspacePath: string, sessionId: string): Promise<void> {
+    if (this.sessions.has(sessionId)) return Promise.resolve();
+    return this.init().then(() =>
+      restoreEngineSession(this.hooks.sessionCreateDeps(), workspacePath, sessionId),
+    );
   }
 
-  async deleteSession(workspacePath: string, sessionId: string): Promise<void> {
-    await this.init();
-    await deleteTaskImpl(this.hooks.taskStateHooks(), workspacePath, sessionId);
+  deleteSession(workspacePath: string, sessionId: string): Promise<void> {
+    return this.init().then(() =>
+      deleteTaskImpl(this.hooks.taskStateHooks(), workspacePath, sessionId),
+    );
   }
 
   async listSessions(workspacePath: string): Promise<EngineSessionState[]> {
     await this.init();
+    const live = (sessionId: string) => {
+      const open = this.sessions.get(sessionId);
+      if (!open) return undefined;
+      const { mode, planEnabled } = open.gate.getMode();
+      return { session: open.session, streaming: open.session.isStreaming, mode, planEnabled };
+    };
     const entries = await this.metadata.list(workspacePath);
-    return toEngineSessionStates(
-      workspacePath,
-      entries,
-      (sessionId) => {
-        const open = this.sessions.get(sessionId);
-        if (!open) return undefined;
-        return {
-          session: open.session,
-          streaming: open.session.isStreaming,
-          mode: open.gate.getMode().mode,
-          planEnabled: open.gate.getMode().planEnabled,
-        };
-      },
-      {
-        selectionFor,
-        usageFromSession,
-        emptyUsage: EMPTY_USAGE,
-      },
-    );
+    return toEngineSessionStates(workspacePath, entries, live, {
+      selectionFor,
+      usageFromSession,
+      emptyUsage: EMPTY_USAGE,
+    });
   }
 
   async listDeletedSessionIds(workspacePath: string): Promise<string[]> {
@@ -164,12 +172,11 @@ export class PiEngine implements Engine {
     return entries.filter((entry) => entry.deleted).map((entry) => entry.sessionId);
   }
 
+  /** 修复依据（research §0-b）：`session.messages` 是投影上下文，压缩后丢旧消息、branch() 后丢废弃分支；restore 必须读 pi 原始分支。 */
   async history(sessionId: string): Promise<EngineMessage[]> {
     const open = this.requireOpen(sessionId);
-    // 修复依据（research §0-b）：`session.messages` 是喂给模型的投影上下文——压缩后旧消息
-    // 被 summary 取代、`branch()` 后废弃分支消失。restore 必须读 pi 的原始分支，才能把压缩
-    // 边界投影成 marker、并保留压缩前的行；每条 message 还带稳定 entryId 供 entityId 派生。
-    return toEngineBranchHistory(open.session.sessionManager.getBranch());
+    const meta = await this.metadata.get(open.workspacePath, sessionId);
+    return toEngineBranchHistory(open.session.sessionManager.getBranch(), meta?.lastCompact);
   }
 
   subscribe(sessionId: string, listener: (event: EngineEvent) => void): EngineEventSubscription {
@@ -178,42 +185,21 @@ export class PiEngine implements Engine {
     return { dispose: () => open.listeners.delete(listener) };
   }
 
-  async submit(sessionId: string, text: string, options: SubmitOptions): Promise<SubmitOutcome> {
+  submit(sessionId: string, text: string, options: SubmitOptions): Promise<SubmitOutcome> {
     const open = this.requireOpen(sessionId);
-    const workspacePath = open.workspacePath;
-    const meta = await this.metadata.get(workspacePath, sessionId);
-    if (meta?.seenRequestIds?.includes(options.requestId)) {
-      return { status: "duplicate", inputId: options.requestId };
-    }
-    if (options.modelSelection) await this.applySelection(sessionId, options.modelSelection);
-    // The mode arrives per submission; the gate applies it before the run starts so the
-    // very first tool call of this turn sees it.
-    const mode = normalizeMode(options.mode ?? meta?.mode);
-    const planEnabled =
-      options.planEnabled ?? (options.mode ? false : (meta?.planEnabled ?? false));
-    open.gate.setMode(mode, planEnabled);
-    const now = Date.now();
-    const title = meta?.title || defaultTitle(text);
-    await this.metadata.upsert(workspacePath, sessionId, {
-      lastActivityAt: now,
-      phase: text.trim() ? "running" : (meta?.phase ?? "draft"),
-      title,
-      titleSource: meta?.titleSource ?? "default",
-      mode,
-      planEnabled,
-      seenRequestId: options.requestId,
-      ...(selectionFor(open.session) ? { model: selectionFor(open.session) ?? undefined } : {}),
-    });
-    if (text.trim().length > 0) {
-      const inputId = await this.startPrompt(workspacePath, sessionId, text, options.requestId);
-      // 标题生成在首条 prompt 启动后以 fire-and-forget 进行（docs/next/
-      // conversation-features.md 决策 8，旧 CLI 同样是首条 query 落库后并发启动）：
-      // 永不 await、永不改变本次 turn 的结果，失败只记 warn。
-      this.titles.maybeStart(workspacePath, sessionId, text, meta);
-      return { status: "accepted", inputId };
-    }
-    this.emitSessionsChanged(workspacePath);
-    return { status: "accepted", inputId: options.requestId };
+    return submitPrompt(
+      {
+        metadata: this.metadata,
+        titles: this.titles,
+        sessionsChanged: (path) => this.emitSessionsChanged(path),
+        startPrompt: (next: string, requestId: string) =>
+          this.startPrompt(open.workspacePath, sessionId, next, requestId),
+        applySelection: (selection: ModelSelection) => this.applySelection(sessionId, selection),
+      },
+      open,
+      text,
+      options,
+    );
   }
 
   async resolveApproval(
@@ -229,108 +215,108 @@ export class PiEngine implements Engine {
   }
 
   permissionMode(sessionId: string): { mode: PermissionMode; planEnabled: boolean } | null {
-    const open = this.sessions.get(sessionId);
-    return open ? open.gate.getMode() : null;
+    return this.sessions.get(sessionId)?.gate.getMode() ?? null;
   }
 
   async abort(sessionId: string): Promise<void> {
     const open = this.sessions.get(sessionId);
     if (!open) return;
-    // Settle the hook before aborting so the run cannot stay paused on an approval.
     open.gate.abortPending();
     await open.session.abort();
+    const phase = "completedInterrupted" as const;
     await this.metadata.upsert(open.workspacePath, sessionId, {
-      phase: "completedInterrupted",
+      phase,
       lastActivityAt: Date.now(),
     });
     this.emitSessionsChanged(open.workspacePath);
   }
 
-  /**
-   * Guide delivery: hand the text to pi's steering queue. pi delivers it at the next
-   * tool-batch boundary inside the *current* run (`agent-loop.ts:176`), so the runner keeps
-   * the item as a pending guide row until `queue_update`/`message_start` shows it consumed.
-   */
+  /** Guide delivery into pi's steering queue; delivered at the next tool-batch boundary. */
   async steer(sessionId: string, text: string): Promise<boolean> {
     const open = this.sessions.get(sessionId);
-    if (!open || !open.session.isStreaming) return false;
+    if (!open?.session.isStreaming) return false;
     await open.session.steer(text);
     return true;
   }
 
   runState(sessionId: string): EngineRunState {
     const open = this.sessions.get(sessionId);
-    if (!open) return { streaming: false, idle: true };
-    return { streaming: open.session.isStreaming, idle: open.session.isIdle };
+    return open
+      ? { streaming: open.session.isStreaming, idle: open.session.isIdle }
+      : { streaming: false, idle: true };
   }
 
-  async waitForIdle(sessionId: string): Promise<void> {
-    const open = this.sessions.get(sessionId);
-    if (!open) return;
-    await open.session.waitForIdle();
+  waitForIdle(sessionId: string): Promise<void> {
+    return this.sessions.get(sessionId)?.session.waitForIdle() ?? Promise.resolve();
   }
 
   clearPiQueue(sessionId: string): void {
     this.sessions.get(sessionId)?.session.clearQueue();
   }
 
+  /** User rename: `custom`, never overwritten by a generated title. */
   async rename(sessionId: string, title: string): Promise<void> {
     const open = this.requireOpen(sessionId);
     open.session.setSessionName(title);
-    await this.metadata.upsert(open.workspacePath, sessionId, {
-      title,
-      titleSource: "custom",
-      lastActivityAt: Date.now(),
-    });
+    const patch = { title, titleSource: "custom" as const, lastActivityAt: Date.now() };
+    await this.metadata.upsert(open.workspacePath, sessionId, patch);
     this.emitSessionsChanged(open.workspacePath);
   }
 
-  async setModel(sessionId: string, selection: ModelSelection | undefined): Promise<void> {
-    if (!selection) return;
-    await this.applySelection(sessionId, selection);
+  setModel(sessionId: string, selection: ModelSelection | undefined): Promise<void> {
+    return selection ? this.applySelection(sessionId, selection) : Promise.resolve();
+  }
+  switchModelConfig(w: string, s: string, input: SwitchModelConfigInput) {
+    return this.configOps.switchModelConfig(w, s, input);
+  }
+  setFollowupMode(w: string, s: string, mode: EngineFollowupMode) {
+    return this.configOps.setFollowupMode(w, s, mode);
   }
 
-  async switchModelConfig(
+  // Conversation rewind/compact/fork (decisions 5-7) delegate to `piConversationOps`.
+  compactState(sessionId: string): EngineCompactState {
+    return compactStateOf(this.conversationOps(), sessionId);
+  }
+  takeCompactOutcomes(sessionId: string): EngineCompactOutcome[] {
+    return this.compactOps.takeOutcomes(sessionId);
+  }
+  compact(sessionId: string, sourceCommandId: string): Promise<EngineCompactOutcome> {
+    this.compactionEntries.delete(sessionId);
+    return runManualCompact(this.conversationOps(), sessionId, sourceCommandId).finally(() =>
+      this.compactionEntries.delete(sessionId),
+    );
+  }
+  rewind(sessionId: string, request: EngineRewindRequest): Promise<EngineRewindOutcome> {
+    return runRewind(this.conversationOps(), sessionId, request);
+  }
+  userMessageBefore(sessionId: string, entryId: string): Promise<EngineRewindTarget | null> {
+    return Promise.resolve(resolveRewindTarget(this.conversationOps(), sessionId, entryId));
+  }
+  forkAssistant(
     workspacePath: string,
     sessionId: string,
-    input: SwitchModelConfigInput,
-  ): Promise<SwitchModelConfigOutcome> {
-    return this.configOps.switchModelConfig(workspacePath, sessionId, input);
+    request: EngineForkRequest,
+  ): Promise<EngineForkOutcome> {
+    return runFork(this.conversationOps(), workspacePath, sessionId, request);
   }
 
-  async setFollowupMode(
-    workspacePath: string,
-    sessionId: string,
-    mode: EngineFollowupMode,
-  ): Promise<{ previous: EngineFollowupMode; mode: EngineFollowupMode }> {
-    return this.configOps.setFollowupMode(workspacePath, sessionId, mode);
-  }
-
-  /**
-   * Sidebar pin/archive (docs/next/task-state.md). The metadata row is the single source
-   * the list filters and the event diff read.
-   */
-  async setTaskState(
+  /** Sidebar pin/archive (docs/next/task-state.md). */
+  setTaskState(
     workspacePath: string,
     sessionId: string,
     patch: { pinned?: boolean; archived?: boolean },
   ): Promise<void> {
-    await this.init();
-    await this.taskApi.setTaskState(workspacePath, sessionId, patch);
+    return this.taskApi.setTaskState(workspacePath, sessionId, patch);
   }
-
-  async setTaskUnread(
+  setTaskUnread(
     workspacePath: string,
     sessionId: string,
     unreadAt: number | null,
     expectedUnreadAt?: number,
   ): Promise<EngineUnreadState> {
-    await this.init();
     return this.taskApi.setTaskUnread(workspacePath, sessionId, unreadAt, expectedUnreadAt);
   }
-
-  async deleteTaskIfArchived(workspacePath: string, sessionId: string): Promise<boolean> {
-    await this.init();
+  deleteTaskIfArchived(workspacePath: string, sessionId: string): Promise<boolean> {
     return this.taskApi.deleteTaskIfArchived(workspacePath, sessionId);
   }
 
@@ -343,9 +329,7 @@ export class PiEngine implements Engine {
 
   onSessionsChanged(listener: (workspacePath: string) => void): () => void {
     this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
+    return () => this.listeners.delete(listener);
   }
 
   async dispose(): Promise<void> {
@@ -357,71 +341,72 @@ export class PiEngine implements Engine {
   // ── internals ──
 
   private attach(open: OpenSession): void {
-    const sessionId = open.session.sessionId;
-    this.sessions.get(sessionId)?.unsubscribe();
-    this.sessions.set(sessionId, open);
+    this.sessions.get(open.session.sessionId)?.unsubscribe();
+    this.sessions.set(open.session.sessionId, open);
   }
 
-  private onPiEvent(
-    workspacePath: string,
-    sessionId: string,
-    event: AgentSessionEvent,
-  ): Promise<void> {
-    // Row identity (docs/next/conversation-features.md decision 1): pi persists the
-    // message right after this listener returns, so a microtask resolves the entry id.
-    reportMessageEntry(
-      event,
-      () => this.sessions.get(sessionId),
-      (identity) => this.emitEngineEvent(sessionId, identity),
-    );
-    return handlePiSessionEvent(
-      {
-        metadata: this.metadata,
-        logger: this.options.logger,
-        sessionFor: (id) => this.sessions.get(id)?.session,
-        sessionsChanged: (path) => this.emitSessionsChanged(path),
-      },
-      workspacePath,
-      sessionId,
-      event,
-    );
+  private onPiEvent(path: string, sessionId: string, event: AgentSessionEvent): Promise<void> {
+    return handleEnginePiEvent(this.eventHookDeps(), path, sessionId, event);
+  }
+
+  private eventHookDeps() {
+    return {
+      logger: this.options.logger,
+      metadata: this.metadata,
+      compactOps: this.compactOps,
+      sessions: this.sessions,
+      emit: (id: string, e: EngineEvent) => this.emitEngineEvent(id, e),
+      sessionsChanged: (path: string) => this.emitSessionsChanged(path),
+      rememberCompactionEntry: (id: string, entryId: string) =>
+        this.compactionEntries.set(id, entryId),
+    };
   }
 
   private promptOps(): PromptOpsDeps {
     return {
       metadata: this.metadata,
       logger: this.options.logger,
-      sessionsChanged: (path) => this.emitSessionsChanged(path),
+      sessionsChanged: (p) => this.emitSessionsChanged(p),
       runtime: () => this.requireRuntime(),
       configOps: this.configOps,
     };
   }
 
-  private async startPrompt(
-    workspacePath: string,
-    sessionId: string,
-    text: string,
-    requestId?: string,
-  ): Promise<string> {
-    return startEnginePrompt(
-      this.promptOps(),
-      this.requireOpen(sessionId),
-      workspacePath,
-      sessionId,
-      text,
-      requestId,
-    );
+  private startPrompt(workspacePath: string, sessionId: string, text: string, requestId?: string) {
+    const open = this.requireOpen(sessionId);
+    return startEnginePrompt(this.promptOps(), open, workspacePath, sessionId, text, requestId);
   }
 
-  private async applySelection(sessionId: string, selection: ModelSelection): Promise<void> {
-    await applyEngineSelection(this.promptOps(), this.requireOpen(sessionId), sessionId, selection);
+  private applySelection(sessionId: string, selection: ModelSelection): Promise<void> {
+    return applyEngineSelection(
+      this.promptOps(),
+      this.requireOpen(sessionId),
+      sessionId,
+      selection,
+    );
   }
 
   /** Synthetic engine events (title/model/followup) travel the same stream as pi events. */
   private emitEngineEvent(sessionId: string, event: EngineEvent): void {
-    const open = this.sessions.get(sessionId);
-    if (!open) return;
-    for (const listener of open.listeners) listener(event);
+    for (const listener of this.sessions.get(sessionId)?.listeners ?? []) listener(event);
+  }
+
+  private conversationOps(): ConversationOpsDeps {
+    return {
+      logger: this.options.logger,
+      metadata: this.metadata,
+      compactOps: this.compactOps,
+      compactionEntryFor: (id: string) => this.compactionEntries.get(id),
+      open: (id: string) => this.requireOpen(id),
+      sessionsChanged: (path: string) => this.emitSessionsChanged(path),
+      forkDeps: () => ({
+        metadata: this.metadata,
+        runtime: () => this.requireRuntime(),
+        factoryDeps: () => this.sessionFactoryDeps(),
+        attach: (open: OpenSession) => this.attach(open),
+        sessionsChanged: (path: string) => this.emitSessionsChanged(path),
+      }),
+    };
   }
 
   private requireRuntime(): ModelRuntime {
@@ -446,6 +431,10 @@ export class PiEngine implements Engine {
         : {}),
       fallbackSettings: () => this.settingsManager ?? SettingsManager.create(process.cwd()),
       modelRuntime: () => this.requireRuntime(),
+      translateContext: (sessionId): PiTranslateContext => {
+        const compactCommandId = this.compactOps.activeCommandId(sessionId);
+        return compactCommandId ? { compactCommandId } : {};
+      },
       onPiEvent: (workspacePath, sessionId, event) => {
         void this.onPiEvent(workspacePath, sessionId, event);
       },

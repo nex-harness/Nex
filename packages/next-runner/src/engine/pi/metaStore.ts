@@ -26,6 +26,12 @@ export interface SessionMetaEntry {
   planEnabled?: boolean;
   /** Composer follow-up mode (`queue` | `guide`); absent = runner default. */
   followupMode?: EngineFollowupMode;
+  /**
+   * Newest successful manual compaction: the pi entry it wrote and the command that asked
+   * for it. pi's session file records no command id, so restore reads this to keep the
+   * marker's `origin:"manual"` and `sourceCommandId` across a runner restart.
+   */
+  lastCompact?: { entryId: string; sourceCommandId: string };
   seenRequestIds?: string[];
   /**
    * Sidebar organization state (docs/next/task-state.md). Files written by older runners

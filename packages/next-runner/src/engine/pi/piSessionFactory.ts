@@ -11,7 +11,7 @@ import {
 import type { Model } from "@earendil-works/pi-ai";
 import { PermissionGate } from "../permissions/gate.js";
 import type { EngineEvent } from "../types.js";
-import { translatePiEvent } from "./events.js";
+import { translatePiEvent, type PiTranslateContext } from "./events.js";
 import { createPermissionGateExtension } from "./permissionExtension.js";
 
 export interface PiSessionFactoryOptions {
@@ -22,6 +22,11 @@ export interface PiSessionFactoryOptions {
   settingsManager: SettingsManager;
   /** Metadata transitions (phase/title) stay owned by the engine. */
   onPiEvent: (event: AgentSessionEvent) => void;
+  /**
+   * Facts only the engine knows when translating: the manual compact command in flight
+   * (pi's compaction events carry no command id).
+   */
+  translateContext?: (sessionId: string) => PiTranslateContext;
 }
 
 export interface CreatedPiSession {
@@ -65,8 +70,15 @@ export async function createPiSessionWithGate(
     settingsManager: options.settingsManager,
   });
   const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
+    // Metadata/compaction bookkeeping first: it decides which command a compaction event
+    // belongs to, and translation must see that before projection folds the event.
     options.onPiEvent(event);
-    for (const translated of translatePiEvent(event)) {
+    const sessionId = session.sessionId;
+    for (const translated of translatePiEvent(
+      event,
+      Date.now(),
+      options.translateContext?.(sessionId),
+    )) {
       for (const listener of listeners) listener(translated);
     }
   });

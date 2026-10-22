@@ -161,19 +161,14 @@ test("CAS: revision increments on every content change (rows, meta, config)", as
   h.publisher.dispose();
 });
 
-test("availability: unimplemented actions are denied with existing guard ids", async () => {
+test("availability: fork/compact are allowed when idle, and the goal flags use their guards", async () => {
   const h = await start();
   const idle = h.lastSnapshot();
   assert.ok(idle);
   conversationSnapshotSchema.parse(idle);
-  assert.deepEqual(idle.availability.fork, {
-    allowed: false,
-    reasonCode: "guard.actionUnavailable",
-  });
-  assert.deepEqual(idle.availability.compact, {
-    allowed: false,
-    reasonCode: "guard.actionUnavailable",
-  });
+  // Batch 2d implements both; the lock only appears while a compaction runs/queues.
+  assert.deepEqual(idle.availability.fork, { allowed: true });
+  assert.deepEqual(idle.availability.compact, { allowed: true });
   // Batch 2c owns the queue: edit is available in every phase.
   assert.deepEqual(idle.availability.queueEdit, { allowed: true });
   assert.deepEqual(idle.availability.pauseGoal, {

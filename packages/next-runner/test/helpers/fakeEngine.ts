@@ -1,31 +1,13 @@
-import type {
-  CreateEngineSessionOptions,
-  Engine,
-  EngineCatalog,
-  EngineEvent,
-  EngineEventSubscription,
-  EngineFollowupMode,
-  EngineMessage,
-  EngineModelInfo,
-  EngineModelState,
-  EngineSessionState,
-  EngineUnreadState,
-  PermissionMode,
-  ResolveApprovalResult,
-  SubmitOptions,
-  SubmitOutcome,
-  SwitchModelConfigInput,
-  SwitchModelConfigOutcome,
-} from "../../src/engine/types.js";
+import type * as T from "../../src/engine/types.js";
+import { defaultTitle, modelState, SAMPLE_MODEL } from "./fakeEngineData.js";
+import { FakeConversationOps } from "./fakeEngineConversation.js";
+import type { Engine } from "../../src/engine/types.js";
 
-/**
- * In-process Engine double for projection/publisher tests. It never touches pi; tests
- * drive it with `emit()` and inspect what the runner recorded.
- */
+/** In-process Engine double: never touches pi; tests drive `emit()` and inspect writes. */
 export class FakeEngine implements Engine {
-  readonly sessions = new Map<string, EngineSessionState>();
-  readonly histories = new Map<string, EngineMessage[]>();
-  readonly listeners = new Map<string, Set<(event: EngineEvent) => void>>();
+  readonly sessions = new Map<string, T.EngineSessionState>();
+  readonly histories = new Map<string, T.EngineMessage[]>();
+  readonly listeners = new Map<string, Set<(event: T.EngineEvent) => void>>();
   readonly metadataListeners = new Set<(workspacePath: string) => void>();
   readonly submitted: Array<{ sessionId: string; text: string; requestId: string }> = [];
   readonly deleted: Array<{ workspacePath: string; sessionId: string }> = [];
@@ -36,24 +18,23 @@ export class FakeEngine implements Engine {
   readonly resolvedApprovals: Array<{ sessionId: string; interactionId: string }> = [];
   /** Guide deliveries (`steer`) in call order. */
   readonly steered: Array<{ sessionId: string; text: string }> = [];
-  /** pi's steering queue contents per session (what `queue_update` reports). */
+  /** pi's steering queue per session (what `queue_update` reports). */
   readonly steering = new Map<string, string[]>();
   /** Sessions with an active run; drives `runState`/`steer`/`waitForIdle`. */
   readonly streaming = new Set<string>();
-  /** Test hook: abort emits `settled{aborted}` (pi does this after the run unwinds). */
+  /** Test hook: abort emits `settled{aborted}`. */
   abortSettles = true;
-  /**
-   * Test hook: ask `submit` to hold for this many ms before starting the run, so a test can
-   * observe the window between a drain decision and the run becoming visible.
-   */
+  /** Compact / rewind / fork doubles; the hooks live on `conversation` (test side). */
+  readonly conversation = new FakeConversationOps(this);
+  /** Test hook: `submit` holds this long, exposing the drain→visible window. */
   submitDelayMs = 0;
   /** Set by `submit` while a delayed submission is in flight. */
   submitting: Promise<void> | null = null;
   private readonly idleWaiters = new Map<string, Array<() => void>>();
-  private readonly modes = new Map<string, { mode: PermissionMode; planEnabled: boolean }>();
+  private readonly modes = new Map<string, { mode: T.PermissionMode; planEnabled: boolean }>();
   private readonly tombstones = new Set<string>();
   private sequence = 0;
-  private catalogValue: EngineCatalog = {
+  private catalogValue: T.EngineCatalog = {
     models: [SAMPLE_MODEL],
     defaultSelection: {
       providerId: SAMPLE_MODEL.providerId,
@@ -65,26 +46,26 @@ export class FakeEngine implements Engine {
   async init(): Promise<void> {}
 
   /** Test hook: adds a catalog model so a switch can change the model identity. */
-  registerModel(info: EngineModelInfo): void {
+  registerModel(info: T.EngineModelInfo): void {
     this.catalogValue = { ...this.catalogValue, models: [...this.catalogValue.models, info] };
   }
 
   async createSession(
     workspacePath: string,
-    options: CreateEngineSessionOptions,
+    options: T.CreateEngineSessionOptions,
   ): Promise<{ sessionId: string }> {
     this.sequence += 1;
     const sessionId = `sess-${this.sequence}`;
-    const model = modelState(options.modelSelection);
+    const now = 1_700_000_000_000 + this.sequence;
     this.sessions.set(sessionId, {
       sessionId,
       workspacePath,
       title: "",
       titleSource: "default",
-      createdAt: 1_700_000_000_000 + this.sequence,
-      lastActivityAt: 1_700_000_000_000 + this.sequence,
+      createdAt: now,
+      lastActivityAt: now,
       phase: "draft",
-      model,
+      model: modelState(options.modelSelection),
       usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       isRunning: false,
     });
@@ -94,8 +75,9 @@ export class FakeEngine implements Engine {
   }
 
   async openSession(_workspacePath: string, sessionId: string): Promise<void> {
-    if (this.tombstones.has(sessionId)) throw new Error("deleted");
-    if (!this.sessions.has(sessionId)) throw new Error(`session ${sessionId} not found`);
+    if (this.tombstones.has(sessionId) || !this.sessions.has(sessionId)) {
+      throw new Error(`session ${sessionId} not found`);
+    }
   }
 
   async deleteSession(workspacePath: string, sessionId: string): Promise<void> {
@@ -105,7 +87,7 @@ export class FakeEngine implements Engine {
     this.emitSessionsChanged(workspacePath);
   }
 
-  async listSessions(workspacePath: string): Promise<EngineSessionState[]> {
+  async listSessions(workspacePath: string): Promise<T.EngineSessionState[]> {
     return [...this.sessions.values()].filter((item) => item.workspacePath === workspacePath);
   }
 
@@ -113,18 +95,22 @@ export class FakeEngine implements Engine {
     return [...this.tombstones];
   }
 
-  async history(sessionId: string): Promise<EngineMessage[]> {
+  async history(sessionId: string): Promise<T.EngineMessage[]> {
     return this.histories.get(sessionId) ?? [];
   }
 
-  subscribe(sessionId: string, listener: (event: EngineEvent) => void): EngineEventSubscription {
+  subscribe(sessionId: string, listener: (e: T.EngineEvent) => void): T.EngineEventSubscription {
     const set = this.listeners.get(sessionId) ?? new Set();
     set.add(listener);
     this.listeners.set(sessionId, set);
     return { dispose: () => set.delete(listener) };
   }
 
-  async submit(sessionId: string, text: string, options: SubmitOptions): Promise<SubmitOutcome> {
+  async submit(
+    sessionId: string,
+    text: string,
+    options: T.SubmitOptions,
+  ): Promise<T.SubmitOutcome> {
     if (this.submitDelayMs > 0) {
       this.submitting = new Promise((resolve) => setTimeout(resolve, this.submitDelayMs));
       await this.submitting;
@@ -132,19 +118,15 @@ export class FakeEngine implements Engine {
     }
     this.submitted.push({ sessionId, text, requestId: options.requestId });
     if (options.mode) {
-      this.modes.set(sessionId, {
-        mode: (options.mode === "edit" || options.mode === "yolo"
-          ? options.mode
-          : "build") as PermissionMode,
-        planEnabled: options.planEnabled ?? false,
-      });
+      const mode: T.PermissionMode =
+        options.mode === "edit" || options.mode === "yolo" ? options.mode : "build";
+      this.modes.set(sessionId, { mode, planEnabled: options.planEnabled ?? false });
     }
     const session = this.sessions.get(sessionId);
     if (text.trim().length > 0) {
       // pi persists the user message and emits message_end (translated to user_input).
       const history = this.histories.get(sessionId) ?? [];
-      history.push({ role: "user", at: Date.now(), text });
-      this.histories.set(sessionId, history);
+      this.histories.set(sessionId, [...history, { role: "user", at: Date.now(), text }]);
       this.streaming.add(sessionId);
       this.emit(sessionId, { type: "user_input", at: Date.now(), text });
     }
@@ -164,45 +146,38 @@ export class FakeEngine implements Engine {
     sessionId: string,
     interactionId: string,
     answer: { optionId?: string; freeText?: string },
-  ): Promise<ResolveApprovalResult> {
+  ): Promise<T.ResolveApprovalResult> {
     if (!this.approvals.has(interactionId)) return { resolved: false };
     this.approvals.delete(interactionId);
     this.resolvedApprovals.push({ sessionId, interactionId });
     const outcome = answer.optionId === "deny" ? "deny" : "allow";
+    const toolCallId = `call-${interactionId}`;
     this.emit(sessionId, {
       type: "approval_settled",
       at: Date.now(),
       interactionId,
-      toolCallId: `call-${interactionId}`,
+      toolCallId,
       outcome,
     });
     return { resolved: true, outcome };
   }
 
-  permissionMode(sessionId: string): { mode: PermissionMode; planEnabled: boolean } | null {
+  permissionMode(sessionId: string): { mode: T.PermissionMode; planEnabled: boolean } | null {
     return this.modes.get(sessionId) ?? null;
   }
 
   async abort(sessionId: string): Promise<void> {
     this.aborted.push(sessionId);
-    // Test double mirrors pi's abort→settle: the fold would otherwise stay "running" and the
-    // queue drain gate would never observe an idle engine.
+    // Mirrors pi's abort→settle (the fold/queue would otherwise stay "running").
     this.streaming.delete(sessionId);
-    if (this.abortSettles) {
-      this.emit(sessionId, { type: "settled", at: Date.now(), aborted: true });
-    }
+    if (this.abortSettles) this.emit(sessionId, { type: "settled", at: Date.now(), aborted: true });
   }
 
-  /**
-   * Guide double: records the steer and emits pi's `queue_update` with the queue contents.
-   * `steering` models pi's steering queue: `consumeSteer` removes it the way pi does right
-   * before `message_start`.
-   */
+  /** Guide double: records the steer and emits pi's `queue_update`. */
   async steer(sessionId: string, text: string): Promise<boolean> {
     if (!this.streaming.has(sessionId)) return false;
     this.steered.push({ sessionId, text });
-    const queue = this.steering.get(sessionId) ?? [];
-    this.steering.set(sessionId, [...queue, text]);
+    this.steering.set(sessionId, [...(this.steering.get(sessionId) ?? []), text]);
     this.emitQueueUpdate(sessionId);
     return true;
   }
@@ -214,9 +189,9 @@ export class FakeEngine implements Engine {
 
   async waitForIdle(sessionId: string): Promise<void> {
     if (!this.streaming.has(sessionId)) return;
-    await new Promise<void>((resolve) => {
-      this.idleWaiters.set(sessionId, [...(this.idleWaiters.get(sessionId) ?? []), resolve]);
-    });
+    await new Promise<void>((resolve) =>
+      this.idleWaiters.set(sessionId, [...(this.idleWaiters.get(sessionId) ?? []), resolve]),
+    );
   }
 
   clearPiQueue(sessionId: string): void {
@@ -236,7 +211,7 @@ export class FakeEngine implements Engine {
     for (const resolve of waiters) resolve();
   }
 
-  /** Test hook: models pi consuming one steering text at the next tool-batch boundary. */
+  /** Test hook: pi consumes one steering text at the next tool-batch boundary. */
   consumeSteer(sessionId: string, text?: string): void {
     const queue = this.steering.get(sessionId) ?? [];
     const next = text === undefined ? queue.slice(1) : queue.filter((entry) => entry !== text);
@@ -265,16 +240,11 @@ export class FakeEngine implements Engine {
 
   async setModel(): Promise<void> {}
 
-  /**
-   * Model double: mirrors the real engine's outcome shape. `switchModelConfig` updates the
-   * session model and emits `model_changed` (+ a `model_change_marker` when the identity
-   * changed) so projection/CAS tests exercise the same event path.
-   */
   async switchModelConfig(
     workspacePath: string,
     sessionId: string,
-    input: SwitchModelConfigInput,
-  ): Promise<SwitchModelConfigOutcome> {
+    input: T.SwitchModelConfigInput,
+  ): Promise<T.SwitchModelConfigOutcome> {
     const session = this.sessions.get(sessionId);
     if (!session) return { status: "failed", reasonCode: "session.notOpen" };
     const providerId = input.provider.trim();
@@ -297,7 +267,7 @@ export class FakeEngine implements Engine {
         ...(previous ? { previous } : {}),
       };
     }
-    const model: EngineModelState = {
+    const model: T.EngineModelState = {
       providerId,
       modelId,
       displayName: known.modelName,
@@ -326,12 +296,11 @@ export class FakeEngine implements Engine {
   async setFollowupMode(
     workspacePath: string,
     sessionId: string,
-    mode: EngineFollowupMode,
-  ): Promise<{ previous: EngineFollowupMode; mode: EngineFollowupMode }> {
+    mode: T.EngineFollowupMode,
+  ): Promise<{ previous: T.EngineFollowupMode; mode: T.EngineFollowupMode }> {
     const session = this.sessions.get(sessionId);
-    if (!session) return { previous: "queue", mode };
-    const previous = session.followupMode ?? "queue";
-    if (previous !== mode) {
+    const previous = session?.followupMode ?? "queue";
+    if (session && previous !== mode) {
       this.sessions.set(sessionId, { ...session, followupMode: mode });
       this.emit(sessionId, { type: "followup_mode_changed", at: Date.now(), mode });
       this.emitSessionsChanged(workspacePath);
@@ -339,7 +308,7 @@ export class FakeEngine implements Engine {
     return { previous, mode };
   }
 
-  /** Sidebar state double: mirrors the metadata store's single-writer semantics. */
+  /** Sidebar state double: single-writer semantics like the metadata store. */
   async setTaskState(
     workspacePath: string,
     sessionId: string,
@@ -356,43 +325,74 @@ export class FakeEngine implements Engine {
     sessionId: string,
     unreadAt: number | null,
     expectedUnreadAt?: number,
-  ): Promise<EngineUnreadState> {
+  ): Promise<T.EngineUnreadState> {
     const session = this.sessions.get(sessionId);
     if (!session) return { cleared: false };
-    if (unreadAt === null && typeof expectedUnreadAt === "number") {
-      if (session.unreadAt !== expectedUnreadAt) {
-        return {
-          cleared: false,
-          ...(typeof session.unreadAt === "number" ? { unreadAt: session.unreadAt } : {}),
-        };
-      }
+    const unread = session.unreadAt;
+    if (unreadAt === null && expectedUnreadAt !== undefined && unread !== expectedUnreadAt) {
+      return { cleared: false, ...(unread !== undefined ? { unreadAt: unread } : {}) };
     }
     const next = { ...session };
-    if (typeof unreadAt === "number") next.unreadAt = unreadAt;
-    else delete next.unreadAt;
+    if (unreadAt === null) delete next.unreadAt;
+    else next.unreadAt = unreadAt;
     this.sessions.set(sessionId, next);
     this.emitSessionsChanged(workspacePath);
     return {
       cleared: unreadAt === null,
-      ...(typeof next.unreadAt === "number" ? { unreadAt: next.unreadAt } : {}),
+      ...(next.unreadAt !== undefined ? { unreadAt: next.unreadAt } : {}),
     };
   }
 
   async deleteTaskIfArchived(workspacePath: string, sessionId: string): Promise<boolean> {
-    const session = this.sessions.get(sessionId);
-    if (!session || session.archived !== true || this.tombstones.has(sessionId)) return false;
-    this.sessions.delete(sessionId);
-    this.tombstones.add(sessionId);
-    this.deleted.push({ workspacePath, sessionId });
-    this.emitSessionsChanged(workspacePath);
+    if (this.sessions.get(sessionId)?.archived !== true || this.tombstones.has(sessionId)) {
+      return false;
+    }
+    await this.deleteSession(workspacePath, sessionId);
     return true;
   }
 
-  async catalog(): Promise<EngineCatalog> {
+  // Conversation features (decisions 5-7) delegate to the doubles in
+  // `fakeEngineConversation.ts`; test hooks live on `conversation`.
+  compactState(sessionId: string): T.EngineCompactState {
+    return this.conversation.compactState(sessionId);
+  }
+
+  takeCompactOutcomes(sessionId: string): T.EngineCompactOutcome[] {
+    return this.conversation.takeCompactOutcomes(sessionId);
+  }
+
+  compact(sessionId: string, sourceCommandId: string): Promise<T.EngineCompactOutcome> {
+    return this.conversation.compact(sessionId, sourceCommandId);
+  }
+
+  reportCompactOutcome(sessionId: string, outcome: T.EngineCompactOutcome): void {
+    this.conversation.reportCompactOutcome(sessionId, outcome);
+  }
+
+  rewind(sessionId: string, request: T.EngineRewindRequest): Promise<T.EngineRewindOutcome> {
+    return this.conversation.rewind(sessionId, request);
+  }
+
+  userMessageBefore(
+    sessionId: string,
+    targetEntryId: string,
+  ): Promise<T.EngineRewindTarget | null> {
+    return this.conversation.userMessageBefore(sessionId, targetEntryId);
+  }
+
+  forkAssistant(
+    workspacePath: string,
+    sessionId: string,
+    request: T.EngineForkRequest,
+  ): Promise<T.EngineForkOutcome> {
+    return this.conversation.forkAssistant(workspacePath, sessionId, request);
+  }
+
+  async catalog(): Promise<T.EngineCatalog> {
     return this.catalogValue;
   }
 
-  setCatalog(catalog: EngineCatalog): void {
+  setCatalog(catalog: T.EngineCatalog): void {
     this.catalogValue = catalog;
   }
 
@@ -406,7 +406,7 @@ export class FakeEngine implements Engine {
     this.metadataListeners.clear();
   }
 
-  emit(sessionId: string, event: EngineEvent): void {
+  emit(sessionId: string, event: T.EngineEvent): void {
     // Keep the run-state double honest for tests that drive `settled` by hand.
     if (event.type === "settled") this.streaming.delete(sessionId);
     for (const listener of this.listeners.get(sessionId) ?? []) listener(event);
@@ -417,39 +417,9 @@ export class FakeEngine implements Engine {
   }
 
   /** Seeds an already-persisted session for restore tests. */
-  seedSession(session: EngineSessionState, history: EngineMessage[]): void {
+  seedSession(session: T.EngineSessionState, history: T.EngineMessage[]): void {
     this.sessions.set(session.sessionId, session);
     this.histories.set(session.sessionId, history);
   }
 }
-
-export const SAMPLE_MODEL: EngineModelInfo = {
-  providerId: "anthropic",
-  providerName: "Anthropic",
-  modelId: "claude-sonnet-4-5",
-  modelName: "Claude Sonnet 4.5",
-  apiType: "anthropic-messages",
-  baseUrl: "https://api.anthropic.com",
-  reasoningLevels: ["off", "low", "medium", "high"],
-  maxOutputTokens: 8192,
-  contextWindow: 200_000,
-  supportsImage: true,
-  supportsVideo: false,
-  supportsAudio: false,
-  supportsPdf: false,
-};
-
-function modelState(selection: CreateEngineSessionOptions["modelSelection"]): EngineModelState {
-  return {
-    providerId: selection?.providerId ?? SAMPLE_MODEL.providerId,
-    modelId: selection?.modelId ?? SAMPLE_MODEL.modelId,
-    displayName: SAMPLE_MODEL.modelName,
-    thought: selection?.options?.reasoningLevel ?? "medium",
-    thoughtLevels: SAMPLE_MODEL.reasoningLevels,
-  };
-}
-
-function defaultTitle(text: string): string {
-  const trimmed = text.trim().replace(/\s+/gu, " ");
-  return trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
-}
+export { SAMPLE_MODEL } from "./fakeEngineData.js";

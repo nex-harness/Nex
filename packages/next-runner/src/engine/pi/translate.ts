@@ -68,7 +68,15 @@ export function toEngineHistory(messages: readonly unknown[]): EngineMessage[] {
  * 每条 message 都带稳定的 `entryId`，用它派生行 `entityId`（`pi:<entryId>`），
  * 与 live 投影从 `message_end` 学到的 id 一致。
  */
-export function toEngineBranchHistory(entries: readonly unknown[]): EngineMessage[] {
+export function toEngineBranchHistory(
+  entries: readonly unknown[],
+  /**
+   * Manual operations that ended in a compaction entry. pi's file records no command id,
+   * so restore matches the entry to the finished operation through the runner metadata's
+   * `lastCompact` (see `SessionMetaStore` and `piEngine.history`).
+   */
+  lastManualCompact?: { entryId: string; sourceCommandId: string },
+): EngineMessage[] {
   const result: EngineMessage[] = [];
   for (const raw of entries) {
     if (typeof raw !== "object" || raw === null) continue;
@@ -82,6 +90,10 @@ export function toEngineBranchHistory(entries: readonly unknown[]): EngineMessag
       continue;
     }
     if (type === "compaction") {
+      // pi 不在 compaction entry 上记录 manual/auto；`fromHook` 只表示由扩展生成。
+      // runner 的 manual compact 在完成后把新 entry id + 命令写进 metadata（
+      // `lastCompact`），restore 用它把同一条 entry 还原成 manual；否则按 auto。
+      const manual = lastManualCompact !== undefined && lastManualCompact.entryId === entryId;
       result.push({
         role: "compaction",
         at,
@@ -90,10 +102,15 @@ export function toEngineBranchHistory(entries: readonly unknown[]): EngineMessag
         tokensBefore: num(entry["tokensBefore"]),
         firstKeptEntryId:
           typeof entry["firstKeptEntryId"] === "string" ? entry["firstKeptEntryId"] : "",
-        // pi 不在 compaction entry 上记录 manual/auto；`fromHook` 只表示由扩展生成。
-        // 默认 auto（pi 的自动压缩是常态），batch 3 的直播 compact 会用命令来源覆盖。
-        origin: entry["fromHook"] === true ? "manual" : "auto",
+        origin: manual || entry["fromHook"] === true ? "manual" : "auto",
+        ...(manual ? { sourceCommandId: lastManualCompact.sourceCommandId } : {}),
       });
+      continue;
+    }
+    if (type === "custom") {
+      // Runner-written entries: `nex.fork` becomes the child's fork notice (decision 6).
+      const fork = forkMarkerFromCustom(entry, entryId, at);
+      if (fork) result.push(fork);
       continue;
     }
     if (type === "branch_summary") {
@@ -108,6 +125,31 @@ export function toEngineBranchHistory(entries: readonly unknown[]): EngineMessag
   }
   return result;
 }
+
+/** `nex.fork` custom entry data → a restore-visible fork marker. */
+function forkMarkerFromCustom(
+  entry: Record<string, unknown>,
+  entryId: string | undefined,
+  at: number,
+): Extract<EngineMessage, { role: "runnerMarker" }> | undefined {
+  if (!entryId || entry["customType"] !== FORK_CUSTOM_TYPE) return undefined;
+  const data = entry["data"];
+  if (typeof data !== "object" || data === null) return undefined;
+  const parentSessionId = (data as Record<string, unknown>)["parentSessionId"];
+  const parentRowId = (data as Record<string, unknown>)["parentRowId"];
+  if (typeof parentSessionId !== "string" || typeof parentRowId !== "number") return undefined;
+  return {
+    role: "runnerMarker",
+    kind: "forkNotice",
+    at,
+    entryId,
+    parentSessionId,
+    parentRowId,
+  };
+}
+
+/** pi custom-entity type the fork command writes (`SessionManager.appendCustomEntry`). */
+export const FORK_CUSTOM_TYPE = "nex.fork";
 
 function entryTimestamp(entry: Record<string, unknown>): number {
   const raw = entry["timestamp"];

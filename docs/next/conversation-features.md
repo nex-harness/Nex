@@ -1,7 +1,8 @@
 # Conversation features (batch 2) — spec
 
-Status: batches 2a and 2c implemented on `feature/next`; the rest is planned. Research
-with citations: `conversation-features-research.md` (section numbers below refer to it).
+Status: batches 2a, 2b, 2c and 2d implemented on `feature/next`; generated titles (2b)
+and mid-session config changes (2b) are in as well. Research with citations:
+`conversation-features-research.md` (section numbers below refer to it).
 
 Scope: compact, fork a reply, retry, edit a sent message, the queue (busy-send routing
 and queue controls), generated titles, mid-session model / follow-up mode changes.
@@ -62,6 +63,12 @@ pi agent_settled ─▶ drain: item reserved → promoting → prompt(item.text)
              snapshot: queue.items -= item, new turn rows
 ```
 
+## Batch 2b — implemented (titles, mid-session model / follow-up mode)
+
+Status: implemented (see the README). Generated titles (decision 8) and
+`switchModelConfig` / `setFollowupMode` (decision 9) are served with real revision CAS; the
+`modelChange` marker rides the same fold as batch 2d's compact markers.
+
 ## Batch 2c — implemented (runner-owned queue)
 
 Status: implemented in `packages/next-runner`.
@@ -110,6 +117,64 @@ Status: implemented in `packages/next-runner`.
 - **Never pi's follow-up queue.** Queued text is only ever submitted by the runner; pi's
   `followUp` channel is unused, so no item can become unobservable or unreorderable.
 
+## Batch 2d — implemented (compact, edit/retry rewind, fork)
+
+Status: implemented in `packages/next-runner`.
+
+- **Compact (§1, decision 7).** `compact` is not CAS (an input command; the command id is
+  the idempotency boundary). Admission lives in the queue (`SessionQueue.admitCompact`):
+  a running or queued compaction → `rejected compactOperationLock`; busy → a
+  `kind:"compact"` item joined to the same FIFO as user text and ACKed `accepted`; idle →
+  started now. `v4/compactOwner.ts` is the single writer of the marker lifecycle: it
+  creates the `running` row before calling `engine.compact()` (so the UI shimmers), then
+  upserts it `success` / `noop` / `cancelled` / `failed` with `tokensBefore`/`tokensAfter`.
+  pi's `compaction_start`/`compaction_end` are translated (`compact_start`/`compact_end`);
+  `reason:"threshold"|"overflow"` becomes an `origin:"auto"` marker through the fold, so an
+  automatic compaction is visible exactly like a manual one. Stop → `session.abort()` also
+  cancels compaction (`canStop` is true while only a compaction runs); a failed/cancelled
+  manual compaction pauses a non-empty queue (`pauseReason:"error"`). `activeWorks` carries
+  `kind:"compact"` (alongside `primaryTurn` while a turn runs). Restore reads the pi entry
+  and the metadata row's `lastCompact {entryId, sourceCommandId}` to keep `origin:"manual"`
+  and lineage. `availability.compact` is allowed unless a compact is running/queued
+  (`compactOperationLock`); the old CLI's `idleCannotCompact` is never advertised (an empty
+  session answers `noop`).
+- **Rewind primitive (decision 5).** `v4/rewindCommands.ts` implements edit and retry on
+  one path: guard → cut the live rows from the target turn's header (`rewindProjection.ts`;
+  rowIds stay monotonic) → `engine.rewind` (`piRewindOps.ts`: abort + `waitForIdle` if
+  running, `sessionManager.branch(parentOf(userEntry))` — `resetLeaf()` for the first
+  message — `refreshContext()`, then `prompt(newText)` in the same session) → ACK. Snapshots
+  are projections of the row set, so dropping rows _is_ the removal; restore agrees because
+  `getBranch()` walks from the branch leaf.
+- **`editUserQuery` (§4).** Guards: empty `newText` → `proto.invalidPayload`; a non-empty
+  `attachments` list → `guard.attachmentsUnsupported` (attachments land in batch 3; omitted
+  = keep and `[]` = none are accepted); target must be the newest real-user row
+  (`guard.latestQueryEditOnly`, the same rule that renders the edit entry); unresolved
+  target → `guard.rewindTargetUnresolved`. `workspaceMode:"rewind"` → `accepted` with
+  `{type:"editUserQuery", disposition:"blocked", reasonCode:"guard.workspaceRewindUnavailable",
+preview}` (an empty, valid preview: `canApply:false`, no files). Otherwise
+  `{type:"editUserQuery", disposition:"rewind", sessionId}`. The rewritten turn keeps the
+  original prompt's `sourceCommandId` lineage (turnHeader + userInput row).
+- **`retryTurn` (§3).** Same primitive with the original user text, resolved _before_ the
+  cut from pi (`engine.userMessageBefore`: the nearest user entry at or before the assistant
+  entry on the active branch). Guard: newest complete assistant only
+  (`guard.latestAssistantRetryOnly`, exactly `actions.canRetry`). ACK is a plain `accepted`
+  (the old CLI returns no result); the UI keeps hiding the retry entry.
+- **`forkAssistant` (§2, decision 6).** Guards: `actions.canFork` (last text segment of a
+  `completedSuccess` turn) else `guard.forkTargetNotStable`; compact running → the lock.
+  `piForkOps.ts` opens a **second** `SessionManager` on the parent file and calls
+  `createBranchedSession(targetEntryId)` → a new session file (new id, `parentSession`
+  header); the `nex.fork {parentSessionId,parentRowId}` custom entry is written through that
+  file's manager, then the child opens its own `AgentSession`, inheriting mode/thinking and
+  titled `Fork of <parent>` (`titleSource:"generated"`). It is registered in the engine,
+  metadata (so the sessions index/sidebar include it) and fires `sessionsChanged`. ACK
+  `{type:"forkAssistant", sessionId}`. The parent file is never written: the integration
+  test asserts byte equality. Restore turns the custom entry into a head `forkNotice`
+  marker (`lane:"lightBoundary"`, `entityId:"pi:marker:<entryId>"`).
+- **Availability.** `fork` and `compact` are real; `guard.actionUnavailable` is no longer
+  used by this runner.
+- **Not served yet.** `applyFileRewind`, `setAssistantFeedback` and the goal commands remain
+  `rejected`/denied; there is no file checkpoint for `workspaceMode:"rewind"`.
+
 ## Batch 2a — implemented (row identity, history, revision CAS, availability)
 
 Status: implemented in `packages/next-runner`. It is the shared prerequisite for every
@@ -135,18 +200,22 @@ other batch; nothing here changes the wire schema.
   in `COMMANDS_REQUIRING_BASE_REVISION` are compared after hydration and answered
   `stale` (`proto.staleRevision` / `proto.staleLogEpoch`) with the real
   `revisionAtDecision`; the UI retries config commands with that value.
-- **Availability / routing.** `fork`, `compact` are denied (`guard.actionUnavailable`); goal
-  commands are denied (`noGoalToPause` / `noGoalToResume`); `switchModelConfig`,
-  `setFollowupMode`, `queueEdit` and `sendQueuedNow` (while running) are allowed.
+- **Availability / routing.** (Batch 2a originally denied `fork`/`compact` with
+  `guard.actionUnavailable`; batch 2d makes both real — see above.) Goal commands are denied
+  (`noGoalToPause` / `noGoalToResume`); `switchModelConfig`, `setFollowupMode`, `queueEdit`
+  and `sendQueuedNow` (while running) are allowed.
   `inputRouting` is `startNow` when idle, `enqueue`/`guide` by `followupMode` while running.
-- **Not served yet.** `editUserQuery`, `retryTurn`, `forkAssistant` remain `rejected`
-  (`unsupported_command`); the affordances render so the later batches only add handlers.
+- **Not served yet (as of 2a).** `editUserQuery`, `retryTurn`, `forkAssistant` were
+  `rejected` (`unsupported_command`) until batch 2d added their handlers.
 
 ## Acceptance
 
 - Unit tests per feature; every emitted snapshot/ACK validated with the real zod schemas.
 - Real pi + faux provider integration for queue drain, compact, edit, fork.
-- **E2E coverage today (batch 2a + 2c).** `next/e2e/conversation.mjs` covers the queue
-  section: a busy turn (`bash sleep` in full-access mode), three messages queued while it
-  streams, drag-reorder, delete, drain in panel order, and Stop → paused banner → Resume →
-  drain. The compact / edit / fork sections are reserved in that file for batch 2d.
+- **E2E coverage today (batch 2a + 2c + 2d).** `next/e2e/conversation.mjs` covers the queue
+  section (busy turn, three queued messages, drag-reorder, delete, drain order, Stop →
+  paused banner → Resume → drain) and the batch 2d sections: `/compact` shows a marker
+  (`Context compressed` or `Context is up to date` for a short session) and chat still
+  works; the user row's inline editor rewinds the last turn so the old reply disappears and
+  the new one replaces it; forking an assistant reply opens the child with the history plus
+  a "Forked from conversation" notice and adds a sidebar row.

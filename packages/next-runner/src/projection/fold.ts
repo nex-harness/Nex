@@ -15,6 +15,7 @@ import {
 export { mapToolInput, mapToolName, toolDisplayName } from "./toolMapping.js";
 import { appendTimelineMarker } from "./markerEvents.js";
 import { applyFollowupModeChanged, applyModelChanged, applyTitleChanged } from "./configEvents.js";
+import { applyCompactEnd, applyCompactStart } from "./compactEvents.js";
 import {
   addUsage,
   allocateRowId,
@@ -51,6 +52,7 @@ export function applyUserInput(
     turnId,
     kind: "turnHeader",
     state: "running",
+    ...(options.sourceCommandId ? { sourceCommandId: options.sourceCommandId } : {}),
     startedAt: options.at,
     createdAt: options.at,
     createdAtSeq: state.seq + 1,
@@ -98,11 +100,20 @@ export function applyUserInput(
 
 export function applyEngineEvent(state: ProjectionState, event: EngineEvent): ProjectionState {
   switch (event.type) {
-    case "user_input":
-      return applyUserInput(state, event.text, {
-        at: event.at,
-        sourceCommandId: "",
-      });
+    case "user_input": {
+      // pi only reports the text; the runner knows which prompt caused it. The lineage is
+      // the command that started the run (rewinds keep the original command's id).
+      const generation = state.promptLineage.generation + 1;
+      const lineage = state.promptLineage.sourceCommandId;
+      return applyUserInput(
+        {
+          ...state,
+          promptLineage: { sourceCommandId: lineage, generation },
+        },
+        event.text,
+        { at: event.at, sourceCommandId: lineage },
+      );
+    }
     case "message_entry":
       return attachEntryId(state, event.entryId, event.role);
     case "assistant_start":
@@ -148,6 +159,23 @@ export function applyEngineEvent(state: ProjectionState, event: EngineEvent): Pr
       return applyApprovalRequest(state, event);
     case "approval_settled":
       return applyApprovalSettled(state, event);
+    case "compact_start":
+      return applyCompactStart(state, event);
+    case "compact_end":
+      return applyCompactEnd(state, event);
+    case "api_retry_start":
+      return bump({
+        ...state,
+        apiRetry: {
+          attempt: event.attempt,
+          maxAttempts: event.maxAttempts,
+          nextRetryAt: event.at + event.delayMs,
+          reasonCode: "provider.retry",
+        },
+        lastActivityAt: event.at,
+      });
+    case "api_retry_end":
+      return state.apiRetry === null ? state : bump({ ...state, apiRetry: null });
     case "error":
       return bump({
         ...state,

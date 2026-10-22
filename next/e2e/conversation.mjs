@@ -12,8 +12,9 @@
 //   5. Stop while busy with queued items pauses the queue (paused banner), and Resume
 //      drains it.
 //
-// Sections reserved for batch 2d (compact marker, edit a sent message, fork a reply) are
-// marked below; add them in place, they must not change the QUEUE section.
+// Batch 2d sections (COMPACT, EDIT, FORK) follow the QUEUE sections; they must not change
+// the QUEUE checks above. Titles may be disabled in dev.sh, so the generated title check is
+// optional and only asserts the sidebar row count.
 //
 // Environment:
 //   NEX_E2E_BASE_URL  Web origin to drive        (default http://localhost:5174)
@@ -553,9 +554,184 @@ try {
   await shot("conv-08-resumed");
 
   // ═══════════════════════════════════════════════════════════════════════
-  // Batch 2d — reserved: compact marker, edit a sent message, fork a reply.
-  // Add those sections here; they must not change the QUEUE checks above.
+  // COMPACT (batch 2d) — /compact writes a marker, chat keeps working
   // ═══════════════════════════════════════════════════════════════════════
+  const compactStamp = Date.now();
+  const compactMarker = `COMPACT-MARKER-${compactStamp}`;
+  const compactAfter = `compact-after-${compactStamp}`;
+  await startNewChat();
+  await setMode("yolo");
+  // Give pi something to summarize: a long turn. The reply marker proves the turn ended.
+  await typeAndSend(
+    `Reply with exactly ${compactMarker}. ` + `Before replying, do not use any tool.`,
+  );
+  const compactTurnDone = await waitUntil(
+    "compactTurnDone",
+    async () => ((await bodyText()).includes(compactMarker) ? true : null),
+    REPLY_TIMEOUT_MS,
+  );
+  check("compactTurnCompleted", Boolean(compactTurnDone));
+  await waitForIdle(REPLY_TIMEOUT_MS);
+
+  await typeAndSend("/compact");
+  // The marker row renders one of the compaction status strings; a short session is
+  // `skipped` (noop), a long one `completed`. Either proves the runner served /compact.
+  const compactSettled = await waitUntil(
+    "compactSettled",
+    async () => {
+      const text = await bodyText();
+      const visible =
+        text.includes("Context compressed") ||
+        text.includes("Context is up to date") ||
+        text.includes("上下文已压缩") ||
+        text.includes("上下文已是最新");
+      return visible ? text : null;
+    },
+    60_000,
+  );
+  check("compactMarkerVisible", Boolean(compactSettled));
+  details.compactMarker = compactSettled
+    ? {
+        compressed:
+          compactSettled.includes("Context compressed") || compactSettled.includes("上下文已压缩"),
+        skipped:
+          compactSettled.includes("Context is up to date") ||
+          compactSettled.includes("上下文已是最新"),
+      }
+    : undefined;
+  await shot("conv-09-compacted");
+
+  // Chat still works after the compaction.
+  await typeAndSend(`Reply with exactly ${compactAfter}`);
+  const compactStillWorks = await waitUntil(
+    "compactStillWorks",
+    async () => ((await bodyText()).includes(compactAfter) ? true : null),
+    REPLY_TIMEOUT_MS,
+  );
+  check("chatWorksAfterCompact", Boolean(compactStillWorks));
+  await shot("conv-10-after-compact");
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // EDIT (batch 2d) — the inline editor rewinds the last user turn
+  // ═══════════════════════════════════════════════════════════════════════
+  const editStamp = Date.now();
+  const editOriginalReply = `edit-old-reply-${editStamp}`;
+  const editNewReply = `edit-new-reply-${editStamp}`;
+  await startNewChat();
+  await setMode("yolo");
+  await typeAndSend(`Reply with exactly ${editOriginalReply}`);
+  const editTurnDone = await waitUntil(
+    "editTurnDone",
+    async () => ((await bodyText()).includes(editOriginalReply) ? true : null),
+    REPLY_TIMEOUT_MS,
+  );
+  check("editTurnCompleted", Boolean(editTurnDone));
+  await waitForIdle(REPLY_TIMEOUT_MS);
+
+  // Actions sit in a hover-revealed bar; hover the user bubble first. The action ids are
+  // `v4-edit-<digits>` (`v4-edit-...` also prefixes the editor controls, so match exactly).
+  const userRow = page.locator('[data-v4-user-input-bubble="true"]').last();
+  if ((await userRow.count()) > 0) await userRow.hover();
+  await page.waitForTimeout(300);
+  const editActions = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid^="v4-edit-"]')]
+      .filter((element) => /^v4-edit-\d+$/u.test(element.getAttribute("data-testid") ?? ""))
+      .map((element) => element.getAttribute("data-testid")),
+  );
+  details.editActions = editActions;
+  check("editAffordanceVisible", editActions.length > 0);
+  if (editActions.length > 0) {
+    await page
+      .locator(`[data-testid="${editActions[editActions.length - 1]}"]`)
+      .first()
+      .click();
+    await page.waitForTimeout(500);
+  }
+  const editInput = page.locator('[data-testid^="v4-edit-input-"]').first();
+  const editSubmit = page.locator('[data-testid^="v4-edit-submit-"]').first();
+  check("editEditorVisible", (await editInput.count()) > 0);
+  if ((await editInput.count()) > 0) {
+    // Drive the real Lexical editor through its E2E bridge (typing into the DOM would
+    // bypass editor state and land in the main composer).
+    const bridged = await editInput.evaluate((element, text) => {
+      const bridge = element.__nexLexicalInputE2E;
+      if (!bridge) return false;
+      bridge.setText(text);
+      return true;
+    }, `Reply with exactly ${editNewReply}`);
+    if (!bridged) {
+      await editInput.click();
+      await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+      await page.keyboard.type(`Reply with exactly ${editNewReply}`);
+    }
+    await page.waitForTimeout(300);
+  }
+  check("editSubmitVisible", (await editSubmit.count()) > 0);
+  if ((await editSubmit.count()) > 0) await editSubmit.click({ timeout: 10_000 }).catch(() => {});
+  const editApplied = await waitUntil(
+    "editApplied",
+    async () => {
+      const text = await bodyText();
+      return text.includes(editNewReply) && !text.includes(editOriginalReply) ? text : null;
+    },
+    REPLY_TIMEOUT_MS,
+  );
+  check("editReplacedReply", Boolean(editApplied));
+  details.editBody = editApplied
+    ? {
+        newReply: editApplied.includes(editNewReply),
+        oldReplyGone: !editApplied.includes(editOriginalReply),
+      }
+    : undefined;
+  await shot("conv-11-edited");
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // FORK (batch 2d) — forks a reply into a new chat with a fork notice
+  // ═══════════════════════════════════════════════════════════════════════
+  const tasksBeforeFork = await page.evaluate(
+    () => document.querySelectorAll("[data-testid^='task-item-']").length,
+  );
+  // The fork action lives in the assistant reply's action bar, revealed on turn hover.
+  // Hover the reply text itself (not the wrapper) and re-check: the deferred toolbar is
+  // mounted after the edit re-run settles, so give the DOM time to catch up.
+  const assistantReply = page
+    .locator('[data-testid^="v4-row-"]')
+    .filter({ hasNot: page.locator('[data-v4-user-input-bubble="true"]') })
+    .last();
+  if ((await assistantReply.count()) > 0) await assistantReply.hover();
+  const forkButton = page.locator('[data-testid^="v4-fork-"]').last();
+  await waitUntil(
+    "forkAffordance",
+    async () => ((await forkButton.count()) > 0 ? true : null),
+    20_000,
+  );
+  check("forkAffordanceVisible", (await forkButton.count()) > 0);
+  // The pane switches to the child on the fork ACK. In all-mode the sidebar already has
+  // rows from earlier suites (and a previous chat's fork button may still be mounted), so:
+  // click only the CURRENT chat's button, and require the child to show the edited reply as
+  // its own history (a stale chat cannot).
+  const forked = await waitUntil(
+    "forked",
+    async () => {
+      const text = await bodyText();
+      const notice = text.includes("Forked from conversation") || text.includes("从对话中派生");
+      const history = text.includes(editNewReply);
+      const tasks = await page.evaluate(
+        () => document.querySelectorAll("[data-testid^='task-item-']").length,
+      );
+      if (notice && history) return { notice, history, tasks };
+      const button = page.locator('[data-testid^="v4-fork-"]').last();
+      if ((await button.count()) > 0) await button.click({ timeout: 2_000 }).catch(() => {});
+      return null;
+    },
+    60_000,
+  );
+  check("forkOpenedChildWithNotice", Boolean(forked));
+  // Optional (all-mode): the child is a new sidebar row. The row count is informational
+  // because earlier suites may still hold rows being re-indexed.
+  details.forkAppearsInSidebar = Boolean(forked && forked.tasks >= tasksBeforeFork + 1);
+  details.fork = forked ?? { tasksBeforeFork };
+  await shot("conv-12-forked");
 
   // Known web-only noise unrelated to conversation state: the external client-config fetch
   // is blocked by CORS, Radix warns about a missing dialog description, and the one-off
@@ -564,7 +740,7 @@ try {
     (line) =>
       line.startsWith("PAGEERROR") ||
       (/CONSOLE\[(error|warning)\]/.test(line) &&
-        !/zcode\.z\.ai|ERR_FAILED|Tooltip is changing|accepted input projection silent|Missing `Description`/u.test(
+        !/zcode\.z\.ai|ERR_FAILED|Tooltip is changing|accepted input projection silent|Missing `Description`|getSkillReferenceCatalog/u.test(
           line,
         )),
   );

@@ -37,6 +37,8 @@ interface RowBase {
 export interface TurnHeaderRowState extends RowBase {
   kind: "turnHeader";
   state: "running" | "completedSuccess" | "completedInterrupted" | "failed";
+  /** Command that started the prompt owning this turn (rewinds keep the original id). */
+  sourceCommandId?: string;
   startedAt: number;
   endedAt?: number;
 }
@@ -101,7 +103,8 @@ export type TimelineMarker =
       tokensBefore?: number;
       tokensAfter?: number;
       summaryRef?: string;
-    };
+    }
+  | { type: "forkNotice"; parentSessionId: string; parentRowId: number };
 
 /** Backwards-compatible alias for the modelChange-only payload. */
 export type ModelChangeMarker = Extract<TimelineMarker, { type: "modelChange" }>;
@@ -188,6 +191,34 @@ export interface ProjectionState {
   /** Live approval cards, keyed by interactionId (insertion order = request order). */
   pendingApprovals: Record<string, PendingApprovalState>;
   lastError: ProjectionError | null;
+  /**
+   * Compact markers the fold owns: one row per in-flight operation, keyed by operationId
+   * (`manual:<commandId>` or `auto:<seq>`). Removed on the terminal transition; the row
+   * itself stays as the history record (docs/next/conversation-features.md decision 7).
+   */
+  compactOperations: Record<string, CompactOperationState>;
+  /** Transient provider retry chip (pi `auto_retry_*`); never a row. */
+  apiRetry: {
+    attempt: number;
+    maxAttempts: number;
+    nextRetryAt: number;
+    reasonCode: string;
+  } | null;
+  /**
+   * Prompt lineage (docs/next/conversation-features.md decisions 5, research §4): the
+   * command that started the current/last prompt. `user_input` rows and their turn headers
+   * carry it as `sourceCommandId`; a rewind re-runs under the original command so the UI
+   * keeps lineage. `promptGeneration` counts prompts and keys auto-compact operation ids.
+   */
+  promptLineage: { sourceCommandId: string; generation: number };
+}
+
+/** Live state of one compaction operation while its marker row shows `running`. */
+export interface CompactOperationState {
+  operationId: string;
+  origin: "manual" | "auto";
+  rowId: number;
+  sourceCommandId?: string;
 }
 
 /** One pi message's rows, waiting for its persisted entry id. */
@@ -237,6 +268,9 @@ export function createProjection(input: CreateProjectionInput): ProjectionState 
     pendingMessageGroups: [],
     pendingApprovals: {},
     lastError: null,
+    compactOperations: {},
+    apiRetry: null,
+    promptLineage: { sourceCommandId: "", generation: 0 },
   };
 }
 

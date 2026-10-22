@@ -14,6 +14,13 @@ import {
   type ConfigCommandContext,
 } from "./configCommands.js";
 import { checkRevisionCas } from "./revisionCas.js";
+import { handleCompact, type CompactCommandContext } from "./compactCommands.js";
+import { handleForkAssistant, type ForkCommandContext } from "./forkCommands.js";
+import {
+  handleEditUserQuery,
+  handleRetryTurn,
+  type RewindCommandContext,
+} from "./rewindCommands.js";
 import {
   handleDeleteQueueItem,
   handleEditQueueItem,
@@ -104,6 +111,14 @@ export class CommandHandler {
         return handleSendQueuedNow(this.queueContext(), workspacePath, envelope);
       case "setAutoDrain":
         return handleSetAutoDrain(this.queueContext(), workspacePath, envelope);
+      case "compact":
+        return handleCompact(this.compactContext(), workspacePath, envelope);
+      case "editUserQuery":
+        return handleEditUserQuery(this.rewindContext(), workspacePath, envelope);
+      case "retryTurn":
+        return handleRetryTurn(this.rewindContext(), workspacePath, envelope);
+      case "forkAssistant":
+        return handleForkAssistant(this.forkContext(), workspacePath, envelope);
       default:
         return rejectedAck(
           envelope.commandId,
@@ -353,6 +368,18 @@ export class CommandHandler {
 
   private queueContext(): QueueCommandContext {
     return { sessions: this.sessions };
+  }
+
+  private compactContext(): CompactCommandContext {
+    return { sessions: this.sessions };
+  }
+
+  private rewindContext(): RewindCommandContext {
+    return { engine: this.engine, sessions: this.sessions };
+  }
+
+  private forkContext(): ForkCommandContext {
+    return { engine: this.engine, sessions: this.sessions };
   }
 
   private configContext(): ConfigCommandContext {

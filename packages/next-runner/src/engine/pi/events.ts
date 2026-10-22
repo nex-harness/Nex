@@ -23,10 +23,22 @@ export function findMessageEntryId(
 }
 
 /**
+ * Facts only the engine knows when translating one pi event: which manual compact
+ * operation is in flight (pi's events carry no command id).
+ */
+export interface PiTranslateContext {
+  compactCommandId?: string;
+}
+
+/**
  * pi AgentSessionEvent → engine events. `message_update` carries a cumulative
  * `partial` snapshot; it is deliberately dropped here so projection only sees deltas.
  */
-export function translatePiEvent(event: AgentSessionEvent, at = Date.now()): EngineEvent[] {
+export function translatePiEvent(
+  event: AgentSessionEvent,
+  at = Date.now(),
+  local?: PiTranslateContext,
+): EngineEvent[] {
   switch (event.type) {
     case "message_start":
       return event.message.role === "assistant"
@@ -96,6 +108,56 @@ export function translatePiEvent(event: AgentSessionEvent, at = Date.now()): Eng
         : [];
     case "agent_settled":
       return [{ type: "settled", at, aborted: event.aborted }];
+    case "compaction_start":
+      // `local.compactCommandId` is set only while the runner's own `compact()` runs; an
+      // automatic compaction (threshold/overflow) has no command and the fold keys it by
+      // prompt generation.
+      return [
+        {
+          type: "compact_start",
+          at,
+          reason: event.reason,
+          ...(local?.compactCommandId ? { sourceCommandId: local.compactCommandId } : {}),
+        },
+      ];
+    case "compaction_end":
+      return [
+        {
+          type: "compact_end",
+          at,
+          reason: event.reason,
+          ...(local?.compactCommandId ? { sourceCommandId: local.compactCommandId } : {}),
+          ...(event.result
+            ? {
+                result: {
+                  tokensBefore: event.result.tokensBefore,
+                  ...(event.result.estimatedTokensAfter !== undefined
+                    ? { tokensAfter: event.result.estimatedTokensAfter }
+                    : {}),
+                },
+              }
+            : {}),
+          aborted: event.aborted,
+          ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
+        },
+      ];
+    case "auto_retry_start":
+      return [
+        {
+          type: "api_retry_start",
+          at,
+          attempt: event.attempt,
+          maxAttempts: event.maxAttempts,
+          delayMs: event.delayMs,
+        },
+      ];
+    case "auto_retry_end":
+      return [{ type: "api_retry_end", at, success: event.success }];
+    case "entry_appended":
+      // Only the compaction boundary is a product fact here, and the fold already owns
+      // that marker row from `compaction_start`/`compaction_end` (restore reads the entry
+      // itself instead). Message entries never come through this event.
+      return [];
     case "queue_update":
       // Guide items are visible as pending rows until pi consumes them; this is the only
       // signal that the steering queue changed (`agent-session.ts:1120-1140` removes the
