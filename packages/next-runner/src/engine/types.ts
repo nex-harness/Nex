@@ -1,4 +1,18 @@
 import type { ModelSelection } from "@nex/shared";
+import type {
+  EngineApplyFileRewindOutcome,
+  EngineFileChanges,
+  EngineFileFacts,
+} from "./engineFileFacts.js";
+import type { RewindPreview } from "./checkpoints/rewindStore.js";
+import type {
+  EngineCompactOutcome,
+  EngineCompactState,
+  EngineRunState,
+  SubmitOutcome,
+  SwitchModelConfigInput,
+  SwitchModelConfigOutcome,
+} from "./engineRunSurfaces.js";
 
 /**
  * Engine boundary. The rest of the runner (projection, publishers, channels) only sees
@@ -65,72 +79,7 @@ export interface EngineUnreadState {
   cleared: boolean;
 }
 
-/**
- * Normalized transcript used for restore; mirrors the pi message shapes we consume.
- *
- * `entryId` is pi's session entry id (`SessionEntryBase.id`). Restore derives the row
- * `entityId` from it (`pi:<entryId>`), so it must match the id the live projection learned
- * through `message_entry` — otherwise action targets change identity across a restart.
- */
-export type EngineMessage =
-  | { role: "user"; at: number; text: string; entryId?: string }
-  | {
-      role: "assistant";
-      at: number;
-      model?: string;
-      usage?: EngineUsage;
-      stopReason: EngineStopReason;
-      errorMessage?: string;
-      entryId?: string;
-      parts: EngineAssistantPart[];
-    }
-  | {
-      role: "toolResult";
-      at: number;
-      toolCallId: string;
-      toolName: string;
-      text: string;
-      isError: boolean;
-      durationMs?: number;
-      entryId?: string;
-    }
-  /**
-   * A pi compaction boundary. Restore projects it as a `timelineMarker` row so the
-   * pre-compaction transcript stays visible (research §0-b): `session.messages` is the
-   * projected model context and drops exactly those rows.
-   */
-  | {
-      role: "compaction";
-      at: number;
-      entryId: string;
-      summary: string;
-      tokensBefore: number;
-      firstKeptEntryId: string;
-      /**
-       * `manual` when the entry belongs to a manual operation (pi `fromHook`, or the entry
-       * linked to a live manual `compaction_start`); `auto` for threshold/overflow.
-       */
-      origin?: "manual" | "auto";
-      /** Manual operation that produced this entry (the v4 commandId); keeps lineage on restore. */
-      sourceCommandId?: string;
-    }
-  /** A branch summary left by pi's `navigateTree`; restore skips it (old CLI parity). */
-  | { role: "branchSummary"; at: number; entryId: string; summary: string }
-  /** Runner-only product marker stored as a pi custom entry; restore projects it. */
-  | EngineForkMarker;
-
-/**
- * `nex.fork` custom entry: the fork notice at a child session's head
- * (docs/next/conversation-features.md decision 6).
- */
-export interface EngineForkMarker {
-  role: "runnerMarker";
-  kind: "forkNotice";
-  at: number;
-  entryId: string;
-  parentSessionId: string;
-  parentRowId: number;
-}
+export type { EngineMessage } from "./engineMessages.js";
 
 export type EngineAssistantPart =
   | { type: "text"; text: string }
@@ -165,111 +114,11 @@ export interface EngineApprovalRequest {
  * Live engine events. Deliberately close to pi's AgentSessionEvent but stripped of
  * cumulative `partial` payloads, so projection stays pure and cheap.
  */
-export type EngineEvent =
-  | { type: "user_input"; at: number; text: string }
-  /**
-   * A message became a persisted pi session entry. pi emits `message_end` before
-   * `appendMessage`, so the row already exists; this event carries the persisted entry id
-   * that turns row identity into `pi:<entryId>` (docs/next/conversation-features.md
-   * decision 1). Events arrive in persistence order, so the projection pairs each id with
-   * the oldest row group of the same role.
-   */
-  | { type: "message_entry"; at: number; entryId: string; role: "user" | "assistant" }
-  | { type: "assistant_start"; at: number; model?: string }
-  | { type: "text_delta"; at: number; delta: string }
-  | { type: "thinking_delta"; at: number; delta: string }
-  | { type: "tool_call_start"; at: number; toolCallId: string; toolName: string; input?: unknown }
-  | {
-      type: "tool_input_delta";
-      at: number;
-      toolCallId: string;
-      toolName: string;
-      delta: string;
-    }
-  | {
-      type: "tool_call_update";
-      at: number;
-      toolCallId: string;
-      toolName: string;
-      text?: string;
-    }
-  | {
-      type: "tool_call_end";
-      at: number;
-      toolCallId: string;
-      toolName: string;
-      text: string;
-      isError: boolean;
-      input?: unknown;
-    }
-  | {
-      type: "assistant_end";
-      at: number;
-      stopReason: EngineStopReason;
-      errorMessage?: string;
-      model?: string;
-      usage?: EngineUsage;
-    }
-  | { type: "settled"; at: number; aborted: boolean }
-  /**
-   * pi's own steer/follow-up queue contents (`AgentSessionEvent.queue_update`). The runner
-   * never uses pi's follow-up queue for queued text (docs/next/conversation-features.md
-   * decision 4), but guide messages live in pi's steering queue until the model consumes
-   * them; this event is how a pending guide item learns it was consumed.
-   */
-  | { type: "pi_queue_update"; at: number; steering: string[]; followUp: string[] }
-  | { type: "phase"; at: number; phase: EnginePhase }
-  /** Generated/renamed title; projection updates `meta` without another snapshot source. */
-  | { type: "title_changed"; at: number; title: string; titleSource: EngineTitleSource }
-  | { type: "model_changed"; at: number; model: EngineModelState }
-  /** Mid-session switch marker; `from` is absent for the explicit ∅→X boundary. */
-  | {
-      type: "model_change_marker";
-      at: number;
-      from?: { provider: string; model: string };
-      to: { provider: string; model: string; thought: string };
-      sourceCommandId?: string;
-    }
-  | {
-      type: "followup_mode_changed";
-      at: number;
-      mode: EngineFollowupMode;
-      sourceCommandId?: string;
-    }
-  /**
-   * pi began a compaction. `reason:"manual"` is either the runner's own `compact()` call
-   * (linked by `sourceCommandId`, set while a manual operation is in flight) or another
-   * manual trigger; `threshold`/`overflow` are pi's automatic pre-run compaction.
-   */
-  | {
-      type: "compact_start";
-      at: number;
-      reason: "manual" | "threshold" | "overflow";
-      sourceCommandId?: string;
-    }
-  | {
-      type: "compact_end";
-      at: number;
-      reason: "manual" | "threshold" | "overflow";
-      sourceCommandId?: string;
-      /** Present when the compaction completed; absent on failure/cancel. */
-      result?: { tokensBefore: number; tokensAfter?: number };
-      aborted: boolean;
-      errorMessage?: string;
-    }
-  /** Transient API retry (pi `auto_retry_*`); never a row, surfaced for the UI's retry chip. */
-  | { type: "api_retry_start"; at: number; attempt: number; maxAttempts: number; delayMs: number }
-  | { type: "api_retry_end"; at: number; success: boolean }
-  | { type: "mode_changed"; at: number; mode: PermissionMode; planEnabled: boolean }
-  | { type: "approval_request"; at: number; approval: EngineApprovalRequest }
-  | {
-      type: "approval_settled";
-      at: number;
-      interactionId: string;
-      toolCallId: string;
-      outcome: EngineApprovalOutcome;
-    }
-  | { type: "error"; at: number; message: string };
+import type { EngineEvent } from "./engineEvents.js";
+import type { EngineMessage } from "./engineMessages.js";
+import type { EngineSessions } from "./engineSessions.js";
+
+export type { EngineEvent };
 
 export interface EngineModelInfo {
   providerId: string;
@@ -298,6 +147,16 @@ export interface CreateEngineSessionOptions {
 
 export interface SubmitOptions {
   requestId: string;
+  /**
+   * Admitted attachment refs resolved by the runner (blob refs or absolute paths). The
+   * engine maps images to pi prompt images and every other type to an attachment block.
+   */
+  attachments?: import("@nex/shared/nex-protocol-v4").AttachmentRef[];
+  /**
+   * Prepared pi prompt (attachment block + images). Absent for a plain submission; the
+   * engine maps `attachments` itself in that case.
+   */
+  prompt?: import("./pi/piSessionOps.js").PromptAttachmentPayload;
   modelSelection?: ModelSelection;
   /** Permission mode of this submission (spec: docs/next/permissions.md). */
   mode?: string;
@@ -311,72 +170,8 @@ export interface ResolveApprovalResult {
   outcome?: EngineApprovalOutcome;
 }
 
-export interface SubmitOutcome {
-  status: "accepted" | "duplicate";
-  inputId: string;
-}
-
-/**
- * Queue/admission surface (docs/next/conversation-features.md decision 4).
- *
- * The runner owns queued text; pi's own queues are only used for `guide`, which pi cannot
- * address by id. These three calls are what the runner's queue drain and guide admission
- * need from the engine and nothing more.
- */
-export interface EngineRunState {
-  /** A run (or post-run continuation/compaction) is active. */
-  streaming: boolean;
-  /** No active run, compaction or branch summary. */
-  idle: boolean;
-}
-
-/** Payload of the v4 `switchModelConfig` command (`command.ts`). */
-export interface SwitchModelConfigInput {
-  provider: string;
-  model: string;
-  thought: string;
-}
-
-/**
- * `unchanged` is the old CLI's `noop config.unchanged`; `failed` carries the reason code
- * (`provider.notInRegistry`) and leaves the session untouched.
- */
-export interface SwitchModelConfigOutcome {
-  status: "changed" | "unchanged" | "failed";
-  reasonCode?: string;
-  message?: string;
-  /** Effective model after the switch (absent on failure). */
-  model?: EngineModelState;
-  /** True when the model identity changed, so the caller emits a `modelChange` marker. */
-  modelIdentityChanged?: boolean;
-  /** Model identity before the switch, for the marker's `from` fields. */
-  previous?: { provider: string; model: string };
-}
-
 export interface EngineEventSubscription {
   dispose(): void;
-}
-
-/** Outcome of one compaction operation (manual via `compact()`, or pi's automatic one). */
-export interface EngineCompactOutcome {
-  status: "success" | "noop" | "cancelled" | "failed";
-  origin: "manual" | "auto";
-  tokensBefore?: number;
-  tokensAfter?: number;
-  /** `compact.noop` / `compact.failed` / the operation lock when nothing started. */
-  reasonCode?: string;
-  message?: string;
-}
-
-export interface EngineCompactState {
-  /** A manual compact operation started by the runner is in flight. */
-  manualInFlight: boolean;
-  /** A manual compact operation is still queued in the runner queue. */
-  queued: boolean;
-  /** pi is compacting (manual or automatic). */
-  compacting: boolean;
-  /** Manual + auto operations the engine observed and has not yet reported. */
-  pendingOutcomes: EngineCompactOutcome[];
 }
 
 /** Resolves a row entityId one way or the other; the caller only sees pi entry ids. */
@@ -391,6 +186,8 @@ export interface EngineRewindRequest {
   /** Target user entry; the branch is cut to its parent. */
   target: EngineRewindTarget;
   newText: string;
+  /** Attachments of the rewritten prompt (omitted by the caller only when there are none). */
+  attachments?: import("@nex/shared/nex-protocol-v4").AttachmentRef[];
 }
 
 export interface EngineRewindOutcome {
@@ -413,38 +210,19 @@ export interface EngineForkOutcome {
   titleSource: EngineTitleSource;
 }
 
-export interface Engine {
+export interface Engine extends EngineSessions {
   init(): Promise<void>;
-
-  /** Creates a pi session immediately (draft prewarm relies on this). */
-  createSession(
-    workspacePath: string,
-    options: CreateEngineSessionOptions,
-  ): Promise<{ sessionId: string; inputId?: string }>;
-
-  /** Lazy restore from disk. Idempotent for an already-open session. */
-  openSession(workspacePath: string, sessionId: string): Promise<void>;
-
-  deleteSession(workspacePath: string, sessionId: string): Promise<void>;
-
-  /** Non-deleted sessions, newest activity first. */
-  listSessions(workspacePath: string): Promise<EngineSessionState[]>;
-
-  /** Tombstoned session ids (deleted, kept for the sidebar's negative membership join). */
-  listDeletedSessionIds(workspacePath: string): Promise<string[]>;
-
-  history(sessionId: string): Promise<EngineMessage[]>;
-
-  subscribe(sessionId: string, listener: (event: EngineEvent) => void): EngineEventSubscription;
-
-  submit(sessionId: string, text: string, options: SubmitOptions): Promise<SubmitOutcome>;
 
   /**
    * Route text into pi's steering queue (guide delivery). The text becomes the next
    * model-step input at the next tool-batch boundary; it is not a new turn owned by the
    * runner. Returns `false` when the session is not streaming (nothing was queued).
    */
-  steer(sessionId: string, text: string): Promise<boolean>;
+  steer(
+    sessionId: string,
+    text: string,
+    attachments?: import("@nex/shared/nex-protocol-v4").AttachmentRef[],
+  ): Promise<boolean>;
 
   /** True while a run is active; drives admission and the queue drain gate. */
   runState(sessionId: string): EngineRunState;
@@ -553,6 +331,47 @@ export interface Engine {
     request: EngineForkRequest,
   ): Promise<EngineForkOutcome>;
 
+  // ── file changes and rewind (batch 3, docs/next/attachments-rewind.md B) ──
+
+  /**
+   * Checkpoint facts for one turn's user entry: its `nex.checkpoints` record (with the
+   * `nex.rewind` state folded in) and the latest log epoch the facts belong to.
+   */
+  fileCheckpointFacts(
+    workspacePath: string,
+    sessionId: string,
+    userEntryId: string,
+  ): Promise<EngineFileFacts>;
+
+  /** Per-file diff aggregation for `conversationFileChangesV4`. */
+  fileChanges(
+    workspacePath: string,
+    sessionId: string,
+    userEntryId: string,
+  ): Promise<EngineFileChanges>;
+
+  /** Rewind preview (safe / unsafe / ignored) for a turn. */
+  fileRewindPreview(
+    workspacePath: string,
+    sessionId: string,
+    userEntryId: string,
+  ): Promise<RewindPreview>;
+
+  /**
+   * Restores the turn-start files (deleting files the turn created) with a reverse journal.
+   * `commitAfterApply` runs after every write; a throw compensates the writes and fails the
+   * apply. On success the engine writes the `nex.rewind` entry (turn shows `reverted`).
+   */
+  applyFileRewind(
+    workspacePath: string,
+    sessionId: string,
+    userEntryId: string,
+    options: { commitAfterApply?: () => Promise<void>; sourceCommandId?: string },
+  ): Promise<EngineApplyFileRewindOutcome>;
+
+  /** True when file checkpoints are usable on this runner (git present). */
+  fileCheckpointsEnabled(workspacePath: string): Promise<boolean>;
+
   catalog(): Promise<EngineCatalog>;
 
   /** Fires when session metadata (create/rename/delete/phase/title) changes. */
@@ -560,3 +379,15 @@ export interface Engine {
 
   dispose(): Promise<void>;
 }
+
+export type { EngineApplyFileRewindOutcome, EngineFileChanges, EngineFileFacts };
+export type { EngineCheckpointsRecord, EngineRewindRecord } from "./checkpointMessages.js";
+
+export type {
+  EngineCompactOutcome,
+  EngineCompactState,
+  EngineRunState,
+  SubmitOutcome,
+  SwitchModelConfigInput,
+  SwitchModelConfigOutcome,
+} from "./engineRunSurfaces.js";

@@ -148,6 +148,15 @@ export function endToolCall(
     rowId = working.toolRows[event.toolCallId];
   }
   const input = event.input !== undefined ? mapToolInput(event.toolName, event.input) : undefined;
+  // A checkpoint hook may already have aimed a `file_diff` at this row (it ends the call
+  // itself); the real result must not drop it.
+  const pendingDisplay =
+    event.display ??
+    (
+      working.rows.find((row) => row.rowId === rowId && row.kind === "toolCall") as
+        | ToolCallRowState
+        | undefined
+    )?.display;
   const rows = working.rows.map((row) => {
     if (row.rowId !== rowId || row.kind !== "toolCall") return row;
     // A blocked (denied/aborted) call also produces a tool result with isError=true; the
@@ -160,6 +169,7 @@ export function endToolCall(
       ...row,
       status: event.isError ? "error" : "success",
       outputText: event.text,
+      ...(pendingDisplay ? { display: pendingDisplay } : {}),
       endedAt: event.at,
       ...(input !== undefined
         ? { input, inputText: jsonText(input), toolName: toolDisplayName(event.toolName) }

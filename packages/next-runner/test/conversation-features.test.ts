@@ -224,6 +224,7 @@ test("editUserQuery: rewinds the latest turn, removes old rows, re-prompts, keep
 });
 
 test("editUserQuery: guards (latest-only, empty text, attachments, stray target)", async () => {
+  // Attachment edits are served since batch 3 (spec A): a non-empty list replaces the refs.
   const h = await startConversationHarness();
   try {
     await h.runTurn("q1", "a1", { entry: "u1" });
@@ -245,14 +246,6 @@ test("editUserQuery: guards (latest-only, empty text, attachments, stray target)
     });
     assert.equal(empty.status, "rejected");
     assert.equal(empty.reasonCode, "proto.invalidPayload");
-
-    const withAttachment = await h.command("editUserQuery", {
-      target: { rowId: newer?.rowId, entityId: "pi:u2" },
-      newText: "text",
-      attachments: [{ id: "a1", name: "x.png", mimeType: "image/png", size: 1, kind: "file" }],
-    });
-    assert.equal(withAttachment.status, "rejected");
-    assert.equal(withAttachment.reasonCode, "guard.attachmentsUnsupported");
 
     const stray = await h.command("editUserQuery", {
       target: { rowId: 999, entityId: "pi:missing" },

@@ -173,3 +173,32 @@ func TestRouteTarget(t *testing.T) {
 		t.Fatalf("Target() = %+v", got)
 	}
 }
+
+func TestResolveFileChangesAndRewindPreviewForwardByWorkspace(t *testing.T) {
+	// Batch 3 (docs/next/attachments-rewind.md B): the changed-files and rewind-preview
+	// queries are workspace-targeted reads that the runner answers; they must reach the
+	// runner that owns the workspace, carrying its identity when the UI sends one.
+	methods := []string{"conversationFileChangesV4", "conversationFileRewindPreviewV4"}
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			route := router.Resolve("nex-agent", method,
+				json.RawMessage(`[{"workspacePath":"/w","workspaceIdentity":"runner:alpha:/w","sessionId":"s","target":{"rowId":1,"entityId":"pi:turn:u1"},"baseRevision":3,"baseLogEpoch":"e"}]`), localNone)
+			if route.Kind != router.TargetWorkspace {
+				t.Fatalf("route = %+v, want TargetWorkspace", route)
+			}
+			if route.WorkspaceIdentity != "runner:alpha:/w" || route.WorkspacePath != "/w" {
+				t.Fatalf("route = %+v, want identity runner:alpha:/w and path /w", route)
+			}
+		})
+	}
+}
+
+func TestResolveFileChangesWithoutWorkspaceIsNotForwarded(t *testing.T) {
+	// No workspace target = no runner can own the request; the browser gets a local
+	// "unsupported" answer instead of a broadcast.
+	route := router.Resolve("nex-agent", "conversationFileChangesV4",
+		json.RawMessage(`[{"sessionId":"s"}]`), localNone)
+	if route.Kind != router.TargetLocalUnsupported {
+		t.Fatalf("route = %+v, want TargetLocalUnsupported", route)
+	}
+}

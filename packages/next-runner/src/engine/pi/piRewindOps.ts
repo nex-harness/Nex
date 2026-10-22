@@ -1,6 +1,6 @@
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { EngineRewindOutcome, EngineRewindRequest, EngineRewindTarget } from "../types.js";
-import { startPromptRun, type PromptHooks } from "./piSessionOps.js";
+import type { PromptHooks } from "./piSessionOps.js";
 
 /**
  * Rewind primitive shared by `editUserQuery` and `retryTurn`
@@ -29,9 +29,28 @@ export async function rewindSession(
   sessionId: string,
   request: EngineRewindRequest,
 ): Promise<EngineRewindOutcome> {
-  const session = hooks.open.session;
-  if (!parentOfUserEntry(session, request.target.userEntryId)) {
+  if (!(await cutBranchToUserEntry(hooks.open.session, request.target))) {
     throw new Error(`Rewind target ${request.target.userEntryId} is not on the active branch`);
+  }
+
+  void workspacePath;
+  void sessionId;
+  // The caller prompts after this returns (it may need to attach images/refs, spec A).
+  return { started: true };
+}
+
+/**
+ * Cuts the branch to the parent of the target user entry (aborting a live run first) and
+ * refreshes pi's context. `false` = the target is not on the active branch.
+ */
+export async function cutBranchToUserEntry(
+  session: AgentSession,
+  target: EngineRewindTarget,
+): Promise<boolean> {
+  // Idempotent: after a cut the entry is no longer on the branch; the leaf already sits on
+  // its parent, so a repeated call (files pre-applied, then the re-prompt) is a no-op.
+  if (!parentOfUserEntry(session, target.userEntryId)) {
+    return session.sessionManager.getLeafId() === parentIdOfEntry(session, target.userEntryId);
   }
   if (session.isStreaming || session.isCompacting) {
     // pi's abort also cancels a manual compaction and waits for idle; the command layer
@@ -42,18 +61,20 @@ export async function rewindSession(
   if (session.isStreaming) {
     throw new Error("Session did not become idle; rewind not applied");
   }
-  const parentId = parentOfUserEntry(session, request.target.userEntryId);
+  const parentId = parentOfUserEntry(session, target.userEntryId);
   if (parentId === undefined) {
-    throw new Error(`Rewind target ${request.target.userEntryId} disappeared`);
+    throw new Error(`Rewind target ${target.userEntryId} disappeared`);
   }
   if (parentId === null) session.sessionManager.resetLeaf();
   else session.sessionManager.branch(parentId);
   session.refreshContext();
+  return true;
+}
 
-  const newText = request.newText;
-  if (newText.trim().length === 0) return { started: false };
-  startPromptRun(hooks, hooks.open, workspacePath, sessionId, newText);
-  return { started: true };
+/** Parent id of an entry by id (also when it has dropped off the active branch). */
+function parentIdOfEntry(session: AgentSession, entryId: string): string | null | undefined {
+  const entry = session.sessionManager.getEntry(entryId);
+  return entry ? (entry.parentId ?? null) : undefined;
 }
 
 /**

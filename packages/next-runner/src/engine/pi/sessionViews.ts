@@ -23,7 +23,11 @@ export async function teardownSession(open: {
   session: AgentSession;
   gate: { dispose(): void };
   unsubscribe: () => void;
+  /** File checkpoints (spec B): flush a finished turn's record before the session closes. */
+  checkpoints?: { flushNow(): void };
 }): Promise<void> {
+  // Persist a settled turn before its session file loses the writer.
+  open.checkpoints?.flushNow();
   try {
     await open.session.abort();
   } catch {

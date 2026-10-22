@@ -1,4 +1,5 @@
 import type {
+  AttachmentRef,
   CommandEnvelope,
   ModelSelection,
   QueueItem,
@@ -33,12 +34,14 @@ export type HeldQueueDisposition = "clearQueueAndSend" | "keepQueueAndSend";
 /** Admission decision for one `sendText` (echoed into the ACK). */
 export interface SendTextAdmission {
   delivery: AdmittedDelivery;
-  /** Present only when the text landed in the runner queue (queue/guide). */
+  /** Present when the text landed in the runner queue (queue/guide). */
   queueItemId?: string;
 }
 
 export interface SendTextPayload {
   text: string;
+  /** Admitted attachment refs (spec A). */
+  attachments?: AttachmentRef[];
   requestedDelivery?: "startNow" | "queue" | "guide";
   heldQueueDisposition?: HeldQueueDisposition;
   expectedHeldQueueItemIds?: string[];
@@ -47,7 +50,6 @@ export interface SendTextPayload {
   planEnabled?: boolean;
 }
 
-/** Outcome of a `compact` admission (decision 7); the handler maps it to an ACK. */
 export type CompactAdmission =
   | { delivery: "startNow"; sourceCommandId: string }
   | { delivery: "queue"; queueItemId: string };
@@ -58,7 +60,6 @@ export class QueueAdmissionError extends Error {
     message: string,
   ) {
     super(message);
-    this.name = "QueueAdmissionError";
   }
 }
 
@@ -72,21 +73,15 @@ export interface SessionQueueDeps {
   projection: () => ProjectionState;
   /** Single write path into the projection cache the snapshot reads. */
   commit: (queue: QueueState) => void;
-  /** Asks the session store for a throttled snapshot publish. */
+  /** Asks the session store for a throttled publish. */
   requestPublish: () => void;
-  /** Runs one queued `compact` item (wired to the compact owner; the queue only dispatches). */
+  /** Runs one queued `compact` item (the compact owner runs it; the queue dispatches). */
   runQueuedCompact: (sourceCommandId: string) => Promise<void>;
+  /** Attachments-only input: no pi user message, the runtime appends its row. */
+  appendTextlessInput?: (text: string, attachments: AttachmentRef[]) => void;
 }
 
-/**
- * Runner-owned queue (docs/next/conversation-features.md decision 4, research §5).
- *
- * Single writer of queued items; `projection.queue` is only a cache written through
- * `commit`, and pi's queues are used for `guide` only. The drain promotes one item per
- * `agent_settled` (single-flight); Stop or a failed turn pauses (`autoDrain=false` +
- * `pauseReason`). Items are in-memory only (old CLI parity). A `kind:"compact"` item is a
- * typed `/compact` intent run by the compact owner, never a user row.
- */
+/** Runner-owned queue (decision 4): single writer of queued items, `projection.queue` cache. */
 export class SessionQueue {
   private items: QueueItem[] = [];
   private autoDrain = true;
@@ -118,17 +113,15 @@ export class SessionQueue {
     envelope: CommandEnvelope,
     payload: SendTextPayload,
   ): Promise<SendTextAdmission> {
-    if (payload.text.trim().length === 0) {
+    if (payload.text.trim().length === 0 && (payload.attachments?.length ?? 0) === 0) {
       throw new QueueAdmissionError("proto.invalidPayload", "input must not be empty");
     }
     const requested: RequestedDelivery = payload.requestedDelivery ?? "auto";
     const busy = this.isBusy();
     const routing = this.inputRoutingMode();
 
-    if (routing === "choice") {
-      // Held queue: clear/keep is required before anything starts, startNow included.
-      this.applyHeldDisposition(payload);
-    }
+    // Held queue: clear/keep is required before anything starts, startNow included.
+    if (routing === "choice") this.applyHeldDisposition(payload);
 
     if (requested === "startNow") {
       if (busy) await this.preempt();
@@ -152,7 +145,11 @@ export class SessionQueue {
             : "queue";
 
     if (delivery === "guide") {
-      const steered = await this.deps.engine.steer(this.deps.sessionId, payload.text);
+      const steered = await this.deps.engine.steer(
+        this.deps.sessionId,
+        payload.text,
+        payload.attachments,
+      );
       if (steered) {
         const item = this.appendItem(envelope, payload, requested, "guide");
         return { delivery: "guide", queueItemId: item.queueItemId };
@@ -168,10 +165,7 @@ export class SessionQueue {
     return { delivery: "queue", queueItemId: item.queueItemId };
   }
 
-  /**
-   * Decision 7: busy → a `kind:"compact"` FIFO item; idle → the caller starts it now. A
-   * running/queued compaction holds the lock (old CLI dedupe: one at a time).
-   */
+  /** Decision 7: busy → a `kind:"compact"` FIFO item; idle → starts now. One at a time. */
   admitCompact(envelope: CommandEnvelope): CompactAdmission {
     if (this.hasCompactInFlight() || this.compactQueued()) {
       throw new QueueAdmissionError("compactOperationLock", "a compaction is already active");
@@ -198,7 +192,7 @@ export class SessionQueue {
     return true;
   }
 
-  /** `beforeQueueItemId: null` = tail; unknown ids are a no-op (false). */
+  /** `beforeQueueItemId: null` = tail; unknown ids are a no-op. */
   reorder(queueItemId: string, beforeQueueItemId: string | null): boolean {
     const next = moveQueueItem(this.items, queueItemId, beforeQueueItemId);
     if (next === null) return false;
@@ -206,7 +200,7 @@ export class SessionQueue {
     return true;
   }
 
-  /** Protocol-only (the UI restores the composer instead); compact items are not editable. */
+  /** Protocol-only (the UI restores the composer); compact items are not editable. */
   edit(queueItemId: string, newText: string): QueueEditResult {
     const item = findItem(this.items, queueItemId);
     if (!item) return "missing";
@@ -217,7 +211,7 @@ export class SessionQueue {
     return "edited";
   }
 
-  /** Busy: arms the flag. Idle: re-arms and drains immediately (old CLI parity). */
+  /** Busy: arms the flag. Idle: re-arms and drains immediately. */
   async setAutoDrain(autoDrain: boolean): Promise<void> {
     if (!autoDrain) {
       this.pause("manual");
@@ -230,15 +224,13 @@ export class SessionQueue {
     await this.drain();
   }
 
-  /** `sendQueuedNow`: abort, wait idle, reserve → promote. "missing"/"busy" outcomes. */
+  /** `sendQueuedNow`: abort, wait idle, reserve → promote. */
   async sendQueuedNow(queueItemId: string): Promise<"promoted" | "missing" | "busy"> {
     const item = findItem(this.items, queueItemId);
     if (!item) return "missing";
     if (item.dispatch.state !== "queued") return "busy";
-    if (item.delivery.admitted === "guide") {
-      // A pending guide is already inside pi's queue; there is nothing to promote.
-      return "busy";
-    }
+    // A pending guide is already inside pi's queue; there is nothing to promote.
+    if (item.delivery.admitted === "guide") return "busy";
     await this.preempt();
     const promoted = await this.promote(item.queueItemId);
     return promoted ? "promoted" : "missing";
@@ -248,15 +240,11 @@ export class SessionQueue {
 
   /** The settle event is the only drain trigger; a preemption owns it while waiting. */
   afterEvent(event: EngineEvent, projection: ProjectionState): void {
-    if (event.type === "pi_queue_update") {
-      this.reconcileGuides(event.steering);
-      return;
-    }
-    if (event.type !== "settled") return;
-    if (this.preempting > 0) return;
+    if (event.type === "pi_queue_update") return this.reconcileGuides(event.steering);
+    if (event.type !== "settled" || this.preempting > 0) return;
+    // Stop or any abort holds the queue so items are not replayed into a run the user
+    // just interrupted; pending guides count too (pi would inject them next run).
     if (event.aborted) {
-      // Stop or any abort holds the queue so items are not replayed into a run the user
-      // just interrupted; pending guides count too (pi would inject them next run).
       if (this.items.length > 0) this.pause("stopped");
       return;
     }
@@ -273,26 +261,26 @@ export class SessionQueue {
     if (this.items.length > 0) this.pause("stopped");
   }
 
-  /** Failed/cancelled compaction holds the remaining items (old CLI `goal-compact.ts`). */
+  /** Failed/cancelled compaction holds the remaining items. */
   pauseAfterCompactFailure(): void {
     if (this.items.length > 0) this.pause("error");
   }
 
   // ── internals ──
 
+  /** A promotion in flight and pi's streaming flag both count (double-submit guard). */
   private isBusy(): boolean {
-    // A promotion on its way to pi and pi's streaming flag (before the fold sees
-    // `user_input`) both count: starting another run would double-submit.
+    const { phase } = this.deps.projection();
     return (
-      isRunningPhase(this.deps.projection().phase) ||
+      isRunningPhase(phase) ||
       this.draining ||
       this.items.some((item) => item.dispatch.state !== "queued") ||
       this.deps.engine.runState(this.deps.sessionId).streaming
     );
   }
 
-  /** Same table the snapshot publishes (delegated so the two can never disagree). */
-  private inputRoutingMode(): "startNow" | "enqueue" | "guide" | "choice" {
+  /** Same table the snapshot publishes (delegated so the two never disagree). */
+  private inputRoutingMode() {
     const { phase, followupMode } = this.deps.projection();
     const route = deriveInputRouting({ phase, followupMode, queue: this.snapshot() }).mode;
     return route === "reject" ? "enqueue" : route;
@@ -324,17 +312,30 @@ export class SessionQueue {
     this.commit();
   }
 
+  /** Starts one input now; a failed submit is an admission error, not a queued retry. */
   private async startNow(envelope: CommandEnvelope, payload: SendTextPayload): Promise<void> {
     try {
-      await this.deps.engine.submit(this.deps.sessionId, payload.text, {
-        requestId: envelope.commandId,
-        ...(payload.modelSelection ? { modelSelection: payload.modelSelection } : {}),
-        ...(payload.mode ? { mode: payload.mode } : {}),
-        ...(payload.planEnabled !== undefined ? { planEnabled: payload.planEnabled } : {}),
-      });
+      await this.submitNow(envelope.commandId, payload.text, payload);
     } catch (error) {
       throw new QueueAdmissionError("send_failed", messageOf(error));
     }
+  }
+  private submitNow(
+    requestId: string,
+    text: string,
+    payload: Omit<
+      SendTextPayload,
+      "requestedDelivery" | "heldQueueDisposition" | "expectedHeldQueueItemIds"
+    >,
+  ): Promise<unknown> {
+    const { attachments, modelSelection, mode, planEnabled } = payload;
+    return this.deps.engine.submit(this.deps.sessionId, text, {
+      requestId,
+      ...attachmentFields(attachments),
+      ...(modelSelection ? { modelSelection } : {}),
+      ...(mode ? { mode: mode as QueueItem["mode"] } : {}),
+      ...(planEnabled !== undefined ? { planEnabled } : {}),
+    });
   }
 
   private appendItem(
@@ -344,20 +345,21 @@ export class SessionQueue {
     admitted: AdmittedDelivery,
     options: { fallbackReasonCode?: string; kind?: QueueItem["kind"] } = {},
   ): QueueItem {
-    const { fallbackReasonCode, kind } = options;
     this.admissionSeq += 1;
+    const { attachments, modelSelection, mode, planEnabled } = payload;
     const item = createQueueItem({
       sourceCommandId: envelope.commandId,
       queueItemId: randomId("qi"),
       clientId: envelope.clientId || "runner",
-      ...(kind ? { kind } : {}),
+      ...(options.kind ? { kind: options.kind } : {}),
       text: payload.text,
-      ...(payload.modelSelection ? { modelSelection: payload.modelSelection } : {}),
-      ...(payload.mode ? { mode: payload.mode as QueueItem["mode"] } : {}),
-      ...(payload.planEnabled !== undefined ? { planEnabled: payload.planEnabled } : {}),
+      ...attachmentFields(attachments),
+      ...(modelSelection ? { modelSelection } : {}),
+      ...(mode ? { mode: mode as QueueItem["mode"] } : {}),
+      ...(planEnabled !== undefined ? { planEnabled } : {}),
       requested,
       admitted,
-      ...(fallbackReasonCode ? { fallbackReasonCode } : {}),
+      ...(options.fallbackReasonCode ? { fallbackReasonCode: options.fallbackReasonCode } : {}),
       admissionSeq: this.admissionSeq,
       admittedAt: Date.now(),
     });
@@ -365,18 +367,11 @@ export class SessionQueue {
     return item;
   }
 
-  private hasDrainable(): boolean {
-    return this.items.some((item) => item.delivery.admitted !== "guide");
-  }
-
   private hasCompactInFlight(): boolean {
     // pi's own state plus the projection's open marker both mean "compaction running".
     const state = this.deps.engine.compactState(this.deps.sessionId);
-    return (
-      state.manualInFlight ||
-      state.compacting ||
-      Object.keys(this.deps.projection().compactOperations).length > 0
-    );
+    const open = Object.keys(this.deps.projection().compactOperations).length > 0;
+    return state.manualInFlight || state.compacting || open;
   }
 
   private pause(reason: NonNullable<QueueState["pauseReason"]>): void {
@@ -412,19 +407,12 @@ export class SessionQueue {
         // The compact owner runs it and owns the marker; the queue only dispatches.
         await this.deps.runQueuedCompact(item.sourceCommandId);
       } else {
-        await this.deps.engine.submit(this.deps.sessionId, item.text, {
-          requestId: item.sourceCommandId,
-          ...(item.modelSelection ? { modelSelection: item.modelSelection } : {}),
-          ...(item.mode ? { mode: item.mode } : {}),
-          ...(item.planEnabled !== undefined ? { planEnabled: item.planEnabled } : {}),
-        });
+        await this.submitNow(item.sourceCommandId, item.text, item);
+        // Attachments-only input persists no user message; the runtime appends the row.
+        if (item.text.trim().length === 0) this.deps.appendTextlessInput?.("", item.attachments);
       }
     } catch (error) {
-      this.deps.logger.warn("queue promotion failed", {
-        sessionId: this.deps.sessionId,
-        queueItemId,
-        message: messageOf(error),
-      });
+      this.warn("queue promotion failed", error);
       this.markDispatch(queueItemId, { state: "queued" });
       return false;
     }
@@ -434,10 +422,9 @@ export class SessionQueue {
   }
 
   private markDispatch(queueItemId: string, dispatch: QueueItem["dispatch"]): void {
-    const next = this.items.map((item) =>
-      item.queueItemId === queueItemId ? { ...item, dispatch } : item,
+    this.setItems(
+      this.items.map((item) => (item.queueItemId === queueItemId ? { ...item, dispatch } : item)),
     );
-    this.setItems(next);
   }
 
   /** Absence from pi's `queue_update` steering list is the guide-consumed signal. */
@@ -448,10 +435,9 @@ export class SessionQueue {
     this.setItems(this.items.filter((item) => !drop.has(item.queueItemId)));
   }
 
-  /** Demote first, then clear pi's queue (clearing first would look like consumption). */
+  /** Demote, then clear pi's queue (clearing first would look like consumption). */
   private demoteUndeliveredGuides(): void {
-    const pending = this.items.filter((item) => item.delivery.admitted === "guide");
-    if (pending.length === 0) return;
+    if (!this.items.some((item) => item.delivery.admitted === "guide")) return;
     const demoted = this.items.map((item) =>
       item.delivery.admitted === "guide"
         ? {
@@ -470,17 +456,15 @@ export class SessionQueue {
     this.deps.engine.clearPiQueue(this.deps.sessionId);
   }
 
-  /** Abort + bounded idle barrier shared by startNow-while-busy and sendQueuedNow. */
+  /** Abort + bounded idle barrier (startNow-while-busy, sendQueuedNow). */
   private async preempt(): Promise<void> {
     this.preempting += 1;
     try {
       await this.deps.engine.abort(this.deps.sessionId);
-      await withTimeout(this.deps.engine.waitForIdle(this.deps.sessionId), IDLE_TIMEOUT_MS).catch(
-        (error: unknown) =>
-          this.deps.logger.warn("queue preemption idle wait timed out", {
-            sessionId: this.deps.sessionId,
-            message: messageOf(error),
-          }),
+      // Bounded: a run that never reports idle must not hold the queue forever.
+      const idle = withTimeout(this.deps.engine.waitForIdle(this.deps.sessionId), IDLE_TIMEOUT_MS);
+      await idle.catch((error: unknown) =>
+        this.warn("queue preemption idle wait timed out", error),
       );
     } finally {
       this.preempting -= 1;
@@ -496,8 +480,15 @@ export class SessionQueue {
     this.deps.commit(this.snapshot());
     this.deps.requestPublish();
   }
+
+  private warn(message: string, error: unknown): void {
+    this.deps.logger.warn(message, { sessionId: this.deps.sessionId, message: messageOf(error) });
+  }
 }
 
-function isRunningPhase(phase: ProjectionState["phase"]): boolean {
-  return phase === "running" || phase === "prewarming";
-}
+// Attachments travel only when present (the protocol defaults the list to empty).
+const attachmentFields = (attachments: readonly AttachmentRef[] | undefined) =>
+  attachments?.length ? { attachments: [...attachments] } : {};
+
+const isRunningPhase = (phase: ProjectionState["phase"]) =>
+  phase === "running" || phase === "prewarming";

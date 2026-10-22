@@ -80,6 +80,8 @@ src/
     client.ts             WebSocket client, dispatch, reconnect, ping/pong
   engine/
     types.ts              Engine interface (the only surface the rest of the runner uses)
+    checkpoints/          shadow-git checkpoints (spec B): git spawn boundary, turn trees,
+                          per-workspace service, changed files / preview / journaled apply
     permissions/
       policy.ts           tool → allow/ask/deny table + plan-mode gate
       bashClassifier.ts   conservative read-only bash classifier
@@ -87,6 +89,9 @@ src/
     pi/
       piEngine.ts         pi implementation (AgentSession, SessionManager, ModelRuntime)
       piSessionFactory.ts session + inline nex-permission-gate extension bootstrap
+      piCheckpointHook.ts turn/checkpoint bookkeeping on pi's tool_call/tool_result hooks
+      piFileOps.ts        per-workspace checkpoint services + git-backed reads
+      piFileFactsOps.ts   nex.checkpoints/nex.rewind → changed files / preview / apply
       piSessionFiles.ts   session dir/file lookup
       piSessionOps.ts     metadata transitions, prompt start, model selection
       permissionExtension.ts  pi `tool_call` hook → gate.authorize
@@ -104,7 +109,8 @@ src/
     restore.ts            pi branch → ProjectionState (restart recovery, incl. compact markers)
     entityIds.ts          pi entry id → row entityId (`pi:<entryId>`) derivation
     messageIdentity.ts    `message_entry` → row entityId attachment (live path)
-    rowActions.ts         edit/retry/fork affordances (old CLI materializeCommandRowActions)
+    rowActions.ts         edit/retry/fork + canRewindFiles affordances (old CLI materializeCommandRowActions)
+    turnCheckpointProjection.ts  turnHeader.fileChanges + restored nex.checkpoints/nex.rewind
     availability.ts       snapshot.availability + inputRouting table
     snapshot.ts           ProjectionState → v4 ConversationSnapshot
   v4/
@@ -113,6 +119,8 @@ src/
     sessionStore.ts       per-session projection owner, throttled snapshot frames
     indexPublisher.ts     sessions-index snapshots
     commands.ts           command admission + idempotency + ACK shapes
+    fileRewindMethods.ts  conversationFileChangesV4 / conversationFileRewindPreviewV4
+    fileRewindCommands.ts applyFileRewind (journaled restore, nex.rewind marker)
     envelopes.ts          wire envelope builders (complete frames only)
     sessionsIndex.ts      SessionSummary projection (incl. pendingInteraction)
     throttle.ts           leading+trailing 10 fps throttle
@@ -272,19 +280,44 @@ heuristics understand `oldText`/`newText` pairs.
 
 ## Channels
 
-| Channel             | Methods                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `nex-agent`         | `subscribeConversationV4`, `resyncConversationV4`, `unsubscribeConversationV4`, `conversationRowsRangeV4`, `conversationPlansV4`, `conversationWorkflowRunsV4` (always `{runs:[]}`), `sendConversationCommandV4`, `queryConversationCommandsV4`, `onDynamicConversationFrame`, sessions-index subscribe/resync/unsubscribe, `onDynamicSessionsIndexFrame` |
-| `nex-task`          | `listTasks`, `listPinnedTasks`, `listArchivedTasks`, `listDeletedTaskIds`, `listPinnedTaskIds`, `getTaskSessionFilePath`, `getTaskNativeSessionLogFile`, `onDynamicWorkspaceEvent`                                                                                                                                                                        |
-| `nex-session`       | `readWorkspacePresentation`                                                                                                                                                                                                                                                                                                                               |
-| `model-selection`   | `getView`, `onDidChange` (never fires; catalog is static per process)                                                                                                                                                                                                                                                                                     |
-| `provider-settings` | `getView`, `onDidChange` (never fires)                                                                                                                                                                                                                                                                                                                    |
+| Channel             | Methods                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nex-agent`         | `subscribeConversationV4`, `resyncConversationV4`, `unsubscribeConversationV4`, `conversationRowsRangeV4`, `conversationPlansV4`, `conversationWorkflowRunsV4` (always `{runs:[]}`), `conversationFileChangesV4`, `conversationFileRewindPreviewV4`, `sendConversationCommandV4`, `queryConversationCommandsV4`, `onDynamicConversationFrame`, sessions-index subscribe/resync/unsubscribe, `onDynamicSessionsIndexFrame` |
+| `nex-task`          | `listTasks`, `listPinnedTasks`, `listArchivedTasks`, `listDeletedTaskIds`, `listPinnedTaskIds`, `getTaskSessionFilePath`, `getTaskNativeSessionLogFile`, `onDynamicWorkspaceEvent`                                                                                                                                                                                                                                        |
+| `nex-session`       | `readWorkspacePresentation`                                                                                                                                                                                                                                                                                                                                                                                               |
+| `model-selection`   | `getView`, `onDidChange` (never fires; catalog is static per process)                                                                                                                                                                                                                                                                                                                                                     |
+| `provider-settings` | `getView`, `onDidChange` (never fires)                                                                                                                                                                                                                                                                                                                                                                                    |
 
 Commands: `createSession` (with or without `firstInput`; draft prewarm works),
 `sendText`, `deleteSession`, `renameSession`, `stop`, `resolveInteraction`,
 `switchModelConfig`, `setFollowupMode`, `compact`, `editUserQuery`, `retryTurn`,
 `forkAssistant`, `deleteQueueItem`, `editQueueItem`, `reorderQueueItem`, `sendQueuedNow`,
-`setAutoDrain`. Unknown commands return `rejected` with `reasonCode:"unsupported_command"`.
+`setAutoDrain`, `applyFileRewind`. Unknown commands return `rejected` with
+`reasonCode:"unsupported_command"`.
+
+### File changes and rewind (batch 3, spec B)
+
+Spec: [`docs/next/attachments-rewind.md`](../../docs/next/attachments-rewind.md).
+
+- **Checkpoints.** One shadow git repository per workspace
+  (`<data>/checkpoints/<sha256(realpath ws)[0:16]>.git`, `--work-tree=<ws>`), independent of
+  the workspace's own repository. On the first mutating tool call (`edit`/`write`) of a
+  turn: side-index `add -A` (honours `.gitignore`) → `write-tree` → `commit-tree`, with the
+  previous turn's tree as the base; every mutating result then records `hash-object -w`.
+  `bash`/`powershell` are not checkpointed (their files show as `bash_ignored`).
+- **Cards and headers.** `edit` rows get `output.display = {kind:"file_diff"}` from pi's
+  `details.patch`; `write` rows get a synthesized whole-file patch. The turn header carries
+  `fileChanges {files,additions,deletions,state}` and `actions.canRewindFiles` (turn not
+  running, no pending interaction, no compaction, `state:"active"`).
+- **Reads/commands.** `conversationFileChangesV4` / `conversationFileRewindPreviewV4` are
+  read-only lookups; `applyFileRewind {target}` restores the turn-start files (deleting files
+  the turn created) through a reverse journal and appends `nex.rewind` (header `reverted`).
+  `editUserQuery {workspaceMode:"rewind"}` previews, restores the files, cuts the branch and
+  re-prompts; an unsafe/empty set answers `blocked` with the preview.
+- **Persistence.** `nex.checkpoints` / `nex.rewind` custom entries in the pi session file, so
+  a restart rebuilds the same diffs, summaries and `reverted` state.
+- **No git on the host** → checkpoints are disabled (one `warn` log), no turn carries
+  `fileChanges`, and Undo is hidden.
 
 ### Conversation features (batch 2d)
 
@@ -368,6 +401,15 @@ The permission suite runs with the default `pnpm test` (no env vars):
   compact success then noop, small-session noop, Stop-cancelled compaction, queued compact
   draining after a run, edit + restore (old rows stay gone), retry, fork (child file,
   fork notice, parent bytes unchanged), and pi's own overflow compaction (`origin:"auto"`).
+- `test/checkpoints-service.test.ts` — real `git` + a temp workspace: turn snapshot,
+  `.gitignore`, created/edited files, external modification → unsafe, bash → ignored,
+  journaled apply, failure compensation, restart, non-git workspace, git missing.
+- `test/file-changes.test.ts` — file summaries/`canRewindFiles`, the two read queries,
+  `applyFileRewind` (accepted/unsafe) and `editUserQuery{workspaceMode:"rewind"}` over the
+  command handler (every ACK/query parsed with the real schemas).
+- `test/file-changes-pi-integration.test.ts` — real pi + faux: write/edit/bash turn shows
+  diffs and fileChanges, Undo restores/deletes files and the header becomes `reverted`, an
+  external change blocks, and edit-with-rewind restores the files and re-runs the turn.
 
 Opt-in real-model smoke test (uses `~/.pi/agent` credentials):
 
@@ -390,7 +432,9 @@ Browser E2Es (see `next/dev.sh --help`):
 ```sh
 next/dev.sh --e2e               # acceptance (read + ls -la, no cards)
 next/dev.sh --e2e=permissions   # approval card: allow / deny / edit mode / read-only ls
-next/dev.sh --e2e=all           # both, acceptance first
+next/dev.sh --e2e=files         # write/edit diff cards, changed-files panel, Undo, edit with rewind
+next/dev.sh --e2e=attachments   # image/file attachment, restore
+next/dev.sh --e2e=all           # every suite, acceptance first
 ```
 
 The unit tests import the real zod schemas from `@nex/shared/nex-protocol-v4` and validate
@@ -409,12 +453,11 @@ publisher tests; an in-process `ws` server drives the link test.
 - **`conversationPlansV4` is always empty**; pi has no ExitPlanMode catalog.
 - **Sessions index is rebuilt from the runner metadata file**, not pi's own session list,
   so sessions created by running `pi` directly in the same workspace are not listed.
-- **No attachments** (`attachment*` / `conversationFileChangesV4` etc. are not
-  implemented). `editUserQuery` therefore refuses a non-empty `attachments` list
-  (`guard.attachmentsUnsupported`); omitted = keep and `[]` = none are accepted.
-- **No workspace file rewind.** `editUserQuery` with `workspaceMode:"rewind"` answers
-  `blocked` (`guard.workspaceRewindUnavailable`) with an empty preview: there are no file
-  checkpoints yet. `applyFileRewind` is not served.
+- **Attachment rows after a runner restart** re-render text-only until the persisted
+  `nex.attachments` entry restore lands (tracked with batch 3 A).
+- **File rewind limits.** Only `edit`/`write` are checkpointed; shell-modified files are
+  reported as ignored. Above 100k tracked files a turn falls back to per-file states
+  (`partial`), and rewind then answers `checkpoint_missing`.
 - **Auto-compaction is marker-complete, not manual.** pi's threshold/overflow compaction
   shows an `origin:"auto"` marker, but the runner cannot queue it (pi decides). A manual
   `compact` runs only from the runner queue.

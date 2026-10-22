@@ -4,7 +4,6 @@ import {
   applyApprovalSettled,
   clearPendingApprovals,
 } from "./approvalEvents.js";
-import { turnEntityId, userEntityId } from "./entityIds.js";
 import { addRowToAssistantGroup, attachEntryId, fallbackTurnId } from "./messageIdentity.js";
 import {
   endToolCall as endToolCallEvent,
@@ -13,9 +12,17 @@ import {
   updateToolOutput as updateToolOutputEvent,
 } from "./toolEvents.js";
 export { mapToolInput, mapToolName, toolDisplayName } from "./toolMapping.js";
-import { appendTimelineMarker } from "./markerEvents.js";
-import { applyFollowupModeChanged, applyModelChanged, applyTitleChanged } from "./configEvents.js";
-import { applyCompactEnd, applyCompactStart } from "./compactEvents.js";
+import {
+  appendTimelineMarker,
+  applyCompactEnd,
+  applyCompactStart,
+  applyFollowupModeChanged,
+  applyModelChanged,
+  applyTitleChanged,
+} from "./foldEvents.js";
+import { applyTurnCheckpoint, markTurnReverted } from "./turnCheckpointProjection.js";
+import { applyUserTurnInput } from "./userTurn.js";
+export { applyUserInput } from "./userTurn.js";
 import {
   addUsage,
   allocateRowId,
@@ -26,78 +33,6 @@ import {
   type ReasoningRowState,
 } from "./state.js";
 
-function countTurns(state: ProjectionState): number {
-  let count = 0;
-  for (const row of state.rows) if (row.kind === "turnHeader") count += 1;
-  return count;
-}
-
-export function applyUserInput(
-  state: ProjectionState,
-  text: string,
-  options: {
-    at: number;
-    sourceCommandId: string;
-    /** pi session entry id when already known (`message_entry` arrived first). */
-    entryId?: string;
-  },
-): ProjectionState {
-  // Turn numbering must match `projectHistory`'s (`turn-<n>` by turnHeader ordinal), not
-  // `seq`: after a restore the two paths would otherwise disagree and a session would carry
-  // two numbering schemes, which the UI uses as its render-unit key (productTurnId).
-  const turnId = `turn-${countTurns(state) + 1}`;
-  const turnIdHeader = allocateRowId(state);
-  const header: ProjectedRow = {
-    rowId: turnIdHeader.id,
-    turnId,
-    kind: "turnHeader",
-    state: "running",
-    ...(options.sourceCommandId ? { sourceCommandId: options.sourceCommandId } : {}),
-    startedAt: options.at,
-    createdAt: options.at,
-    createdAtSeq: state.seq + 1,
-  };
-  const inputRowId = allocateRowId({ ...state, nextRowId: turnIdHeader.next });
-  const inputRow: ProjectedRow = {
-    rowId: inputRowId.id,
-    turnId,
-    kind: "userInput",
-    text,
-    sourceCommandId: options.sourceCommandId,
-    createdAt: options.at,
-    createdAtSeq: state.seq + 1,
-  };
-  const withEntryId = options.entryId
-    ? {
-        header: { ...header, entityId: turnEntityId(options.entryId, 0) },
-        input: { ...inputRow, entityId: userEntityId(options.entryId) },
-      }
-    : { header, input: inputRow };
-  // A user message's persisted entry id arrives after `message_end` (see
-  // `EngineEvent.message_entry`); remember the rows that identity belongs to.
-  const groups = options.entryId
-    ? state.pendingMessageGroups
-    : [
-        ...state.pendingMessageGroups,
-        {
-          kind: "user" as const,
-          rowIds: [inputRow.rowId],
-          headerRowId: header.rowId,
-        },
-      ];
-  return bump({
-    ...state,
-    rows: [...state.rows, withEntryId.header, withEntryId.input],
-    nextRowId: inputRowId.next,
-    currentTurn: { turnId, headerRowId: turnIdHeader.id, startedAt: options.at },
-    currentResponse: null,
-    pendingMessageGroups: groups,
-    lastActivityAt: options.at,
-    phase: "running",
-    lastError: null,
-  });
-}
-
 export function applyEngineEvent(state: ProjectionState, event: EngineEvent): ProjectionState {
   switch (event.type) {
     case "user_input": {
@@ -105,13 +40,19 @@ export function applyEngineEvent(state: ProjectionState, event: EngineEvent): Pr
       // the command that started the run (rewinds keep the original command's id).
       const generation = state.promptLineage.generation + 1;
       const lineage = state.promptLineage.sourceCommandId;
-      return applyUserInput(
+      return applyUserTurnInput(
         {
           ...state,
           promptLineage: { sourceCommandId: lineage, generation },
         },
         event.text,
-        { at: event.at, sourceCommandId: lineage },
+        {
+          at: event.at,
+          sourceCommandId: lineage,
+          ...(event.attachments && event.attachments.length > 0
+            ? { attachments: event.attachments }
+            : {}),
+        },
       );
     }
     case "message_entry":
@@ -128,6 +69,8 @@ export function applyEngineEvent(state: ProjectionState, event: EngineEvent): Pr
       return updateToolInputEvent(state, event);
     case "tool_call_update":
       return updateToolOutputEvent(state, event);
+    // The real tool result and a checkpoint-aimed display (spec B) share `tool_call_end`;
+    // the fold upgrades an already-terminal row in place and keeps its display.
     case "tool_call_end":
       return endToolCallEvent(state, event);
     case "assistant_end":
@@ -176,6 +119,10 @@ export function applyEngineEvent(state: ProjectionState, event: EngineEvent): Pr
       });
     case "api_retry_end":
       return state.apiRetry === null ? state : bump({ ...state, apiRetry: null });
+    case "turn_checkpoint":
+      return applyTurnCheckpoint(state, event);
+    case "turn_rewind":
+      return markTurnReverted(state, event.userEntryId, event.data.files);
     case "error":
       return bump({
         ...state,

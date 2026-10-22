@@ -10,7 +10,9 @@
 #   next/dev.sh --e2e=multi        # run the multi-runner E2E (two runners, same path)
 #   next/dev.sh --e2e=tasks        # run the task-state E2E (pin/archive/rename/delete)
 #   next/dev.sh --e2e=conversation # run the conversation E2E (runner-owned queue)
-#   next/dev.sh --e2e=all          # run acceptance, permissions, tasks, conversation and multi
+#   next/dev.sh --e2e=attachments  # run the attachments E2E (image + text file, restore)
+#   next/dev.sh --e2e=files        # run the file-changes E2E (diffs, Undo, edit with rewind)
+#   next/dev.sh --e2e=all          # run acceptance, permissions, tasks, conversation, attachments, files and multi
 #
 # Environment:
 #   NEX_NEXT_PORT           Go server port                 (default 3031)
@@ -43,9 +45,11 @@ for arg in "$@"; do
     --e2e=multi) E2E_MODE="multi" ;;
     --e2e=tasks) E2E_MODE="tasks" ;;
     --e2e=conversation) E2E_MODE="conversation" ;;
+    --e2e=attachments) E2E_MODE="attachments" ;;
+    --e2e=files) E2E_MODE="files" ;;
     --e2e=all) E2E_MODE="all" ;;
     -h | --help)
-      sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -301,6 +305,8 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   permissions_status=0
   tasks_status=0
   conversation_status=0
+  attachments_status=0
+  files_status=0
   multi_status=0
   if [[ "$E2E_MODE" == "acceptance" || "$E2E_MODE" == "all" ]]; then
     (
@@ -355,6 +361,30 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
     conversation_status=$?
     log "conversation E2E exited with $conversation_status"
   fi
+  if [[ "$E2E_MODE" == "files" || "$E2E_MODE" == "all" ]]; then
+    (
+      cd "$REPO_ROOT"
+      # The suite opens its own chat and asserts files on disk, so earlier suites' sidebar
+      # rows do not matter (no "starts empty" assertion).
+      NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
+        NEX_E2E_TOKEN="$BROWSER_TOKEN" \
+        NEX_E2E_WORKSPACE="$WORKSPACE" \
+        node next/e2e/file-changes.mjs
+    )
+    files_status=$?
+    log "file-changes E2E exited with $files_status"
+  fi
+  if [[ "$E2E_MODE" == "attachments" || "$E2E_MODE" == "all" ]]; then
+    (
+      cd "$REPO_ROOT"
+      NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
+        NEX_E2E_TOKEN="$BROWSER_TOKEN" \
+        NEX_E2E_WORKSPACE="$WORKSPACE" \
+        node next/e2e/attachments.mjs
+    )
+    attachments_status=$?
+    log "attachments E2E exited with $attachments_status"
+  fi
   if [[ "$E2E_MODE" == "multi" || "$E2E_MODE" == "all" ]]; then
     (
       cd "$REPO_ROOT"
@@ -382,6 +412,12 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   fi
   if [[ "$conversation_status" -ne 0 ]]; then
     exit "$conversation_status"
+  fi
+  if [[ "$attachments_status" -ne 0 ]]; then
+    exit "$attachments_status"
+  fi
+  if [[ "$files_status" -ne 0 ]]; then
+    exit "$files_status"
   fi
   exit "$multi_status"
 fi

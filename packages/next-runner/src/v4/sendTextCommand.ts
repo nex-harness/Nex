@@ -1,4 +1,6 @@
 import type { CommandAck, CommandEnvelope, ModelSelection } from "@nex/shared/nex-protocol-v4";
+import { normalizeAdmittedRefs } from "../attachments/admitted.js";
+import type { AttachmentRegistry } from "../attachments/registry.js";
 import { normalizeMode } from "../engine/permissions/policy.js";
 import { acceptedAck, inputAcceptedResult, rejectedAck } from "./envelopes.js";
 import { QueueAdmissionError } from "./queue.js";
@@ -10,12 +12,16 @@ import type { SessionRuntime, SessionRuntimeStore } from "./sessionStore.js";
  * `SessionQueue`, which decides startNow / queue / guide and owns the resulting item.
  *
  * The permission mode is echoed into the projection only for a `startNow`: a queued item
- * carries its own mode and applies it when promoted.
+ * carries its own mode and applies it when promoted. Attachments (spec A) are registered
+ * with ref authority before admission, so the queued item and the eventual row carry them
+ * and a read of one of those refs passes the session's listing check.
  */
 export interface SendTextCommandContext {
   sessions: SessionRuntimeStore;
   /** Engine mode readback, so createSession/approval paths stay consistent. */
   permissionMode: (sessionId: string) => { mode: string; planEnabled: boolean } | null;
+  /** Ref authority (spec A); absent for tests that never send attachments. */
+  attachments?: AttachmentRegistry | null;
 }
 
 export async function handleSendText(
@@ -29,6 +35,7 @@ export async function handleSendText(
   }
   const payload = envelope.payload as {
     text?: string;
+    attachments?: import("@nex/shared/nex-protocol-v4").AttachmentRef[];
     modelSelection?: ModelSelection;
     mode?: string;
     planEnabled?: boolean;
@@ -36,12 +43,18 @@ export async function handleSendText(
     heldQueueDisposition?: "clearQueueAndSend" | "keepQueueAndSend";
     expectedHeldQueueItemIds?: string[];
   };
+  const attachments = normalizeAdmittedRefs(payload.attachments);
+  if ((payload.text ?? "").trim().length === 0 && attachments.length === 0) {
+    return rejectedAck(envelope.commandId, 0, "proto.invalidPayload", "input must not be empty");
+  }
   try {
     const runtime = ctx.sessions.ensure(workspacePath, sessionId);
     // A restored session is opened asynchronously; submit must not race openSession.
     await runtime.ready;
+    if (attachments.length > 0) ctx.attachments?.addAdmitted(sessionId, attachments);
     const admission = await runtime.queue.admitSendText(envelope, {
       text: payload.text ?? "",
+      ...(attachments.length > 0 ? { attachments } : {}),
       ...(payload.requestedDelivery ? { requestedDelivery: payload.requestedDelivery } : {}),
       ...(payload.heldQueueDisposition
         ? { heldQueueDisposition: payload.heldQueueDisposition }

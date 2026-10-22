@@ -41,12 +41,21 @@ export interface TurnHeaderRowState extends RowBase {
   sourceCommandId?: string;
   startedAt: number;
   endedAt?: number;
+  /** Aggregated changed files (spec B): derived live from tool displays, restored from checkpoints. */
+  fileChanges?: {
+    files: number;
+    additions: number;
+    deletions: number;
+    state: "active" | "reverted";
+  };
 }
 
 export interface UserInputRowState extends RowBase {
   kind: "userInput";
   text: string;
   sourceCommandId: string;
+  /** Admitted attachment refs (spec A); rendered as media previews / file chips. */
+  attachments?: import("@nex/shared/nex-protocol-v4").AttachmentRef[];
 }
 
 export interface AssistantTextRowState extends RowBase {
@@ -73,6 +82,8 @@ export interface ToolCallRowState extends RowBase {
   inputText: string;
   input?: unknown;
   outputText?: string;
+  /** Structured display (`file_diff` today) forwarded into `output.display`. */
+  display?: import("../engine/checkpoints/types.js").FileDiffDisplay;
   errorMessage?: string;
   /** Set while the row waits for approval; cleared on the terminal transition. */
   approvalInteractionId?: string;

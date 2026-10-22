@@ -1,40 +1,74 @@
 import type * as T from "../../src/engine/types.js";
-import { defaultTitle, modelState, SAMPLE_MODEL } from "./fakeEngineData.js";
+import { defaultTitle, SAMPLE_MODEL } from "./fakeEngineData.js";
 import { FakeConversationOps } from "./fakeEngineConversation.js";
+import { FakeFileOps, FileOpsDelegation } from "./fakeEngineFiles.js";
+import type { WithFileOps } from "./fakeEngineFiles.js";
 import type { Engine } from "../../src/engine/types.js";
+import { SessionLifecycle } from "./fakeEngineSession.js";
 
 /** In-process Engine double: never touches pi; tests drive `emit()` and inspect writes. */
-export class FakeEngine implements Engine {
+export class FakeEngine implements Engine, WithFileOps {
   readonly sessions = new Map<string, T.EngineSessionState>();
   readonly histories = new Map<string, T.EngineMessage[]>();
   readonly listeners = new Map<string, Set<(event: T.EngineEvent) => void>>();
   readonly metadataListeners = new Set<(workspacePath: string) => void>();
-  readonly submitted: Array<{ sessionId: string; text: string; requestId: string }> = [];
+  readonly submitted: Array<{
+    sessionId: string;
+    text: string;
+    requestId: string;
+    attachments?: import("@nex/shared/nex-protocol-v4").AttachmentRef[];
+  }> = [];
   readonly deleted: Array<{ workspacePath: string; sessionId: string }> = [];
   readonly renamed: Array<{ sessionId: string; title: string }> = [];
   readonly aborted: string[] = [];
   /** Test hook: interactionId → optionId, consumed by resolveApproval. */
   readonly approvals = new Map<string, string>();
   readonly resolvedApprovals: Array<{ sessionId: string; interactionId: string }> = [];
-  /** Guide deliveries (`steer`) in call order. */
-  readonly steered: Array<{ sessionId: string; text: string }> = [];
-  /** pi's steering queue per session (what `queue_update` reports). */
-  readonly steering = new Map<string, string[]>();
+  /** Guide deliveries (`steer`) in call order (spec A: with their attachments). */
+  readonly steered: Array<{
+    sessionId: string;
+    text: string;
+    attachments?: import("@nex/shared/nex-protocol-v4").AttachmentRef[];
+  }> = [];
   /** Sessions with an active run; drives `runState`/`steer`/`waitForIdle`. */
   readonly streaming = new Set<string>();
   /** Test hook: abort emits `settled{aborted}`. */
   abortSettles = true;
   /** Compact / rewind / fork doubles; the hooks live on `conversation` (test side). */
   readonly conversation = new FakeConversationOps(this);
-  /** Test hook: `submit` holds this long, exposing the drain→visible window. */
+  /** File-change / rewind doubles (spec B). */
+  readonly files = new FakeFileOps();
+  /** The `Engine` file-surface methods (kept in `fakeEngineFiles.ts` for the file budget). */
+  private readonly fileOps = new FileOpsDelegation(this);
+
+  fileCheckpointFacts = this.fileOps.fileCheckpointFacts;
+  fileChanges = this.fileOps.fileChanges;
+  fileRewindPreview = this.fileOps.fileRewindPreview;
+  applyFileRewind = this.fileOps.applyFileRewind;
+  fileCheckpointsEnabled = this.fileOps.fileCheckpointsEnabled;
+
+  /** pi's steering queue per session (what `queue_update` reports). */
+  readonly steering = new Map<string, string[]>();
+  /** Test hooks: `submitDelayMs` holds `submit`, exposing the drain→visible window. */
   submitDelayMs = 0;
-  /** Set by `submit` while a delayed submission is in flight. */
   submitting: Promise<void> | null = null;
   private readonly idleWaiters = new Map<string, Array<() => void>>();
+  /** Session lifecycle methods live in `fakeEngineSession.ts` (file budget). */
+  private readonly lifecycle = new SessionLifecycle(this);
+
+  init = this.lifecycle.init;
+  registerModel = this.lifecycle.registerModel;
+  createSession = this.lifecycle.createSession;
+  openSession = this.lifecycle.openSession;
+  deleteSession = this.lifecycle.deleteSession;
+  listSessions = this.lifecycle.listSessions;
+  listDeletedSessionIds = this.lifecycle.listDeletedSessionIds;
+  history = this.lifecycle.history;
+  subscribe = this.lifecycle.subscribe;
   private readonly modes = new Map<string, { mode: T.PermissionMode; planEnabled: boolean }>();
-  private readonly tombstones = new Set<string>();
-  private sequence = 0;
-  private catalogValue: T.EngineCatalog = {
+  readonly tombstones = new Set<string>();
+  sequence = 0;
+  catalogValue: T.EngineCatalog = {
     models: [SAMPLE_MODEL],
     defaultSelection: {
       providerId: SAMPLE_MODEL.providerId,
@@ -42,69 +76,6 @@ export class FakeEngine implements Engine {
       options: { reasoningLevel: "medium" },
     },
   };
-
-  async init(): Promise<void> {}
-
-  /** Test hook: adds a catalog model so a switch can change the model identity. */
-  registerModel(info: T.EngineModelInfo): void {
-    this.catalogValue = { ...this.catalogValue, models: [...this.catalogValue.models, info] };
-  }
-
-  async createSession(
-    workspacePath: string,
-    options: T.CreateEngineSessionOptions,
-  ): Promise<{ sessionId: string }> {
-    this.sequence += 1;
-    const sessionId = `sess-${this.sequence}`;
-    const now = 1_700_000_000_000 + this.sequence;
-    this.sessions.set(sessionId, {
-      sessionId,
-      workspacePath,
-      title: "",
-      titleSource: "default",
-      createdAt: now,
-      lastActivityAt: now,
-      phase: "draft",
-      model: modelState(options.modelSelection),
-      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      isRunning: false,
-    });
-    this.histories.set(sessionId, []);
-    this.emitSessionsChanged(workspacePath);
-    return { sessionId };
-  }
-
-  async openSession(_workspacePath: string, sessionId: string): Promise<void> {
-    if (this.tombstones.has(sessionId) || !this.sessions.has(sessionId)) {
-      throw new Error(`session ${sessionId} not found`);
-    }
-  }
-
-  async deleteSession(workspacePath: string, sessionId: string): Promise<void> {
-    this.deleted.push({ workspacePath, sessionId });
-    this.sessions.delete(sessionId);
-    this.tombstones.add(sessionId);
-    this.emitSessionsChanged(workspacePath);
-  }
-
-  async listSessions(workspacePath: string): Promise<T.EngineSessionState[]> {
-    return [...this.sessions.values()].filter((item) => item.workspacePath === workspacePath);
-  }
-
-  async listDeletedSessionIds(_workspacePath?: string): Promise<string[]> {
-    return [...this.tombstones];
-  }
-
-  async history(sessionId: string): Promise<T.EngineMessage[]> {
-    return this.histories.get(sessionId) ?? [];
-  }
-
-  subscribe(sessionId: string, listener: (e: T.EngineEvent) => void): T.EngineEventSubscription {
-    const set = this.listeners.get(sessionId) ?? new Set();
-    set.add(listener);
-    this.listeners.set(sessionId, set);
-    return { dispose: () => set.delete(listener) };
-  }
 
   async submit(
     sessionId: string,
@@ -116,7 +87,12 @@ export class FakeEngine implements Engine {
       await this.submitting;
       this.submitting = null;
     }
-    this.submitted.push({ sessionId, text, requestId: options.requestId });
+    this.submitted.push({
+      sessionId,
+      text,
+      requestId: options.requestId,
+      ...(options.attachments?.length ? { attachments: options.attachments } : {}),
+    });
     if (options.mode) {
       const mode: T.PermissionMode =
         options.mode === "edit" || options.mode === "yolo" ? options.mode : "build";
@@ -126,9 +102,22 @@ export class FakeEngine implements Engine {
     if (text.trim().length > 0) {
       // pi persists the user message and emits message_end (translated to user_input).
       const history = this.histories.get(sessionId) ?? [];
-      this.histories.set(sessionId, [...history, { role: "user", at: Date.now(), text }]);
+      this.histories.set(sessionId, [
+        ...history,
+        {
+          role: "user",
+          at: Date.now(),
+          text,
+          ...(options.attachments?.length ? { attachments: options.attachments } : {}),
+        },
+      ]);
       this.streaming.add(sessionId);
-      this.emit(sessionId, { type: "user_input", at: Date.now(), text });
+      this.emit(sessionId, {
+        type: "user_input",
+        at: Date.now(),
+        text,
+        ...(options.attachments?.length ? { attachments: options.attachments } : {}),
+      });
     }
     if (session) {
       this.sessions.set(sessionId, {
@@ -174,9 +163,17 @@ export class FakeEngine implements Engine {
   }
 
   /** Guide double: records the steer and emits pi's `queue_update`. */
-  async steer(sessionId: string, text: string): Promise<boolean> {
+  async steer(
+    sessionId: string,
+    text: string,
+    attachments?: import("@nex/shared/nex-protocol-v4").AttachmentRef[],
+  ): Promise<boolean> {
     if (!this.streaming.has(sessionId)) return false;
-    this.steered.push({ sessionId, text });
+    this.steered.push({
+      sessionId,
+      text,
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
+    });
     this.steering.set(sessionId, [...(this.steering.get(sessionId) ?? []), text]);
     this.emitQueueUpdate(sessionId);
     return true;
@@ -351,8 +348,6 @@ export class FakeEngine implements Engine {
     return true;
   }
 
-  // Conversation features (decisions 5-7) delegate to the doubles in
-  // `fakeEngineConversation.ts`; test hooks live on `conversation`.
   compactState(sessionId: string): T.EngineCompactState {
     return this.conversation.compactState(sessionId);
   }
@@ -388,6 +383,13 @@ export class FakeEngine implements Engine {
     return this.conversation.forkAssistant(workspacePath, sessionId, request);
   }
 
+  /** Set by the attachment command tests: refs a restore must re-join (spec A). */
+  setSweepGuard(guard: ((ref: string) => boolean) | null): void {
+    this.sweepGuard = guard;
+  }
+
+  sweepGuard: ((ref: string) => boolean) | null = null;
+
   async catalog(): Promise<T.EngineCatalog> {
     return this.catalogValue;
   }
@@ -422,4 +424,3 @@ export class FakeEngine implements Engine {
     this.histories.set(session.sessionId, history);
   }
 }
-export { SAMPLE_MODEL } from "./fakeEngineData.js";

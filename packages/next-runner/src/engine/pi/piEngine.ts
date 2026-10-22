@@ -4,7 +4,6 @@ import {
   type AgentSessionEvent,
 } from "@earendil-works/pi-coding-agent";
 import type { ModelSelection } from "@nex/shared";
-import type { Logger } from "../../logger.js";
 import type {
   CreateEngineSessionOptions,
   Engine,
@@ -29,93 +28,89 @@ import type {
   SubmitOutcome,
   SwitchModelConfigInput,
 } from "../types.js";
-import { PiCompactOps } from "./piCompactOps.js";
-import { submitPrompt } from "./piSessionOps.js";
+import type { PromptAttachmentPayload } from "./piSessionOps.js";
 
-import {
-  compactStateOf,
-  resolveRewindTarget,
-  runFork,
-  runManualCompact,
-  runRewind,
-  type ConversationOpsDeps,
-} from "./piConversationOps.js";
-import type { PiTranslateContext } from "./events.js";
-import { handleEnginePiEvent } from "./piEventHook.js";
+import type { ConversationOpsDeps } from "./piConversationOps.js";
+import type { PiFileOps } from "./piFileOps.js";
+import type { SessionControls } from "./sessionControls.js";
+import type { SessionLifecycleOps } from "./sessionLifecycleOps.js";
+import type { ConversationCommands } from "./piConversationCommands.js";
+import type { PiCompactOps } from "./piCompactOps.js";
+import type { createHookFactories } from "./engineHooks.js";
+import type { createTaskStateApi } from "./taskStateOps.js";
 import { SessionMetaStore } from "./metaStore.js";
-import { toEngineSessionStates, teardownSession } from "./sessionViews.js";
-import { createTaskStateApi, deleteTaskImpl } from "./taskStateOps.js";
-import { EMPTY_USAGE, selectionFor, usageFromSession } from "./sessionHelpers.js";
+import { teardownSession } from "./sessionViews.js";
+import { createEngineCollaborators } from "./engineCollaborators.js";
 import { buildCatalog } from "./modelCatalog.js";
-import { toEngineBranchHistory } from "./translate.js";
 import { openPiSession, type OpenSession } from "./sessionLifecycle.js";
-import { applyEngineSelection, startEnginePrompt, type PromptOpsDeps } from "./promptOps.js";
+import { createSessionFactoryDeps } from "./sessionFactoryDeps.js";
+import { createPromptHooks } from "./piPromptHooks.js";
+import { createEngineEventHook } from "./piEngineWiring.js";
+import { createConversationOps } from "./piConversationWiring.js";
 import type { SessionConfigOps } from "./sessionConfigOps.js";
-import { createEngineOps } from "./engineOps.js";
-import { createEngineSession, restoreEngineSession } from "./sessionCreateOps.js";
-import { createHookFactories, sessionDirFactory } from "./engineHooks.js";
-import type { TitleCompletionRequest, TitleGenerationSettings } from "./titleGenerator.js";
+import { AttachmentRegistry } from "../../attachments/registry.js";
+import type { AttachmentPromptTable } from "./piAttachmentOps.js";
+import { createAttachmentOps } from "./attachmentOpsFactory.js";
+import type { TitleGenerationSettings } from "./titleGenerator.js";
+import type { PiEngineOptions } from "./piEngineOptions.js";
+export type { PiEngineOptions } from "./piEngineOptions.js";
 import type { TitleCoordinator } from "./titleRunner.js";
-
-export interface PiEngineOptions {
-  dataDir: string;
-  logger: Logger;
-  /** Test seam: a faux-backed ModelRuntime instead of `~/.pi/agent` credentials. */
-  createModelRuntime?: () => Promise<ModelRuntime>;
-  /** Test seams: in-memory settings, title settings and a fake completion. */
-  createSettingsManager?: (workspacePath: string) => SettingsManager;
-  titleSettings?: TitleGenerationSettings;
-  completeTitle?: (request: TitleCompletionRequest) => Promise<string>;
-}
 
 /** pi-backed Engine: session files under `<dataDir>/sessions/`, one metadata file per workspace, the in-process session map. */
 export class PiEngine implements Engine {
-  private readonly sessions = new Map<string, OpenSession>();
+  readonly sessions = new Map<string, OpenSession>();
   private readonly listeners = new Set<(workspacePath: string) => void>();
-  private readonly metadata: SessionMetaStore;
-  private readonly configOps: SessionConfigOps;
-  private readonly titleSettings: TitleGenerationSettings;
-  private readonly titles: TitleCoordinator;
-  private readonly taskApi: ReturnType<typeof createTaskStateApi>;
-  private readonly hooks: ReturnType<typeof createHookFactories>;
-  private readonly compactOps: PiCompactOps;
-  /** pi entry a manual compaction produced, so its outcome can be persisted with the command. */
-  private readonly compactionEntries = new Map<string, string>();
-  private modelRuntime: ModelRuntime | null = null;
-  private settingsManager: SettingsManager | null = null;
+  readonly metadata: SessionMetaStore;
+  readonly configOps!: SessionConfigOps;
+  readonly titleSettings!: TitleGenerationSettings;
+  readonly titles!: TitleCoordinator;
+  readonly taskApi!: ReturnType<typeof createTaskStateApi>;
+  readonly hooks!: ReturnType<typeof createHookFactories>;
+  readonly compactOps!: PiCompactOps;
+  /** pi entry a manual compaction produced (persisted with its command). */
+  readonly compactionEntries = new Map<string, string>();
+  /** Attachment blobs + prompt feeding (spec A). */
+  readonly attachments: AttachmentRegistry;
+  readonly attachmentOps: AttachmentPromptTable;
+  /** File surface (checkpoint services per workspace + git-backed reads). */
+  readonly fileOps!: PiFileOps;
+  /** Run controls over open sessions (abort/stop/guide/idle). */
+  readonly sessionControls!: SessionControls;
+  /** Session/transcript half of the Engine surface (created in the constructor). */
+  readonly sessionLifecycle!: SessionLifecycleOps;
+  modelRuntime: ModelRuntime | null = null;
+  settingsManager: SettingsManager | null = null;
   private catalogCache: EngineCatalog | null = null;
   private initialized = false;
 
-  constructor(private readonly options: PiEngineOptions) {
+  constructor(readonly options: PiEngineOptions) {
     this.metadata = new SessionMetaStore(options.dataDir, options.logger);
-    this.hooks = createHookFactories({
-      dataDir: options.dataDir,
-      metadata: this.metadata,
-      sessions: this.sessions,
-      sessionDir: sessionDirFactory(options.dataDir),
-      attach: (open) => this.attach(open),
-      teardown: teardownSession,
-      sessionsChanged: (workspacePath) => this.emitSessionsChanged(workspacePath),
-      factoryDeps: () => this.sessionFactoryDeps(),
-      runtime: () => this.requireRuntime(),
+    this.attachments =
+      options.attachments ??
+      new AttachmentRegistry({
+        dataDir: options.dataDir,
+        ...(options.attachmentSessionQuotaBytes !== undefined
+          ? { sessionQuotaBytes: options.attachmentSessionQuotaBytes }
+          : {}),
+      });
+    this.attachmentOps = createAttachmentOps({ host: this.attachments, logger: options.logger });
+    const wiring = createEngineCollaborators(this);
+    Object.assign(this, {
+      fileOps: wiring.fileOps,
+      sessionControls: wiring.sessionControls,
+      hooks: wiring.hooks,
+      taskApi: wiring.taskApi,
+      compactOps: wiring.compactOps,
+      configOps: wiring.configOps,
+      titles: wiring.titles,
+      titleSettings: wiring.titleSettings,
+      sessionLifecycle: wiring.sessionLifecycle,
+      conversation: wiring.conversation,
     });
-    this.taskApi = createTaskStateApi(this.hooks.taskStateHooks());
-    const sessionFor = (sessionId: string) => this.sessions.get(sessionId)?.session;
-    this.compactOps = new PiCompactOps({ logger: options.logger, sessionFor });
-    const ops = createEngineOps({
-      logger: options.logger,
-      metadata: this.metadata,
-      ...(options.titleSettings ? { titleSettings: options.titleSettings } : {}),
-      ...(options.completeTitle ? { completeTitle: options.completeTitle } : {}),
-      runtime: () => this.requireRuntime(),
-      sessionFor,
-      emit: (sessionId, event) => this.emitEngineEvent(sessionId, event),
-      sessionsChanged: (workspacePath) => this.emitSessionsChanged(workspacePath),
-    });
-    this.configOps = ops.configOps;
-    this.titles = ops.titles;
-    this.titleSettings = ops.titleSettings;
   }
+
+  /** Conversation rewind/compact/fork commands (created after the compact owner). */
+  readonly conversation!: ConversationCommands;
 
   async init(): Promise<void> {
     if (this.initialized) return;
@@ -125,81 +120,33 @@ export class PiEngine implements Engine {
       : await ModelRuntime.create();
     this.settingsManager = SettingsManager.create(process.cwd());
     await this.metadata.load();
+    this.attachments.startSweeper();
     this.initialized = true;
   }
 
-  createSession(
-    workspacePath: string,
-    options: CreateEngineSessionOptions,
-  ): Promise<{ sessionId: string }> {
-    return this.init().then(() =>
-      createEngineSession(this.hooks.sessionCreateDeps(), workspacePath, options),
-    );
+  createSession(w: string, o: CreateEngineSessionOptions) {
+    return this.sessionLifecycle.createSession(w, o);
   }
-
-  openSession(workspacePath: string, sessionId: string): Promise<void> {
-    if (this.sessions.has(sessionId)) return Promise.resolve();
-    return this.init().then(() =>
-      restoreEngineSession(this.hooks.sessionCreateDeps(), workspacePath, sessionId),
-    );
+  openSession(w: string, id: string): Promise<void> {
+    return this.sessionLifecycle.openSession(w, id);
   }
-
-  deleteSession(workspacePath: string, sessionId: string): Promise<void> {
-    return this.init().then(() =>
-      deleteTaskImpl(this.hooks.taskStateHooks(), workspacePath, sessionId),
-    );
+  deleteSession(w: string, id: string): Promise<void> {
+    return this.sessionLifecycle.deleteSession(w, id);
   }
-
-  async listSessions(workspacePath: string): Promise<EngineSessionState[]> {
-    await this.init();
-    const live = (sessionId: string) => {
-      const open = this.sessions.get(sessionId);
-      if (!open) return undefined;
-      const { mode, planEnabled } = open.gate.getMode();
-      return { session: open.session, streaming: open.session.isStreaming, mode, planEnabled };
-    };
-    const entries = await this.metadata.list(workspacePath);
-    return toEngineSessionStates(workspacePath, entries, live, {
-      selectionFor,
-      usageFromSession,
-      emptyUsage: EMPTY_USAGE,
-    });
+  listSessions(w: string): Promise<EngineSessionState[]> {
+    return this.sessionLifecycle.listSessions(w);
   }
-
-  async listDeletedSessionIds(workspacePath: string): Promise<string[]> {
-    await this.init();
-    const entries = await this.metadata.list(workspacePath);
-    return entries.filter((entry) => entry.deleted).map((entry) => entry.sessionId);
+  listDeletedSessionIds(w: string): Promise<string[]> {
+    return this.sessionLifecycle.listDeletedSessionIds(w);
   }
-
-  /** 修复依据（research §0-b）：`session.messages` 是投影上下文，压缩后丢旧消息、branch() 后丢废弃分支；restore 必须读 pi 原始分支。 */
-  async history(sessionId: string): Promise<EngineMessage[]> {
-    const open = this.requireOpen(sessionId);
-    const meta = await this.metadata.get(open.workspacePath, sessionId);
-    return toEngineBranchHistory(open.session.sessionManager.getBranch(), meta?.lastCompact);
+  history(id: string): Promise<EngineMessage[]> {
+    return this.sessionLifecycle.history(id);
   }
-
-  subscribe(sessionId: string, listener: (event: EngineEvent) => void): EngineEventSubscription {
-    const open = this.requireOpen(sessionId);
-    open.listeners.add(listener);
-    return { dispose: () => open.listeners.delete(listener) };
+  subscribe(id: string, listener: (event: EngineEvent) => void): EngineEventSubscription {
+    return this.sessionLifecycle.subscribe(id, listener);
   }
-
-  submit(sessionId: string, text: string, options: SubmitOptions): Promise<SubmitOutcome> {
-    const open = this.requireOpen(sessionId);
-    return submitPrompt(
-      {
-        metadata: this.metadata,
-        titles: this.titles,
-        sessionsChanged: (path) => this.emitSessionsChanged(path),
-        startPrompt: (next: string, requestId: string) =>
-          this.startPrompt(open.workspacePath, sessionId, next, requestId),
-        applySelection: (selection: ModelSelection) => this.applySelection(sessionId, selection),
-      },
-      open,
-      text,
-      options,
-    );
+  submit(id: string, text: string, options: SubmitOptions): Promise<SubmitOutcome> {
+    return this.sessionLifecycle.submit(id, text, options);
   }
 
   async resolveApproval(
@@ -215,43 +162,24 @@ export class PiEngine implements Engine {
   }
 
   permissionMode(sessionId: string): { mode: PermissionMode; planEnabled: boolean } | null {
-    return this.sessions.get(sessionId)?.gate.getMode() ?? null;
+    return this.sessionControls.permissionMode(sessionId);
   }
 
-  async abort(sessionId: string): Promise<void> {
-    const open = this.sessions.get(sessionId);
-    if (!open) return;
-    open.gate.abortPending();
-    await open.session.abort();
-    const phase = "completedInterrupted" as const;
-    await this.metadata.upsert(open.workspacePath, sessionId, {
-      phase,
-      lastActivityAt: Date.now(),
-    });
-    this.emitSessionsChanged(open.workspacePath);
+  abort(sessionId: string): Promise<void> {
+    return this.sessionControls.abort(sessionId);
   }
 
-  /** Guide delivery into pi's steering queue; delivered at the next tool-batch boundary. */
-  async steer(sessionId: string, text: string): Promise<boolean> {
-    const open = this.sessions.get(sessionId);
-    if (!open?.session.isStreaming) return false;
-    await open.session.steer(text);
-    return true;
+  steer(sessionId: string, text: string): Promise<boolean> {
+    return this.sessionControls.steer(sessionId, text);
   }
-
   runState(sessionId: string): EngineRunState {
-    const open = this.sessions.get(sessionId);
-    return open
-      ? { streaming: open.session.isStreaming, idle: open.session.isIdle }
-      : { streaming: false, idle: true };
+    return this.sessionControls.runState(sessionId);
   }
-
   waitForIdle(sessionId: string): Promise<void> {
-    return this.sessions.get(sessionId)?.session.waitForIdle() ?? Promise.resolve();
+    return this.sessionControls.waitForIdle(sessionId);
   }
-
   clearPiQueue(sessionId: string): void {
-    this.sessions.get(sessionId)?.session.clearQueue();
+    this.sessionControls.clearPiQueue(sessionId);
   }
 
   /** User rename: `custom`, never overwritten by a generated title. */
@@ -273,34 +201,30 @@ export class PiEngine implements Engine {
     return this.configOps.setFollowupMode(w, s, mode);
   }
 
-  // Conversation rewind/compact/fork (decisions 5-7) delegate to `piConversationOps`.
+  // Conversation rewind/compact/fork (decisions 5-7) → `piConversationCommands.ts`.
   compactState(sessionId: string): EngineCompactState {
-    return compactStateOf(this.conversationOps(), sessionId);
+    return this.conversation.compactState(sessionId);
   }
   takeCompactOutcomes(sessionId: string): EngineCompactOutcome[] {
     return this.compactOps.takeOutcomes(sessionId);
   }
   compact(sessionId: string, sourceCommandId: string): Promise<EngineCompactOutcome> {
-    this.compactionEntries.delete(sessionId);
-    return runManualCompact(this.conversationOps(), sessionId, sourceCommandId).finally(() =>
-      this.compactionEntries.delete(sessionId),
-    );
+    return this.conversation.compact(sessionId, sourceCommandId);
   }
   rewind(sessionId: string, request: EngineRewindRequest): Promise<EngineRewindOutcome> {
-    return runRewind(this.conversationOps(), sessionId, request);
+    return this.conversation.rewind(sessionId, request);
   }
   userMessageBefore(sessionId: string, entryId: string): Promise<EngineRewindTarget | null> {
-    return Promise.resolve(resolveRewindTarget(this.conversationOps(), sessionId, entryId));
+    return this.conversation.userMessageBefore(sessionId, entryId);
   }
   forkAssistant(
     workspacePath: string,
     sessionId: string,
     request: EngineForkRequest,
   ): Promise<EngineForkOutcome> {
-    return runFork(this.conversationOps(), workspacePath, sessionId, request);
+    return this.conversation.forkAssistant(workspacePath, sessionId, request);
   }
 
-  /** Sidebar pin/archive (docs/next/task-state.md). */
   setTaskState(
     workspacePath: string,
     sessionId: string,
@@ -320,6 +244,27 @@ export class PiEngine implements Engine {
     return this.taskApi.deleteTaskIfArchived(workspacePath, sessionId);
   }
 
+  fileCheckpointFacts(w: string, s: string, userEntryId: string) {
+    return this.fileOps.facts(w, s, userEntryId);
+  }
+  fileChanges(w: string, s: string, userEntryId: string) {
+    return this.fileOps.changes(w, s, userEntryId);
+  }
+  fileRewindPreview(w: string, s: string, userEntryId: string) {
+    return this.fileOps.preview(w, s, userEntryId);
+  }
+  applyFileRewind(
+    w: string,
+    s: string,
+    userEntryId: string,
+    options: { commitAfterApply?: () => Promise<void>; sourceCommandId?: string },
+  ) {
+    return this.fileOps.apply(w, s, userEntryId, options);
+  }
+  fileCheckpointsEnabled(workspacePath: string): Promise<boolean> {
+    return this.fileOps.enabled(workspacePath);
+  }
+
   async catalog(): Promise<EngineCatalog> {
     await this.init();
     if (this.catalogCache) return this.catalogCache;
@@ -336,108 +281,106 @@ export class PiEngine implements Engine {
     for (const open of this.sessions.values()) void teardownSession(open);
     this.sessions.clear();
     this.listeners.clear();
+    this.attachments.dispose();
   }
 
   // ── internals ──
 
-  private attach(open: OpenSession): void {
+  attach(open: OpenSession): void {
     this.sessions.get(open.session.sessionId)?.unsubscribe();
     this.sessions.set(open.session.sessionId, open);
   }
 
-  private onPiEvent(path: string, sessionId: string, event: AgentSessionEvent): Promise<void> {
-    return handleEnginePiEvent(this.eventHookDeps(), path, sessionId, event);
-  }
-
-  private eventHookDeps() {
-    return {
+  onPiEventHook(path: string, sessionId: string, event: AgentSessionEvent): Promise<void> {
+    return createEngineEventHook({
       logger: this.options.logger,
       metadata: this.metadata,
       compactOps: this.compactOps,
+      attachments: this.attachmentOps,
       sessions: this.sessions,
-      emit: (id: string, e: EngineEvent) => this.emitEngineEvent(id, e),
-      sessionsChanged: (path: string) => this.emitSessionsChanged(path),
-      rememberCompactionEntry: (id: string, entryId: string) =>
-        this.compactionEntries.set(id, entryId),
-    };
-  }
-
-  private promptOps(): PromptOpsDeps {
-    return {
-      metadata: this.metadata,
-      logger: this.options.logger,
-      sessionsChanged: (p) => this.emitSessionsChanged(p),
-      runtime: () => this.requireRuntime(),
-      configOps: this.configOps,
-    };
-  }
-
-  private startPrompt(workspacePath: string, sessionId: string, text: string, requestId?: string) {
-    const open = this.requireOpen(sessionId);
-    return startEnginePrompt(this.promptOps(), open, workspacePath, sessionId, text, requestId);
-  }
-
-  private applySelection(sessionId: string, selection: ModelSelection): Promise<void> {
-    return applyEngineSelection(
-      this.promptOps(),
-      this.requireOpen(sessionId),
-      sessionId,
-      selection,
-    );
+      emit: (id, e) => this.emitEngineEvent(id, e),
+      sessionsChanged: (path) => this.emitSessionsChanged(path),
+      rememberCompactionEntry: (id, entryId) => this.compactionEntries.set(id, entryId),
+    })(path, sessionId, event);
   }
 
   /** Synthetic engine events (title/model/followup) travel the same stream as pi events. */
-  private emitEngineEvent(sessionId: string, event: EngineEvent): void {
+  emitEngineEvent(sessionId: string, event: EngineEvent): void {
     for (const listener of this.sessions.get(sessionId)?.listeners ?? []) listener(event);
   }
 
-  private conversationOps(): ConversationOpsDeps {
-    return {
+  conversationOps(): ConversationOpsDeps {
+    return createConversationOps({
       logger: this.options.logger,
       metadata: this.metadata,
       compactOps: this.compactOps,
-      compactionEntryFor: (id: string) => this.compactionEntries.get(id),
-      open: (id: string) => this.requireOpen(id),
-      sessionsChanged: (path: string) => this.emitSessionsChanged(path),
-      forkDeps: () => ({
-        metadata: this.metadata,
-        runtime: () => this.requireRuntime(),
-        factoryDeps: () => this.sessionFactoryDeps(),
-        attach: (open: OpenSession) => this.attach(open),
-        sessionsChanged: (path: string) => this.emitSessionsChanged(path),
-      }),
-    };
+      compactionEntryFor: (id) => this.compactionEntries.get(id),
+      open: (id) => this.requireOpen(id),
+      sessionsChanged: (path) => this.emitSessionsChanged(path),
+      runtime: () => this.requireRuntime(),
+      factoryDeps: () => this.sessionFactoryDeps(),
+      attach: (open) => this.attach(open),
+    });
   }
 
-  private requireRuntime(): ModelRuntime {
+  startPrompt(
+    workspacePath: string,
+    sessionId: string,
+    text: string,
+    requestId: string | undefined,
+    payload?: PromptAttachmentPayload,
+    onStart?: (session: import("@earendil-works/pi-coding-agent").AgentSession) => void,
+  ): Promise<string> {
+    return this.promptHooks().startPrompt(
+      workspacePath,
+      sessionId,
+      text,
+      requestId,
+      payload,
+      onStart,
+    );
+  }
+
+  applySelection(sessionId: string, selection: ModelSelection): Promise<void> {
+    return this.promptHooks().applySelection(sessionId, selection);
+  }
+
+  private promptHooks() {
+    return createPromptHooks({
+      metadata: this.metadata,
+      sessions: this.sessions,
+      configOps: this.configOps,
+      logger: this.options.logger,
+      runtime: () => this.requireRuntime(),
+      sessionsChanged: (path) => this.emitSessionsChanged(path),
+    });
+  }
+
+  requireRuntime(): ModelRuntime {
     if (!this.modelRuntime) throw new Error("Engine is not initialized");
     return this.modelRuntime;
   }
 
-  private requireOpen(sessionId: string): OpenSession {
+  requireOpen(sessionId: string): OpenSession {
     const open = this.sessions.get(sessionId);
     if (!open) throw new Error(`Session ${sessionId} is not open`);
     return open;
   }
 
-  private emitSessionsChanged(workspacePath: string): void {
+  emitSessionsChanged(workspacePath: string): void {
     for (const listener of this.listeners) listener(workspacePath);
   }
 
-  private sessionFactoryDeps(): Parameters<typeof openPiSession>[0] {
-    return {
-      ...(this.options.createSettingsManager
-        ? { createSettingsManager: this.options.createSettingsManager }
-        : {}),
-      fallbackSettings: () => this.settingsManager ?? SettingsManager.create(process.cwd()),
-      modelRuntime: () => this.requireRuntime(),
-      translateContext: (sessionId): PiTranslateContext => {
-        const compactCommandId = this.compactOps.activeCommandId(sessionId);
-        return compactCommandId ? { compactCommandId } : {};
-      },
-      onPiEvent: (workspacePath, sessionId, event) => {
-        void this.onPiEvent(workspacePath, sessionId, event);
-      },
-    };
+  sessionFactoryDeps(): Parameters<typeof openPiSession>[0] {
+    return createSessionFactoryDeps({
+      options: this.options,
+      settingsManager: () => this.settingsManager,
+      runtime: () => this.requireRuntime(),
+      compactOps: this.compactOps,
+      fileOps: this.fileOps,
+      attachmentOps: this.attachmentOps,
+      sessions: this.sessions,
+      onPiEvent: (w, id, event) => void this.onPiEventHook(w, id, event),
+    });
   }
 }

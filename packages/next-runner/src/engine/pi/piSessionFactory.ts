@@ -5,6 +5,9 @@ import {
   getAgentDir,
   type AgentSession,
   type AgentSessionEvent,
+  type BeforeAgentStartEvent,
+  type ExtensionFactory,
+  type InlineExtension,
   type ModelRuntime,
   type SessionManager,
 } from "@earendil-works/pi-coding-agent";
@@ -13,6 +16,8 @@ import { PermissionGate } from "../permissions/gate.js";
 import type { EngineEvent } from "../types.js";
 import { translatePiEvent, type PiTranslateContext } from "./events.js";
 import { createPermissionGateExtension } from "./permissionExtension.js";
+import type { PiCheckpointHook } from "./piCheckpointHook.js";
+import { createCheckpointExtension } from "./checkpointExtension.js";
 
 export interface PiSessionFactoryOptions {
   workspacePath: string;
@@ -27,6 +32,30 @@ export interface PiSessionFactoryOptions {
    * (pi's compaction events carry no command id).
    */
   translateContext?: (sessionId: string) => PiTranslateContext;
+  /**
+   * File checkpoints (spec B). Optional: a session created before the service resolves (or
+   * with git missing) simply has no checkpoint hooks.
+   */
+  checkpoints?: PiCheckpointHook;
+  /**
+   * Reads and clears the per-run system-prompt note (spec A: the "attached files are
+   * readable with read" hint). The note is never persisted.
+   */
+  takeSystemNote?: () => string | undefined;
+  /**
+   * Pre-translation hook (spec A): `message_start` of a user message executes its prompt
+   * here, before translation, so `user_input` can carry the row text + attachment refs.
+   */
+  onPiEventBeforeTranslate?: (event: AgentSessionEvent) => void;
+  /** The session whose input table a user `message_end` claims (spec A). */
+  attachmentInputs?: {
+    claim: (
+      promptText: string,
+      sessionId: string,
+    ) =>
+      | { text: string; attachments?: import("@nex/shared/nex-protocol-v4").AttachmentRef[] }
+      | undefined;
+  };
 }
 
 export interface CreatedPiSession {
@@ -58,7 +87,11 @@ export async function createPiSessionWithGate(
     cwd: options.workspacePath,
     agentDir: getAgentDir(),
     settingsManager: options.settingsManager,
-    extensionFactories: [createPermissionGateExtension(gate)],
+    extensionFactories: [
+      createPermissionGateExtension(gate),
+      ...(options.takeSystemNote ? [createSystemNoteExtension(options.takeSystemNote)] : []),
+      ...(options.checkpoints ? [createCheckpointExtension(options.checkpoints)] : []),
+    ],
   });
   await resourceLoader.reload();
   const { session } = await createAgentSession({
@@ -70,17 +103,62 @@ export async function createPiSessionWithGate(
     settingsManager: options.settingsManager,
   });
   const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
+    // Attachment prompt bookkeeping must run before translation: an attachment prompt's
+    // persisted user text is rewritten at its `message_start`, and its `message_entry`
+    // is emitted there (spec A).
+    options.onPiEventBeforeTranslate?.(event);
     // Metadata/compaction bookkeeping first: it decides which command a compaction event
     // belongs to, and translation must see that before projection folds the event.
     options.onPiEvent(event);
-    const sessionId = session.sessionId;
+    // Checkpoint facts ride the same ordered stream: a user message opens a product turn,
+    // its persisted entry id becomes the rewind anchor, and a settle flushes the record.
+    const checkpoints = options.checkpoints;
+    if (checkpoints) {
+      if (event.type === "message_end" && event.message.role === "user") {
+        checkpoints.startTurn();
+      } else if (event.type === "agent_settled") {
+        void checkpoints.settle();
+      }
+    }
     for (const translated of translatePiEvent(
       event,
       Date.now(),
-      options.translateContext?.(sessionId),
+      translateContextFor(options, session.sessionId),
     )) {
       for (const listener of listeners) listener(translated);
     }
   });
   return { session, gate, listeners, unsubscribe };
+}
+
+/** Translate context: manual compact + the session's attachment input table (spec A). */
+function translateContextFor(
+  options: PiSessionFactoryOptions,
+  sessionId: string,
+): PiTranslateContext | undefined {
+  const compact = options.translateContext?.(sessionId);
+  const attachmentInputs = options.attachmentInputs;
+  const takeAttachments = attachmentInputs
+    ? (promptText: string) => attachmentInputs.claim(promptText, sessionId)
+    : undefined;
+  if (!compact && !takeAttachments) return undefined;
+  return { ...compact, ...(takeAttachments ? { takeAttachments } : {}) };
+}
+
+/**
+ * Inline pi extension appending the run's one-shot system-prompt note (spec A). The engine
+ * sets it right before `prompt()`; reading it on `before_agent_start` and returning
+ * `systemPrompt` keeps it in this request only — nothing about attachments is written into
+ * the session file, so a later `refreshContext()` never resurrects a stale hint.
+ */
+function createSystemNoteExtension(take: () => string | undefined): InlineExtension {
+  const factory: ExtensionFactory = (pi) => {
+    pi.on("before_agent_start", async (event: BeforeAgentStartEvent) => {
+      const note = take();
+      if (!note) return undefined;
+      if (event.messageType !== "user") return undefined;
+      return { systemPrompt: `${event.systemPrompt}${note}` };
+    });
+  };
+  return { name: "nex-attachment-note", factory };
 }

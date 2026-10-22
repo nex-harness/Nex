@@ -287,6 +287,7 @@ function turnHeaderRow(
     state: row.state,
     startedAt: row.startedAt,
     ...(row.endedAt !== undefined ? { endedAt: row.endedAt } : {}),
+    ...(row.fileChanges ? { fileChanges: row.fileChanges } : {}),
     createdAt: row.createdAt,
     createdAtSeq: row.createdAtSeq,
   };
@@ -303,6 +304,7 @@ function userInputRow(
     kind: "userInput",
     text: row.text,
     origin: "realUser",
+    ...(row.attachments && row.attachments.length > 0 ? { attachments: row.attachments } : {}),
     ...(row.sourceCommandId ? { sourceCommandId: row.sourceCommandId } : {}),
     createdAt: row.createdAt,
     createdAtSeq: row.createdAtSeq,
@@ -361,7 +363,14 @@ function toolCallRow(
     status: row.status,
     inputText: row.inputText,
     ...(row.input !== undefined ? { input: row.input } : {}),
-    ...(row.outputText !== undefined ? { output: { text: outputText } } : {}),
+    ...(row.outputText !== undefined || row.display !== undefined
+      ? {
+          output: {
+            text: outputText,
+            ...(row.display ? { display: row.display } : {}),
+          },
+        }
+      : {}),
     ...(row.outputText !== undefined ? { outputPreview: buildOutputPreview(outputText) } : {}),
     ...(row.status === "error"
       ? { error: { code: "tool_error", message: row.errorMessage ?? outputText } }

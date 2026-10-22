@@ -8,6 +8,7 @@ import {
   userEntityId,
 } from "./entityIds.js";
 import { mapToolInput, toolDisplayName } from "./fold.js";
+import { parseUnifiedPatch } from "../engine/checkpoints/patch.js";
 import {
   jsonText,
   type ProjectedRow,
@@ -61,6 +62,7 @@ export function projectHistory(
   let headerRowId: number | null = null;
   let lastTurnId: string | undefined;
   let lastAt = session.createdAt;
+  const checkpointRecords: Array<Extract<EngineMessage, { role: "checkpoints" | "rewind" }>> = [];
 
   const allocate = (): number => {
     const id = nextRowId;
@@ -103,6 +105,13 @@ export function projectHistory(
   };
 
   for (const message of messages) {
+    if (message.role === "checkpoints" || message.role === "rewind") {
+      // `nex.checkpoints` / `nex.rewind` are applied after the turn walk: they target a turn
+      // header by its user entry id, which may be seen later in the same pass.
+      checkpointRecords.push(message);
+      lastAt = Math.max(lastAt, message.at);
+      continue;
+    }
     if (message.role === "runnerMarker") {
       // `nex.fork` custom entry → the child's head notice (decision 6). It belongs to no
       // product turn, so it renders before the first turn header under `turn-0`.
@@ -160,6 +169,9 @@ export function projectHistory(
         kind: "userInput",
         ...(message.entryId ? { entityId: userEntityId(message.entryId) } : {}),
         text: message.text,
+        ...(message.attachments && message.attachments.length > 0
+          ? { attachments: message.attachments }
+          : {}),
         sourceCommandId: "",
         createdAt: message.at,
         createdAtSeq: rowId,
@@ -223,6 +235,8 @@ export function projectHistory(
     lastAt = message.at;
   }
   closeTurn(lastAt, true);
+  applyCheckpointRecords(rows, checkpointRecords);
+  refreshTurnSummaries(rows);
 
   return {
     ...state,
@@ -295,6 +309,93 @@ export function projectHistory(
     };
     rows.push(toolRow);
     toolRowByCallId.set(part.id, rowId);
+  }
+}
+
+/**
+ * Replays `nex.checkpoints` / `nex.rewind` onto the restored rows (spec B):
+ * - a record's tool displays land on their tool rows (`output.display`);
+ * - a `nex.rewind` record flips its turn header to `reverted`.
+ * Records whose user entry is not on the active branch are ignored (abandoned branch, or a
+ * turn that was itself cut), which keeps restore in agreement with the live row set.
+ */
+function applyCheckpointRecords(
+  rows: ProjectedRow[],
+  records: Array<Extract<EngineMessage, { role: "checkpoints" | "rewind" }>>,
+): void {
+  const reverted = new Set(
+    records.filter((record) => record.role === "rewind").map((record) => record.userEntryId),
+  );
+  for (const record of records) {
+    if (record.role !== "checkpoints") continue;
+    for (const operation of record.data.operations) {
+      if (!operation.patch || operation.toolName === "bash") continue;
+      const index = rows.findIndex(
+        (row) => row.kind === "toolCall" && row.toolCallId === operation.toolCallId,
+      );
+      const row = rows[index];
+      if (!row || row.kind !== "toolCall" || (row.status !== "success" && row.status !== "error")) {
+        continue;
+      }
+      const { hunks } = parseUnifiedPatch(operation.patch);
+      if (hunks.length === 0) continue;
+      rows[index] = {
+        ...row,
+        display: {
+          kind: "file_diff",
+          filePath: operation.path,
+          additions: operation.additions,
+          deletions: operation.deletions,
+          structuredPatch: hunks,
+        },
+      };
+    }
+  }
+  for (const userEntryId of reverted) {
+    const userIndex = rows.findIndex(
+      (row) => row.kind === "userInput" && row.entityId === userEntityId(userEntryId),
+    );
+    const user = rows[userIndex];
+    if (!user) continue;
+    for (let index = userIndex; index >= 0; index -= 1) {
+      const candidate = rows[index];
+      if (!candidate || candidate.turnId !== user.turnId) continue;
+      if (candidate.kind !== "turnHeader") continue;
+      rows[index] = {
+        ...candidate,
+        fileChanges: {
+          files: candidate.fileChanges?.files ?? 0,
+          additions: candidate.fileChanges?.additions ?? 0,
+          deletions: candidate.fileChanges?.deletions ?? 0,
+          state: "reverted",
+        },
+      };
+      break;
+    }
+  }
+}
+
+/** Fills `turnHeader.fileChanges` from tool displays unless a rewind marker owns it. */
+function refreshTurnSummaries(rows: ProjectedRow[]): void {
+  for (let index = 0; index < rows.length; index += 1) {
+    const header = rows[index];
+    if (!header || header.kind !== "turnHeader" || header.fileChanges?.state === "reverted") {
+      continue;
+    }
+    const files = new Set<string>();
+    let additions = 0;
+    let deletions = 0;
+    for (const row of rows) {
+      if (row.turnId !== header.turnId || row.kind !== "toolCall" || !row.display) continue;
+      files.add(row.display.filePath);
+      additions += row.display.additions;
+      deletions += row.display.deletions;
+    }
+    if (files.size === 0) continue;
+    rows[index] = {
+      ...header,
+      fileChanges: { files: files.size, additions, deletions, state: "active" },
+    };
   }
 }
 

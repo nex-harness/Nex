@@ -1,5 +1,6 @@
 import {
   COMMANDS_REQUIRING_BASE_REVISION,
+  type AttachmentRef,
   type CommandAck,
   type CommandEnvelope,
   type ConversationSnapshot,
@@ -14,8 +15,11 @@ import {
   type ConfigCommandContext,
 } from "./configCommands.js";
 import { checkRevisionCas } from "./revisionCas.js";
+import { normalizeAdmittedRefs } from "../attachments/admitted.js";
+import type { AttachmentRegistry } from "../attachments/registry.js";
 import { handleCompact, type CompactCommandContext } from "./compactCommands.js";
 import { handleForkAssistant, type ForkCommandContext } from "./forkCommands.js";
+import { handleApplyFileRewind, type FileRewindCommandContext } from "./fileRewindCommands.js";
 import {
   handleEditUserQuery,
   handleRetryTurn,
@@ -56,7 +60,14 @@ export class CommandHandler {
     private readonly engine: Engine,
     private readonly sessions: SessionRuntimeStore,
     private readonly logger: Logger,
+    /** Shared ref authority (spec A); absent in tests that never send attachments. */
+    private readonly attachments: AttachmentRegistry | null = null,
   ) {}
+
+  private runtimeAttachments(): AttachmentRegistry {
+    if (!this.attachments) throw new Error("attachments are not configured");
+    return this.attachments;
+  }
 
   async handle(workspacePath: string, envelope: CommandEnvelope): Promise<CommandAck> {
     const runtime = envelope.sessionId ? this.sessions.get(envelope.sessionId) : undefined;
@@ -119,6 +130,8 @@ export class CommandHandler {
         return handleRetryTurn(this.rewindContext(), workspacePath, envelope);
       case "forkAssistant":
         return handleForkAssistant(this.forkContext(), workspacePath, envelope);
+      case "applyFileRewind":
+        return handleApplyFileRewind(this.fileRewindContext(), workspacePath, envelope);
       default:
         return rejectedAck(
           envelope.commandId,
@@ -173,6 +186,8 @@ export class CommandHandler {
     const payload = envelope.payload as {
       firstInput?: {
         text?: string;
+        /** Admitted attachment refs (spec A); registered before the prompt starts. */
+        attachments?: AttachmentRef[];
         modelSelection?: ModelSelection;
         mode?: string;
         planEnabled?: boolean;
@@ -187,17 +202,24 @@ export class CommandHandler {
       );
       const runtime = this.sessions.ensure(workspacePath, sessionId);
       const text = payload.firstInput?.text;
+      const attachments = normalizeAdmittedRefs(payload.firstInput?.attachments);
       // The mode travels with the submission, never as a live command: firstInput (the
       // actual send) wins over the config override.
       const mode = payload.firstInput?.mode ?? payload.config?.mode;
       const planEnabled = payload.firstInput?.planEnabled ?? payload.config?.planEnabled;
-      if (text !== undefined && text.trim().length > 0) {
-        await this.engine.submit(sessionId, text, {
+      if ((text !== undefined && text.trim().length > 0) || attachments.length > 0) {
+        if (attachments.length > 0) this.runtimeAttachments().addAdmitted(sessionId, attachments);
+        await this.engine.submit(sessionId, text ?? "", {
           requestId: envelope.commandId,
+          ...(attachments.length > 0 ? { attachments } : {}),
           ...(modelSelection ? { modelSelection } : {}),
           ...(mode ? { mode } : {}),
           ...(planEnabled !== undefined ? { planEnabled } : {}),
         });
+        if (attachments.length > 0 && (text ?? "").trim().length === 0) {
+          // Attachments only: pi persists no user message, so the row is appended here.
+          this.sessions.appendTextlessInput(runtime, "", attachments);
+        }
       } else if (mode !== undefined || planEnabled !== undefined) {
         this.applyModeToProjection(runtime, mode, planEnabled);
       }
@@ -232,6 +254,8 @@ export class CommandHandler {
     const revision = runtime?.projection.revision ?? 0;
     try {
       await this.engine.deleteSession(workspacePath, sessionId);
+      // A deleted session's blobs have no writer left to read them (spec A cleanup).
+      await this.attachments?.purgeSession(sessionId).catch(() => undefined);
       if (runtime) {
         // Keep the ACK for duplicate replay, then drop the projection.
         runtime.acceptedCommands.set(envelope.commandId, acceptedAck(envelope.commandId, revision));
@@ -363,6 +387,7 @@ export class CommandHandler {
     return {
       sessions: this.sessions,
       permissionMode: (sessionId) => this.engine.permissionMode(sessionId),
+      attachments: this.attachments,
     };
   }
 
@@ -375,10 +400,14 @@ export class CommandHandler {
   }
 
   private rewindContext(): RewindCommandContext {
-    return { engine: this.engine, sessions: this.sessions };
+    return { engine: this.engine, sessions: this.sessions, attachments: this.attachments };
   }
 
   private forkContext(): ForkCommandContext {
+    return { engine: this.engine, sessions: this.sessions };
+  }
+
+  private fileRewindContext(): FileRewindCommandContext {
     return { engine: this.engine, sessions: this.sessions };
   }
 

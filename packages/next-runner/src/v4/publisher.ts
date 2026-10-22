@@ -1,14 +1,27 @@
-import type { CommandAck, CommandEnvelope } from "@nex/shared/nex-protocol-v4";
+import type {
+  CommandAck,
+  CommandEnvelope,
+  V4ConversationFileChangesParams,
+  V4ConversationFileRewindPreviewParams,
+} from "@nex/shared/nex-protocol-v4";
 import type { Logger } from "../logger.js";
 import type { Engine, EngineSessionState } from "../engine/types.js";
 import { CommandHandler } from "./commands.js";
 import type { CompleteConversationWireFrame, CompleteSessionsIndexWireFrame } from "./envelopes.js";
 import { SessionsIndexPublisher } from "./indexPublisher.js";
 import { SessionRuntimeStore } from "./sessionStore.js";
+import type { AttachmentRegistry } from "../attachments/registry.js";
+import {
+  conversationFileChanges,
+  conversationFileRewindPreview,
+  type FileQueryContext,
+} from "./fileRewindMethods.js";
 
 export interface PublisherOptions {
   engine: Engine;
   logger: Logger;
+  /** Shared attachment ref authority (spec A); the publisher posts listings into it. */
+  attachments?: AttachmentRegistry | null;
 }
 
 /**
@@ -22,15 +35,26 @@ export interface PublisherOptions {
  */
 export class ConversationPublisher {
   readonly sessions: SessionRuntimeStore;
+  private readonly attachments: AttachmentRegistry | null;
   readonly index: SessionsIndexPublisher;
   private readonly commands: CommandHandler;
   private readonly engineUnsubscribe: () => void;
   private readonly pendingUnsubscribe: () => void;
 
   constructor(private readonly options: PublisherOptions) {
-    this.sessions = new SessionRuntimeStore(options.engine, options.logger);
+    this.sessions = new SessionRuntimeStore(
+      options.engine,
+      options.logger,
+      options.attachments ?? null,
+    );
     this.index = new SessionsIndexPublisher(options.engine, options.logger);
-    this.commands = new CommandHandler(options.engine, this.sessions, options.logger);
+    this.commands = new CommandHandler(
+      options.engine,
+      this.sessions,
+      options.logger,
+      options.attachments ?? null,
+    );
+    this.attachments = options.attachments ?? null;
     this.index.setPendingInteractionsSource((workspacePath) =>
       this.sessions.pendingInteractions(workspacePath),
     );
@@ -105,6 +129,24 @@ export class ConversationPublisher {
     this.index.unsubscribe(subscriptionId);
   }
 
+  /** `conversationFileChangesV4` (read-only; spec B). */
+  fileChanges(workspacePath: string, params: V4ConversationFileChangesParams) {
+    return conversationFileChanges(this.fileQueryContext(), workspacePath, params);
+  }
+
+  /** `conversationFileRewindPreviewV4` (read-only; spec B). */
+  fileRewindPreview(workspacePath: string, params: V4ConversationFileRewindPreviewParams) {
+    return conversationFileRewindPreview(this.fileQueryContext(), workspacePath, params);
+  }
+
+  private fileQueryContext(): FileQueryContext {
+    return () => ({
+      engine: this.options.engine,
+      sessions: this.sessions,
+      logger: this.options.logger,
+    });
+  }
+
   sendCommand(params: { workspacePath: string; envelope: CommandEnvelope }): Promise<CommandAck> {
     return this.commands.handle(params.workspacePath, params.envelope);
   }
@@ -125,6 +167,11 @@ export class ConversationPublisher {
 
   sessionStates(workspacePath: string): Promise<EngineSessionState[]> {
     return this.sessions.sessionStates(workspacePath);
+  }
+
+  /** The attachment authority (read/preview commands authorize against it). */
+  attachmentRegistry(): AttachmentRegistry | null {
+    return this.attachments;
   }
 
   dispose(): void {

@@ -67,11 +67,22 @@ export class FakeConversationOps {
       (message) => message.role === "user" && message.text === request.target.text,
     );
     const kept = cut >= 0 ? history.slice(0, cut) : history;
+    const attachments = request.attachments?.length ? request.attachments : undefined;
     this.host.histories.set(sessionId, [
       ...kept,
-      { role: "user", at: Date.now(), text: request.newText },
+      {
+        role: "user",
+        at: Date.now(),
+        text: request.newText,
+        ...(attachments ? { attachments } : {}),
+      },
     ]);
-    this.host.emit(sessionId, { type: "user_input", at: Date.now(), text: request.newText });
+    this.host.emit(sessionId, {
+      type: "user_input",
+      at: Date.now(),
+      text: request.newText,
+      ...(attachments ? { attachments } : {}),
+    });
     return { started: true };
   }
 

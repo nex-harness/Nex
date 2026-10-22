@@ -116,7 +116,7 @@ test("switchModelConfig: unknown provider → failed provider.notInRegistry", as
 test("switchModelConfig: success updates config/modelSelection and appends a modelChange marker", async () => {
   const h = await start();
   // A second model must exist for an identity change to be possible.
-  const { SAMPLE_MODEL } = await import("./helpers/fakeEngine.js");
+  const { SAMPLE_MODEL } = await import("./helpers/fakeEngineData.js");
   h.engine.registerModel({ ...SAMPLE_MODEL, modelId: "faux-2", modelName: "Faux Two" });
 
   const before = h.lastSnapshot();

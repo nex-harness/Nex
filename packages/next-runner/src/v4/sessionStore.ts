@@ -19,6 +19,8 @@ import {
   conversationTopic,
 } from "./envelopes.js";
 import { CompactOwner } from "./compactOwner.js";
+import type { AttachmentRegistry } from "../attachments/registry.js";
+import { applyUserInput } from "../projection/fold.js";
 import { SessionQueue } from "./queue.js";
 import type { SessionPendingInteraction } from "./sessionsIndex.js";
 import { SnapshotThrottle } from "./throttle.js";
@@ -64,6 +66,8 @@ export class SessionRuntimeStore {
   constructor(
     private readonly engine: Engine,
     private readonly logger: Logger,
+    /** Shared ref authority (spec A): every published projection posts its refs here. */
+    private readonly attachments: AttachmentRegistry | null = null,
   ) {}
 
   addSink(workspacePath: string, emit: FrameSink): { dispose(): void } {
@@ -147,6 +151,8 @@ export class SessionRuntimeStore {
         runtime.throttle.request();
       },
       runQueuedCompact: (sourceCommandId) => runtime.compact.runQueued(sourceCommandId),
+      appendTextlessInput: (text, attachments) =>
+        this.appendTextlessInput(runtime, text, attachments),
     });
     this.runtimes.set(sessionId, runtime);
     runtime.ready = this.hydrate(runtime);
@@ -246,7 +252,17 @@ export class SessionRuntimeStore {
       const sessions = await this.engine.listSessions(runtime.workspacePath);
       const meta = sessions.find((item) => item.sessionId === runtime.sessionId);
       const history = await this.engine.history(runtime.sessionId);
-      if (meta) runtime.projection = projectHistory(meta, history, runtime.logEpoch);
+      if (meta) {
+        // Restored `nex.attachments` refs are listed before the fold publishes, so the
+        // sweep protects them and previews authorize immediately (spec A).
+        this.attachments?.setPosted(
+          runtime.sessionId,
+          history.flatMap((message) =>
+            message.role === "user" && message.attachments ? message.attachments : [],
+          ),
+        );
+        runtime.projection = projectHistory(meta, history, runtime.logEpoch);
+      }
       // The gate is the mode authority; a mode command may have landed while history was
       // being read, so re-apply it after the base projection exists.
       const liveMode = this.engine.permissionMode(runtime.sessionId);
@@ -325,12 +341,60 @@ export class SessionRuntimeStore {
     this.emit(runtime, subscriptionId, ordinal, deliveryKind);
   }
 
+  /** Posts the session's listed refs (rows + queue) before a frame leaves (spec A). */
+  private postAttachments(runtime: SessionRuntime): void {
+    this.attachments?.setPostedFromProjection(runtime.sessionId, runtime.projection);
+  }
+
+  /**
+   * Rows + queue of a session with no attachment entries (spec A): `sendText` with
+   * attachments and no text has no user message in pi, so the row is appended here.
+   */
+  appendTextlessInput(
+    runtime: SessionRuntime,
+    text: string,
+    attachments: import("@nex/shared/nex-protocol-v4").AttachmentRef[],
+  ): void {
+    // pi always persists the prompt's user message (`userText` may equal `blockText`);
+    // only a text-LESS input has no row on its own.
+    const lineage = runtime.projection.promptLineage.sourceCommandId;
+    runtime.projection = applyUserInput(
+      {
+        ...runtime.projection,
+        promptLineage: {
+          sourceCommandId: lineage,
+          generation: runtime.projection.promptLineage.generation + 1,
+        },
+      },
+      text,
+      {
+        at: Date.now(),
+        sourceCommandId: lineage,
+        ...(attachments.length > 0 ? { attachments } : {}),
+      },
+    );
+    this.postAttachments(runtime);
+    runtime.throttle.request();
+  }
+
+  /**
+   * A queued item became the live turn: its admitted refs move from the admission table to
+   * the projection's listing (its row carries them both ways).
+   */
+  admitItem(
+    runtime: SessionRuntime,
+    refs: readonly import("@nex/shared/nex-protocol-v4").AttachmentRef[],
+  ): void {
+    this.attachments?.addAdmitted(runtime.sessionId, refs);
+  }
+
   private emit(
     runtime: SessionRuntime,
     subscriptionId: string,
     ordinal: FrameOrdinal,
     deliveryKind: "initial" | "online" | "recovery",
   ): void {
+    this.postAttachments(runtime);
     const snapshot = buildConversationSnapshot(runtime.projection);
     const next = ordinal.next(subscriptionId);
     const wire = buildConversationFrame({

@@ -1,6 +1,6 @@
 # Attachments and file rewind (batch 3) — spec
 
-Status: planned on `feature/next`. Research with citations:
+Status: implemented on `feature/next`. Research with citations:
 `attachments-rewind-research.md` (A = attachments, B = rewind).
 
 ## A. Attachments
@@ -73,6 +73,47 @@ editUserQuery{rewind} ─▶ preview ─ blocked? ─yes─▶ ACK disposition:"
                         restore files (journaled) ─▶ nex.rewind entry
                         ─▶ branch cut (batch 2d primitive) ─▶ prompt(newText, attachments)
 ```
+
+## Implementation notes (B)
+
+- **Module layout.** `engine/checkpoints/` owns the shadow repo: `checkpointGit.ts` (spawn
+  boundary, `core.autocrlf=false`/`core.fileMode=false`/`core.longpaths=true`, forward-slash
+  paths, no shell), `checkpointGitOps.ts` (side-index `add -A` → `write-tree` →
+  `commit-tree`, blob hashing, whole-file patch), `checkpointService.ts` (per-workspace live
+  turn), `rewindStore.ts` (changed files / preview / journaled apply) and
+  `checkpointFiles.ts` (temp-file + rename + fsync, reverse journal).
+- **Turn ownership** follows the product turn: `message_end(user)` opens `turn-<n>`,
+  `message_entry(user)` supplies the rewind anchor (the persisted pi entry id), the first
+  mutating `tool_call` snapshots, every mutating `tool_result` records the post-state, and
+  `agent_settled` persists `nex.checkpoints` (retried once if the anchor is still pending;
+  also flushed on session teardown).
+- **Persisted records.** `nex.checkpoints {version,userEntryId,turnId,sequence,files,
+operations[{path,toolCallId,toolName,postBlob,additions,deletions,patch}],partial?}` and
+  `nex.rewind {version,userEntryId,turnId,revertedAt,sourceCommandId,files}`; restore
+  projects them onto tool rows (`output.display`) and turn headers (`fileChanges.state`).
+- **Per-path diff** = the LAST operation's patch (so a write→edit pair reports the edit, not
+  the write). `turnHeader.fileChanges` aggregates the turn's tool displays live and from the
+  restored records.
+- **Ignored files.** Shell tools (`bash`/`powershell`/`shell`/`terminal`) are never
+  checkpointed; a simple `touch/rm/mv/… <path>` command records a path hint. Such paths are
+  reported as `ignoredFiles: bash_ignored` and do not by themselves block a rewind (the
+  safe-set rule decides), matching the old CLI's `canApply = safe > 0 && unsafe == 0`.
+- **Ordering deviation (edit with rewind).** Files are restored first, journaled; only when
+  every write is down does the branch cut run (`editUserQuery{workspaceMode:"rewind"}` →
+  apply files → cut → prompt). If the cut fails, the error is reported and the files stay
+  restored: the conversation can never be rewound without its files. The spec's literal
+  "cut inside apply's commit step" would compensate the files after a cut that cannot be
+  undone, so this direction is deliberate.
+- **Preview gate.** `safeFiles > 0 && unsafeFiles == 0` (both `applyFileRewind` and
+  `editUserQuery{rewind}`); the internal `startBlob` never leaves the runner (the wire
+  preview stays `{action,operationCount,path,toolNames}`).
+- **Git missing** → the first checkpoint attempt probes `git --version` before creating any
+  directory, logs `file checkpoints disabled: git is unavailable` once, and every turn has no
+  `fileChanges` (Undo hidden). Non-git workspaces work identically (the shadow repo lives in
+  `<runnerData>/checkpoints/<sha256(realpath ws)[0:16]>.git`).
+- **Fail-closed details.** The empty tree (`4b825dc…`) is a valid snapshot id: the service
+  checks for `undefined`, never truthiness. A turn whose snapshot failed is `partial` →
+  `checkpoint_missing` on rewind.
 
 ## Acceptance
 

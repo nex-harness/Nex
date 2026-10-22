@@ -177,9 +177,16 @@ test("pi integration: build mode asks, allow writes the file, projection settles
       "OK",
     );
 
+    // The settle event fires when the card resolves, before the tool result lands, so wait
+    // for the row's terminal status rather than the first pending-free snapshot.
     const settledSnapshot = await waitFor(() => {
       const snapshot = buildConversationSnapshot(harness.projection());
-      return snapshot.pendingInteractions.length === 0 ? snapshot : undefined;
+      const row = snapshot.rows.window.find((item) => item.kind === "toolCall");
+      return snapshot.pendingInteractions.length === 0 &&
+        row?.kind === "toolCall" &&
+        row.status === "success"
+        ? snapshot
+        : undefined;
     }, 15_000);
     const row = settledSnapshot.rows.window.find((item) => item.kind === "toolCall");
     assert.equal(row?.kind === "toolCall" ? row.status : "", "success");

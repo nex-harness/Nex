@@ -29,8 +29,9 @@ and queue controls), generated titles, mid-session model / follow-up mode change
 5. **Rewind primitive** shared by edit and retry: abort if running, `branch()` to the
    parent of the target user entry, `refreshContext()`, emit `row.removed` from that turn's
    header, then prompt again in the same session. Row ids stay monotonic (never reused).
-   Edit with `workspaceMode:"rewind"` (restore files) is answered `blocked` with
-   `guard.workspaceRewindUnavailable` until batch 3 adds file checkpoints.
+   Edit with `workspaceMode:"rewind"` (restore files) is served by batch 3's checkpoints
+   (see `attachments-rewind.md` B): files are restored first, then the branch is cut and
+   the new text is prompted.
 6. **Fork** copies the conversation up to the target into a new pi session file
    (`createBranchedSession` on a second `SessionManager`), records a `nex.fork` custom
    entry for the fork notice, titles it `Fork of <parent>` (`generated`), and returns
@@ -172,8 +173,8 @@ preview}` (an empty, valid preview: `canApply:false`, no files). Otherwise
   marker (`lane:"lightBoundary"`, `entityId:"pi:marker:<entryId>"`).
 - **Availability.** `fork` and `compact` are real; `guard.actionUnavailable` is no longer
   used by this runner.
-- **Not served yet.** `applyFileRewind`, `setAssistantFeedback` and the goal commands remain
-  `rejected`/denied; there is no file checkpoint for `workspaceMode:"rewind"`.
+- **Not served yet.** `setAssistantFeedback` and the goal commands remain `rejected`/denied.
+  `applyFileRewind` arrived with batch 3 (`docs/next/attachments-rewind.md` B).
 
 ## Batch 2a — implemented (row identity, history, revision CAS, availability)
 

@@ -108,6 +108,12 @@ export function toEngineBranchHistory(
       continue;
     }
     if (type === "custom") {
+      // File-feature entries (spec B): restore projects them onto rows after the walk.
+      const fileRecord = fileRecordFromCustom(entry, entryId, at);
+      if (fileRecord) {
+        result.push(fileRecord);
+        continue;
+      }
       // Runner-written entries: `nex.fork` becomes the child's fork notice (decision 6).
       const fork = forkMarkerFromCustom(entry, entryId, at);
       if (fork) result.push(fork);
@@ -124,6 +130,37 @@ export function toEngineBranchHistory(
     }
   }
   return result;
+}
+
+/**
+ * `nex.checkpoints` / `nex.rewind` custom entries → restore facts (spec B). The payload is
+ * validated loosely here; `piFileFactsOps` re-validates it before use.
+ */
+function fileRecordFromCustom(
+  entry: Record<string, unknown>,
+  entryId: string | undefined,
+  at: number,
+): Extract<EngineMessage, { role: "checkpoints" | "rewind" }> | undefined {
+  const customType = entry["customType"];
+  const data = entry["data"];
+  if (!entryId || typeof data !== "object" || data === null) return undefined;
+  const record = data as Record<string, unknown>;
+  const userEntryId = record["userEntryId"];
+  if (typeof userEntryId !== "string") return undefined;
+  if (customType === "nex.checkpoints") {
+    return {
+      role: "checkpoints",
+      at,
+      entryId,
+      userEntryId,
+      turnId: typeof record["turnId"] === "string" ? record["turnId"] : "",
+      data: record as never,
+    };
+  }
+  if (customType === "nex.rewind") {
+    return { role: "rewind", at, entryId, userEntryId, data: record as never };
+  }
+  return undefined;
 }
 
 /** `nex.fork` custom entry data → a restore-visible fork marker. */

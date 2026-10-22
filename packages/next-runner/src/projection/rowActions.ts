@@ -6,9 +6,8 @@ import type { ProjectedRow, ProjectionState } from "./state.js";
  *
  * Port of `materializeCommandRowActions`
  * (`apps/nex-cli/packages/bootstrap/src/nex-protocol-v4/product-projection.ts:1182-1300`),
- * reduced to this runner's row kinds. The old CLI also revokes `canRewindFiles` and tracks
- * message-id/edit-target tables; both belong to batches that add file checkpoints and the
- * rewind command, so they are absent here.
+ * reduced to this runner's row kinds. The old CLI's message-id/edit-target tables are
+ * replaced by `entityId`; `canRewindFiles` (batch 3) follows the old CLI's rule exactly.
  *
  * Rules (decision 1):
  * - `canEdit` + `editDisposition:"rewind"` — newest `realUser` row, and only while no
@@ -17,6 +16,9 @@ import type { ProjectedRow, ProjectionState } from "./state.js";
  *   its turnHeader is not running, and the same turn has a realUser cause.
  * - `canFork` — `complete` assistantText row that is the last text segment of its turn,
  *   whose turnHeader ended `completedSuccess`, and while no compact work is active.
+ * - `canRewindFiles` — on a turnHeader with `fileChanges.state === "active"`, while the turn
+ *   is not running, no interaction is pending, and no compact work is active (the old CLI's
+ *   file rewind rule, spec B).
  *
  * The old CLI additionally required a resolvable message id; this runner's entityId *is*
  * the pi entry id, so `entityId !== undefined` is that check (an unresolved id could not be
@@ -66,8 +68,21 @@ export function deriveRowActions(state: ProjectionState): Map<number, RowActions
     return hasUserCause ? latestAssistant : undefined;
   })();
 
+  const interactionPending = Object.keys(state.pendingApprovals).length > 0;
   for (const row of rows) {
     const next: RowActions = {};
+    if (row.kind === "turnHeader") {
+      if (
+        !completionBlockingActive &&
+        !interactionPending &&
+        row.state !== "running" &&
+        row.fileChanges?.state === "active"
+      ) {
+        next.canRewindFiles = true;
+        actions.set(row.rowId, next);
+      }
+      continue;
+    }
     if (row.kind === "userInput") {
       if (row === latestEditable && row.entityId) {
         next.canEdit = true;

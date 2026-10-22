@@ -28,6 +28,17 @@ export function findMessageEntryId(
  */
 export interface PiTranslateContext {
   compactCommandId?: string;
+  /**
+   * Consumes the admitted text input that produced this user message: `inputText` is the
+   * prompt text pi persisted (user text + attachment block); the return value is the user's
+   * text plus the attachment refs. Spec A — the user row shows what the user typed, while
+   * the model sees the block.
+   */
+  takeAttachments?: (
+    promptText: string,
+  ) =>
+    | { text: string; attachments?: import("@nex/shared/nex-protocol-v4").AttachmentRef[] }
+    | undefined;
 }
 
 /**
@@ -81,11 +92,17 @@ export function translatePiEvent(
       ];
     case "message_end":
       if (event.message.role === "user") {
+        // Attachments of the prompt this user message belongs to (the runner queued them
+        // at admission, spec A); a steer sent outside the runner has none.
+        const claim = local?.takeAttachments?.(messageText(event.message.content));
         return [
           {
             type: "user_input",
             at,
-            text: messageText(event.message.content),
+            text: claim?.text ?? messageText(event.message.content),
+            ...(claim?.attachments && claim.attachments.length > 0
+              ? { attachments: claim.attachments }
+              : {}),
           },
         ];
       }

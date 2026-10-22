@@ -1,4 +1,3 @@
-import type { CommandEnvelope } from "@nex/shared/nex-protocol-v4";
 import type { ModelSelection } from "@nex/shared";
 import { resolve as resolvePath } from "node:path";
 import type { Engine } from "../engine/types.js";
@@ -6,6 +5,8 @@ import type { ChannelRegistryLike } from "../link/registry.js";
 import type { JsonValue } from "../link/frames.js";
 import type { Logger } from "../logger.js";
 import type { ConversationPublisher } from "../v4/publisher.js";
+import { registerNexAgentCalls } from "./nexAgentCalls.js";
+import type { AttachmentRegistry } from "../attachments/registry.js";
 import { readWorkspacePresentation, workspacePathFromParams } from "./nexSession.js";
 import { NexTaskChannel } from "./nexTask.js";
 import { buildModelSelectionViews } from "./modelViews.js";
@@ -37,6 +38,12 @@ export function registerChannels(
     isSessionWatched: (sessionId) => publisher.sessions.isWatched(sessionId),
   });
   let modelRevision = 0;
+
+  const requireAttachments = (): AttachmentRegistry => {
+    const attachmentRegistry = publisher.attachmentRegistry();
+    if (!attachmentRegistry) throw new Error("attachments are not configured on this runner");
+    return attachmentRegistry;
+  };
 
   const requireWorkspace = (arg: JsonValue): string => {
     const path = workspacePathFromArg(arg);
@@ -72,80 +79,15 @@ export function registerChannels(
     return { ...target, taskId: requireStringField(arg, "taskId") };
   };
 
-  // ── nex-agent: v4 conversation ──
-
-  registry.call("nex-agent", "subscribeConversationV4", async (arg) => {
-    const record = asRecord(arg);
-    const workspacePath = requireWorkspace(arg);
-    const sessionId = requireString(record["sessionId"], "sessionId");
-    return publisher.subscribeConversation({ workspacePath, sessionId });
-  });
-
-  registry.call("nex-agent", "resyncConversationV4", async (arg) => {
-    const record = asRecord(arg);
-    const workspacePath = requireWorkspace(arg);
-    const subscriptionId = requireString(record["subscriptionId"], "subscriptionId");
-    return publisher.resyncConversation({ workspacePath, subscriptionId });
-  });
-
-  registry.call("nex-agent", "unsubscribeConversationV4", async (arg) => {
-    const record = asRecord(arg);
-    const workspacePath = requireWorkspace(arg);
-    const subscriptionId = requireString(record["subscriptionId"], "subscriptionId");
-    publisher.unsubscribeConversation(workspacePath, subscriptionId);
-    return undefined;
-  });
-
-  registry.call("nex-agent", "conversationRowsRangeV4", async (arg) => {
-    const record = asRecord(arg);
-    const workspacePath = requireWorkspace(arg);
-    const sessionId = requireString(record["sessionId"], "sessionId");
-    return publisher.rowsRange(workspacePath, sessionId);
-  });
-
-  registry.call("nex-agent", "conversationPlansV4", async (arg) => {
-    const record = asRecord(arg);
-    const workspacePath = requireWorkspace(arg);
-    const sessionId = requireString(record["sessionId"], "sessionId");
-    return publisher.plans(workspacePath, sessionId);
-  });
-
-  // Workflow runs are a pi-absent feature. `useWorkflowRunJournalSummaries` reads this
-  // unconditionally when a session opens, so answer an empty journal instead of letting
-  // the server reject the known method with "Unknown method" on every open.
-  registry.call("nex-agent", "conversationWorkflowRunsV4", async (arg) => {
-    requireWorkspace(arg);
-    return { runs: [] };
-  });
-
-  registry.call("nex-agent", "sendConversationCommandV4", async (arg) => {
-    const record = asRecord(arg);
-    const workspacePath = requireWorkspace(arg);
-    const envelope = record["envelope"];
-    if (!isRecord(envelope)) throw new Error("envelope is required");
-    return publisher.sendCommand({
-      workspacePath,
-      envelope: envelope as unknown as CommandEnvelope,
-    });
-  });
-
-  registry.call("nex-agent", "queryConversationCommandsV4", async (arg) => {
-    const record = asRecord(arg);
-    const commands = Array.isArray(record["commands"]) ? record["commands"] : [];
-    return publisher.queryCommands({
-      commands: commands.map((item) => {
-        const key = asRecord(item);
-        return {
-          sessionId: typeof key["sessionId"] === "string" ? key["sessionId"] : null,
-          commandId: String(key["commandId"] ?? ""),
-        };
-      }),
-    });
-  });
-
-  registry.listen("nex-agent", "onDynamicConversationFrame", (arg, emit) => {
-    const workspacePath = requireWorkspace(arg);
-    return publisher.addConversationSink(workspacePath, (frame) => emit(frame as JsonValue));
+  // ── nex-agent: v4 conversation (call table in `nexAgentCalls.ts`) ──
+  registerNexAgentCalls(registry, {
+    publisher,
+    requireWorkspace,
+    requireAttachments,
+    requireString,
+    asRecord,
+    numberOrZero,
+    stringOrEmpty,
   });
 
   // ── nex-agent: sessions index ──
@@ -370,6 +312,15 @@ function workspaceIdentityFromArg(arg: JsonValue): string | undefined {
     if (typeof nested === "string" && nested.trim().length > 0) return nested.trim();
   }
   return undefined;
+}
+
+/** Read-only queries ignore the CAS watermark; the runner builds it from its own state. */
+function numberOrZero(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function stringOrEmpty(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function asRecord(value: JsonValue): Record<string, unknown> {

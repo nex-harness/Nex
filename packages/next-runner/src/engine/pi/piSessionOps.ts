@@ -7,6 +7,14 @@ import type { PermissionMode, SubmitOptions, SubmitOutcome } from "../types.js";
 import { defaultTitle, selectionFor, usageFromSession } from "./sessionHelpers.js";
 import type { SessionMetaEntry, SessionMetaStore } from "./metaStore.js";
 
+/** Attachments of one submission, already resolved to pi prompt content (spec A). */
+export interface PromptAttachmentPayload {
+  promptText: string;
+  images: import("@earendil-works/pi-ai").ImageContent[];
+  /** Streaming behavior of the prompt (followUp for a queued submit). */
+  streamingBehavior: "followUp" | "steer";
+}
+
 export interface SubmitHooks {
   metadata: SessionMetaStore;
   /** Title generation is fire-and-forget after the first prompt (decision 8). */
@@ -19,8 +27,20 @@ export interface SubmitHooks {
     ) => void;
   };
   sessionsChanged: (workspacePath: string) => void;
-  startPrompt: (text: string, requestId: string) => Promise<string>;
+  logger: Logger;
+  /**
+   * Starts a pi prompt (row text = `text`, model prompt = `payload.promptText`); absent when
+   * the caller already started the run (attachment path, rewind).
+   */
+  startPrompt?: (
+    text: string,
+    requestId: string,
+    payload: PromptAttachmentPayload,
+    onStart?: (session: AgentSession) => void,
+  ) => Promise<string>;
   applySelection: (selection: ModelSelection) => Promise<void>;
+  /** Runs right after pi accepted the prompt (attachment bookkeeping, spec A). */
+  onPromptStarted?: (session: AgentSession) => void;
 }
 
 export interface SubmitTarget {
@@ -65,7 +85,14 @@ export async function submitPrompt(
     hooks.sessionsChanged(workspacePath);
     return { status: "accepted", inputId: options.requestId };
   }
-  const inputId = await hooks.startPrompt(text, options.requestId);
+  const payload = options.prompt ?? {
+    promptText: text,
+    images: [],
+    streamingBehavior: "followUp" as const,
+  };
+  const inputId = hooks.startPrompt
+    ? await hooks.startPrompt(text, options.requestId, payload, hooks.onPromptStarted)
+    : options.requestId;
   hooks.titles.maybeStart(workspacePath, sessionId, text, meta);
   return { status: "accepted", inputId };
 }
@@ -123,7 +150,9 @@ export interface PromptHooks {
 
 /**
  * Starts the pi run without awaiting it: `prompt()` resolves when the whole run settles,
- * and the link's call/result must not wait for that.
+ * and the link's call/result must not wait for that. The returned promise is the run
+ * promise itself — awaiting it means waiting for the whole run — so callers that only need
+ * "did pi accept the prompt" attach their own handler instead of awaiting it.
  */
 export function startPromptRun(
   hooks: PromptHooks,
@@ -131,9 +160,18 @@ export function startPromptRun(
   workspacePath: string,
   sessionId: string,
   text: string,
-): void {
-  open.inflight = open.session
-    .prompt(text, { streamingBehavior: "followUp" })
+  attachments: {
+    images?: import("@earendil-works/pi-ai").ImageContent[];
+    streamingBehavior?: "followUp" | "steer";
+    onStart?: (session: AgentSession) => void;
+  } = {},
+): Promise<void> {
+  const run = open.session.prompt(text, {
+    streamingBehavior: attachments.streamingBehavior ?? "followUp",
+    ...(attachments.images && attachments.images.length > 0 ? { images: attachments.images } : {}),
+  });
+  attachments.onStart?.(open.session);
+  open.inflight = run
     .catch(async (error: unknown) => {
       await hooks.metadata.upsert(workspacePath, sessionId, {
         phase: "error",
@@ -148,6 +186,7 @@ export function startPromptRun(
     .finally(() => {
       open.inflight = null;
     });
+  return run;
 }
 
 export async function applyModelSelection(

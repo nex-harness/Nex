@@ -279,7 +279,6 @@ async function ensureRunnerWorkspace() {
   // 只在第一次发送前选一次 workspace：选择器会新建 draft，重复选择会把上一次
   // setMode() 选好的权限模式重置回 build，表现为 edit 模式仍然弹出审批卡。
   if (workspaceEnsured) return;
-  const expectedName = path.basename(WORKSPACE);
   // Match the exact absolute path from the machine picker. Matching the sidebar
   // by basename is not enough on a multi-machine deployment: another machine can
   // be the restored tab and short names ("ws") appear in unrelated UI text.
