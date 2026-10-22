@@ -191,6 +191,13 @@ export type EngineEvent =
       usage?: EngineUsage;
     }
   | { type: "settled"; at: number; aborted: boolean }
+  /**
+   * pi's own steer/follow-up queue contents (`AgentSessionEvent.queue_update`). The runner
+   * never uses pi's follow-up queue for queued text (docs/next/conversation-features.md
+   * decision 4), but guide messages live in pi's steering queue until the model consumes
+   * them; this event is how a pending guide item learns it was consumed.
+   */
+  | { type: "pi_queue_update"; at: number; steering: string[]; followUp: string[] }
   | { type: "phase"; at: number; phase: EnginePhase }
   /** Generated/renamed title; projection updates `meta` without another snapshot source. */
   | { type: "title_changed"; at: number; title: string; titleSource: EngineTitleSource }
@@ -265,6 +272,20 @@ export interface SubmitOutcome {
   inputId: string;
 }
 
+/**
+ * Queue/admission surface (docs/next/conversation-features.md decision 4).
+ *
+ * The runner owns queued text; pi's own queues are only used for `guide`, which pi cannot
+ * address by id. These three calls are what the runner's queue drain and guide admission
+ * need from the engine and nothing more.
+ */
+export interface EngineRunState {
+  /** A run (or post-run continuation/compaction) is active. */
+  streaming: boolean;
+  /** No active run, compaction or branch summary. */
+  idle: boolean;
+}
+
 /** Payload of the v4 `switchModelConfig` command (`command.ts`). */
 export interface SwitchModelConfigInput {
   provider: string;
@@ -317,6 +338,26 @@ export interface Engine {
   subscribe(sessionId: string, listener: (event: EngineEvent) => void): EngineEventSubscription;
 
   submit(sessionId: string, text: string, options: SubmitOptions): Promise<SubmitOutcome>;
+
+  /**
+   * Route text into pi's steering queue (guide delivery). The text becomes the next
+   * model-step input at the next tool-batch boundary; it is not a new turn owned by the
+   * runner. Returns `false` when the session is not streaming (nothing was queued).
+   */
+  steer(sessionId: string, text: string): Promise<boolean>;
+
+  /** True while a run is active; drives admission and the queue drain gate. */
+  runState(sessionId: string): EngineRunState;
+
+  /** Resolves once no run/compaction is active (bounded by the caller's timeout). */
+  waitForIdle(sessionId: string): Promise<void>;
+
+  /**
+   * Drops anything still sitting in pi's steering/follow-up queues. The runner never leaves
+   * follow-up items there, so this exists to stop an undelivered guide from leaking into the
+   * next run invisibly (the runner re-queues it as a visible item instead).
+   */
+  clearPiQueue(sessionId: string): void;
 
   /** Resolves a pending permission interaction; unknown ids are an idempotent no-op. */
   resolveApproval(

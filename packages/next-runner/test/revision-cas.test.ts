@@ -174,10 +174,8 @@ test("availability: unimplemented actions are denied with existing guard ids", a
     allowed: false,
     reasonCode: "guard.actionUnavailable",
   });
-  assert.deepEqual(idle.availability.queueEdit, {
-    allowed: false,
-    reasonCode: "guard.actionUnavailable",
-  });
+  // Batch 2c owns the queue: edit is available in every phase.
+  assert.deepEqual(idle.availability.queueEdit, { allowed: true });
   assert.deepEqual(idle.availability.pauseGoal, {
     allowed: false,
     reasonCode: "noGoalToPause",
@@ -191,11 +189,11 @@ test("availability: unimplemented actions are denied with existing guard ids", a
     allowed: false,
     reasonCode: "sendQueuedNowRequiresRunning",
   });
-  // Implemented by this batch.
+  // Implemented by batch 2a.
   assert.deepEqual(idle.availability.switchModelConfig, { allowed: true });
   assert.deepEqual(idle.availability.setFollowupMode, { allowed: true });
 
-  // While running, sendQueuedNow changes its reason (still denied until the queue lands).
+  // While running, "send now" is available (it preempts the active run).
   await h.publisher.sendCommand({
     workspacePath: WORKSPACE,
     envelope: envelope({
@@ -208,10 +206,7 @@ test("availability: unimplemented actions are denied with existing guard ids", a
   const running = h.lastSnapshot();
   assert.ok(running);
   conversationSnapshotSchema.parse(running);
-  assert.deepEqual(running.availability.sendQueuedNow, {
-    allowed: false,
-    reasonCode: "guard.actionUnavailable",
-  });
+  assert.deepEqual(running.availability.sendQueuedNow, { allowed: true });
   h.publisher.dispose();
 });
 

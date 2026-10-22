@@ -7,7 +7,6 @@ import {
 } from "@nex/shared/nex-protocol-v4";
 import type { Logger } from "../logger.js";
 import type { Engine } from "../engine/types.js";
-import { normalizeMode } from "../engine/permissions/policy.js";
 import { buildConversationSnapshot } from "../projection/snapshot.js";
 import {
   handleSetFollowupMode,
@@ -15,12 +14,24 @@ import {
   type ConfigCommandContext,
 } from "./configCommands.js";
 import { checkRevisionCas } from "./revisionCas.js";
+import {
+  handleDeleteQueueItem,
+  handleEditQueueItem,
+  handleReorderQueueItem,
+  handleSendQueuedNow,
+  handleSetAutoDrain,
+  type QueueCommandContext,
+} from "./queueCommands.js";
+import {
+  applyModeToProjection,
+  handleSendText,
+  type SendTextCommandContext,
+} from "./sendTextCommand.js";
 import type { SessionRuntime, SessionRuntimeStore } from "./sessionStore.js";
 import {
   acceptedAck,
   createSessionResult,
   duplicateAck,
-  inputAcceptedResult,
   noopAck,
   rejectedAck,
   resolveInteractionResult,
@@ -70,7 +81,7 @@ export class CommandHandler {
       case "createSession":
         return this.createSession(workspacePath, envelope);
       case "sendText":
-        return this.sendText(workspacePath, envelope);
+        return handleSendText(this.sendTextContext(), workspacePath, envelope);
       case "deleteSession":
         return this.deleteSession(workspacePath, envelope);
       case "renameSession":
@@ -83,6 +94,16 @@ export class CommandHandler {
         return handleSwitchModelConfig(this.configContext(), workspacePath, envelope);
       case "setFollowupMode":
         return handleSetFollowupMode(this.configContext(), workspacePath, envelope);
+      case "deleteQueueItem":
+        return handleDeleteQueueItem(this.queueContext(), workspacePath, envelope);
+      case "editQueueItem":
+        return handleEditQueueItem(this.queueContext(), workspacePath, envelope);
+      case "reorderQueueItem":
+        return handleReorderQueueItem(this.queueContext(), workspacePath, envelope);
+      case "sendQueuedNow":
+        return handleSendQueuedNow(this.queueContext(), workspacePath, envelope);
+      case "setAutoDrain":
+        return handleSetAutoDrain(this.queueContext(), workspacePath, envelope);
       default:
         return rejectedAck(
           envelope.commandId,
@@ -179,46 +200,6 @@ export class CommandHandler {
     }
   }
 
-  private async sendText(workspacePath: string, envelope: CommandEnvelope): Promise<CommandAck> {
-    const sessionId = envelope.sessionId;
-    if (!sessionId) {
-      return rejectedAck(envelope.commandId, 0, "session_required", "sendText needs sessionId");
-    }
-    const payload = envelope.payload as {
-      text?: string;
-      modelSelection?: ModelSelection;
-      mode?: string;
-      planEnabled?: boolean;
-    };
-    try {
-      const runtime = this.sessions.ensure(workspacePath, sessionId);
-      // A restored session is opened asynchronously; submit must not race openSession.
-      await runtime.ready;
-      await this.engine.submit(sessionId, payload.text ?? "", {
-        requestId: envelope.commandId,
-        ...(payload.modelSelection ? { modelSelection: payload.modelSelection } : {}),
-        ...(payload.mode ? { mode: payload.mode } : {}),
-        ...(payload.planEnabled !== undefined ? { planEnabled: payload.planEnabled } : {}),
-      });
-      this.applyModeToProjection(runtime, payload.mode, payload.planEnabled);
-      runtime.throttle.request();
-      const ack = acceptedAck(
-        envelope.commandId,
-        runtime.projection.revision,
-        inputAcceptedResult(envelope.commandId),
-      );
-      runtime.acceptedCommands.set(envelope.commandId, ack);
-      return ack;
-    } catch (error) {
-      return rejectedAck(
-        envelope.commandId,
-        this.sessions.get(sessionId)?.projection.revision ?? 0,
-        "send_failed",
-        messageOf(error),
-      );
-    }
-  }
-
   private async deleteSession(
     workspacePath: string,
     envelope: CommandEnvelope,
@@ -287,6 +268,9 @@ export class CommandHandler {
     try {
       const runtime = this.sessions.ensure(workspacePath, sessionId);
       await runtime.ready;
+      // Stopping is the user saying "not this queue either": pause before aborting so the
+      // settle handler sees autoDrain=false and does not drain the next item (decision 4).
+      runtime.queue.pauseForStop();
       await this.engine.abort(sessionId);
       runtime.throttle.request();
       const ack = acceptedAck(envelope.commandId, runtime.projection.revision);
@@ -351,31 +335,24 @@ export class CommandHandler {
     }
   }
 
-  /**
-   * Mirrors the engine's current mode into the projection (the gate is the authority).
-   * Uses the engine value rather than the command payload so createSession without text
-   * and resolveInteraction stay consistent.
-   */
+  /** Delegates to the shared adapter so sendText and createSession agree. */
   private applyModeToProjection(
     runtime: SessionRuntime | undefined,
     mode?: string,
     planEnabled?: boolean,
   ): void {
-    if (!runtime) return;
-    const engineMode = this.engine.permissionMode(runtime.sessionId);
-    const nextMode = engineMode?.mode ?? normalizeMode(mode);
-    const nextPlan = engineMode?.planEnabled ?? planEnabled ?? false;
-    if (runtime.projection.mode === nextMode && runtime.projection.planEnabled === nextPlan) {
-      return;
-    }
-    runtime.projection = {
-      ...runtime.projection,
-      seq: runtime.projection.seq + 1,
-      revision: runtime.projection.revision + 1,
-      mode: nextMode,
-      planEnabled: nextPlan,
-      lastActivityAt: Date.now(),
+    applyModeToProjection(this.sendTextContext(), runtime, mode, planEnabled);
+  }
+
+  private sendTextContext(): SendTextCommandContext {
+    return {
+      sessions: this.sessions,
+      permissionMode: (sessionId) => this.engine.permissionMode(sessionId),
     };
+  }
+
+  private queueContext(): QueueCommandContext {
+    return { sessions: this.sessions };
   }
 
   private configContext(): ConfigCommandContext {

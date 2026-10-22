@@ -11,13 +11,14 @@ import type {
 import { applyEngineEvent } from "../projection/fold.js";
 import { projectHistory } from "../projection/restore.js";
 import { buildConversationSnapshot } from "../projection/snapshot.js";
-import { createProjection, type ProjectionState } from "../projection/state.js";
+import { createProjection, bump, type ProjectionState } from "../projection/state.js";
 import {
   FrameOrdinal,
   type CompleteConversationWireFrame,
   buildConversationFrame,
   conversationTopic,
 } from "./envelopes.js";
+import { SessionQueue } from "./queue.js";
 import type { SessionPendingInteraction } from "./sessionsIndex.js";
 import { SnapshotThrottle } from "./throttle.js";
 
@@ -39,6 +40,11 @@ export interface SessionRuntime {
   subscribers: Set<string>;
   /** commandId → ACK; owned by CommandHandler, stored here so it dies with the session. */
   acceptedCommands: Map<string, CommandAck>;
+  /**
+   * Runner-owned queue for this session (single writer, see `v4/queue.ts`). Lives in memory
+   * for the lifetime of this runtime; a runner restart starts it empty.
+   */
+  queue: SessionQueue;
   disposed: boolean;
 }
 
@@ -92,7 +98,8 @@ export class SessionRuntimeStore {
     const existing = this.runtimes.get(sessionId);
     if (existing) return existing;
     const logEpoch = newLogEpoch();
-    const runtime: SessionRuntime = {
+    let runtime: SessionRuntime;
+    runtime = {
       sessionId,
       workspacePath,
       logEpoch,
@@ -105,8 +112,24 @@ export class SessionRuntimeStore {
       ordinals: new Map(),
       subscribers: new Set(),
       acceptedCommands: new Map(),
+      // Assigned below: the queue needs the runtime for its projection read/write ports.
+      queue: null as unknown as SessionQueue,
       disposed: false,
     };
+    runtime.queue = new SessionQueue({
+      engine: this.engine,
+      sessionId,
+      logger: this.logger,
+      projection: () => runtime.projection,
+      // 修复依据：queue 是 runner 独占的可变事实，projection 只是它的只读缓存。
+      // 唯一写入口在这里，其他模块（fold/commands）都不能直接改 `projection.queue`。
+      commit: (queue) => {
+        runtime.projection = bump({ ...runtime.projection, queue });
+      },
+      requestPublish: () => {
+        runtime.throttle.request();
+      },
+    });
     this.runtimes.set(sessionId, runtime);
     runtime.ready = this.hydrate(runtime);
     return runtime;
@@ -221,6 +244,7 @@ export class SessionRuntimeStore {
       runtime.hydrated = true;
       for (const event of buffered) {
         runtime.projection = applyEngineEvent(runtime.projection, event);
+        runtime.queue.afterEvent(event, runtime.projection);
       }
       if (
         buffered.some(
@@ -246,6 +270,9 @@ export class SessionRuntimeStore {
       return;
     }
     runtime.projection = applyEngineEvent(runtime.projection, event);
+    // The queue owner observes the same ordered stream after the fold: it needs the folded
+    // phase (error vs aborted settle) and pi's queue_update (guide consumption).
+    runtime.queue.afterEvent(event, runtime.projection);
     runtime.throttle.request();
     // Only approvals change the sidebar attention dot; every other event keeps the set.
     if (event.type === "approval_request" || event.type === "approval_settled") {

@@ -1,4 +1,4 @@
-import type { RowActions } from "@nex/shared/nex-protocol-v4";
+import type { QueueState, RowActions } from "@nex/shared/nex-protocol-v4";
 import type {
   EngineApprovalOutcome,
   EngineFollowupMode,
@@ -153,6 +153,12 @@ export interface ProjectionState {
   planEnabled: boolean;
   /** Composer follow-up mode (snapshot `config.followupMode` + `inputRouting`). */
   followupMode: EngineFollowupMode;
+  /**
+   * Queue facts (snapshot `queue`). Written **only** by `v4/queue.ts` (the session queue
+   * owner) through `SessionRuntimeStore`; the fold never touches it. Restored sessions start
+   * empty because the queue is deliberately not persisted (old CLI parity).
+   */
+  queue: QueueState;
   rows: ProjectedRow[];
   nextRowId: number;
   currentTurn: {
@@ -222,6 +228,7 @@ export function createProjection(input: CreateProjectionInput): ProjectionState 
     mode: input.mode ?? "build",
     planEnabled: input.planEnabled ?? false,
     followupMode: input.followupMode ?? "queue",
+    queue: { items: [], autoDrain: true },
     rows: [],
     nextRowId: 1,
     currentTurn: null,

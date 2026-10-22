@@ -123,6 +123,10 @@ export function applyEngineEvent(state: ProjectionState, event: EngineEvent): Pr
       return endResponse(state, event);
     case "settled":
       return settle(state, event.at, event.aborted);
+    case "pi_queue_update":
+      // pi's own steering/follow-up queue is not projection state: the queue owner consumes
+      // it (`v4/queue.ts` reconciles pending guides) and no row changes here.
+      return state;
     case "phase":
       return bump({ ...state, phase: event.phase, lastActivityAt: event.at });
     case "mode_changed":

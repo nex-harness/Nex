@@ -2,20 +2,32 @@ import type { InputRouting } from "@nex/shared/nex-protocol-v4";
 import type { ProjectionState } from "./state.js";
 
 /**
- * Minimal `computeInputRouting` subset that makes `config.followupMode` meaningful
- * (old CLI `projection-state.ts:157-197`): an active run routes input to `guide` or the
- * queue; otherwise the next input starts now.
+ * `snapshot.inputRouting` (research §5; port of the old CLI's `computeInputRouting`,
+ * `projection-state.ts:157-197`).
  *
- * Wired through `availability.ts` → `buildConversationSnapshot`. Batch 2a (this change)
- * reports the routing only; the runner-owned queue and its drain arrive in batch 2c, so
- * `choice` (held queue) is unreachable and busy text still goes to pi's follow-up channel.
+ * | state                                              | mode      |
+ * | -------------------------------------------------- | --------- |
+ * | running / prewarming, followupMode=guide           | guide     |
+ * | running / prewarming, followupMode=queue           | enqueue   |
+ * | completed + queued items + autoDrain=false         | choice    |
+ * | otherwise                                          | startNow  |
+ *
+ * `choice` is the held queue: the composer must ask clear/keep before sending
+ * (`SessionPane` renders the confirmation and sends `heldQueueDisposition`). Guide items are
+ * excluded from the queue count because they are pi-owned pending rows, not queued text.
  */
 export function deriveInputRouting(state: {
   phase: ProjectionState["phase"];
   followupMode: ProjectionState["followupMode"];
+  queue: ProjectionState["queue"];
 }): InputRouting {
   if (state.phase === "running" || state.phase === "prewarming") {
     return { mode: state.followupMode === "guide" ? "guide" : "enqueue" };
+  }
+  const completed = state.phase === "completedSuccess" || state.phase === "completedInterrupted";
+  const queued = state.queue.items.some((item) => item.delivery.admitted !== "guide");
+  if (completed && queued && !state.queue.autoDrain) {
+    return { mode: "choice", reasonCode: "heldQueueInputRequiresChoice" };
   }
   return { mode: "startNow" };
 }

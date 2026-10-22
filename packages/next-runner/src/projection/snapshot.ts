@@ -114,7 +114,7 @@ export function buildConversationSnapshot(
         cacheWriteTokens: state.usage.cacheWrite,
       },
     },
-    queue: { items: [], autoDrain: true },
+    queue: state.queue,
     pendingInteractions: toPendingInteractions(state),
     pendingCommands: [],
     backgroundWorks: [],

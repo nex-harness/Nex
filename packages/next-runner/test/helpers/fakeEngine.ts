@@ -34,6 +34,22 @@ export class FakeEngine implements Engine {
   /** Test hook: interactionId → optionId, consumed by resolveApproval. */
   readonly approvals = new Map<string, string>();
   readonly resolvedApprovals: Array<{ sessionId: string; interactionId: string }> = [];
+  /** Guide deliveries (`steer`) in call order. */
+  readonly steered: Array<{ sessionId: string; text: string }> = [];
+  /** pi's steering queue contents per session (what `queue_update` reports). */
+  readonly steering = new Map<string, string[]>();
+  /** Sessions with an active run; drives `runState`/`steer`/`waitForIdle`. */
+  readonly streaming = new Set<string>();
+  /** Test hook: abort emits `settled{aborted}` (pi does this after the run unwinds). */
+  abortSettles = true;
+  /**
+   * Test hook: ask `submit` to hold for this many ms before starting the run, so a test can
+   * observe the window between a drain decision and the run becoming visible.
+   */
+  submitDelayMs = 0;
+  /** Set by `submit` while a delayed submission is in flight. */
+  submitting: Promise<void> | null = null;
+  private readonly idleWaiters = new Map<string, Array<() => void>>();
   private readonly modes = new Map<string, { mode: PermissionMode; planEnabled: boolean }>();
   private readonly tombstones = new Set<string>();
   private sequence = 0;
@@ -109,6 +125,11 @@ export class FakeEngine implements Engine {
   }
 
   async submit(sessionId: string, text: string, options: SubmitOptions): Promise<SubmitOutcome> {
+    if (this.submitDelayMs > 0) {
+      this.submitting = new Promise((resolve) => setTimeout(resolve, this.submitDelayMs));
+      await this.submitting;
+      this.submitting = null;
+    }
     this.submitted.push({ sessionId, text, requestId: options.requestId });
     if (options.mode) {
       this.modes.set(sessionId, {
@@ -124,6 +145,7 @@ export class FakeEngine implements Engine {
       const history = this.histories.get(sessionId) ?? [];
       history.push({ role: "user", at: Date.now(), text });
       this.histories.set(sessionId, history);
+      this.streaming.add(sessionId);
       this.emit(sessionId, { type: "user_input", at: Date.now(), text });
     }
     if (session) {
@@ -163,6 +185,72 @@ export class FakeEngine implements Engine {
 
   async abort(sessionId: string): Promise<void> {
     this.aborted.push(sessionId);
+    // Test double mirrors pi's abort→settle: the fold would otherwise stay "running" and the
+    // queue drain gate would never observe an idle engine.
+    this.streaming.delete(sessionId);
+    if (this.abortSettles) {
+      this.emit(sessionId, { type: "settled", at: Date.now(), aborted: true });
+    }
+  }
+
+  /**
+   * Guide double: records the steer and emits pi's `queue_update` with the queue contents.
+   * `steering` models pi's steering queue: `consumeSteer` removes it the way pi does right
+   * before `message_start`.
+   */
+  async steer(sessionId: string, text: string): Promise<boolean> {
+    if (!this.streaming.has(sessionId)) return false;
+    this.steered.push({ sessionId, text });
+    const queue = this.steering.get(sessionId) ?? [];
+    this.steering.set(sessionId, [...queue, text]);
+    this.emitQueueUpdate(sessionId);
+    return true;
+  }
+
+  runState(sessionId: string): { streaming: boolean; idle: boolean } {
+    const streaming = this.streaming.has(sessionId);
+    return { streaming, idle: !streaming };
+  }
+
+  async waitForIdle(sessionId: string): Promise<void> {
+    if (!this.streaming.has(sessionId)) return;
+    await new Promise<void>((resolve) => {
+      this.idleWaiters.set(sessionId, [...(this.idleWaiters.get(sessionId) ?? []), resolve]);
+    });
+  }
+
+  clearPiQueue(sessionId: string): void {
+    this.steering.set(sessionId, []);
+    this.emitQueueUpdate(sessionId);
+  }
+
+  // ── queue test hooks ──
+
+  /** Test hook: finish the current run the way pi would (assistant_end + settled). */
+  settle(sessionId: string, options: { aborted?: boolean } = {}): void {
+    const aborted = options.aborted ?? false;
+    this.streaming.delete(sessionId);
+    this.emit(sessionId, { type: "settled", at: Date.now(), aborted });
+    const waiters = this.idleWaiters.get(sessionId) ?? [];
+    this.idleWaiters.delete(sessionId);
+    for (const resolve of waiters) resolve();
+  }
+
+  /** Test hook: models pi consuming one steering text at the next tool-batch boundary. */
+  consumeSteer(sessionId: string, text?: string): void {
+    const queue = this.steering.get(sessionId) ?? [];
+    const next = text === undefined ? queue.slice(1) : queue.filter((entry) => entry !== text);
+    this.steering.set(sessionId, next);
+    this.emitQueueUpdate(sessionId);
+  }
+
+  private emitQueueUpdate(sessionId: string): void {
+    this.emit(sessionId, {
+      type: "pi_queue_update",
+      at: Date.now(),
+      steering: [...(this.steering.get(sessionId) ?? [])],
+      followUp: [],
+    });
   }
 
   async rename(sessionId: string, title: string): Promise<void> {
@@ -319,6 +407,8 @@ export class FakeEngine implements Engine {
   }
 
   emit(sessionId: string, event: EngineEvent): void {
+    // Keep the run-state double honest for tests that drive `settled` by hand.
+    if (event.type === "settled") this.streaming.delete(sessionId);
     for (const listener of this.listeners.get(sessionId) ?? []) listener(event);
   }
 

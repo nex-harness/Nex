@@ -14,6 +14,7 @@ import type {
   EngineFollowupMode,
   EngineMessage,
   EngineSessionState,
+  EngineRunState,
   EngineUnreadState,
   PermissionMode,
   ResolveApprovalResult,
@@ -243,6 +244,34 @@ export class PiEngine implements Engine {
       lastActivityAt: Date.now(),
     });
     this.emitSessionsChanged(open.workspacePath);
+  }
+
+  /**
+   * Guide delivery: hand the text to pi's steering queue. pi delivers it at the next
+   * tool-batch boundary inside the *current* run (`agent-loop.ts:176`), so the runner keeps
+   * the item as a pending guide row until `queue_update`/`message_start` shows it consumed.
+   */
+  async steer(sessionId: string, text: string): Promise<boolean> {
+    const open = this.sessions.get(sessionId);
+    if (!open || !open.session.isStreaming) return false;
+    await open.session.steer(text);
+    return true;
+  }
+
+  runState(sessionId: string): EngineRunState {
+    const open = this.sessions.get(sessionId);
+    if (!open) return { streaming: false, idle: true };
+    return { streaming: open.session.isStreaming, idle: open.session.isIdle };
+  }
+
+  async waitForIdle(sessionId: string): Promise<void> {
+    const open = this.sessions.get(sessionId);
+    if (!open) return;
+    await open.session.waitForIdle();
+  }
+
+  clearPiQueue(sessionId: string): void {
+    this.sessions.get(sessionId)?.session.clearQueue();
   }
 
   async rename(sessionId: string, title: string): Promise<void> {

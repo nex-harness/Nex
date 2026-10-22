@@ -416,6 +416,13 @@ test("publisher: createSession/sendText mode reaches the engine and snapshot.con
     assert.equal(snapshot.config.mode, "edit");
     assert.equal(snapshot.config.planEnabled, false);
 
+    // The first run must settle first: a sendText while busy is a queue admission
+    // (docs/next/conversation-features.md decision 4) and its mode applies when the item is
+    // promoted, not at admission. This test is about the direct start path.
+    engine.emit(sessionId, { type: "assistant_end", at: T0 + 1, stopReason: "stop" });
+    engine.emit(sessionId, { type: "settled", at: T0 + 2, aborted: false });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     await publisher.sendCommand({
       workspacePath: WORKSPACE,
       envelope: {

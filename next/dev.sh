@@ -9,7 +9,8 @@
 #   next/dev.sh --e2e=permissions  # run the permissions E2E (approval card flow)
 #   next/dev.sh --e2e=multi        # run the multi-runner E2E (two runners, same path)
 #   next/dev.sh --e2e=tasks        # run the task-state E2E (pin/archive/rename/delete)
-#   next/dev.sh --e2e=all          # run acceptance, permissions, tasks and multi
+#   next/dev.sh --e2e=conversation # run the conversation E2E (runner-owned queue)
+#   next/dev.sh --e2e=all          # run acceptance, permissions, tasks, conversation and multi
 #
 # Environment:
 #   NEX_NEXT_PORT           Go server port                 (default 3031)
@@ -41,6 +42,7 @@ for arg in "$@"; do
     --e2e=permissions) E2E_MODE="permissions" ;;
     --e2e=multi) E2E_MODE="multi" ;;
     --e2e=tasks) E2E_MODE="tasks" ;;
+    --e2e=conversation) E2E_MODE="conversation" ;;
     --e2e=all) E2E_MODE="all" ;;
     -h | --help)
       sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -298,6 +300,7 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   acceptance_status=0
   permissions_status=0
   tasks_status=0
+  conversation_status=0
   multi_status=0
   if [[ "$E2E_MODE" == "acceptance" || "$E2E_MODE" == "all" ]]; then
     (
@@ -336,6 +339,22 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
     tasks_status=$?
     log "task-actions E2E exited with $tasks_status"
   fi
+  if [[ "$E2E_MODE" == "conversation" || "$E2E_MODE" == "all" ]]; then
+    (
+      cd "$REPO_ROOT"
+      # `all` runs other suites first, so the sidebar already has rows by the time the
+      # conversation suite starts; it then skips the "starts empty" assertion.
+      conversation_allow_existing=0
+      [[ "$E2E_MODE" == "all" ]] && conversation_allow_existing=1
+      NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
+        NEX_E2E_TOKEN="$BROWSER_TOKEN" \
+        NEX_E2E_WORKSPACE="$WORKSPACE" \
+        NEX_E2E_ALLOW_EXISTING_TASKS="$conversation_allow_existing" \
+        node next/e2e/conversation.mjs
+    )
+    conversation_status=$?
+    log "conversation E2E exited with $conversation_status"
+  fi
   if [[ "$E2E_MODE" == "multi" || "$E2E_MODE" == "all" ]]; then
     (
       cd "$REPO_ROOT"
@@ -360,6 +379,9 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   fi
   if [[ "$tasks_status" -ne 0 ]]; then
     exit "$tasks_status"
+  fi
+  if [[ "$conversation_status" -ne 0 ]]; then
+    exit "$conversation_status"
   fi
   exit "$multi_status"
 fi

@@ -145,8 +145,11 @@ export function createSessionResult(sessionId: string): CommandResult {
   return { type: "createSession", sessionId };
 }
 
-export function inputAcceptedResult(inputId: string): CommandResult {
-  return { type: "inputAccepted", delivery: "startNow", inputId };
+export function inputAcceptedResult(
+  inputId: string,
+  delivery: "startNow" | "queue" | "guide" = "startNow",
+): CommandResult {
+  return { type: "inputAccepted", delivery, inputId };
 }
 
 export function resolveInteractionResult(clientId: string, optionId?: string): CommandResult {

@@ -96,6 +96,18 @@ export function translatePiEvent(event: AgentSessionEvent, at = Date.now()): Eng
         : [];
     case "agent_settled":
       return [{ type: "settled", at, aborted: event.aborted }];
+    case "queue_update":
+      // Guide items are visible as pending rows until pi consumes them; this is the only
+      // signal that the steering queue changed (`agent-session.ts:1120-1140` removes the
+      // text before emitting `message_start`).
+      return [
+        {
+          type: "pi_queue_update",
+          at,
+          steering: [...event.steering],
+          followUp: [...event.followUp],
+        },
+      ];
     default:
       return [];
   }
