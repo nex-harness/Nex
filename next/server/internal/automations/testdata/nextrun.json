@@ -1,0 +1,3727 @@
+{
+  "generatedBy": "next/server/internal/automations/testdata/gen.ts",
+  "cronerVersion": "10.x",
+  "cron": [
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "* * * * *",
+      "nextRunAt": 1773110100000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "*/5 * * * *",
+      "nextRunAt": 1773110100000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "*/15 * * * *",
+      "nextRunAt": 1773110700000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "0 * * * *",
+      "nextRunAt": 1773111600000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "30 * * * *",
+      "nextRunAt": 1773113400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "0 9 * * *",
+      "nextRunAt": 1773190800000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "45 6 * * 1-5",
+      "nextRunAt": 1773182700000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "0 0 * * 0",
+      "nextRunAt": 1773504000000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "15 10 * * 1,3,5",
+      "nextRunAt": 1773195300000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "0 8 1 * *",
+      "nextRunAt": 1775001600000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "0 8 29 * *",
+      "nextRunAt": 1774742400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "0 12 * * 6,0",
+      "nextRunAt": 1773460800000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "0 2 * * *",
+      "nextRunAt": 1773165600000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "30 2 * * *",
+      "nextRunAt": 1773167400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "0 3 * * *",
+      "nextRunAt": 1773169200000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "0 1 * * *",
+      "nextRunAt": 1773162000000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "5 0 1 */3 *",
+      "nextRunAt": 1774973100000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "0 9 * JAN-MAR *",
+      "nextRunAt": 1773190800000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "*/20 9-17 * * 1-5",
+      "nextRunAt": 1773110400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "0 0 30 2 *",
+      "nextRunAt": null
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "* * * * *",
+      "nextRunAt": 1782666060000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "*/5 * * * *",
+      "nextRunAt": 1782666300000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "*/15 * * * *",
+      "nextRunAt": 1782666900000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "0 * * * *",
+      "nextRunAt": 1782669600000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "30 * * * *",
+      "nextRunAt": 1782667800000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "0 9 * * *",
+      "nextRunAt": 1782694800000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "45 6 * * 1-5",
+      "nextRunAt": 1782686700000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "0 0 * * 0",
+      "nextRunAt": 1783180800000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "15 10 * * 1,3,5",
+      "nextRunAt": 1782699300000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "0 8 1 * *",
+      "nextRunAt": 1782864000000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "0 8 29 * *",
+      "nextRunAt": 1782691200000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "0 12 * * 6,0",
+      "nextRunAt": 1783137600000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "0 2 * * *",
+      "nextRunAt": 1782669600000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "30 2 * * *",
+      "nextRunAt": 1782671400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "0 3 * * *",
+      "nextRunAt": 1782673200000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "0 1 * * *",
+      "nextRunAt": 1782752400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "5 0 1 */3 *",
+      "nextRunAt": 1782835500000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "0 9 * JAN-MAR *",
+      "nextRunAt": 1798765200000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "*/20 9-17 * * 1-5",
+      "nextRunAt": 1782694800000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "nextRunAt": null
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "* * * * *",
+      "nextRunAt": 1772933460000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "*/5 * * * *",
+      "nextRunAt": 1772933700000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "*/15 * * * *",
+      "nextRunAt": 1772934300000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "0 * * * *",
+      "nextRunAt": 1772935200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "30 * * * *",
+      "nextRunAt": 1772937000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "0 9 * * *",
+      "nextRunAt": 1772974800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "45 6 * * 1-5",
+      "nextRunAt": 1773053100000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "0 0 * * 0",
+      "nextRunAt": 1772946000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "15 10 * * 1,3,5",
+      "nextRunAt": 1773065700000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "0 8 1 * *",
+      "nextRunAt": 1775044800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "0 8 29 * *",
+      "nextRunAt": 1774785600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "0 12 * * 6,0",
+      "nextRunAt": 1772985600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "0 2 * * *",
+      "nextRunAt": 1772953200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "30 2 * * *",
+      "nextRunAt": 1772955000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "0 3 * * *",
+      "nextRunAt": 1772953200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "0 1 * * *",
+      "nextRunAt": 1772949600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "5 0 1 */3 *",
+      "nextRunAt": 1775016300000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "0 9 * JAN-MAR *",
+      "nextRunAt": 1772974800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "*/20 9-17 * * 1-5",
+      "nextRunAt": 1773061200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "nextRunAt": null
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "* * * * *",
+      "nextRunAt": 1772951460000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "*/5 * * * *",
+      "nextRunAt": 1772951700000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "*/15 * * * *",
+      "nextRunAt": 1772952300000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "0 * * * *",
+      "nextRunAt": 1772953200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "30 * * * *",
+      "nextRunAt": 1772955000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "0 9 * * *",
+      "nextRunAt": 1772974800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "45 6 * * 1-5",
+      "nextRunAt": 1773053100000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "0 0 * * 0",
+      "nextRunAt": 1773547200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "15 10 * * 1,3,5",
+      "nextRunAt": 1773065700000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "0 8 1 * *",
+      "nextRunAt": 1775044800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "0 8 29 * *",
+      "nextRunAt": 1774785600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "0 12 * * 6,0",
+      "nextRunAt": 1772985600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "0 2 * * *",
+      "nextRunAt": 1772953200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "30 2 * * *",
+      "nextRunAt": 1772955000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "0 3 * * *",
+      "nextRunAt": 1772953200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "0 1 * * *",
+      "nextRunAt": 1773032400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "5 0 1 */3 *",
+      "nextRunAt": 1775016300000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "0 9 * JAN-MAR *",
+      "nextRunAt": 1772974800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "*/20 9-17 * * 1-5",
+      "nextRunAt": 1773061200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "nextRunAt": null
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "* * * * *",
+      "nextRunAt": 1793507460000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "*/5 * * * *",
+      "nextRunAt": 1793507700000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "*/15 * * * *",
+      "nextRunAt": 1793508300000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "0 * * * *",
+      "nextRunAt": 1793509200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "30 * * * *",
+      "nextRunAt": 1793511000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "0 9 * * *",
+      "nextRunAt": 1793541600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "45 6 * * 1-5",
+      "nextRunAt": 1793619900000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "0 0 * * 0",
+      "nextRunAt": 1794114000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "15 10 * * 1,3,5",
+      "nextRunAt": 1793632500000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "0 8 1 * *",
+      "nextRunAt": 1793538000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "0 8 29 * *",
+      "nextRunAt": 1795957200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "0 12 * * 6,0",
+      "nextRunAt": 1793552400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "0 2 * * *",
+      "nextRunAt": 1793516400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "30 2 * * *",
+      "nextRunAt": 1793518200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "0 3 * * *",
+      "nextRunAt": 1793520000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "0 1 * * *",
+      "nextRunAt": 1793509200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "5 0 1 */3 *",
+      "nextRunAt": 1798779900000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "0 9 * JAN-MAR *",
+      "nextRunAt": 1798812000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "*/20 9-17 * * 1-5",
+      "nextRunAt": 1793628000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "nextRunAt": null
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "* * * * *",
+      "nextRunAt": 1793511060000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "*/5 * * * *",
+      "nextRunAt": 1793511300000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "*/15 * * * *",
+      "nextRunAt": 1793511900000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "0 * * * *",
+      "nextRunAt": 1793516400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "30 * * * *",
+      "nextRunAt": 1793518200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "0 9 * * *",
+      "nextRunAt": 1793541600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "45 6 * * 1-5",
+      "nextRunAt": 1793619900000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "0 0 * * 0",
+      "nextRunAt": 1794114000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "15 10 * * 1,3,5",
+      "nextRunAt": 1793632500000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "0 8 1 * *",
+      "nextRunAt": 1793538000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "0 8 29 * *",
+      "nextRunAt": 1795957200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "0 12 * * 6,0",
+      "nextRunAt": 1793552400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "0 2 * * *",
+      "nextRunAt": 1793516400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "30 2 * * *",
+      "nextRunAt": 1793518200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "0 3 * * *",
+      "nextRunAt": 1793520000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "0 1 * * *",
+      "nextRunAt": 1793599200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "5 0 1 */3 *",
+      "nextRunAt": 1798779900000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "0 9 * JAN-MAR *",
+      "nextRunAt": 1798812000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "*/20 9-17 * * 1-5",
+      "nextRunAt": 1793628000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "nextRunAt": null
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "* * * * *",
+      "nextRunAt": 1774744260000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "*/5 * * * *",
+      "nextRunAt": 1774744500000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "*/15 * * * *",
+      "nextRunAt": 1774745100000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "0 * * * *",
+      "nextRunAt": 1774746000000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "30 * * * *",
+      "nextRunAt": 1774747800000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "0 9 * * *",
+      "nextRunAt": 1774767600000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "45 6 * * 1-5",
+      "nextRunAt": 1774845900000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "0 0 * * 0",
+      "nextRunAt": 1775340000000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "15 10 * * 1,3,5",
+      "nextRunAt": 1774858500000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "0 8 1 * *",
+      "nextRunAt": 1775023200000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "0 8 29 * *",
+      "nextRunAt": 1774764000000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "0 12 * * 6,0",
+      "nextRunAt": 1774778400000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "0 2 * * *",
+      "nextRunAt": 1774746000000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "30 2 * * *",
+      "nextRunAt": 1774747800000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "0 3 * * *",
+      "nextRunAt": 1774746000000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "0 1 * * *",
+      "nextRunAt": 1774825200000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "5 0 1 */3 *",
+      "nextRunAt": 1774994700000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "0 9 * JAN-MAR *",
+      "nextRunAt": 1774767600000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "*/20 9-17 * * 1-5",
+      "nextRunAt": 1774854000000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "nextRunAt": null
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "* * * * *",
+      "nextRunAt": 1792888260000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "*/5 * * * *",
+      "nextRunAt": 1792888500000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "*/15 * * * *",
+      "nextRunAt": 1792889100000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "0 * * * *",
+      "nextRunAt": 1792893600000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "30 * * * *",
+      "nextRunAt": 1792895400000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "0 9 * * *",
+      "nextRunAt": 1792915200000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "45 6 * * 1-5",
+      "nextRunAt": 1792993500000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "0 0 * * 0",
+      "nextRunAt": 1793487600000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "15 10 * * 1,3,5",
+      "nextRunAt": 1793006100000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "0 8 1 * *",
+      "nextRunAt": 1793516400000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "0 8 29 * *",
+      "nextRunAt": 1793257200000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "0 12 * * 6,0",
+      "nextRunAt": 1792926000000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "0 2 * * *",
+      "nextRunAt": 1792976400000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "30 2 * * *",
+      "nextRunAt": 1792978200000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "0 3 * * *",
+      "nextRunAt": 1792893600000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "0 1 * * *",
+      "nextRunAt": 1792972800000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "5 0 1 */3 *",
+      "nextRunAt": 1798758300000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "0 9 * JAN-MAR *",
+      "nextRunAt": 1798790400000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "*/20 9-17 * * 1-5",
+      "nextRunAt": 1793001600000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "nextRunAt": null
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "* * * * *",
+      "nextRunAt": 1769904000000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "*/5 * * * *",
+      "nextRunAt": 1769904000000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "*/15 * * * *",
+      "nextRunAt": 1769904000000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "0 * * * *",
+      "nextRunAt": 1769904000000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "30 * * * *",
+      "nextRunAt": 1769905800000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "0 9 * * *",
+      "nextRunAt": 1769936400000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "45 6 * * 1-5",
+      "nextRunAt": 1770014700000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "0 0 * * 0",
+      "nextRunAt": 1769904000000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "15 10 * * 1,3,5",
+      "nextRunAt": 1770027300000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "0 8 1 * *",
+      "nextRunAt": 1769932800000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "0 8 29 * *",
+      "nextRunAt": 1774771200000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "0 12 * * 6,0",
+      "nextRunAt": 1769947200000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "0 2 * * *",
+      "nextRunAt": 1769911200000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "30 2 * * *",
+      "nextRunAt": 1769913000000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "0 3 * * *",
+      "nextRunAt": 1769914800000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "0 1 * * *",
+      "nextRunAt": 1769907600000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "5 0 1 */3 *",
+      "nextRunAt": 1775001900000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "0 9 * JAN-MAR *",
+      "nextRunAt": 1769936400000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "*/20 9-17 * * 1-5",
+      "nextRunAt": 1770022800000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "nextRunAt": null
+    }
+  ],
+  "scheduleRule": [
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 10,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773110696789,
+      "automationNextRunAt": 1773110696789
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782831660000,
+      "automationNextRunAt": 1782831660000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 61,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1773112440000,
+      "automationNextRunAt": 1773112440000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 15,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773112500000,
+      "automationNextRunAt": 1773112500000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 6,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782831600000,
+      "automationNextRunAt": 1782831600000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 5,
+        "hour": 9,
+        "minute": 30,
+        "anchorAt": 1793507400000
+      },
+      "nextRunAt": 1793507400000,
+      "automationNextRunAt": 1793507400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773190800000,
+      "automationNextRunAt": 1773190800000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 2,
+        "minute": 30,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773167400000,
+      "automationNextRunAt": 1773167400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 2,
+        "hour": 1,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782752400000,
+      "automationNextRunAt": 1782752400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 6,
+        "minute": 45,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1773182700000,
+      "automationNextRunAt": 1773182700000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          1
+        ]
+      },
+      "nextRunAt": 1773619200000,
+      "automationNextRunAt": 1773619200000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "weekdays": [
+          0,
+          6
+        ]
+      },
+      "nextRunAt": 1783209600000,
+      "automationNextRunAt": 1783209600000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 2,
+        "hour": 18,
+        "minute": 30,
+        "anchorAt": 1768467900000,
+        "weekdays": [
+          2,
+          4
+        ]
+      },
+      "nextRunAt": 1773138600000,
+      "automationNextRunAt": 1773138600000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "monthDays": [
+          1
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1774998000000,
+      "automationNextRunAt": 1774998000000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "monthDays": [
+          13,
+          31
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1781305200000,
+      "automationNextRunAt": 1781305200000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 3,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "monthDays": [
+          15
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1776207600000,
+      "automationNextRunAt": 1776207600000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          5
+        ],
+        "monthlyMode": "weekday"
+      },
+      "nextRunAt": 1775170800000,
+      "automationNextRunAt": 1775170800000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "months": [
+          3
+        ],
+        "monthDays": [
+          10
+        ]
+      },
+      "nextRunAt": 1804640400000,
+      "automationNextRunAt": 1804640400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "months": [
+          2
+        ],
+        "monthDays": [
+          29
+        ]
+      },
+      "nextRunAt": 1835398800000,
+      "automationNextRunAt": 1835398800000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 10,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1782666296789,
+      "automationNextRunAt": 1782666296789
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782831660000,
+      "automationNextRunAt": 1782831660000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 61,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1782668700000,
+      "automationNextRunAt": 1782668700000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 15,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1782666900000,
+      "automationNextRunAt": 1782666900000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 6,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782831600000,
+      "automationNextRunAt": 1782831600000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 5,
+        "hour": 9,
+        "minute": 30,
+        "anchorAt": 1793507400000
+      },
+      "nextRunAt": 1793507400000,
+      "automationNextRunAt": 1793507400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1782694800000,
+      "automationNextRunAt": 1782694800000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 2,
+        "minute": 30,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1782671400000,
+      "automationNextRunAt": 1782671400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 2,
+        "hour": 1,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782752400000,
+      "automationNextRunAt": 1782752400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 6,
+        "minute": 45,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1782686700000,
+      "automationNextRunAt": 1782686700000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          1
+        ]
+      },
+      "nextRunAt": 1782691200000,
+      "automationNextRunAt": 1782691200000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "weekdays": [
+          0,
+          6
+        ]
+      },
+      "nextRunAt": 1783209600000,
+      "automationNextRunAt": 1783209600000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 2,
+        "hour": 18,
+        "minute": 30,
+        "anchorAt": 1768467900000,
+        "weekdays": [
+          2,
+          4
+        ]
+      },
+      "nextRunAt": 1782815400000,
+      "automationNextRunAt": 1782815400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "monthDays": [
+          1
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1782860400000,
+      "automationNextRunAt": 1782860400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "monthDays": [
+          13,
+          31
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1783897200000,
+      "automationNextRunAt": 1783897200000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 3,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "monthDays": [
+          15
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1784070000000,
+      "automationNextRunAt": 1784070000000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          5
+        ],
+        "monthlyMode": "weekday"
+      },
+      "nextRunAt": 1783033200000,
+      "automationNextRunAt": 1783033200000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "months": [
+          3
+        ],
+        "monthDays": [
+          10
+        ]
+      },
+      "nextRunAt": 1804640400000,
+      "automationNextRunAt": 1804640400000
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "months": [
+          2
+        ],
+        "monthDays": [
+          29
+        ]
+      },
+      "nextRunAt": 1835398800000,
+      "automationNextRunAt": 1835398800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 10,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773110696789,
+      "automationNextRunAt": 1773110696789
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782831660000,
+      "automationNextRunAt": 1782831660000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 61,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1772936760000,
+      "automationNextRunAt": 1772936760000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 15,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773108900000,
+      "automationNextRunAt": 1773108900000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 6,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782831600000,
+      "automationNextRunAt": 1782831600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 5,
+        "hour": 9,
+        "minute": 30,
+        "anchorAt": 1793507400000
+      },
+      "nextRunAt": 1793507400000,
+      "automationNextRunAt": 1793507400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773061200000,
+      "automationNextRunAt": 1773061200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 2,
+        "minute": 30,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773037800000,
+      "automationNextRunAt": 1773037800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 2,
+        "hour": 1,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782795600000,
+      "automationNextRunAt": 1782795600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 6,
+        "minute": 45,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1772966700000,
+      "automationNextRunAt": 1772966700000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          1
+        ]
+      },
+      "nextRunAt": 1773057600000,
+      "automationNextRunAt": 1773057600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "weekdays": [
+          0,
+          6
+        ]
+      },
+      "nextRunAt": 1783252800000,
+      "automationNextRunAt": 1783252800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 2,
+        "hour": 18,
+        "minute": 30,
+        "anchorAt": 1768467900000,
+        "weekdays": [
+          2,
+          4
+        ]
+      },
+      "nextRunAt": 1773181800000,
+      "automationNextRunAt": 1773181800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "monthDays": [
+          1
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1775041200000,
+      "automationNextRunAt": 1775041200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "monthDays": [
+          13,
+          31
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1781348400000,
+      "automationNextRunAt": 1781348400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 3,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "monthDays": [
+          15
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1776250800000,
+      "automationNextRunAt": 1776250800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          5
+        ],
+        "monthlyMode": "weekday"
+      },
+      "nextRunAt": 1775214000000,
+      "automationNextRunAt": 1775214000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "months": [
+          3
+        ],
+        "monthDays": [
+          10
+        ]
+      },
+      "nextRunAt": 1773147600000,
+      "automationNextRunAt": 1773147600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "months": [
+          2
+        ],
+        "monthDays": [
+          29
+        ]
+      },
+      "nextRunAt": 1835445600000,
+      "automationNextRunAt": 1835445600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 10,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773110696789,
+      "automationNextRunAt": 1773110696789
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782831660000,
+      "automationNextRunAt": 1782831660000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 61,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1772955060000,
+      "automationNextRunAt": 1772955060000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 15,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773108900000,
+      "automationNextRunAt": 1773108900000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 6,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782831600000,
+      "automationNextRunAt": 1782831600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 5,
+        "hour": 9,
+        "minute": 30,
+        "anchorAt": 1793507400000
+      },
+      "nextRunAt": 1793507400000,
+      "automationNextRunAt": 1793507400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773061200000,
+      "automationNextRunAt": 1773061200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 2,
+        "minute": 30,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773037800000,
+      "automationNextRunAt": 1773037800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 2,
+        "hour": 1,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782795600000,
+      "automationNextRunAt": 1782795600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 6,
+        "minute": 45,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1772966700000,
+      "automationNextRunAt": 1772966700000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          1
+        ]
+      },
+      "nextRunAt": 1773057600000,
+      "automationNextRunAt": 1773057600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "weekdays": [
+          0,
+          6
+        ]
+      },
+      "nextRunAt": 1783252800000,
+      "automationNextRunAt": 1783252800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 2,
+        "hour": 18,
+        "minute": 30,
+        "anchorAt": 1768467900000,
+        "weekdays": [
+          2,
+          4
+        ]
+      },
+      "nextRunAt": 1773181800000,
+      "automationNextRunAt": 1773181800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "monthDays": [
+          1
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1775041200000,
+      "automationNextRunAt": 1775041200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "monthDays": [
+          13,
+          31
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1781348400000,
+      "automationNextRunAt": 1781348400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 3,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "monthDays": [
+          15
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1776250800000,
+      "automationNextRunAt": 1776250800000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          5
+        ],
+        "monthlyMode": "weekday"
+      },
+      "nextRunAt": 1775214000000,
+      "automationNextRunAt": 1775214000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "months": [
+          3
+        ],
+        "monthDays": [
+          10
+        ]
+      },
+      "nextRunAt": 1773147600000,
+      "automationNextRunAt": 1773147600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "months": [
+          2
+        ],
+        "monthDays": [
+          29
+        ]
+      },
+      "nextRunAt": 1835445600000,
+      "automationNextRunAt": 1835445600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 10,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1793507696789,
+      "automationNextRunAt": 1793507696789
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1793507460000,
+      "automationNextRunAt": 1793507460000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 61,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1793509620000,
+      "automationNextRunAt": 1793509620000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 15,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1793510100000,
+      "automationNextRunAt": 1793510100000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 6,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1793523600000,
+      "automationNextRunAt": 1793523600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 5,
+        "hour": 9,
+        "minute": 30,
+        "anchorAt": 1793507400000
+      },
+      "nextRunAt": 1793525400000,
+      "automationNextRunAt": 1793525400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1793541600000,
+      "automationNextRunAt": 1793541600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 2,
+        "minute": 30,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1793518200000,
+      "automationNextRunAt": 1793518200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 2,
+        "hour": 1,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1793509200000,
+      "automationNextRunAt": 1793509200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 6,
+        "minute": 45,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1793533500000,
+      "automationNextRunAt": 1793533500000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          1
+        ]
+      },
+      "nextRunAt": 1793624400000,
+      "automationNextRunAt": 1793624400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "weekdays": [
+          0,
+          6
+        ]
+      },
+      "nextRunAt": 1793538000000,
+      "automationNextRunAt": 1793538000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 2,
+        "hour": 18,
+        "minute": 30,
+        "anchorAt": 1768467900000,
+        "weekdays": [
+          2,
+          4
+        ]
+      },
+      "nextRunAt": 1793748600000,
+      "automationNextRunAt": 1793748600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "monthDays": [
+          1
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1793534400000,
+      "automationNextRunAt": 1793534400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "monthDays": [
+          13,
+          31
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1794571200000,
+      "automationNextRunAt": 1794571200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 3,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "monthDays": [
+          15
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1800014400000,
+      "automationNextRunAt": 1800014400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          5
+        ],
+        "monthlyMode": "weekday"
+      },
+      "nextRunAt": 1793966400000,
+      "automationNextRunAt": 1793966400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "months": [
+          3
+        ],
+        "monthDays": [
+          10
+        ]
+      },
+      "nextRunAt": 1804687200000,
+      "automationNextRunAt": 1804687200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "months": [
+          2
+        ],
+        "monthDays": [
+          29
+        ]
+      },
+      "nextRunAt": 1835445600000,
+      "automationNextRunAt": 1835445600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 10,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1793514896789,
+      "automationNextRunAt": 1793514896789
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1793514660000,
+      "automationNextRunAt": 1793514660000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 61,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1793516940000,
+      "automationNextRunAt": 1793516940000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 15,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1793517300000,
+      "automationNextRunAt": 1793517300000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 6,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1793523600000,
+      "automationNextRunAt": 1793523600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 5,
+        "hour": 9,
+        "minute": 30,
+        "anchorAt": 1793507400000
+      },
+      "nextRunAt": 1793525400000,
+      "automationNextRunAt": 1793525400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1793541600000,
+      "automationNextRunAt": 1793541600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 2,
+        "minute": 30,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1793518200000,
+      "automationNextRunAt": 1793518200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 2,
+        "hour": 1,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1793685600000,
+      "automationNextRunAt": 1793685600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 6,
+        "minute": 45,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1793533500000,
+      "automationNextRunAt": 1793533500000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          1
+        ]
+      },
+      "nextRunAt": 1793624400000,
+      "automationNextRunAt": 1793624400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "weekdays": [
+          0,
+          6
+        ]
+      },
+      "nextRunAt": 1793538000000,
+      "automationNextRunAt": 1793538000000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 2,
+        "hour": 18,
+        "minute": 30,
+        "anchorAt": 1768467900000,
+        "weekdays": [
+          2,
+          4
+        ]
+      },
+      "nextRunAt": 1793748600000,
+      "automationNextRunAt": 1793748600000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "monthDays": [
+          1
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1793534400000,
+      "automationNextRunAt": 1793534400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "monthDays": [
+          13,
+          31
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1794571200000,
+      "automationNextRunAt": 1794571200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 3,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "monthDays": [
+          15
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1800014400000,
+      "automationNextRunAt": 1800014400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          5
+        ],
+        "monthlyMode": "weekday"
+      },
+      "nextRunAt": 1793966400000,
+      "automationNextRunAt": 1793966400000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "months": [
+          3
+        ],
+        "monthDays": [
+          10
+        ]
+      },
+      "nextRunAt": 1804687200000,
+      "automationNextRunAt": 1804687200000
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "months": [
+          2
+        ],
+        "monthDays": [
+          29
+        ]
+      },
+      "nextRunAt": 1835445600000,
+      "automationNextRunAt": 1835445600000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 10,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1774744496789,
+      "automationNextRunAt": 1774744496789
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782831660000,
+      "automationNextRunAt": 1782831660000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 61,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1774744800000,
+      "automationNextRunAt": 1774744800000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 15,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1774746900000,
+      "automationNextRunAt": 1774746900000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 6,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782831600000,
+      "automationNextRunAt": 1782831600000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 5,
+        "hour": 9,
+        "minute": 30,
+        "anchorAt": 1793507400000
+      },
+      "nextRunAt": 1793507400000,
+      "automationNextRunAt": 1793507400000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1774767600000,
+      "automationNextRunAt": 1774767600000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 2,
+        "minute": 30,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1774747800000,
+      "automationNextRunAt": 1774747800000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 2,
+        "hour": 1,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782774000000,
+      "automationNextRunAt": 1782774000000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 6,
+        "minute": 45,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1774759500000,
+      "automationNextRunAt": 1774759500000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          1
+        ]
+      },
+      "nextRunAt": 1774850400000,
+      "automationNextRunAt": 1774850400000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "weekdays": [
+          0,
+          6
+        ]
+      },
+      "nextRunAt": 1783231200000,
+      "automationNextRunAt": 1783231200000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 2,
+        "hour": 18,
+        "minute": 30,
+        "anchorAt": 1768467900000,
+        "weekdays": [
+          2,
+          4
+        ]
+      },
+      "nextRunAt": 1775579400000,
+      "automationNextRunAt": 1775579400000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "monthDays": [
+          1
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1775019600000,
+      "automationNextRunAt": 1775019600000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "monthDays": [
+          13,
+          31
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1781326800000,
+      "automationNextRunAt": 1781326800000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 3,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "monthDays": [
+          15
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1776229200000,
+      "automationNextRunAt": 1776229200000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          5
+        ],
+        "monthlyMode": "weekday"
+      },
+      "nextRunAt": 1775192400000,
+      "automationNextRunAt": 1775192400000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "months": [
+          3
+        ],
+        "monthDays": [
+          10
+        ]
+      },
+      "nextRunAt": 1804665600000,
+      "automationNextRunAt": 1804665600000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "months": [
+          2
+        ],
+        "monthDays": [
+          29
+        ]
+      },
+      "nextRunAt": 1835424000000,
+      "automationNextRunAt": 1835424000000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 10,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1792888496789,
+      "automationNextRunAt": 1792888496789
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1792888260000,
+      "automationNextRunAt": 1792888260000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 61,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1792891080000,
+      "automationNextRunAt": 1792891080000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 15,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1792890900000,
+      "automationNextRunAt": 1792890900000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 6,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1792897200000,
+      "automationNextRunAt": 1792897200000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 5,
+        "hour": 9,
+        "minute": 30,
+        "anchorAt": 1793507400000
+      },
+      "nextRunAt": 1793507400000,
+      "automationNextRunAt": 1793507400000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1792915200000,
+      "automationNextRunAt": 1792915200000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 2,
+        "minute": 30,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1792978200000,
+      "automationNextRunAt": 1792978200000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 2,
+        "hour": 1,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1792972800000,
+      "automationNextRunAt": 1792972800000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 6,
+        "minute": 45,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1792907100000,
+      "automationNextRunAt": 1792907100000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          1
+        ]
+      },
+      "nextRunAt": 1792998000000,
+      "automationNextRunAt": 1792998000000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "weekdays": [
+          0,
+          6
+        ]
+      },
+      "nextRunAt": 1792911600000,
+      "automationNextRunAt": 1792911600000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 2,
+        "hour": 18,
+        "minute": 30,
+        "anchorAt": 1768467900000,
+        "weekdays": [
+          2,
+          4
+        ]
+      },
+      "nextRunAt": 1793727000000,
+      "automationNextRunAt": 1793727000000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "monthDays": [
+          1
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1793512800000,
+      "automationNextRunAt": 1793512800000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "monthDays": [
+          13,
+          31
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1793426400000,
+      "automationNextRunAt": 1793426400000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 3,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "monthDays": [
+          15
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1799992800000,
+      "automationNextRunAt": 1799992800000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          5
+        ],
+        "monthlyMode": "weekday"
+      },
+      "nextRunAt": 1793944800000,
+      "automationNextRunAt": 1793944800000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "months": [
+          3
+        ],
+        "monthDays": [
+          10
+        ]
+      },
+      "nextRunAt": 1804665600000,
+      "automationNextRunAt": 1804665600000
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "months": [
+          2
+        ],
+        "monthDays": [
+          29
+        ]
+      },
+      "nextRunAt": 1835424000000,
+      "automationNextRunAt": 1835424000000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 10,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773110696789,
+      "automationNextRunAt": 1773110696789
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782831660000,
+      "automationNextRunAt": 1782831660000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "minute",
+        "interval": 61,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1769906280000,
+      "automationNextRunAt": 1769906280000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 15,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773108900000,
+      "automationNextRunAt": 1773108900000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 6,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782831600000,
+      "automationNextRunAt": 1782831600000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "hourly",
+        "interval": 5,
+        "hour": 9,
+        "minute": 30,
+        "anchorAt": 1793507400000
+      },
+      "nextRunAt": 1793507400000,
+      "automationNextRunAt": 1793507400000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773133200000,
+      "automationNextRunAt": 1773133200000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 2,
+        "minute": 30,
+        "anchorAt": 1773110096789
+      },
+      "nextRunAt": 1773109800000,
+      "automationNextRunAt": 1773109800000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 2,
+        "hour": 1,
+        "minute": 0,
+        "anchorAt": 1782831600000
+      },
+      "nextRunAt": 1782781200000,
+      "automationNextRunAt": 1782781200000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "daily",
+        "interval": 1,
+        "hour": 6,
+        "minute": 45,
+        "anchorAt": 1768467900000
+      },
+      "nextRunAt": 1769928300000,
+      "automationNextRunAt": 1769928300000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          1
+        ]
+      },
+      "nextRunAt": 1773043200000,
+      "automationNextRunAt": 1773043200000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 1,
+        "hour": 8,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "weekdays": [
+          0,
+          6
+        ]
+      },
+      "nextRunAt": 1783238400000,
+      "automationNextRunAt": 1783238400000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "weekly",
+        "interval": 2,
+        "hour": 18,
+        "minute": 30,
+        "anchorAt": 1768467900000,
+        "weekdays": [
+          2,
+          4
+        ]
+      },
+      "nextRunAt": 1770748200000,
+      "automationNextRunAt": 1770748200000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "monthDays": [
+          1
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1772348400000,
+      "automationNextRunAt": 1772348400000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1782831600000,
+        "monthDays": [
+          13,
+          31
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1781334000000,
+      "automationNextRunAt": 1781334000000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 3,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "monthDays": [
+          15
+        ],
+        "monthlyMode": "date"
+      },
+      "nextRunAt": 1776236400000,
+      "automationNextRunAt": 1776236400000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "monthly",
+        "interval": 1,
+        "hour": 7,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "weekdays": [
+          5
+        ],
+        "monthlyMode": "weekday"
+      },
+      "nextRunAt": 1772780400000,
+      "automationNextRunAt": 1772780400000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1773110096789,
+        "months": [
+          3
+        ],
+        "monthDays": [
+          10
+        ]
+      },
+      "nextRunAt": 1773133200000,
+      "automationNextRunAt": 1773133200000
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "rule": {
+        "unit": "yearly",
+        "interval": 1,
+        "hour": 9,
+        "minute": 0,
+        "anchorAt": 1768467900000,
+        "months": [
+          2
+        ],
+        "monthDays": [
+          29
+        ]
+      },
+      "nextRunAt": 1835427600000,
+      "automationNextRunAt": 1835427600000
+    }
+  ],
+  "previous": [
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-03-10T02:34:56.789Z",
+      "cronExpr": "0 0 30 2 *",
+      "previousRunAt": null
+    },
+    {
+      "timezone": "Asia/Shanghai",
+      "from": "2026-06-28T17:00:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "previousRunAt": null
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T01:30:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "previousRunAt": null
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-03-08T06:30:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "previousRunAt": null
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T04:30:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "previousRunAt": null
+    },
+    {
+      "timezone": "America/New_York",
+      "from": "2026-11-01T06:30:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "previousRunAt": null
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-03-29T00:30:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "previousRunAt": null
+    },
+    {
+      "timezone": "Europe/Berlin",
+      "from": "2026-10-25T00:30:00.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "previousRunAt": null
+    },
+    {
+      "timezone": "UTC",
+      "from": "2026-01-31T23:59:30.000Z",
+      "cronExpr": "0 0 30 2 *",
+      "previousRunAt": null
+    }
+  ]
+}
