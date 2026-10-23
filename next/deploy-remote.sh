@@ -35,6 +35,9 @@
 #   --build-on-host             build on the host instead of cross-compiling
 #   --no-start                  install artifacts but do not (re)start
 #
+# The runner bundle is built for linux-x64 by default (it embeds the matching
+# node-pty prebuild); override with NEX_BUNDLE_PLATFORM=linux-arm64 etc.
+#
 # Environment equivalents:
 #   NEX_DEPLOY_DIR        user-mode root                (default ~/nex-next)
 #   NEX_DEPLOY_PORT       server port                   (default 3041)
@@ -45,6 +48,7 @@
 #   NEX_DEPLOY_ALLOWED_ORIGINS  extra Origin hosts for /ws (comma separated)
 #   NEX_RUNNER_NAME       display name in the picker    (default: short hostname)
 #   NEX_RUNNER_ID         fixed runner id               (default: generated once)
+#   NEX_BUNDLE_PLATFORM   pty prebuild target           (default linux-x64)
 #
 # Secrets: user mode generates ~/nex-next/secrets.env; --system writes
 # <home>/.nex-next/env (mode 600). Both are reused on redeploy — a redeploy never
@@ -190,10 +194,13 @@ log "building the web client"
   pnpm --filter @nex/web build
 )
 
-log "building the runner bundle"
+log "building the runner bundle (linux-x64, incl. node-pty prebuild assets)"
 (
   cd "$REPO_ROOT"
-  pnpm --filter @nex/next-runner bundle
+  # The bundle carries the pty-host entry plus the node-pty prebuild for the
+  # target OS/arch: building on macOS must pick the linux-x64 prebuild, or the
+  # deployed runner has no pty.node and terminals fail to start.
+  pnpm --filter @nex/next-runner bundle -- --platform "${NEX_BUNDLE_PLATFORM:-linux-x64}"
 )
 
 # --- remote paths -----------------------------------------------------------
@@ -392,6 +399,37 @@ NODE_BIN="$2"
 [[ -n "$NODE_BIN" ]] && export PATH="$NODE_BIN:$PATH"
 cd "$DIR/runner"
 [[ -d node_modules ]] || npm install --omit=dev --no-audit --no-fund
+
+# pty-host native assets: node-pty ships no linux prebuild, so npm install may have
+# compiled it with node-gyp or left it without pty.node. The bundle carries the
+# platform prebuild (node-pty-assets.tar.gz) and lib/ptyHostAssets.mjs (loaded by
+# pty-host with --import on first start). Materialize it now, before the runner
+# starts, and fail the deploy if pty.node is still missing.
+NEX_PTY_TARGET="$(node -p "require('./package.json').nexPtyTarget || ''")"
+# Node 24 has no process.arch-independent alias; build the key from the host runtime.
+EXPECTED_TARGET="${NEX_PTY_TARGET:-$(node -p 'process.platform + "-" + process.arch')}"
+if [[ -n "$NEX_PTY_TARGET" && "$NEX_PTY_TARGET" != "$EXPECTED_TARGET" ]]; then
+  echo "[deploy] runner bundle was built for $NEX_PTY_TARGET but this host is $EXPECTED_TARGET" >&2
+  exit 1
+fi
+if [[ -f node-pty-assets.tar.gz ]]; then
+  NODE_PTY_ROOT="$(node -e 'try{console.log(require("node:path").dirname(require.resolve("node-pty/package.json",{paths:[process.cwd()]})))}catch{}')"
+  if [[ -n "$NODE_PTY_ROOT" && ! -f "$NODE_PTY_ROOT/prebuilds/$EXPECTED_TARGET/pty.node" ]]; then
+    mkdir -p "$NODE_PTY_ROOT/prebuilds/$EXPECTED_TARGET"
+    tar -xzf node-pty-assets.tar.gz -C "$NODE_PTY_ROOT/prebuilds/$EXPECTED_TARGET"
+  fi
+  if [[ -n "$NODE_PTY_ROOT" ]]; then
+    if [[ "$EXPECTED_TARGET" == darwin-* ]]; then
+      # spawn-helper must be executable or node-pty fails with "posix_spawnp failed".
+      chmod 0755 "$NODE_PTY_ROOT/prebuilds/$EXPECTED_TARGET/spawn-helper" 2>/dev/null || true
+    fi
+    [[ -f "$NODE_PTY_ROOT/prebuilds/$EXPECTED_TARGET/pty.node" ]] || {
+      echo "[deploy] node-pty prebuild missing after install: $NODE_PTY_ROOT/prebuilds/$EXPECTED_TARGET/pty.node" >&2
+      exit 1
+    }
+    echo "[deploy] node-pty prebuild ready: $NODE_PTY_ROOT/prebuilds/$EXPECTED_TARGET/pty.node"
+  fi
+fi
 REMOTE_DEPS
 )" "$dest" "$NODE_BIN"
 }

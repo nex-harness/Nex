@@ -802,9 +802,36 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: 1.3.0
         version: 1.3.0(@aws-sdk/credential-provider-node@3.972.86)(@modelcontextprotocol/sdk@1.29.0(zod@4.6.5))(@smithy/signature-v4@5.7.4)(ws@8.20.0)(zod@4.6.5)
+      '@lydell/node-pty-darwin-arm64':
+        specifier: 1.2.0-beta.10
+        version: 1.2.0-beta.10
+      '@lydell/node-pty-darwin-x64':
+        specifier: 1.2.0-beta.10
+        version: 1.2.0-beta.10
+      '@lydell/node-pty-linux-arm64':
+        specifier: 1.2.0-beta.10
+        version: 1.2.0-beta.10
+      '@lydell/node-pty-linux-x64':
+        specifier: 1.2.0-beta.10
+        version: 1.2.0-beta.10
+      '@lydell/node-pty-win32-arm64':
+        specifier: 1.2.0-beta.10
+        version: 1.2.0-beta.10
+      '@lydell/node-pty-win32-x64':
+        specifier: 1.2.0-beta.10
+        version: 1.2.0-beta.10
       '@nex/shared':
         specifier: workspace:*
         version: link:../shared
+      '@xterm/addon-serialize':
+        specifier: 0.14.0
+        version: 0.14.0
+      '@xterm/headless':
+        specifier: 6.0.0
+        version: 6.0.0
+      node-pty:
+        specifier: 1.1.0
+        version: 1.1.0
       ws:
         specifier: ^8.20.0
         version: 8.20.0
@@ -2583,6 +2610,16 @@ packages:
     resolution: {integrity: sha512-J9HnxvSzEeMH748+Ul1VrmCLWMo7iCVJy9EGijRR62+YO/Yk5GaCydUTZ+KzlH0/X5aTrgt5cfiof4vx45tRRg==}
     cpu: [x64]
     os: [linux]
+
+  '@lydell/node-pty-win32-arm64@1.2.0-beta.10':
+    resolution: {integrity: sha512-PlDJpJX/pnKyy6OmADKzhf+INZDDnzTBGaI0LT4laVNc6NblZNqUSkCMjLFWbeakeuQp0VG37M49WQSN9FDfeA==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@lydell/node-pty-win32-x64@1.2.0-beta.10':
+    resolution: {integrity: sha512-ExFgWrzyldNAMi45U9PLIOu+g/RatP+f0c/dZxaooifME6yLW32BoHveH26/TtoAjZyJrc2iL0u48pgnR1fzmg==}
+    cpu: [x64]
+    os: [win32]
 
   '@malept/cross-spawn-promise@2.0.0':
     resolution: {integrity: sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg==}
@@ -5249,6 +5286,12 @@ packages:
     resolution: {integrity: sha512-UFYkDm4HUahf2lnEyHvio51TNGiLK66mqP2JoATy7hRZeXaGMRDr00JiSF7m63vR5WKATF605yEggJKsw0JpMQ==}
     peerDependencies:
       '@xterm/xterm': ^5.0.0
+
+  '@xterm/addon-serialize@0.14.0':
+    resolution: {integrity: sha512-uteyTU1EkrQa2Ux6P/uFl2fzmXI46jy5uoQMKEOM0fKTyiW7cSn0WrFenHm5vO5uEXX/GpwW/FgILvv3r0WbkA==}
+
+  '@xterm/headless@6.0.0':
+    resolution: {integrity: sha512-5Yj1QINYCyzrZtf8OFIHi47iQtI+0qYFPHmouEfG8dHNxbZ9Tb9YGSuLcsEwj9Z+OL75GJqPyJbyoFer80a2Hw==}
 
   '@xterm/xterm@5.5.0':
     resolution: {integrity: sha512-hqJHYaQb5OptNunnyAnkHyM8aCjZ1MEIDTQu1iIbbTD/xops91NB5yq1ZK/dC2JDbVWtF23zUtl9JE2NqwT87A==}
@@ -11762,6 +11805,10 @@ snapshots:
 
   '@lydell/node-pty-linux-x64@1.2.0-beta.10': {}
 
+  '@lydell/node-pty-win32-arm64@1.2.0-beta.10': {}
+
+  '@lydell/node-pty-win32-x64@1.2.0-beta.10': {}
+
   '@malept/cross-spawn-promise@2.0.0':
     dependencies:
       cross-spawn: 7.0.6
@@ -14089,6 +14136,10 @@ snapshots:
   '@xterm/addon-fit@0.10.0(@xterm/xterm@5.5.0)':
     dependencies:
       '@xterm/xterm': 5.5.0
+
+  '@xterm/addon-serialize@0.14.0': {}
+
+  '@xterm/headless@6.0.0': {}
 
   '@xterm/xterm@5.5.0': {}
 
