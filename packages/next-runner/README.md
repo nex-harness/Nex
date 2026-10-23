@@ -46,13 +46,15 @@ an empty `apiKey` placeholder only.
 One text-frame JSON WebSocket. The runner sends `hello` first, then handles server
 frames:
 
-| Frame                 | Direction | Handling                                                               |
-| --------------------- | --------- | ---------------------------------------------------------------------- |
-| `hello` / `welcome`   | R→S / S→R | handshake                                                              |
-| `call`                | S→R       | `(channel, method) → async handler(arg)`; replies `result{ok, value?}` |
-| `listen` / `unlisten` | S→R       | `(channel, event) → (arg, emit) → dispose`                             |
-| `event`               | R→S       | one emit for the matching listen id                                    |
-| `ping` / `pong`       | both      | 15 s interval; missing inbound traffic for 45 s reconnects             |
+| Frame                 | Direction | Handling                                                                 |
+| --------------------- | --------- | ------------------------------------------------------------------------ |
+| `hello` / `welcome`   | R→S / S→R | handshake; `hello.lastAppliedVersion` = the config version last applied  |
+| `call`                | S→R       | `(channel, method) → async handler(arg)`; replies `result{ok, value?}`   |
+| `listen` / `unlisten` | S→R       | `(channel, event) → (arg, emit) → dispose`                               |
+| `event`               | R→S       | one emit for the matching listen id                                      |
+| `config`              | S→R       | full merged snapshot; applied one at a time (a late version is ignored)  |
+| `configApplied`       | R→S       | `{version, ok, errors[], facts}` for every applied (or rejected) push    |
+| `ping` / `pong`       | both      | application ping every 15 s; missing inbound traffic for 45 s reconnects |
 
 Rules implemented here:
 
@@ -206,6 +208,28 @@ the projected model context and drops summarized messages after compaction. Rest
 `assistantWork`, status `success`, origin `manual`/`auto`), and skips `branch_summary`
 entries (old CLI parity).
 
+## Server-owned provider config (P0)
+
+Spec: `docs/next/config-mcp-skills.md`. The `config` frame carries the desired
+providers/models of one version; the runner builds an immutable RuntimeConfig
+per version:
+
+- **Fallback mode** (`doc.owned:false`, no enabled provider): today's behavior —
+  every new session reads the agent dir's `models.json`/`auth.json` and
+  `SettingsManager.create(cwd)`.
+- **Server mode:** a derived `<data>/derived/<version>/models.json` plus an
+  in-memory credential store (`setRuntimeApiKey`; `auth.json` is never written),
+  `SettingsManager.inMemory` seeded from the doc's settings layer, cwd = the
+  workspace. New sessions use the latest generation; running sessions keep the
+  runtime and settings manager they were created with.
+- A rejected frame (`ok:false`, e.g. unknown schema) keeps the previous
+  generation. Per-provider problems (missing secret, a model pi rejected) are
+  reported as `errors[]` with `ok:true` and surfaced as `issues` in Settings.
+- `<data>/applied-config.json` caches the applied version/mode (never secrets).
+- `config.exportLocal` returns the runner's local models.json providers, its
+  `auth.json` api keys (values only over the link, stored as server secrets by
+  `POST /api/config/import-runner`), settings defaults and raw `mcp.json`.
+
 ## Permissions ("Ask before changes")
 
 Spec: [`docs/next/permissions.md`](../../docs/next/permissions.md).
@@ -285,8 +309,9 @@ heuristics understand `oldText`/`newText` pairs.
 | `nex-agent`         | `subscribeConversationV4`, `resyncConversationV4`, `unsubscribeConversationV4`, `conversationRowsRangeV4`, `conversationPlansV4`, `conversationWorkflowRunsV4` (always `{runs:[]}`), `conversationFileChangesV4`, `conversationFileRewindPreviewV4`, `sendConversationCommandV4`, `queryConversationCommandsV4`, `onDynamicConversationFrame`, sessions-index subscribe/resync/unsubscribe, `onDynamicSessionsIndexFrame` |
 | `nex-task`          | `listTasks`, `listPinnedTasks`, `listArchivedTasks`, `listDeletedTaskIds`, `listPinnedTaskIds`, `getTaskSessionFilePath`, `getTaskNativeSessionLogFile`, `onDynamicWorkspaceEvent`                                                                                                                                                                                                                                        |
 | `nex-session`       | `readWorkspacePresentation`                                                                                                                                                                                                                                                                                                                                                                                               |
-| `model-selection`   | `getView`, `onDidChange` (never fires; catalog is static per process)                                                                                                                                                                                                                                                                                                                                                     |
-| `provider-settings` | `getView`, `onDidChange` (never fires)                                                                                                                                                                                                                                                                                                                                                                                    |
+| `model-selection`   | `getView`, `onDidChange` (never fires; catalog is static per process). Served for old servers; the nex-next server answers it itself once configured (fallback forwards here)                                                                                                                                                                                                                                             |
+| `provider-settings` | `getView`, `onDidChange` (never fires); same fallback role as `model-selection`                                                                                                                                                                                                                                                                                                                                           |
+| `config`            | `apply`, `status`, `exportLocal`                                                                                                                                                                                                                                                                                                                                                                                          |
 
 Commands: `createSession` (with or without `firstInput`; draft prewarm works),
 `sendText`, `deleteSession`, `renameSession`, `stop`, `resolveInteraction`,

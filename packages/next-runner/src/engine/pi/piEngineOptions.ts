@@ -6,6 +6,12 @@ import type { TitleCompletionRequest, TitleGenerationSettings } from "./titleGen
 export interface PiEngineOptions {
   dataDir: string;
   logger: Logger;
+  /**
+   * Server-owned runtime config (docs/next/config-mcp-skills.md). When set, new
+   * sessions use the latest applied generation's ModelRuntime and
+   * SettingsManager; `createModelRuntime` then only serves the fallback mode.
+   */
+  runtimeConfig?: import("../../config/applyRuntimeConfig.js").RuntimeConfigManager;
   /** Test seam: a faux-backed ModelRuntime instead of `~/.pi/agent` credentials. */
   createModelRuntime?: () => Promise<ModelRuntime>;
   /** Test seams: in-memory settings, title settings and a fake completion. */

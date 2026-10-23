@@ -24,6 +24,11 @@ type Config struct {
 	Addr string
 	// DataDir holds server-id, web sessions and UI settings.
 	DataDir string
+	// ConfigDir is the server-owned provider config directory: it holds
+	// config.json directly plus config/secrets.enc, config/keys/config.key. A
+	// separate directory lets operators (and the E2E stack) isolate the provider
+	// store from the rest of the server data.
+	ConfigDir string
 	// WebRoot is the directory that contains the built web client. It may not
 	// exist; in that case the HTTP layer answers 404 for non-API paths.
 	WebRoot string
@@ -49,6 +54,7 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 
 	addr := fs.String("addr", "", "listen address (default :3030, env NEX_SERVER_ADDR)")
 	dataDir := fs.String("data-dir", "", "data directory (default ~/.nex-next/server, env NEX_DATA_DIR)")
+	configDir := fs.String("config-dir", "", "server-owned provider config directory (default <data-dir>/config, env NEX_SERVER_CONFIG_DIR)")
 	webRoot := fs.String("web-root", "", "web static root (default packages/web/dist, env NEX_WEB_STATIC_ROOT)")
 	name := fs.String("name", "", "server display name (default hostname, env NEX_SERVER_NAME)")
 	origins := fs.String("allowed-origins", "", "comma-separated WebSocket Origin host patterns (env NEX_ALLOWED_ORIGINS)")
@@ -60,6 +66,7 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 	cfg := Config{
 		Addr:           firstNonEmpty(*addr, getenv("NEX_SERVER_ADDR"), getenv("PORT")),
 		DataDir:        firstNonEmpty(*dataDir, getenv("NEX_DATA_DIR")),
+		ConfigDir:      firstNonEmpty(*configDir, getenv("NEX_SERVER_CONFIG_DIR")),
 		WebRoot:        firstNonEmpty(*webRoot, getenv("NEX_WEB_STATIC_ROOT")),
 		AuthToken:      strings.TrimSpace(getenv("NEX_SERVER_AUTH_TOKEN")),
 		RunnerToken:    strings.TrimSpace(getenv("NEX_RUNNER_TOKEN")),
@@ -86,6 +93,9 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 			return Config{}, fmt.Errorf("resolving home directory: %w", err)
 		}
 		cfg.DataDir = filepath.Join(home, ".nex-next", "server")
+	}
+	if cfg.ConfigDir == "" {
+		cfg.ConfigDir = filepath.Join(cfg.DataDir, "config")
 	}
 	if cfg.WebRoot == "" {
 		cfg.WebRoot = DefaultWebRoot

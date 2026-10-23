@@ -6,6 +6,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -64,6 +65,17 @@ type Deps struct {
 	BrowserWS http.Handler
 	// RunnerWS serves GET /runner.
 	RunnerWS http.Handler
+	// Config serves the authenticated config import endpoint. Nil disables it
+	// (unit tests that do not assemble the config manager).
+	Config ConfigAdmin
+}
+
+// ConfigAdmin is the server-side config surface the HTTP layer exposes.
+type ConfigAdmin interface {
+	// ImportFromRunner imports one runner's local providers/keys into its scope.
+	ImportFromRunner(ctx context.Context, runnerID string) (any, error)
+	// KnownRunners lists runners with a live link or recorded facts.
+	KnownRunners() []string
 }
 
 // Server is the HTTP mux.
@@ -99,6 +111,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/auth/login", s.handleLogin)
 	s.mux.HandleFunc("/api/auth/logout", s.handleLogout)
 	s.mux.HandleFunc("/api/server-info", s.handleServerInfo)
+	if s.deps.Config != nil {
+		s.mux.HandleFunc("/api/config/import-runner", s.handleImportRunner)
+		s.mux.HandleFunc("/api/config/status", s.handleConfigStatus)
+	}
 	if s.deps.BrowserWS != nil {
 		s.mux.Handle("/ws", s.deps.BrowserWS)
 		s.mux.Handle("/ws/", s.deps.BrowserWS)
@@ -394,6 +410,52 @@ func (s *Server) handleServerInfo(w http.ResponseWriter, r *http.Request) {
 			WebsocketRPC:             true,
 			ProcessResourceTelemetry: false,
 		},
+	})
+}
+
+// handleImportRunner imports one runner's local ~/.pi/agent providers. The UI has
+// no import button; this endpoint is the documented alternative (README).
+//
+//	POST /api/config/import-runner?runnerId=alpha
+func (s *Server) handleImportRunner(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	runnerID := strings.TrimSpace(r.URL.Query().Get("runnerId"))
+	if runnerID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "runnerId is required"})
+		return
+	}
+	known := false
+	for _, id := range s.deps.Config.KnownRunners() {
+		if id == runnerID {
+			known = true
+			break
+		}
+	}
+	if !known {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "runner offline"})
+		return
+	}
+	summary, err := s.deps.Config.ImportFromRunner(r.Context(), runnerID)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
+// handleConfigStatus reports the doc version and per-runner applied state
+// (never provider keys).
+func (s *Server) handleConfigStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	runners := s.deps.Config.KnownRunners()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"runners": runners,
 	})
 }
 

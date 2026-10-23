@@ -12,7 +12,8 @@
 #   next/dev.sh --e2e=conversation # run the conversation E2E (runner-owned queue)
 #   next/dev.sh --e2e=attachments  # run the attachments E2E (image + text file, restore)
 #   next/dev.sh --e2e=files        # run the file-changes E2E (diffs, Undo, edit with rewind)
-#   next/dev.sh --e2e=all          # run acceptance, permissions, tasks, conversation, attachments, files and multi
+#   next/dev.sh --e2e=settings     # run the server-owned provider settings E2E (settings -> picker -> chat)
+#   next/dev.sh --e2e=all          # every suite, settings last
 #
 # Environment:
 #   NEX_NEXT_PORT           Go server port                 (default 3031)
@@ -22,6 +23,9 @@
 #   NEX_MULTI_WORKSPACE     Path served by both E2E runners (default $TMPDIR/nex-next-multi)
 #   NEX_NEXT_BROWSER_TOKEN  Browser login token             (default: NEX_SERVER_AUTH_TOKEN or random)
 #   NEX_NEXT_RUNNER_TOKEN   Runner bearer token             (default: NEX_RUNNER_TOKEN or random)
+#   NEX_SERVER_CONFIG_DIR   Server-owned provider config dir (default <server data>/config)
+#   NEX_E2E_AGENT_DIR       Agent dir seeded for --e2e runs (exported to runners as
+#                            PI_CODING_AGENT_DIR; default <data>/pi-agent-e2e)
 #
 # The demo workspace always contains notes.txt ("hello from demo"), which the
 # acceptance E2E reads. The permissions E2E owns perm-*.txt in the same workspace
@@ -47,6 +51,7 @@ for arg in "$@"; do
     --e2e=conversation) E2E_MODE="conversation" ;;
     --e2e=attachments) E2E_MODE="attachments" ;;
     --e2e=files) E2E_MODE="files" ;;
+    --e2e=settings) E2E_MODE="settings" ;;
     --e2e=all) E2E_MODE="all" ;;
     -h | --help)
       sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -113,6 +118,10 @@ port_in_use "$WEB_PORT" && die "port $WEB_PORT is already in use; stop that proc
 RUNNER_DATA="$DATA_DIR/runner"
 BETA_RUNNER_DATA="$DATA_DIR/runner-e2e-beta"
 SERVER_DATA="$DATA_DIR/server"
+# Server-owned config lives in its own directory (NEX_SERVER_CONFIG_DIR) so the
+# provider store can be isolated from the rest of the server state.
+SERVER_CONFIG="${NEX_SERVER_CONFIG_DIR:-$SERVER_DATA/config}"
+DATA_E2E_CONFIG="$DATA_DIR/server-e2e-config"
 if [[ "$RUN_E2E" -eq 1 ]]; then
   # The acceptance run asserts an empty "real task" sidebar before the send.
   # Reset sessions/metadata, but keep runner-id.json: the browser persists
@@ -125,7 +134,38 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   # "runner offline", so E2E runs get their own settings store.
   SERVER_DATA="$DATA_DIR/server-e2e"
   rm -rf "$SERVER_DATA"
+  # Server-owned provider config (config/config.json, keys/, secrets.enc) is
+  # global state: a provider left in a developer's ~/.nex-next/server would be
+  # pushed to every E2E runner and break model selection. The E2E store lives in
+  # its own directory, which also lets the settings suite start clean.
+  SERVER_CONFIG="$DATA_E2E_CONFIG"
+  rm -rf "$SERVER_CONFIG"
+  # Fallback-mode runners read the agent dir's models.json. Seeded with pi-ai's
+  # faux provider: every suite then has one deterministic model whose requests
+  # never leave the process, independent of the developer's real ~/.pi/agent
+  # (zero models, missing plans, expiring OAuth). Only the settings suite, which
+  # asserts the composer catalog starts without its own provider, gets an empty
+  # dir. This is the E2E harness only: production runners keep ~/.pi/agent.
+  E2E_AGENT_DIR="${NEX_E2E_AGENT_DIR:-$DATA_DIR/pi-agent-e2e}"
+  rm -rf "$E2E_AGENT_DIR"
+  mkdir -p "$E2E_AGENT_DIR/extensions"
+  if [[ "$E2E_MODE" == "settings" ]]; then
+    # The settings suite asserts the provider is absent before it is added.
+    printf '{}\n' >"$E2E_AGENT_DIR/models.json"
+  else
+    cp "$REPO_ROOT/packages/next-runner/test/fixtures/e2e-agent/models.json" "$E2E_AGENT_DIR/models.json"
+    cp "$REPO_ROOT/packages/next-runner/test/fixtures/e2e-agent/settings.json" "$E2E_AGENT_DIR/settings.json"
+    # The extension is loaded from the agent dir; point it at the repo bundle.
+    cp "$REPO_ROOT/packages/next-runner/src/extensions/e2eProvider.ts" "$E2E_AGENT_DIR/extensions/e2eProvider.ts"
+  fi
+  # The runner reads the seed from NEX_E2E_SEED_MODELS when its agent dir has no
+  # models.json yet (see packages/next-runner/src/config.ts): runner data dirs
+  # survive across E2E runs, while the agent dir is recreated here.
+  export NEX_E2E_SEED_MODELS="$E2E_AGENT_DIR/models.json"
+  export PI_CODING_AGENT_DIR="$E2E_AGENT_DIR"
 fi
+# Exported after the E2E override so both branches reach the server.
+export NEX_SERVER_CONFIG_DIR="$SERVER_CONFIG"
 if [[ "$RUN_MULTI" -eq 1 ]]; then
   rm -rf "$BETA_RUNNER_DATA/sessions" "$BETA_RUNNER_DATA/workspaces"
   # Fresh path per run: the multi E2E also asserts alpha never persisted a session for it.
@@ -197,6 +237,15 @@ start_prefixed() {
   CHILD_PIDS+=("$!")
 }
 
+if [[ "$RUN_E2E" -eq 1 ]]; then
+  # Deterministic scripted model for every suite (see the fixture's header).
+  # The server is also part of the runner's fallback path, so it is never
+  # dropped while the suites share one stack.
+  start_prefixed faux-provider env \
+    E2E_FAUX_PORT="${NEX_E2E_FAUX_PORT:-18080}" \
+    node "$REPO_ROOT/packages/next-runner/test/fixtures/e2e-provider/server.mjs"
+fi
+
 log "server:   http://127.0.0.1:$PORT (data: $SERVER_DATA)"
 log "runner:   $RUNNER_WORKSPACES (data: $RUNNER_DATA)"
 if [[ "$RUN_MULTI" -eq 1 ]]; then
@@ -213,7 +262,8 @@ start_prefixed server env \
   NEX_RUNNER_TOKEN="$RUNNER_TOKEN" \
   "$SERVER_BIN"
 
-start_prefixed runner env \
+start_prefixed runner env "PI_CODING_AGENT_DIR=${PI_CODING_AGENT_DIR:-}" \
+  "NEX_E2E_SEED_MODELS=${NEX_E2E_SEED_MODELS:-}" \
   NEX_SERVER_URL="ws://127.0.0.1:$PORT/runner" \
   NEX_RUNNER_TOKEN="$RUNNER_TOKEN" \
   NEX_RUNNER_WORKSPACES="$RUNNER_WORKSPACES" \
@@ -308,6 +358,7 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   attachments_status=0
   files_status=0
   multi_status=0
+  settings_status=0
   if [[ "$E2E_MODE" == "acceptance" || "$E2E_MODE" == "all" ]]; then
     (
       cd "$REPO_ROOT"
@@ -400,6 +451,28 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
     multi_status=$?
     log "multi-runner E2E exited with $multi_status"
   fi
+  if [[ "$E2E_MODE" == "settings" || "$E2E_MODE" == "all" ]]; then
+    # Every browser suite starts from the script's first answer (and earlier
+    # stacks cannot tell a tool step from its neighbours by model inference).
+    curl -fsS -X DELETE http://127.0.0.1:18080/state >/dev/null 2>&1 || true
+    if [[ "$E2E_MODE" == "settings" ]]; then
+      # Only the settings suite runs on this stack: give it the empty fallback
+      # catalog and drop sessions that would reference the previous one.
+      rm -rf "$RUNNER_DATA/sessions" "$RUNNER_DATA/workspaces" "$BETA_RUNNER_DATA/sessions" "$BETA_RUNNER_DATA/workspaces"
+    fi
+    (
+      cd "$REPO_ROOT"
+      # Runs last in `all`: it adds a provider to the server config store, so
+      # every other suite still sees the runner's local (fallback) catalog.
+      NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
+        NEX_E2E_TOKEN="$BROWSER_TOKEN" \
+        NEX_E2E_SERVER_CONFIG="$SERVER_CONFIG" \
+        NEX_E2E_WORKSPACE="$WORKSPACE" \
+        node next/e2e/settings.mjs
+    )
+    settings_status=$?
+    log "settings E2E exited with $settings_status"
+  fi
   set -e
   if [[ "$acceptance_status" -ne 0 ]]; then
     exit "$acceptance_status"
@@ -419,7 +492,10 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   if [[ "$files_status" -ne 0 ]]; then
     exit "$files_status"
   fi
-  exit "$multi_status"
+  if [[ "$multi_status" -ne 0 ]]; then
+    exit "$multi_status"
+  fi
+  exit "$settings_status"
 fi
 
 wait

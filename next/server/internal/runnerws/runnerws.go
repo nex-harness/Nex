@@ -50,6 +50,25 @@ type helloFrame struct {
 	OS         string              `json:"os"`
 	Arch       string              `json:"arch"`
 	Workspaces []runners.Workspace `json:"workspaces"`
+	// LastAppliedVersion is the config version the runner last applied
+	// (docs/next/config-mcp-skills.md decision 4). Optional; 0 means "never
+	// applied" and triggers an immediate push.
+	LastAppliedVersion uint64 `json:"lastAppliedVersion,omitempty"`
+}
+
+// ConfigHandler receives runner acknowledgements and connect events. The
+// server-side implementation (internal/local) owns the config doc, the push
+// scheduling and the per-runner facts.
+type ConfigHandler interface {
+	// RunnerConnected is called after registration with the runner id and the
+	// version it last applied.
+	RunnerConnected(runnerID string, lastAppliedVersion uint64)
+	// RunnerDisconnected forgets per-runner applied state.
+	RunnerDisconnected(runnerID string)
+	// ConfigApplied records one `configApplied` frame.
+	ConfigApplied(runnerID string, version uint64, ok bool, errors []map[string]any, facts map[string]any)
+	// OnLinkReady lets the handler attach a push function for this runner.
+	OnLinkReady(runnerID string, push func(version uint64, payload any) error)
 }
 
 type runnerError struct {
@@ -70,6 +89,7 @@ type pendingCall struct {
 type Conn struct {
 	logger  *slog.Logger
 	reg     *runners.Registry
+	config  ConfigHandler
 	ws      *websocket.Conn
 	version string
 
@@ -97,6 +117,13 @@ var sequence atomic.Uint64
 // Serve accepts /runner requests, validates the bearer token, performs the
 // hello/welcome handshake and runs the link until the peer disconnects.
 func Serve(logger *slog.Logger, reg *runners.Registry, runnerToken, serverVersion string, w http.ResponseWriter, r *http.Request) {
+	ServeWithConfig(logger, reg, runnerToken, serverVersion, nil, w, r)
+}
+
+// ServeWithConfig is Serve plus the server-owned config push (docs/next/
+// config-mcp-skills.md decision 4). config may be nil, which disables the push
+// (the client then keeps its local fallback config).
+func ServeWithConfig(logger *slog.Logger, reg *runners.Registry, runnerToken, serverVersion string, config ConfigHandler, w http.ResponseWriter, r *http.Request) {
 	if !auth.TokensEqual(runnerToken, bearerToken(r)) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -123,6 +150,7 @@ func Serve(logger *slog.Logger, reg *runners.Registry, runnerToken, serverVersio
 	conn := &Conn{
 		logger:  logger.With("component", "runner-link"),
 		reg:     reg,
+		config:  config,
 		ws:      ws,
 		version: serverVersion,
 		pending: make(map[string]*pendingCall),
@@ -140,11 +168,12 @@ func Serve(logger *slog.Logger, reg *runners.Registry, runnerToken, serverVersio
 	}
 	defer conn.Close()
 
-	go conn.keepAlive(ctx)
-
 	err = conn.readLoop(ctx)
 	conn.shutdown()
 	reg.Unregister(conn.info.RunnerID, conn)
+	if config != nil {
+		config.RunnerDisconnected(conn.info.RunnerID)
+	}
 	if err != nil && !isExpectedClose(err) {
 		conn.logger.Info("runner link closed", "runnerId", conn.info.RunnerID, "error", err)
 	}
@@ -220,9 +249,67 @@ func (c *Conn) handshake(ctx context.Context) error {
 	c.reg.Register(c.info, c)
 	c.logger.Info("runner connected", "runnerId", hello.RunnerID, "name", hello.Name,
 		"workspaces", len(hello.Workspaces), "version", hello.Version)
+	if c.config != nil {
+		c.config.OnLinkReady(hello.RunnerID, c.pushConfig)
+		c.config.RunnerConnected(hello.RunnerID, hello.LastAppliedVersion)
+	}
 	return nil
 }
 
+// pushConfig writes one S→R `config` frame. The payload is the JSON body of the
+// frame minus envelope fields ({"t","version","doc","secrets","bundles"}).
+func (c *Conn) pushConfig(version uint64, payload any) error {
+
+	var body []byte
+	switch typed := payload.(type) {
+	case nil:
+		body = []byte("null")
+	case []byte:
+		body = typed
+	case json.RawMessage:
+		body = typed
+	default:
+		encoded, err := json.Marshal(typed)
+		if err != nil {
+			return fmt.Errorf("encoding config push: %w", err)
+		}
+		body = encoded
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return fmt.Errorf("config push body must be an object: %w", err)
+	}
+	frame := make(map[string]json.RawMessage, len(fields)+2)
+	for key, value := range fields {
+		frame[key] = value
+	}
+	t, _ := json.Marshal("config")
+	versionValue, _ := json.Marshal(version)
+	frame["t"] = t
+	frame["version"] = versionValue
+	if _, ok := frame["bundles"]; !ok {
+		frame["bundles"], _ = json.Marshal([]any{})
+	}
+	if _, ok := frame["secrets"]; !ok {
+		frame["secrets"], _ = json.Marshal(map[string]string{})
+	}
+	encoded, err := json.Marshal(frame)
+	if err != nil {
+		return err
+	}
+	return c.write(encoded)
+}
+
+// keepAlive pings the runner so an idle link is reaped by PingTimeout.
+//
+// It uses the application-level `ping` frame, not a WebSocket Ping: the
+// library's Conn.Ping blocks until a pong arrives, and the pong is only
+// delivered by the read loop — so a ping issued while the read loop waits
+// out a caller deadline (or between reads) is never answered and would
+// tear down a perfectly healthy link. Application pings are ordinary text
+// frames: they are read like any other frame and `pong` is dispatched from
+// the read loop, so any read activity keeps the link alive and silence is
+// detected by the same path that detects a dead TCP peer.
 func (c *Conn) keepAlive(ctx context.Context) {
 	ticker := time.NewTicker(PingInterval)
 	defer ticker.Stop()
@@ -232,11 +319,10 @@ func (c *Conn) keepAlive(ctx context.Context) {
 			return
 		case <-c.done:
 			return
+		case <-ctx.Done():
+			return
 		case <-ticker.C:
-			pingCtx, cancel := context.WithTimeout(ctx, PingTimeout)
-			err := c.ws.Ping(pingCtx)
-			cancel()
-			if err != nil {
+			if err := c.sendControl("ping"); err != nil {
 				c.logger.Info("runner link ping failed, closing", "runnerId", c.info.RunnerID, "error", err)
 				c.Close()
 				return
@@ -297,8 +383,22 @@ func (c *Conn) dispatch(data []byte) {
 		if emit != nil {
 			emit(env.Val)
 		}
+	case "configApplied":
+		var ack struct {
+			Version uint64           `json:"version"`
+			OK      bool             `json:"ok"`
+			Errors  []map[string]any `json:"errors"`
+			Facts   map[string]any   `json:"facts"`
+		}
+		if err := json.Unmarshal(data, &ack); err != nil {
+			c.logger.Warn("dropping malformed configApplied", "error", err)
+			return
+		}
+		if c.config != nil {
+			c.config.ConfigApplied(c.info.RunnerID, ack.Version, ack.OK, ack.Errors, ack.Facts)
+		}
 	case "ping":
-		c.sendControl("pong")
+		_ = c.sendControl("pong")
 	case "pong":
 		// Application-level pong: nothing to do.
 	default:
@@ -306,12 +406,12 @@ func (c *Conn) dispatch(data []byte) {
 	}
 }
 
-func (c *Conn) sendControl(t string) {
+func (c *Conn) sendControl(t string) error {
 	data, err := json.Marshal(map[string]string{"t": t})
 	if err != nil {
-		return
+		return err
 	}
-	_ = c.write(data)
+	return c.write(data)
 }
 
 func (c *Conn) write(data []byte) error {

@@ -16,6 +16,8 @@ export interface HelloFrame {
   os: string;
   arch: string;
   workspaces: Array<{ path: string; label: string }>;
+  /** Last config version this runner applied (0 = none); optional for old servers. */
+  lastAppliedVersion?: number;
 }
 
 export interface WelcomeFrame {
@@ -58,6 +60,27 @@ export interface EventFrame {
   value: JsonValue;
 }
 
+/**
+ * Server-owned config push (docs/next/config-mcp-skills.md decision 4). The
+ * payload is a full merged snapshot per runner, never a delta.
+ */
+export interface ConfigFrame {
+  t: "config";
+  version: number;
+  doc: unknown;
+  secrets?: Record<string, string>;
+  bundles?: unknown[];
+}
+
+/** Runner acknowledgement of one applied config version. */
+export interface ConfigAppliedFrame {
+  t: "configApplied";
+  version: number;
+  ok: boolean;
+  errors: Array<{ scope?: string; path?: string; code: string; message: string }>;
+  facts: Record<string, unknown>;
+}
+
 export interface PingFrame {
   t: "ping";
 }
@@ -66,8 +89,20 @@ export interface PongFrame {
   t: "pong";
 }
 
-export type ClientFrame = HelloFrame | PingFrame | PongFrame | ResultFrame | EventFrame;
-export type ServerFrame = WelcomeFrame | CallFrame | ListenFrame | UnlistenFrame | PingFrame;
+export type ClientFrame =
+  | HelloFrame
+  | PingFrame
+  | PongFrame
+  | ResultFrame
+  | EventFrame
+  | ConfigAppliedFrame;
+export type ServerFrame =
+  | WelcomeFrame
+  | CallFrame
+  | ListenFrame
+  | UnlistenFrame
+  | PingFrame
+  | ConfigFrame;
 
 const UNDEF_KEY = "$undef";
 
@@ -114,6 +149,9 @@ export function parseServerFrame(raw: string): ServerFrame | null {
     case "listen":
     case "unlisten":
     case "ping":
+      return parsed as unknown as ServerFrame;
+    case "config":
+      if (typeof parsed["version"] !== "number") return null;
       return parsed as unknown as ServerFrame;
     default:
       return null;

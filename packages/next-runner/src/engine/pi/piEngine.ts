@@ -114,11 +114,21 @@ export class PiEngine implements Engine {
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    // Defaults read ~/.pi/agent/auth.json + models.json: the user's pi credentials, no push.
-    this.modelRuntime = this.options.createModelRuntime
-      ? await this.options.createModelRuntime()
-      : await ModelRuntime.create();
-    this.settingsManager = SettingsManager.create(process.cwd());
+    if (this.options.runtimeConfig) {
+      // Server-owned config decides the runtime per generation. Until the first
+      // `config` frame arrives (or while the doc has no providers) the runner
+      // keeps the local ~/.pi/agent behavior.
+      this.modelRuntime = await this.options.runtimeConfig.ensureFallbackRuntime(() =>
+        this.options.createModelRuntime ? this.options.createModelRuntime() : ModelRuntime.create(),
+      );
+      this.settingsManager = this.options.runtimeConfig.settingsManager();
+    } else {
+      // Defaults read ~/.pi/agent/auth.json + models.json: the user's pi credentials, no push.
+      this.modelRuntime = this.options.createModelRuntime
+        ? await this.options.createModelRuntime()
+        : await ModelRuntime.create();
+      this.settingsManager = SettingsManager.create(process.cwd());
+    }
     await this.metadata.load();
     this.attachments.startSweeper();
     this.initialized = true;
@@ -270,6 +280,20 @@ export class PiEngine implements Engine {
     if (this.catalogCache) return this.catalogCache;
     this.catalogCache = await buildCatalog(this.requireRuntime(), this.settingsManager);
     return this.catalogCache;
+  }
+
+  /**
+   * Adopts a newly applied server config (docs/next/config-mcp-skills.md
+   * decision 5): new sessions read the latest generation's runtime and settings;
+   * running sessions keep what they were created with.
+   */
+  adoptRuntimeConfig(): void {
+    const manager = this.options.runtimeConfig;
+    if (!manager) return;
+    this.modelRuntime = manager.runtime();
+    this.settingsManager = manager.settingsManager();
+    // The catalog is derived from the runtime; a config change replaces it.
+    this.catalogCache = null;
   }
 
   onSessionsChanged(listener: (workspacePath: string) => void): () => void {

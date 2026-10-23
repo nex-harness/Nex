@@ -480,6 +480,20 @@ func (c *connection) runPromise(ctx context.Context, entry *pendingPromise, requ
 		value, err := c.deps.Registry.CallFirst(ctx, request.Channel, request.Name, arg)
 		c.respondForwarded(ctx, request.ID, value, err)
 
+	case router.TargetRunner:
+		arg, err := rpcwire.ToJSON(request.Arg)
+		if err != nil {
+			c.enqueuePromiseError(request.ID, err.Error(), "Error")
+			return
+		}
+		link, ok := c.deps.Registry.Runner(route.RunnerID)
+		if !ok {
+			c.enqueuePromiseError(request.ID, "runner offline", "Error")
+			return
+		}
+		value, err := link.Call(ctx, request.Channel, request.Name, arg)
+		c.respondForwarded(ctx, request.ID, value, err)
+
 	default:
 		c.enqueuePromiseError(request.ID, fmt.Sprintf("Channel name '%s' not found", request.Channel), "Unknown channel")
 	}

@@ -501,11 +501,24 @@ try {
     REPLY_TIMEOUT_MS,
   );
   check("rewindReranTurn", Boolean(rerunDone));
+  // 修复依据：文件还原发生在 runner 处理 editUserQuery{rewind} 时，重跑回复（rerunDone）
+  // 与它并发到达浏览器；`rerunDone` 一出现就同步 stat，文件可能还没被删除（旧断言因此
+  // 偶发读到删除前的 "first line"）。这里等磁盘状态真正到位（文件消失或内容不含首行），
+  // 超时仍不对再判失败，而不是把「刚点完就去读」当成产品行为。
+  const restoredFiles = await waitUntil(
+    "rewindFilesRestored",
+    async () => {
+      const content = fileContent();
+      return content === null || !content.includes(FIRST_LINE)
+        ? { deleted: content === null }
+        : null;
+    },
+    20_000,
+  );
   const afterRewind = fileContent();
   details.afterRewind = afterRewind;
-  check("rewindRestoredFiles", afterRewind === null || !afterRewind.includes(FIRST_LINE), {
-    content: afterRewind,
-  });
+  details.rewindRestored = restoredFiles;
+  check("rewindRestoredFiles", Boolean(restoredFiles), { content: afterRewind });
   await shot("files-05-rewind-rerun");
 
   // Known web-only noise (same filter as the other suites).

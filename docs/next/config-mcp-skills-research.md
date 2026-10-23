@@ -189,3 +189,63 @@ Server `internal/configstore` (doc model, merge, validation, AES-GCM secrets, at
 **P3 — polish (1 wk).** OAuth login channel (URL/device-code relay + paste-back, callback on runner), `testModelConnectivity` outbound call, env/PATH append layer, import-once migration flow, rejection diagnostics in UI.
 
 **First usable version (cut list):** providers + models + runtime keys only; global + runner scopes only (workspace/session schema present but empty); no bundles; MCP as a _global_ list applied to every runner with no per-OS variants; skills from runner-local `~/.pi/agent` for now; no OAuth relay; no `listRemoteModels`/tests; `providerTemplates: []` with a "add custom provider" form. That is roughly P0 minus OAuth plus the P1 global MCP slice ≈ 2–2.5 weeks, and it converts today's read-only synthetic views (`modelViews.ts`) into write-capable, server-owned config without touching the browser UI.
+
+---
+
+## E. P0 as built (decisions on the open points)
+
+Implementation: `next/server/internal/configstore` (doc, merge, validation,
+AES-256-GCM secret box, atomic store), `next/server/internal/local`
+(`Manager` = push/facts, `provider-settings`, `model-selection`, `config`
+channel), `next/server/internal/runnerws` (`config` / `configApplied`,
+`hello.lastAppliedVersion`), `POST /api/config/import-runner`,
+`packages/next-runner/src/config/*`, `channels/configChannel.ts`,
+`extensions/e2eProvider.ts` (E2E only).
+
+1. **Config dir vs server data dir.** The store root is `<data-dir>/config`
+   (`-config-dir` / `NEX_SERVER_CONFIG_DIR`): `config.json` directly inside it,
+   secrets at `config/secrets.enc`, the key at `config/keys/config.key`. The
+   E2E stack points it at `server-e2e-config` so a developer's real providers
+   never leak into a test run.
+2. **`owned` mode.** The server owns a runner as soon as the doc has an enabled
+   provider; the provider's key must be entitled (stored secret, `${ENV}` or a
+   literal). A provider without a key is still pushed but reported
+   `secret-not-provisioned` (its models are not executable) — an edit is never
+   silently overridden by local `~/.pi/agent` files.
+3. **Secrets.** stdlib AES-256-GCM, random 12-byte nonce prefixed, AAD = secret
+   id (`sec_prov_<id>_apikey`); key file created lazily with `O_EXCL`. The doc
+   never stores a literal key: `savePersonalProviderOverlay` moves an inline
+   value into the secret store and rewrites the field to the reference.
+   models.json references `$NEX_PROVIDER_<ID>_API_KEY`, which the runner exports
+   to the process env for the generation (pi's tool subprocesses see it; the file
+   on disk is credential-blind).
+4. **model-selection path.** While the doc has no enabled provider, the router
+   forwards `getView`/`refresh`/`onDidChange` to the owning runner (fallback
+   catalog from `~/.pi/agent`). Once configured, the server compiles the view
+   from doc + facts (`effectiveSelection` / `selectionIssue` mirror
+   `packages/next-runner/src/channels/modelViews.ts` and `@nex/provider`'s
+   resolver; reasoning levels come from the runner's facts when present). This
+   keeps the composer working in both modes without forwarding machine-dependent
+   data when Settings owns it.
+5. **Import UX.** The unchanged UI has no import button, so the one-shot import
+   is `POST /api/config/import-runner?runnerId=<id>` (session-authenticated). It
+   answers `{runnerId, version, providers[], keysStored[]}` and never a value.
+   No UI button was added (a Settings action would need new i18n + design).
+6. **Unsupported methods.** `listRemoteModels`, `testModelConnectivity` and
+   `lookupModelInfo` return a clear error (the server does not call model
+   providers or models.dev in this release); `resolveModelConfig` echoes the
+   doc's complete model config; provider/model reorder is implemented.
+7. **Keep-alive.** The server now pings runners with application `ping` frames
+   instead of WebSocket pings: the library's `Ping` waits for a pong that only
+   the read loop can deliver, so it would fail whenever a read is between
+   calls — a healthy link died after 15 s of idleness. The read loop dispatches
+   synchronously again (it must answer a `call` while waiting; a queue let a
+   pending `config.exportLocal` answer arrive out of order and time out).
+8. **E2E determinism.** The pre-existing suites relied implicitly on the
+   developer's `~/.pi/agent` having models. All `--e2e` runs now get an isolated
+   agent dir (`NEX_E2E_AGENT_DIR`, default `<data>/pi-agent-e2e`) whose
+   models.json points at a bundled `e2eProvider.ts` extension (pi-ai's
+   OpenAI-completions provider table under a private API id) and a local scripted
+   faux provider (`packages/next-runner/test/fixtures/e2e-provider/server.mjs`)
+   that plays "read notes.txt" then a fixed sentence — no network. The settings
+   suite gets an empty agent dir so it can assert the provider is absent first.

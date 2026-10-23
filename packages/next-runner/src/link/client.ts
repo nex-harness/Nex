@@ -22,6 +22,30 @@ export interface RunnerLinkOptions {
   pongTimeoutMs?: number;
   /** Max reconnect delay (spec: 10 s). */
   maxBackoffMs?: number;
+  /** Server-owned config hook (docs/next/config-mcp-skills.md decision 4). */
+  config?: {
+    /** Sends `configApplied` for one applied version. */
+    applied: (result: {
+      version: number;
+      ok: boolean;
+      errors: Array<{ scope?: string; path?: string; code: string; message: string }>;
+      facts: Record<string, unknown>;
+    }) => void;
+    /** Applies one pushed version (never throws; reports through applied). */
+    apply: (frame: {
+      version: number;
+      doc: unknown;
+      secrets?: Record<string, string>;
+      bundles?: unknown[];
+    }) => Promise<{
+      version: number;
+      ok: boolean;
+      errors: Array<{ scope?: string; path?: string; code: string; message: string }>;
+      facts: Record<string, unknown>;
+    }>;
+    /** Version reported in `hello` after a reconnect. */
+    lastAppliedVersion: () => number;
+  };
 }
 
 type LinkState = "idle" | "connecting" | "open" | "closed";
@@ -46,6 +70,8 @@ export class RunnerLink {
   private lastInboundAt = 0;
   private readonly listens = new Map<string, ListenEntry>();
   private stopped = false;
+  private applyChain: Promise<void> = Promise.resolve();
+  private lastConfigVersion = -1;
 
   private readonly pingIntervalMs: number;
   private readonly pongTimeoutMs: number;
@@ -86,6 +112,16 @@ export class RunnerLink {
     return this.state === "open";
   }
 
+  /** Sends one `configApplied` acknowledgement (docs/next/config-mcp-skills.md). */
+  sendConfigApplied(result: {
+    version: number;
+    ok: boolean;
+    errors: Array<{ scope?: string; path?: string; code: string; message: string }>;
+    facts: Record<string, unknown>;
+  }): void {
+    this.send({ t: "configApplied", ...result } satisfies ClientFrame);
+  }
+
   private connect(): void {
     if (this.stopped) return;
     this.state = "connecting";
@@ -99,7 +135,12 @@ export class RunnerLink {
       this.attempt = 0;
       this.lastInboundAt = Date.now();
       this.options.logger.info("runner link connected", { url: this.options.url });
-      this.send({ t: "hello", ...this.options.hello } satisfies ClientFrame);
+      const lastApplied = this.options.config?.lastAppliedVersion() ?? 0;
+      this.send({
+        t: "hello",
+        ...this.options.hello,
+        ...(lastApplied > 0 ? { lastAppliedVersion: lastApplied } : {}),
+      } satisfies ClientFrame);
       this.startPing();
     });
 
@@ -192,7 +233,36 @@ export class RunnerLink {
       case "unlisten":
         this.disposeListen(frame.id);
         return;
+      case "config":
+        this.handleConfig(frame);
+        return;
     }
+  }
+
+  /**
+   * Applies a config push. Frames are processed one at a time and a late one is
+   * ignored, so a slow apply never resurrects an older version.
+   */
+  private handleConfig(frame: {
+    version: number;
+    doc: unknown;
+    secrets?: Record<string, string>;
+    bundles?: unknown[];
+  }): void {
+    const hook = this.options.config;
+    if (!hook) return;
+    this.applyChain = this.applyChain
+      .then(async () => {
+        if (frame.version < this.lastConfigVersion) return;
+        this.lastConfigVersion = frame.version;
+        const result = await hook.apply(frame);
+        hook.applied(result);
+      })
+      .catch((error: unknown) => {
+        this.options.logger.warn("config apply failed", {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
   }
 
   private async handleCall(

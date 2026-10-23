@@ -14,6 +14,9 @@ const PI_TO_ENGINE_API: Record<string, EngineModelInfo["apiType"]> = {
   "openai-responses": "openai-responses",
   "azure-openai-responses": "openai-responses",
   "openai-codex-responses": "openai-responses",
+  // E2E harness: the seeded provider table (extensions/e2eProvider.ts) indexes
+  // the OpenAI-completions API under a private id.
+  "e2e-openai-completions": "openai-chat-completions",
 };
 
 export function toEngineModelInfo(

@@ -1,0 +1,19 @@
+{
+  "providers": {
+    "faux": {
+      "name": "Faux (next E2E)",
+      "api": "e2e-openai-completions",
+      "baseUrl": "http://127.0.0.1:18080/v1",
+      "authHeader": true,
+      "apiKey": "faux",
+      "models": [
+        {
+          "id": "faux-1",
+          "name": "Faux 1",
+          "contextWindow": 128000,
+          "maxTokens": 8192
+        }
+      ]
+    }
+  }
+}

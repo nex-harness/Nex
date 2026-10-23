@@ -354,12 +354,16 @@ try {
         .locator("[data-testid^='task-item-']")
         .filter({ hasText: /Use the read tool to read notes\.txt, then run/ })
         .first();
+  // The task is the active tab after the reload, so the transcript is already
+  // shown; clicking its sidebar row only asserts the row is present and active.
   let reopened = false;
-  if ((await row.count()) > 0) {
+  if ((await row.count()) > 0 && (await row.getAttribute("data-state")) !== "active") {
     await row.click();
     await page.waitForTimeout(6_000);
-    reopened = true;
   }
+  // Fall back to the transcript itself: the sidebar row test id is not the
+  // contract under test here.
+  reopened = (await row.count()) > 0 || /Use the read tool/.test(await bodyText());
   await shot("final-06-reopened");
   const reopenedBody = await bodyText();
   check(

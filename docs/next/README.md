@@ -33,14 +33,15 @@ agent-runner (packages/next-runner, Node 24 + pi SDK) × N machines
            sessions index, model catalog, tool execution
 ```
 
-| State                                               | Owner                                   | Notes                                                       |
-| --------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------- |
-| Transcript, session list, conversation seq/logEpoch | runner                                  | pi session files under the runner data dir                  |
-| Sidebar task state (pin/archive/unread/rename/delete) | runner (metadata store)               | single writer; see `task-state.md`                          |
-| Model catalog, API keys                             | runner (MVP)                            | read from runner env / pi `auth.json`; server push is later |
-| Which runners/workspaces exist                      | server (in memory, from runner `hello`) | runner is the source; server forgets on disconnect          |
-| UI settings (`setting` channel)                     | server (JSON file)                      |                                                             |
-| Drafts, view state                                  | browser                                 |                                                             |
+| State                                                 | Owner                                   | Notes                                                                       |
+| ----------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------- |
+| Transcript, session list, conversation seq/logEpoch   | runner                                  | pi session files under the runner data dir                                  |
+| Sidebar task state (pin/archive/unread/rename/delete) | runner (metadata store)                 | single writer; see `task-state.md`                                          |
+| Provider/model config + API keys (desired)            | server (`config/config.json`, secrets)  | `config-mcp-skills.md`; pushed per runner as `config` frames                |
+| Effective model runtime, local facts                  | runner                                  | fallback `~/.pi/agent` or server-owned generation; facts in `configApplied` |
+| Which runners/workspaces exist                        | server (in memory, from runner `hello`) | runner is the source; server forgets on disconnect                          |
+| UI settings (`setting` channel)                       | server (JSON file)                      |                                                                             |
+| Drafts, view state                                    | browser                                 |                                                                             |
 
 The server never interprets conversation payloads. It routes by workspace and
 forwards channel-RPC calls/events as JSON.
@@ -79,16 +80,18 @@ Envelope:
 { "t": "<type>", "id": "<string, request id where applicable>", ... }
 ```
 
-| t             | Direction | Fields                                                         | Meaning                                                                    |
-| ------------- | --------- | -------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `hello`       | R→S       | `runnerId, name, version, os, arch, workspaces:[{path,label}]` | First frame. Server replies `welcome` or closes.                           |
-| `welcome`     | S→R       | `serverVersion`                                                |                                                                            |
-| `call`        | S→R       | `id, channel, method, arg`                                     | Forwarded UI channel call. `arg` is the JSON bridge form of the RPC value. |
-| `result`      | R→S       | `id, ok, value?, error?:{message,name?}`                       | Reply to `call`.                                                           |
-| `listen`      | S→R       | `id, channel, event, arg`                                      | Start a dynamic event stream (`onDynamicXxx(arg)`).                        |
-| `unlisten`    | S→R       | `id`                                                           | Stop it.                                                                   |
-| `event`       | R→S       | `id, value`                                                    | One event fire for listen `id`.                                            |
-| `ping`/`pong` | both      |                                                                | 15 s interval, 45 s timeout.                                               |
+| t               | Direction | Fields                                                                                            | Meaning                                                                                                                                                                                                                     |
+| --------------- | --------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hello`         | R→S       | `runnerId, name, version, os, arch, workspaces:[{path,label}], lastAppliedVersion?`               | First frame. Server replies `welcome` or closes. `lastAppliedVersion` makes a stale reconnect push immediately.                                                                                                             |
+| `welcome`       | S→R       | `serverVersion`                                                                                   |                                                                                                                                                                                                                             |
+| `call`          | S→R       | `id, channel, method, arg`                                                                        | Forwarded UI channel call. `arg` is the JSON bridge form of the RPC value.                                                                                                                                                  |
+| `result`        | R→S       | `id, ok, value?, error?:{message,name?}`                                                          | Reply to `call`.                                                                                                                                                                                                            |
+| `listen`        | S→R       | `id, channel, event, arg`                                                                         | Start a dynamic event stream (`onDynamicXxx(arg)`).                                                                                                                                                                         |
+| `unlisten`      | S→R       | `id`                                                                                              | Stop it.                                                                                                                                                                                                                    |
+| `event`         | R→S       | `id, value`                                                                                       | One event fire for listen `id`.                                                                                                                                                                                             |
+| `config`        | S→R       | `version, doc:{schema,version,owned,providers[],settings?}, secrets:{secretId→value}, bundles:[]` | Full merged snapshot for this runner (never deltas). `owned:false` = no enabled provider, runner keeps its local `~/.pi/agent`.                                                                                             |
+| `configApplied` | R→S       | `version, ok, errors:[{scope?,path,code,message}], facts:{mode,modelsByProvider,…}`               | Ack. `ok:false` = structurally invalid push, previous config kept; per-provider problems are `ok:true` + `errors[]`.                                                                                                        |
+| `ping`          | both      |                                                                                                   | Application-level 15 s interval; the server closes after 45 s of silence. The server sends `ping` frames (not WebSocket pings: a WS pong is only read by the read loop and a pending `Ping` would fail while a read waits). |
 
 Rules:
 
@@ -96,17 +99,15 @@ Rules:
   (`ProxyChannel` sends `[arg0, ...]`); runners unwrap it. Undefined values are
   `{"$undef":true}`, buffers `{"$buf":"<base64>","$vs":bool}` (see
   `next/server/internal/rpcwire/README.md`).
-- Workspace-less forwarded calls (`provider-settings.*` operations without a
-  workspace target, `model-selection` operations other than a targeted
-  `getView`, `nex-task.listPinnedTaskIds`) go to the first connected runner.
+- Workspace-less forwarded calls (`nex-task.listPinnedTaskIds`) go to the first
+  connected runner. `model-selection` / `provider-settings` are answered by the
+  server in both modes (see below), so they are never forwarded.
 - A forwarded call whose argument carries a `runner:<runnerId>:<path>`
   `workspaceIdentity` goes to that runner; an offline/unknown runner returns
   `runner offline` and never falls back to another machine.
 - Ids are server-generated strings, unique per runner connection.
 - On disconnect, the server fails pending calls with `runner offline` and drops
   listens; the browser's v4 layer resubscribes (snapshot) when the runner returns.
-- Workspace-less listens (`model-selection`/`provider-settings` `onDidChange`)
-  move to the next connected runner immediately when their runner disconnects.
 - `/ws` accepts only same-host `Origin` (plus `NEX_ALLOWED_ORIGINS`): it
   authenticates with a session cookie, which does not prevent cross-site
   WebSocket handshakes.
@@ -126,10 +127,23 @@ Implemented by the server itself:
   `listTasks`), merges/sorts/searches/limits, and pushes snapshot controller
   frames. `deleteArchivedTask(s)` / `mutateTask` forward to the owning runner's
   `nex-task` mutations. Task-state semantics: `task-state.md`.
-- `model-selection`, `provider-settings`: `getView` forwards to the runner named
-  by the optional `workspaceIdentity` in its input, else to the first connected
-  runner; `onDidChange` stays on the first connected runner (the model catalog
-  lives on runners).
+- `model-selection`, `provider-settings`: always answered by the server
+  (`config-mcp-skills.md` P0). `getView`/`refresh` compile the view from the
+  config doc plus the runner's `configApplied` facts, and `onDidChange` fans out
+  locally; a forward is never used, so an older peer (or a runner without the
+  channel) can never leave a `getView` unanswered.
+  - Server-owned mode (the doc defines an enabled provider): the model list is
+    the doc's providers whose key is provisioned.
+  - Fallback mode (no server provider, decision 2): the runner keeps using its
+    own `~/.pi/agent`, so the list is the catalog that runner reported in
+    `configApplied.facts.modelsByProvider`. Until that runner has reported one,
+    `getView` answers the stable `no runner connected` error (the UI retries)
+    instead of an empty picker.
+  - Every write is server-owned.
+- `config`: `exportLocal` forwards to the runner named by `runnerId` (else the
+  first connected runner); `status` is local.
+- `POST /api/config/import-runner?runnerId=<id>` imports a runner's local
+  providers/keys into its runner scope (see "Server-owned provider config").
 - Stubs that keep the UI quiet: `system`, `git`, `mcp-sync`,
   `coding-plan-subscription`, `settings-sync` (`getFirstRunPromptState →
 {handled:true}`), `subagents`, `client-scenes`, `onboarding-record`
@@ -162,6 +176,46 @@ Runner projection strategy (MVP): every change is published as a full snapshot
 frame (`fromSeq: 0, toSeq: seq`, `snapshot.seq == toSeq`). The UI replaces state
 on snapshots without gap checks. Streaming text is throttled (≤ 10 snapshots/s
 per session). Deltas are a later optimization.
+
+### Server-owned provider config (P0)
+
+Spec: `config-mcp-skills.md` decisions 1-6. One `ConfigDoc` (schema 1, monotonic
+version) lives in `<config dir>/config.json`; provider API keys are AES-256-GCM
+sealed in `<config dir>/config/secrets.enc` with the key file
+`<config dir>/keys/config.key` (0600, created on first use). The browser only
+ever sees a mask; runners receive only the secrets of providers enabled for
+them, in memory.
+
+- **Fallback until configured.** A doc without an enabled provider leaves
+  runners on their own `~/.pi/agent` (fallback mode). Once it has one, the
+  runner switches to a derived `models.json` under `<runner data>/derived/`, an
+  in-memory credential store (`setRuntimeApiKey`, no `auth.json` write) and
+  `SettingsManager.inMemory`. New sessions use the latest generation; running
+  sessions keep theirs.
+- **Push.** Every committed doc change pushes the full snapshot to each
+  connected runner; `configApplied.version` is tracked per runner, and a
+  reconnect whose `hello.lastAppliedVersion` is stale is pushed immediately.
+  The runner's `configApplied.facts` carry `modelsByProvider` in both modes:
+  server mode reports what the derived runtime registered, fallback mode reports
+  the runner's own `~/.pi/agent` catalog (the server's model-selection view is
+  compiled from it, see above).
+- **Views.** `provider-settings.getView` shows the desired doc overlaid with the
+  runner's facts (models it actually registered, auth status) and `issues` for
+  rejected items. `model-selection.getView` lists enabled providers whose
+  credential is provisioned and resolves the caller's `selection` into
+  `effectiveSelection` / `selectionIssue` (unknown provider/model →
+  `provider-not-found`/`model-not-found`; missing or unsupported reasoning level →
+  identity-only selection + issue). A disabled model disappears immediately.
+- **Import.** `POST /api/config/import-runner?runnerId=<runner>` calls the
+  runner's `config.exportLocal` (models.json providers, api keys from
+  `auth.json`, settings defaults, raw `mcp.json`), stores the providers in that
+  runner's scope and the keys as secrets, and reports `{providers, keysStored}`
+  without values. The helper exists because the unchanged UI has no import
+  button; `curl -X POST -H 'Cookie: nex_session=…' 'http://<host>/api/config/import-runner?runnerId=alpha'`.
+- **Unsupported in this release:** `listRemoteModels`, `testModelConnectivity`,
+  `lookupModelInfo` return a clear error (the server does not call model
+  providers or models.dev); `resolveModelConfig` echoes the doc's model config;
+  the reorder methods are implemented.
 
 ### Runner view contracts the unchanged UI depends on
 

@@ -3,6 +3,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/tylinux/nex-next/server/internal/auth"
 	"github.com/tylinux/nex-next/server/internal/browserws"
+	"github.com/tylinux/nex-next/server/internal/configstore"
 	"github.com/tylinux/nex-next/server/internal/httpapi"
 	"github.com/tylinux/nex-next/server/internal/local"
 	"github.com/tylinux/nex-next/server/internal/runners"
@@ -20,7 +22,10 @@ import (
 
 // Options are the resolved runtime options (see internal/config).
 type Options struct {
-	DataDir     string
+	DataDir string
+	// ConfigDir is the server-owned config store root; empty means
+	// <DataDir>/config.
+	ConfigDir   string
 	WebRoot     string
 	AuthToken   string
 	RunnerToken string
@@ -38,6 +43,8 @@ type App struct {
 	Registry *runners.Registry
 	Auth     *auth.Service
 	Local    *local.Registry
+	// Config owns the server-side desired config and the runner push.
+	Config *local.Manager
 
 	serverID string
 }
@@ -57,6 +64,12 @@ func New(options Options, logger *slog.Logger) (*App, error) {
 	if err := os.MkdirAll(options.DataDir, 0o700); err != nil {
 		return nil, err
 	}
+	// 修复：ConfigDir 为空时 configstore 会落到相对路径（进程 cwd），测试里直接
+	// 构造 App 时把 config.json、secrets.enc 和密钥写进了源码树 next/server/test/。
+	// 按字段注释在这里统一兜成 <DataDir>/config，不依赖调用方先走 internal/config。
+	if options.ConfigDir == "" {
+		options.ConfigDir = filepath.Join(options.DataDir, "config")
+	}
 	serverID, err := loadOrCreateServerID(options.DataDir)
 	if err != nil {
 		return nil, err
@@ -71,6 +84,15 @@ func New(options Options, logger *slog.Logger) (*App, error) {
 	localRegistry.Register("setting", settings)
 	localRegistry.Register("broadcast", local.NewBroadcast())
 	localRegistry.Register("window-controller", local.NewWindowController(registry, logger))
+	// Server-owned config (docs/next/config-mcp-skills.md P0): provider-settings,
+	// model-selection and the config channel read the doc + runner facts in both
+	// modes (fallback compiles the runner's own catalog), and a doc change or a
+	// runner's fresh facts re-broadcast both views.
+	store := configstore.NewStore(options.ConfigDir, logger)
+	configManager := local.NewManager(store, registry, logger, local.PublishConfigViews)
+	localRegistry.Register("provider-settings", local.NewProviderSettingsChannel(configManager))
+	localRegistry.Register("model-selection", local.NewModelSelectionChannel(configManager))
+	localRegistry.Register("config", local.NewConfigChannel(configManager))
 	for name, channel := range local.StubChannels() {
 		localRegistry.Register(name, channel)
 	}
@@ -81,6 +103,7 @@ func New(options Options, logger *slog.Logger) (*App, error) {
 		Registry: registry,
 		Auth:     authService,
 		Local:    localRegistry,
+		Config:   configManager,
 		serverID: serverID,
 	}, nil
 }
@@ -96,7 +119,7 @@ func (a *App) Handler() http.Handler {
 	})
 
 	runnerHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		runnerws.Serve(a.Logger, a.Registry, a.Options.RunnerToken, a.Options.Version, w, r)
+		runnerws.ServeWithConfig(a.Logger, a.Registry, a.Options.RunnerToken, a.Options.Version, a.Config, w, r)
 	})
 
 	return httpapi.New(httpapi.Deps{
@@ -109,8 +132,18 @@ func (a *App) Handler() http.Handler {
 		WebRoot:    a.Options.WebRoot,
 		BrowserWS:  browser,
 		RunnerWS:   runnerHandler,
+		Config:     configAdmin{a.Config},
 	}).Handler()
 }
+
+// configAdmin adapts *local.Manager to httpapi.ConfigAdmin.
+type configAdmin struct{ manager *local.Manager }
+
+func (c configAdmin) ImportFromRunner(ctx context.Context, runnerID string) (any, error) {
+	return c.manager.AdminImportFromRunner(ctx, runnerID)
+}
+
+func (c configAdmin) KnownRunners() []string { return c.manager.KnownRunners() }
 
 // loadOrCreateServerID persists a random id so /api/server-info is stable
 // across restarts.

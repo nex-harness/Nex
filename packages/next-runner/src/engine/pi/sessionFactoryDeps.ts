@@ -37,7 +37,10 @@ export function createSessionFactoryDeps(deps: {
         return claimed;
       },
     },
-    fallbackSettings: () => deps.settingsManager() ?? SettingsManager.create(process.cwd()),
+    fallbackSettings: () =>
+      deps.settingsManager() ??
+      deps.options.runtimeConfig?.settingsManager() ??
+      SettingsManager.create(process.cwd()),
     ...(deps.options.createSettingsManager
       ? { createSettingsManager: deps.options.createSettingsManager }
       : {}),

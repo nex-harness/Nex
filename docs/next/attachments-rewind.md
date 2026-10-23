@@ -104,6 +104,13 @@ operations[{path,toolCallId,toolName,postBlob,additions,deletions,patch}],partia
   restored: the conversation can never be rewound without its files. The spec's literal
   "cut inside apply's commit step" would compensate the files after a cut that cannot be
   undone, so this direction is deliberate.
+- **E2E observation point (files suite).** The restore finishes inside the runner while the
+  re-run reply streams to the browser over the same link; the reply can render before the
+  debounced snapshot that carries the `nex.rewind` state. `file-changes.mjs` therefore polls
+  the disk state (file gone / first line absent) after the rewind click instead of sampling
+  once. A runner-side trace of `editUserQuery{rewind}` shows `applied: true` with the file
+  already absent when the command returns, so the deleted-file result is the product
+  behaviour, not a timing window to work around.
 - **Preview gate.** `safeFiles > 0 && unsafeFiles == 0` (both `applyFileRewind` and
   `editUserQuery{rewind}`); the internal `startBlob` never leaves the runner (the wire
   preview stays `{action,operationCount,path,toolNames}`).

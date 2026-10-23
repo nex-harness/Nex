@@ -34,6 +34,7 @@ func run() int {
 
 	application, err := app.New(app.Options{
 		DataDir:        cfg.DataDir,
+		ConfigDir:      cfg.ConfigDir,
 		WebRoot:        cfg.WebRoot,
 		AuthToken:      cfg.AuthToken,
 		RunnerToken:    cfg.RunnerToken,
@@ -67,7 +68,7 @@ func run() int {
 	}()
 
 	logger.Info("nex-next-server listening", "addr", cfg.Addr, "dataDir", cfg.DataDir,
-		"webRoot", cfg.WebRoot, "version", Version)
+		"configDir", cfg.ConfigDir, "webRoot", cfg.WebRoot, "version", Version)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("http server failed", "error", err)
 		return 1

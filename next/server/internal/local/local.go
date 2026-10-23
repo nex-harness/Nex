@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/tylinux/nex-next/server/internal/rpcwire"
+	"github.com/tylinux/nex-next/server/internal/runners"
 )
 
 // Env is the per-connection context handed to local channels.
@@ -84,7 +85,7 @@ func rawObject(value rpcwire.Value) ([]byte, error) {
 	value = unwrapCallArgs(value)
 	switch typed := value.(type) {
 	case json.RawMessage:
-		if !json.Valid(typed) {
+		if !json.Valid([]byte(typed)) {
 			return nil, errors.New("argument is not valid JSON")
 		}
 		return typed, nil
@@ -201,6 +202,11 @@ func firstArgument(value rpcwire.Value) rpcwire.Value {
 		return typed
 	}
 	return value
+}
+
+// parseRunnerIdentity parses a server-built `runner:<runnerId>:<path>` identity.
+func parseRunnerIdentity(identity string) (string, string, bool) {
+	return runners.ParseIdentity(strings.TrimSpace(identity))
 }
 
 // stringArgument decodes a positional string argument.

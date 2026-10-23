@@ -211,7 +211,12 @@ export function registerChannels(
     return readWorkspacePresentation(requireWorkspaceTarget(arg));
   });
 
-  // ── model-selection / provider-settings (first connected runner) ──
+  // ── model-selection / provider-settings ──
+  //
+  // These remain runner-served for peers that still forward them (an older
+  // nex-next server, or the desktop host); the nex-next server now answers them
+  // itself from the config doc plus this runner's `configApplied` facts
+  // (docs/next/config-mcp-skills.md decision 6) and never forwards them.
 
   const views = async (arg?: JsonValue) => {
     const catalog = await engine.catalog();

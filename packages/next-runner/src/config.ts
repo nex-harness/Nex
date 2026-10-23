@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile } from "node:fs/promises";
+import { cp, mkdir, readFile } from "node:fs/promises";
 import { hostname, arch, platform } from "node:os";
 import { homedir } from "node:os";
 import { delimiter, isAbsolute, resolve } from "node:path";
@@ -19,6 +19,27 @@ export interface RunnerConfig {
 
 const DEFAULT_DATA_DIR = resolve(homedir(), ".nex-next", "runner");
 const DEFAULT_SERVER_URL = "ws://127.0.0.1:3030/runner";
+
+/**
+ * E2E seam: seed an empty agent dir from NEX_E2E_SEED_MODELS. Test harnesses
+ * pass the agent dir through the process env, but a runner from an older
+ * harness may keep its previous data dir; this keeps the seeded catalog
+ * identical for every start. Absent unless the E2E stack sets it.
+ */
+export async function seedAgentDirFromEnv(env: NodeJS.ProcessEnv): Promise<void> {
+  const source = env["NEX_E2E_SEED_MODELS"]?.trim();
+  const agentDir = env["PI_CODING_AGENT_DIR"]?.trim();
+  if (!source || !agentDir) return;
+  const target = resolve(agentDir, "models.json");
+  try {
+    await readFile(target);
+    return;
+  } catch {
+    // No seeded file yet: copy the seed.
+  }
+  await mkdir(resolve(agentDir), { recursive: true });
+  await cp(source, target);
+}
 
 export function resolveConfig(env: NodeJS.ProcessEnv): RunnerConfig {
   const dataDir = env["NEX_RUNNER_DATA_DIR"]

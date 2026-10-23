@@ -33,6 +33,9 @@ const (
 	// TargetLocalUnsupported is a local channel/method the server does not
 	// implement; it returns a MethodNotFound error.
 	TargetLocalUnsupported
+	// TargetRunner forwards to the runner named by RunnerID (config export and
+	// other server-initiated runner facts).
+	TargetRunner
 )
 
 // Route is the resolved destination for one channel request.
@@ -43,6 +46,8 @@ type Route struct {
 	// WorkspaceIdentity is set for TargetWorkspace when the argument carried a
 	// runner identity; the registry prefers it over WorkspacePath.
 	WorkspaceIdentity string
+	// RunnerID is set for TargetRunner.
+	RunnerID string
 }
 
 // Target combines the route's workspace fields into a registry target.
@@ -57,6 +62,10 @@ const (
 	ChannelNexTask          = "nex-task"
 	ChannelModelSelection   = "model-selection"
 	ChannelProviderSettings = "provider-settings"
+	// ChannelConfig is the server-owned desired configuration (docs/next/
+	// config-mcp-skills.md). provider-settings/model-selection are answered from
+	// it by the server; the rest of the channel is served locally too.
+	ChannelConfig = "config"
 )
 
 // workspaceTargetMethods enumerates forwarded nex-agent methods that carry a
@@ -204,20 +213,25 @@ func resolveSpecial(channel, method string, arg rpcwire.Value) (Route, bool) {
 		return Route{Kind: TargetLocalUnsupported}, true
 
 	case ChannelModelSelection, ChannelProviderSettings:
-		// A targeted getView carries `{selection, workspacePath,
-		// workspaceIdentity}` from the active draft. Only a runner identity is a
-		// reliable machine key here; without one the call stays on the first
-		// connected runner (legacy clients send no target at all).
-		if method == "getView" {
-			if target := workspaceTarget(arg); target.WorkspaceIdentity != "" {
-				return Route{
-					Kind:              TargetWorkspace,
-					WorkspacePath:     target.WorkspacePath,
-					WorkspaceIdentity: target.WorkspaceIdentity,
-				}, true
+		// The server serves these channels from the config doc plus runner facts
+		// (docs/next/config-mcp-skills.md decision 6), in both modes: while the doc
+		// has no providers the view is compiled from the runner's own catalog as
+		// reported in `configApplied.facts` (fallback), so the browser never needs
+		// a machine-dependent forward for the composer. An older runner that
+		// reports no catalog gets the stable "no runner connected" error instead
+		// of an unanswered forward. Writes are always server-owned.
+		return Route{Kind: TargetLocal}, true
+
+	case ChannelConfig:
+		// config.exportLocal reads a runner's local ~/.pi/agent; the runner id is
+		// explicit (no workspace in the arg). Everything else is server-local.
+		if method == "exportLocal" {
+			if runnerID := stringFieldOf(positionalArgument(arg), "runnerId"); runnerID != "" {
+				return Route{Kind: TargetRunner, RunnerID: runnerID}, true
 			}
+			return Route{Kind: TargetFirstRunner}, true
 		}
-		return Route{Kind: TargetFirstRunner}, true
+		return Route{Kind: TargetLocal}, true
 	}
 	return Route{}, false
 }
@@ -241,9 +255,11 @@ func resolveSpecialEvent(channel, event string, arg rpcwire.Value) (Route, bool)
 		}
 		return Route{Kind: TargetLocalUnsupported}, true
 	case ChannelModelSelection, ChannelProviderSettings:
-		// Their onDidChange events are plain listens with no workspace target;
-		// keep them on the same first-runner rule as before.
-		return Route{Kind: TargetFirstRunner}, true
+		// onDidChange follows getView: server-owned in both modes (a config
+		// version or a runner's fresh facts re-broadcast the view).
+		return Route{Kind: TargetLocal}, true
+	case ChannelConfig:
+		return Route{Kind: TargetLocal}, true
 	}
 	return Route{}, false
 }
@@ -310,6 +326,66 @@ func workspaceTargetFromRaw(raw json.RawMessage) runners.Target {
 		return runners.Target{}
 	}
 	return normalizeTarget(probe.WorkspacePath, probe.WorkspaceIdentity)
+}
+
+// stringFieldOf reads one string property of an argument object (arrays are
+// searched element-wise so the caller may pass a positional envelope).
+func stringFieldOf(arg rpcwire.Value, key string) string {
+	switch typed := arg.(type) {
+	case []any:
+		for _, element := range typed {
+			if value := stringFieldOf(element, key); value != "" {
+				return value
+			}
+		}
+	case json.RawMessage:
+		trimmed := strings.TrimSpace(string(typed))
+		// The undef sentinel (`{"$undef":true}`) is the client's undefined value,
+		// not an argument object.
+		if trimmed == "" || strings.Contains(trimmed, `"$undef"`) {
+			return ""
+		}
+		var probe map[string]any
+		if json.Unmarshal(typed, &probe) == nil {
+			if text, ok := probe[key].(string); ok {
+				return strings.TrimSpace(text)
+			}
+		}
+	case map[string]any:
+		if text, ok := typed[key].(string); ok {
+			return strings.TrimSpace(text)
+		}
+	}
+	return ""
+}
+
+// positionalArgument returns the first element of a `[arg]` call envelope.
+//
+// ProxyChannel.toService always sends `call(name, [...args])`, so a method's
+// argument is wrapped in a one-element array; a bare object (hand-written
+// client or test) is accepted as well. A `{"$undef":true}` element is the
+// client's undefined value and yields no argument.
+func positionalArgument(arg rpcwire.Value) rpcwire.Value {
+	switch typed := arg.(type) {
+	case []any:
+		if len(typed) == 0 {
+			return nil
+		}
+		return positionalArgument(typed[0])
+	case json.RawMessage:
+		trimmed := strings.TrimSpace(string(typed))
+		if strings.HasPrefix(trimmed, "[") {
+			var elements []json.RawMessage
+			if json.Unmarshal(typed, &elements) != nil || len(elements) == 0 {
+				return nil
+			}
+			return positionalArgument(elements[0])
+		}
+		if trimmed == "" || strings.Contains(trimmed, `"$undef"`) {
+			return nil
+		}
+	}
+	return arg
 }
 
 func normalizeTarget(path, identity string) runners.Target {

@@ -548,3 +548,117 @@ test(
     }
   },
 );
+
+/**
+ * 端到端复现 `--e2e=files` 的失败序列（spec B，fixture 带真实的 write→edit 工具链）：
+ * 1. 建文件的一轮 → Undo（文件被删）；
+ * 2. 再建同一文件的一轮（turn-start = 文件不存在）；
+ * 3. 编辑该用户消息并选「Reset chat + files」→ 文件回到该轮起始状态（不存在）。
+ *
+ * 回归依据：E2E 的 `rewindRestoredFiles` 曾在重跑回复一出现就同步 stat，读到删除前的
+ * 内容。runner 侧的实际顺序是「先还原文件（journaled），再切分支、再重跑」，这里直接
+ * 验证该顺序：命令 ACK 返回时文件已不存在，且重跑轮（无工具）不会再创建它。
+ */
+test(
+  "pi + faux: create → Undo → create again → edit with rewind deletes the created file",
+  { skip: !hasGit },
+  async () => {
+    const h = await start({ gitRepository: true });
+    const FILE = "e2e-file-rewind.txt";
+    try {
+      // 1. 第一轮：写文件 + 编辑（同一次助手消息的两个 toolCall）。
+      currentFaux().setResponses([
+        fauxAssistantMessage(
+          [
+            fauxToolCall("write", { path: FILE, content: "first line 1" }),
+            fauxToolCall("edit", {
+              path: FILE,
+              edits: [{ oldText: "first line 1", newText: "second line 1" }],
+            }),
+          ],
+          { stopReason: "toolUse" },
+        ),
+        fauxAssistantMessage("file done"),
+      ]);
+      await runPrompt(h, "create the file with a write and an edit");
+      assert.equal(await readFile(join(h.workspace, FILE), "utf8"), "second line 1");
+
+      // Undo：该轮创建的文件被删除。
+      const first = await waitFor(
+        () =>
+          h
+            .snapshot()
+            .rows.window.filter((row) => row.kind === "userInput")
+            .at(-1),
+        "first user row",
+      );
+      assert.ok(first?.entityId);
+      const undo = await h.command("applyFileRewind", {
+        target: { rowId: first.rowId, entityId: first.entityId },
+      });
+      assert.equal(undo.status, "accepted");
+      await assert.rejects(stat(join(h.workspace, FILE)));
+
+      // 2. 第二轮：同一文件只写首行（turn-start = 文件不存在）。
+      currentFaux().setResponses([
+        fauxAssistantMessage([fauxToolCall("write", { path: FILE, content: "first line 2" })], {
+          stopReason: "toolUse",
+        }),
+        fauxAssistantMessage("RERUN-OLD"),
+      ]);
+      await runPrompt(h, "create the file again with only the first line");
+      assert.equal(await readFile(join(h.workspace, FILE), "utf8"), "first line 2");
+      const second = await waitFor(
+        () =>
+          h
+            .snapshot()
+            .rows.window.filter((row) => row.kind === "userInput")
+            .at(-1),
+        "second user row",
+      );
+      assert.ok(second?.entityId);
+      assert.notEqual(second.entityId, first.entityId);
+      await waitFor(
+        () =>
+          headerFor(h.snapshot(), second.entityId as string)?.actions?.canRewindFiles
+            ? true
+            : undefined,
+        "second turn canRewindFiles",
+      );
+
+      // 3. 编辑该消息并还原文件：无工具的重跑回复。
+      currentFaux().setResponses([fauxAssistantMessage("rerun line 2")]);
+      const ack = await h.command("editUserQuery", {
+        target: { rowId: second.rowId, entityId: second.entityId },
+        newText: "Reply with exactly rerun line 2. Use no tools.",
+        workspaceMode: "rewind",
+        attachments: [],
+      });
+      assert.equal(ack.status, "accepted");
+      assert.equal(ack.result?.type === "editUserQuery" ? ack.result.disposition : "", "rewind");
+      // 文件在命令返回时已删除（还原先于分支切割与重跑），重跑轮不会再创建它。
+      await assert.rejects(stat(join(h.workspace, FILE)));
+      await waitFor(
+        () =>
+          h
+            .snapshot()
+            .rows.window.some((row) => row.kind === "assistantText" && row.text === "rerun line 2")
+            ? true
+            : undefined,
+        "re-run reply",
+      );
+      await assert.rejects(stat(join(h.workspace, FILE)));
+      const rerunUser = h
+        .snapshot()
+        .rows.window.filter((row) => row.kind === "userInput")
+        .at(-1);
+      assert.equal(
+        rerunUser?.kind === "userInput" ? rerunUser.text : "",
+        "Reply with exactly rerun line 2. Use no tools.",
+        "the rewritten prompt is the newest user row",
+      );
+    } finally {
+      await cleanup(h);
+    }
+  },
+);

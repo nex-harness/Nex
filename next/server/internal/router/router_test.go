@@ -119,44 +119,50 @@ func TestResolveNexTask(t *testing.T) {
 }
 
 func TestResolveModelCatalogChannels(t *testing.T) {
+	// provider-settings/model-selection are answered by the server in both
+	// modes: the doc plus runner facts, and in fallback the runner's own catalog
+	// as reported in configApplied facts. A forward would leave an older runner
+	// (or none) unanswered, so even a targeted getView stays local.
 	for _, channel := range []string{"model-selection", "provider-settings"} {
-		route := router.Resolve(channel, "getView", rpcwire.Undefined{}, localNone)
-		if route.Kind != router.TargetFirstRunner {
-			t.Fatalf("%s route = %+v, want first runner", channel, route)
+		for name, arg := range map[string]rpcwire.Value{
+			"undefined": rpcwire.Undefined{},
+			"undef-arg": json.RawMessage(`[{"$undef":true}]`),
+			"targeted":  json.RawMessage(`[{"selection":null,"workspacePath":"/w","workspaceIdentity":"runner:beta:/w"}]`),
+		} {
+			if route := router.Resolve(channel, "getView", arg, localNone); route.Kind != router.TargetLocal {
+				t.Fatalf("%s.getView(%s) route = %+v, want local", channel, name, route)
+			}
 		}
 		eventRoute := router.ResolveEvent(channel, "onDidChange", rpcwire.Undefined{}, localNone)
-		if eventRoute.Kind != router.TargetFirstRunner {
-			t.Fatalf("%s event route = %+v, want first runner", channel, eventRoute)
+		if eventRoute.Kind != router.TargetLocal {
+			t.Fatalf("%s event route = %+v, want local", channel, eventRoute)
 		}
-		// Other operations have no workspace target and stay first-runner.
-		if refresh := router.Resolve(channel, "refresh", json.RawMessage(`[{"reason":"manual"}]`), localNone); refresh.Kind != router.TargetFirstRunner {
+		if refresh := router.Resolve(channel, "refresh", json.RawMessage(`[{"reason":"manual"}]`), localNone); refresh.Kind != router.TargetLocal {
 			t.Fatalf("%s.refresh route = %+v", channel, refresh)
+		}
+		// Writes are always server-owned.
+		if route := router.Resolve(channel, "createPersonalProvider", rpcwire.Undefined{}, localNone); route.Kind != router.TargetLocal {
+			t.Fatalf("%s write route = %+v, want local", channel, route)
 		}
 	}
 }
 
-func TestResolveModelCatalogGetViewWithWorkspaceTarget(t *testing.T) {
-	route := router.Resolve("model-selection", "getView",
-		json.RawMessage(`[{"selection":null,"workspacePath":"/w","workspaceIdentity":"runner:beta:/w"}]`), localNone)
-	if route.Kind != router.TargetWorkspace || route.WorkspaceIdentity != "runner:beta:/w" || route.WorkspacePath != "/w" {
-		t.Fatalf("model-selection.getView route = %+v", route)
+func TestResolveConfigChannel(t *testing.T) {
+	route := router.Resolve("config", "exportLocal", json.RawMessage(`[{"runnerId":"alpha"}]`), localNone)
+	if route.Kind != router.TargetRunner || route.RunnerID != "alpha" {
+		t.Fatalf("exportLocal route = %+v", route)
 	}
-
-	// A path without identity is not a machine key for the model catalog: it
-	// stays on the first connected runner (matching the spec's "identity, else
-	// first runner").
-	pathOnly := router.Resolve("provider-settings", "getView",
-		json.RawMessage(`[{"selection":null,"workspacePath":"/w"}]`), localNone)
-	if pathOnly.Kind != router.TargetFirstRunner {
-		t.Fatalf("provider-settings.getView path-only route = %+v, want first runner", pathOnly)
+	// The browser wraps a single argument in an array; the runnerId must be read
+	// from inside it (exportLocal({runnerId}) otherwise fell back to the first
+	// connected runner and imported the wrong machine).
+	if wrapped := router.Resolve("config", "exportLocal", json.RawMessage(`[{"runnerId":"beta"}]`), localNone); wrapped.Kind != router.TargetRunner || wrapped.RunnerID != "beta" {
+		t.Fatalf("wrapped exportLocal route = %+v", wrapped)
 	}
-
-	// onDidChange is a plain event with no arg: it always follows the first
-	// runner.
-	eventRoute := router.ResolveEvent("model-selection", "onDidChange",
-		json.RawMessage(`[{"workspacePath":"/w","workspaceIdentity":"runner:beta:/w"}]`), localNone)
-	if eventRoute.Kind != router.TargetFirstRunner {
-		t.Fatalf("onDidChange route = %+v, want first runner", eventRoute)
+	if fallback := router.Resolve("config", "exportLocal", rpcwire.Undefined{}, localNone); fallback.Kind != router.TargetFirstRunner {
+		t.Fatalf("exportLocal without runnerId route = %+v", fallback)
+	}
+	if other := router.Resolve("config", "status", rpcwire.Undefined{}, localNone); other.Kind != router.TargetLocal {
+		t.Fatalf("config.status route = %+v", other)
 	}
 }
 
