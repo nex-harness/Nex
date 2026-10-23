@@ -4,7 +4,7 @@ import {
   packWorkspaceFileEntries,
   unpackWorkspaceFileEntries,
 } from "@nex/shared/workspaceFileEntriesCodec";
-import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
+import { useWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { fetchWorkspaceFileEntriesPacked } from "@/workspace-file-search/fetchWorkspaceFileEntries.js";
 import { useWorkspaceFileSearchFilterEntries } from "@/workspace-file-search/useWorkspaceFileSearchFilter.js";
 
@@ -27,7 +27,7 @@ export function useWorkspaceFileSearchIndex({
   workspaceRemoteSessionId?: string;
   enabled: boolean;
 }): WorkspaceFileSearchIndexState {
-  const { fileService } = useWorkspaceServices(
+  const { fileService } = useWorkspaceBoundServices(
     workspacePath,
     workspaceRemoteSessionId,
     workspaceIdentity,

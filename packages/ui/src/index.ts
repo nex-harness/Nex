@@ -49,6 +49,7 @@ export {
 export {
   ServiceProvider,
   useServices,
+  useWorkspaceBoundServices,
   useWorkspaceServices,
   PlatformProvider,
   usePlatform,

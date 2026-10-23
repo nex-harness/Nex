@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog.js";
 import { toast } from "@/components/ui/toast.js";
 import { GitGraphPane } from "@/git-graph/GitGraphPane.js";
-import { useServices } from "@/hooks/useServices.js";
+import { useWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { getErrorMessage } from "@/lib/errorMessage.js";
 import { logger } from "@/logger.js";
@@ -20,13 +20,20 @@ import { AlertCircleIcon, LoaderIcon, XIcon } from "lucide-react";
 interface GitGraphDialogProps {
   open: boolean;
   workspacePath: string;
+  /** 目标 workspace 的 server 路由身份（多 runner）；桌面/local host 忽略。 */
+  workspaceIdentity?: string;
   onOpenChange: (nextOpen: boolean) => void;
 }
 
 const GIT_GRAPH_PAGE_SIZE = 50;
 
-export function GitGraphDialog({ open, workspacePath, onOpenChange }: GitGraphDialogProps) {
-  const { gitService } = useServices();
+export function GitGraphDialog({
+  open,
+  workspacePath,
+  workspaceIdentity,
+  onOpenChange,
+}: GitGraphDialogProps) {
+  const { gitService } = useWorkspaceBoundServices(workspacePath, null, workspaceIdentity);
   const { intl } = useNexIntl();
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);

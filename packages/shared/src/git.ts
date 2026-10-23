@@ -95,6 +95,12 @@ export interface GitIdentity {
 
 export interface GitRepositoryRequest {
   workspacePath: string;
+  /**
+   * 可选的服务端路由身份（`runner:<runnerId>:<path>`，见 server-workspace-identity）。
+   * 多 runner 拓扑下同一路径可能被多台机器提供，server 只凭 workspacePath 无法路由。
+   * 桌面/local host 实现忽略该字段；取值由 UI 的 workspace 绑定访问器注入。
+   */
+  workspaceIdentity?: string;
 }
 
 export type GitCommitGraphRefKind = "branch" | "remote" | "tag" | "head";
@@ -213,7 +219,6 @@ export interface GitCommitResult {
 }
 
 export interface GitGenerateCommitMessageRequest extends GitRepositoryRequest {
-  workspaceIdentity?: string;
   locale?: Locale;
   includeUnstaged?: boolean;
   currentSessionFilePaths?: string[];

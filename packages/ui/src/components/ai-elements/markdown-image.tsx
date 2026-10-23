@@ -17,7 +17,7 @@ import {
   imageThumbnailTriggerClassName,
 } from "@/components/ai-elements/image-thumbnail-gallery.js";
 import { cn } from "@/components/lib/utils.js";
-import { useOptionalServices } from "@/hooks/useServices.js";
+import { useOptionalWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { isImagePreviewPath } from "@/lib/codeViewer.js";
 import { resolveMarkdownFileLink } from "@/lib/markdownFileLink.js";
@@ -28,6 +28,8 @@ export { clampImagePreviewOffset as clampMarkdownImagePreviewOffset } from "@/co
 export type MarkdownImageProps = ComponentProps<"img"> & {
   node?: unknown;
   workspacePath?: string;
+  /** 对话所属 workspace 的路由身份，用于把本地图片读取路由到对应 runner。 */
+  workspaceIdentity?: string;
   workspaceHomePath?: string;
   sessionId?: string;
   readAttachment?: (params: {
@@ -149,11 +151,13 @@ export function MarkdownImage({
   sessionId,
   src,
   workspacePath,
+  workspaceIdentity,
   workspaceHomePath,
   ...props
 }: MarkdownImageProps) {
   const { intl } = useNexIntl();
-  const services = useOptionalServices();
+  // 对话图片按消息所属 workspace 绑定 file 服务；桌面/local host 忽略多注入的路由字段。
+  const services = useOptionalWorkspaceBoundServices(workspacePath, undefined, workspaceIdentity);
   const resolvedSrc = typeof src === "string" ? src : "";
   const artifactRef = useMemo(() => decodeMarkdownArtifactImageSource(resolvedSrc), [resolvedSrc]);
   const localImageLink = useMemo(() => {

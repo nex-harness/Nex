@@ -1284,7 +1284,8 @@ export function AnimatedSidePanePanel({
                           />
                         ) : tab.type === "terminal" ? (
                           <SidePaneTerminalPane
-                            services={services}
+                            workspacePath={workspaceAbsPath}
+                            workspaceIdentity={workspaceIdentity}
                             sessionId={tab.id}
                             workspaceKey={workspaceKey}
                             cwd={tab.cwd ?? workspaceAbsPath}

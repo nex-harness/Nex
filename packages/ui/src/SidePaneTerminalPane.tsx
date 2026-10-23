@@ -1,9 +1,10 @@
 import { useCallback } from "react";
-import type { IServiceAccessor } from "@nex/services";
+import { useWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { TerminalSession } from "@/terminal/TerminalSession.js";
 
 export function SidePaneTerminalPane({
-  services,
+  workspacePath,
+  workspaceIdentity,
   sessionId,
   workspaceKey,
   cwd,
@@ -11,7 +12,10 @@ export function SidePaneTerminalPane({
   isWindowsDesktop = false,
   onOpenBrowserUrl,
 }: {
-  services: IServiceAccessor;
+  /** terminal 所属 workspace 的绝对路径；create 时携带，server 据此路由到所属 runner。 */
+  workspacePath?: string;
+  /** terminal 所属 workspace 的路由身份（`runner:<id>:<path>`）；桌面/local host 忽略。 */
+  workspaceIdentity?: string;
   /**
    * 保活：sessionId 复用 tab.id（跨 workspace 稳定），同时作为 TerminalSession 的 persistentKey。
    * 让 xterm+PTY 所有权进 sidePaneTerminalSessionRegistry 模块级单例，
@@ -28,6 +32,8 @@ export function SidePaneTerminalPane({
   isWindowsDesktop?: boolean;
   onOpenBrowserUrl: (url: string) => void;
 }) {
+  // terminal 只绑定 workspace（不绑定远程 session）：多 runner 下由 server 按身份路由。
+  const boundServices = useWorkspaceBoundServices(workspacePath, null, workspaceIdentity);
   const handleShellLabelChange = useCallback(() => {
     // 业务说明：side pane 外层 tab 已经承载终端标题，这里只需要单个 shell 实例，
     // 不再显示或同步第二层 terminal tab 标题，避免形成嵌套 tabs。
@@ -38,8 +44,9 @@ export function SidePaneTerminalPane({
       <TerminalSession
         sessionId={sessionId}
         persistentKey={sessionId}
+        terminalPersistentKey={sessionId}
         workspaceKey={workspaceKey}
-        services={services}
+        services={boundServices}
         cwd={cwd}
         isVisible={isVisible}
         isWindowsDesktop={isWindowsDesktop}

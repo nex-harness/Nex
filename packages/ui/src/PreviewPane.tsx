@@ -26,7 +26,7 @@ import { toast } from "@/components/ui/toast.js";
 import { cn } from "@/components/lib/utils.js";
 import type { FileBinaryPreview, FileMediaPreview, FileTextSlice } from "@nex/shared";
 import { TID_PREVIEW_PANE } from "@nex/shared";
-import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
+import { useWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { usePptxFileWatch } from "@/hooks/usePptxFileWatch.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { usePdfViewerLabels, usePptxViewerLabels } from "@/hooks/usePreviewViewerLabels.js";
@@ -514,7 +514,9 @@ export function PreviewPane({
     matchedOpenContext.isRemoteWorkspace,
   );
   const fileActions = useFileContextActions();
-  const { fileService, fileWatcherService, mediaPreviewService } = useWorkspaceServices(
+  // 代码查看器按 source 所属 workspace 绑定服务：多 runner 下同一路径可能来自另一台机器。
+  // 桌面/local host 忽略多注入的路由字段，行为不变。
+  const { fileService, fileWatcherService, mediaPreviewService } = useWorkspaceBoundServices(
     sourceWorkspacePath,
     source?.workspaceRemoteSessionId,
     source?.workspaceIdentity,

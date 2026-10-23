@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { WorkspaceFileEntry } from "@nex/shared";
-import { useServices } from "@/hooks/useServices.js";
+import { useWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { buildFileMentionMarkdown } from "@/mentions/mentionMarkdown.js";
 import { WORKSPACE_FILE_SEARCH_DISPLAY_CAP } from "@nex/shared/workspaceFileSearch";
 import { getMentionGroupLimitForQuery } from "@/mentions/mentionSearch.js";
@@ -39,7 +39,9 @@ export function useFileMentionProvider(
   title: string,
   defaultPreviewLimit?: number,
 ): MentionCategoryResult {
-  const { fileService } = useServices();
+  // @ 提及按所属 workspace 绑定 file 服务：多 runner 下同一路径由 server 按身份路由。
+  // 桌面/local host 忽略多注入的 workspacePath，行为不变。
+  const { fileService } = useWorkspaceBoundServices(workspacePath, undefined, workspaceIdentity);
   const limit =
     getMentionGroupLimitForQuery(query, defaultPreviewLimit) ?? WORKSPACE_FILE_SEARCH_DISPLAY_CAP;
   // 连接实例也属于作用域：相同路径的远程重连不能接纳旧 Host 的查询结果。

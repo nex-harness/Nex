@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- 文件树数据 hook 需要集中维护目录加载、watcher 刷新和 Git 状态竞态。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
+import { useWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { logger } from "@/logger.js";
 import {
   WORKSPACE_FILE_TREE_WATCH_BULK_REFRESH_THRESHOLD,
@@ -63,7 +63,7 @@ export function useWorkspaceFileTreeData({
   workspaceRemoteSessionId?: string;
   enableWorkspaceFeatures?: boolean;
 }) {
-  const { fileService, fileWatcherService, gitService } = useWorkspaceServices(
+  const { fileService, fileWatcherService, gitService } = useWorkspaceBoundServices(
     workspacePath,
     workspaceRemoteSessionId,
     workspaceIdentity,

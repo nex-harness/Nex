@@ -1,6 +1,6 @@
 import type { IServiceAccessor } from "@nex/services";
 import { useEffect, useState } from "react";
-import { useServices } from "@/hooks/useServices.js";
+import { useWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { isAbsoluteFilePath } from "@/lib/path.js";
 
 interface WorkspaceHomePathParams {
@@ -28,7 +28,13 @@ function normalizeHostHomePath(homePath: string): string | null {
 }
 
 export function useWorkspaceHomePath(params: WorkspaceHomePathParams): string | undefined {
-  const { systemService } = useServices();
+  // system.info 的 homedir 必须来自 workspace 所在的机器：多 runner 绑定后由 server 路由到
+  // 该 workspace 的 runner（无目标时回落第一台 runner）；桌面/local host 行为不变。
+  const { systemService } = useWorkspaceBoundServices(
+    params.workspacePath,
+    params.remoteSessionId,
+    params.workspaceIdentity,
+  );
   const cacheKey = buildWorkspaceHomeCacheKey(params);
   const [state, setState] = useState<{ cacheKey: string; homePath?: string }>(() => {
     const cached = workspaceHomePathCache.get(cacheKey);

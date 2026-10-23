@@ -1,11 +1,32 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import type { IServiceAccessor } from "@nex/services";
 import type { FileEntry } from "@nex/shared";
-import { FolderIcon, FolderSymlinkIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  FolderIcon,
+  FolderSymlinkIcon,
+  MonitorIcon,
+} from "lucide-react";
 import { Button } from "./components/ui/button.js";
 import { Input } from "./components/ui/input.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./components/ui/dropdown-menu.js";
 import { useNexIntl } from "./i18n/IntlProvider.js";
+import {
+  buildDirectoryBrowserMachineOptions,
+  resolveDirectoryBrowserMachineStartPath,
+  shouldShowDirectoryBrowserMachineSelector,
+} from "./lib/directoryBrowserMachines.js";
+import { bindServicesToWorkspace } from "./lib/workspaceBoundServices.js";
 import { logger } from "./logger.js";
+import { useRunnerWorkspaceDirectoryStore } from "./store/runnerWorkspaceDirectoryStore.js";
 
 function createDirectoryBrowserReadParams(
   path: string,
@@ -41,6 +62,23 @@ function createDirectoryBrowserRequestGuard(): {
 }
 
 /**
+ * 目录浏览器当前要浏览的机器（web 多 runner）。
+ *
+ * TODO(docs/next/workspace-tools.md Decision 1)：server 目前没有“机器级”（非 workspace 根）
+ * 的 `runner:` 路由身份，readdir/system.info 仍由本机 server 应答；这里先把目标固化成
+ * 显式 prop，待 server 支持按 runnerId 路由后，把 `{workspacePath, workspaceIdentity}`
+ * 改成 `{runnerId}` 目标即可，组件不需要再改结构。
+ */
+export interface DirectoryBrowserMachineTarget {
+  /** 稳定的机器 key（runnerId；旧 server 为 "__local__"）。 */
+  id: string;
+  /** 机器展示名；空串表示未知（回退“本机”文案）。 */
+  name: string;
+  /** 机器操作系统。 */
+  os?: string;
+}
+
+/**
  * 服务端目录浏览对话框。
  * 通过 fileService.readdir 浏览远程/本地服务器的目录结构，
  * 适用于 web 端无法调用系统原生文件选择器的场景。
@@ -51,12 +89,18 @@ export function DirectoryBrowser({
   onCancel,
   onPathChange,
   embedded = false,
+  machineTarget,
 }: {
   services: IServiceAccessor;
   onSelect: (path: string) => void;
   onCancel: () => void;
   onPathChange?: (path: string) => void;
   embedded?: boolean;
+  /**
+   * 当前浏览目标机器（由外层机器下拉提供）。缺省表示“本机 / 未指定”：
+   * web 旧 server、单 runner 与桌面 remote 目录选择都走这里，行为不变。
+   */
+  machineTarget?: DirectoryBrowserMachineTarget | null;
 }) {
   const [currentPath, setCurrentPath] = useState("");
   const [inputPath, setInputPath] = useState("");
@@ -69,20 +113,66 @@ export function DirectoryBrowser({
   const requestGuardRef = useRef(createDirectoryBrowserRequestGuard());
   const { intl } = useNexIntl();
 
-  // 初始化：获取 homedir 作为起始路径
+  // runner 目录来自 web 平台（`/api/server-info`），desktop 平台不实现时为 null。
+  const runnerWorkspaces = useRunnerWorkspaceDirectoryStore((state) => state.workspaces);
+  const machineOptions = useMemo(
+    () => buildDirectoryBrowserMachineOptions(runnerWorkspaces),
+    [runnerWorkspaces],
+  );
+  const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
+  const selectedMachine = useMemo(() => {
+    if (machineOptions.length === 0) {
+      return null;
+    }
+    return (
+      machineOptions.find((option) => option.id === selectedMachineId) ?? machineOptions[0] ?? null
+    );
+  }, [machineOptions, selectedMachineId]);
+  const showMachineSelector = shouldShowDirectoryBrowserMachineSelector(machineOptions);
+  const activeMachineTarget = machineTarget ?? selectedMachine;
+
+  // 有明确机器目标时把 readdir/system.info 绑定到该机器；未指定/本机时沿用传入的 services，
+  // 保持 web 旧 server、单 runner 与桌面 remote 的原行为。
+  const browserServices = useMemo(() => {
+    if (!activeMachineTarget || activeMachineTarget.id === "__local__") {
+      return services;
+    }
+    // TODO(docs/next/workspace-tools.md)：server 支持按 runnerId 路由后改为机器级身份。
+    return (
+      bindServicesToWorkspace(services, {
+        workspacePath: "",
+        workspaceIdentity: `runner:${activeMachineTarget.id}:/`,
+      }) ?? services
+    );
+  }, [activeMachineTarget, services]);
+  const activeMachineId = activeMachineTarget?.id ?? null;
+
+  // 初始化/切换机器：从 system.info 取 homedir 作为起始路径。
+  // 非本机机器在有已编目 workspace 根时优先从根开始：机器级身份暂不可路由时，
+  // 拿到的 homedir 可能来自 server 而不是目标机器。
   useEffect(() => {
-    services.systemService
+    const machine = machineOptions.find((option) => option.id === activeMachineId) ?? null;
+    const knownRootPath = resolveDirectoryBrowserMachineStartPath(
+      machine && machine.id !== "__local__" ? machine : null,
+      "",
+    );
+    browserServices.systemService
       .info()
       .then((info) => {
-        navigateTo(info.homedir);
+        navigateTo(knownRootPath || info.homedir);
       })
       .catch((err) => {
+        if (knownRootPath) {
+          // system.info 不可用（例如路由未就绪）时仍进入已知 workspace 根，让用户继续浏览。
+          navigateTo(knownRootPath);
+          return;
+        }
         logger.error("[DirectoryBrowser] 获取系统信息失败:", err);
         setError(intl.formatMessage({ id: "directoryBrowser.errorSystem" }));
         setLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeMachineId, browserServices]);
 
   const navigateTo = async (
     path: string,
@@ -92,7 +182,7 @@ export function DirectoryBrowser({
     setLoading(true);
     setError("");
     try {
-      const result = await services.fileService.readdir(
+      const result = await browserServices.fileService.readdir(
         createDirectoryBrowserReadParams(path, nextShowHiddenDirectories),
       );
       if (!requestGuardRef.current.isCurrent(requestId)) {
@@ -158,6 +248,60 @@ export function DirectoryBrowser({
   const browserContent = (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div>
+        {/* 机器选择：只在 web 多 runner 时出现；单 runner/桌面不渲染，保持原布局。 */}
+        {showMachineSelector ? (
+          <div className="mb-2 flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="h-9 min-w-0 max-w-full justify-between gap-2 px-3 text-ui-base"
+                >
+                  <MonitorIcon className="size-4 shrink-0 text-foreground-subtle" />
+                  <span className="truncate">
+                    {selectedMachine?.name ||
+                      intl.formatMessage({ id: "directoryBrowser.machine.local" })}
+                  </span>
+                  {selectedMachine?.os ? (
+                    <span className="shrink-0 text-ui-sm text-foreground-subtle">
+                      {selectedMachine.os}
+                    </span>
+                  ) : null}
+                  <ChevronDownIcon className="size-4 shrink-0 text-foreground-subtle" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuLabel>
+                  {intl.formatMessage({ id: "directoryBrowser.machine.title" })}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {machineOptions.map((option) => (
+                  <DropdownMenuItem
+                    key={option.id}
+                    onSelect={() => setSelectedMachineId(option.id)}
+                    className="flex items-center gap-2"
+                  >
+                    <MonitorIcon className="size-4 shrink-0 text-foreground-subtle" />
+                    <span className="min-w-0 flex-1 truncate">
+                      {option.name || intl.formatMessage({ id: "directoryBrowser.machine.local" })}
+                    </span>
+                    {option.os ? (
+                      <span className="shrink-0 text-ui-sm text-foreground-subtle">
+                        {option.os}
+                      </span>
+                    ) : null}
+                    {option.id === selectedMachine?.id ? (
+                      <CheckIcon className="size-4 shrink-0 text-foreground" />
+                    ) : null}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : null}
+
         <div className="mb-1 block text-ui-base text-foreground-subtle">
           {intl.formatMessage({ id: "directoryBrowser.title" })}
         </div>

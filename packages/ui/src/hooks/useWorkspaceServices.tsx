@@ -11,6 +11,7 @@ import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 import { REMOTE_WORKSPACE_DISCONNECTED_ERROR_CODE } from "@/lib/remoteWorkspaceServiceError.js";
 import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
+import { bindServicesToWorkspace } from "@/lib/workspaceBoundServices.js";
 
 let disconnectedRemoteServices: IServiceAccessor | null = null;
 
@@ -237,6 +238,36 @@ export function useWorkspaceServices(
 }
 
 /**
+ * workspace 绑定的服务：在 `useWorkspaceServices` 之上，把 file/file-watcher/media-preview/
+ * git/git-checkpoint/terminal 的 path-bearing 调用注入 `{workspacePath, workspaceIdentity}`，
+ * 让 server 能按身份把请求路由到该 workspace 所在的 runner（docs/next/workspace-tools.md Decision 1）。
+ *
+ * 桌面/local host 忽略这些可选字段，行为不变；返回值按（services, 目标）记忆化，
+ * 只有 workspace 变化时引用才变化。
+ */
+export function useWorkspaceBoundServices(
+  workspacePath: string | null | undefined,
+  preferredRemoteSessionId?: string | null,
+  workspaceIdentity?: string | null,
+  remoteTarget?: unknown,
+): IServiceAccessor {
+  const services = useWorkspaceServices(
+    workspacePath,
+    preferredRemoteSessionId,
+    workspaceIdentity,
+    remoteTarget,
+  );
+  return useMemo(
+    () =>
+      bindServicesToWorkspace(
+        services,
+        workspacePath ? { workspacePath, workspaceIdentity } : null,
+      ) ?? services,
+    [services, workspacePath, workspaceIdentity],
+  );
+}
+
+/**
  * 有 workspacePath 时按 workspace 解析服务，否则用当前 context services。
  *
  * 修复：useNexSessionService / useNexTaskService / useNexAgentService 曾各自写成
@@ -245,6 +276,24 @@ export function useWorkspaceServices(
  * 渲染的 hook 顺序不同，React 抛出 "prevDeps.join is not a function" 并让该子树崩溃。
  * 这里无条件调用两个 hook，只在结果上做选择，保证 hook 顺序稳定。
  */
+/**
+ * 有 workspacePath 时的 workspace 绑定访问器，否则用当前 context services（可选）。
+ * 与 `useOptionalWorkspaceServices` 同构，额外注入路由目标。
+ */
+export function useOptionalWorkspaceBoundServices(
+  workspacePath?: string | null,
+  preferredRemoteSessionId?: string | null,
+  workspaceIdentity?: string | null,
+): IServiceAccessor | null {
+  const contextServices = useOptionalServices();
+  const boundServices = useWorkspaceBoundServices(
+    workspacePath,
+    preferredRemoteSessionId,
+    workspaceIdentity,
+  );
+  return workspacePath ? boundServices : contextServices;
+}
+
 export function useOptionalWorkspaceServices(
   workspacePath?: string | null,
   preferredRemoteSessionId?: string | null,

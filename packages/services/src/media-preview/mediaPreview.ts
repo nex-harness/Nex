@@ -28,9 +28,15 @@ export type MediaPreviewPreparation =
     };
 
 export interface IMediaPreviewService {
+  /**
+   * `workspacePath`/`workspaceIdentity` 可选：多 runner 拓扑下用于把预览请求路由到
+   * 文件所在机器的 runner；桌面/local host 实现忽略这两个字段。
+   */
   prepare(params: {
     path: string;
     expectedKind: MediaPreviewKind;
+    workspacePath?: string;
+    workspaceIdentity?: string;
   }): Promise<MediaPreviewPreparation>;
   refreshPlaybackUrl?(params: { previewId: string }): Promise<{
     url: string;

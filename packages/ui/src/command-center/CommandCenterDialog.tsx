@@ -26,7 +26,7 @@ import {
 import { cn } from "@/components/lib/utils.js";
 import { toast } from "@/components/ui/toast.js";
 import { useGlobalTaskList } from "@/hooks/useGlobalTaskList.js";
-import { useServices } from "@/hooks/useServices.js";
+import { useWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { FileDisplayIcon, resolveFileDisplayDescriptor } from "@/lib/fileDisplay.js";
 import { formatTaskRelativeTime } from "@/lib/taskListItemPresentation.js";
@@ -427,7 +427,9 @@ export const CommandCenterDialog = memo(function CommandCenterDialogComponent({
   ) => void;
   onOpenCodeViewer: (source: CodeViewerSource) => void;
 }) {
-  const { fileService } = useServices();
+  // 命令中心只索引当前激活 workspace 的文件，索引请求按该 workspace 绑定路由
+  // （多 runner 下同一路径可能来自另一台机器）；桌面/local host 忽略多注入字段。
+  const { fileService } = useWorkspaceBoundServices(workspaceAbsPath, null, workspaceIdentity);
   const { intl } = useNexIntl();
   const workspaceKey = workspaceIdentity?.trim() || workspaceAbsPath;
   const [rawQuery, setRawQuery] = useState("");

@@ -28,6 +28,12 @@ import {
   type TerminalInputFallbackHandledData,
 } from "@/terminal/terminalComposedInputFallback.js";
 import { normalizePowerShellReadlineRedraw } from "@/terminal/terminalDataTransform.js";
+import {
+  clearPersistedTerminalId,
+  persistTerminalId,
+  readPersistedTerminalId,
+  resolveTerminalCreateOutcome,
+} from "@/terminal/terminalReattach.js";
 import { getHttpLinksForTerminalBufferLine } from "@/terminal/terminalLinks.js";
 import { mergeTerminalTheme } from "@/terminal/terminalTheme.js";
 import {
@@ -96,6 +102,7 @@ export function TerminalSession({
   onOpenBrowserUrl,
   persistentKey,
   workspaceKey,
+  terminalPersistentKey,
 }: {
   sessionId: string;
   services: IServiceAccessor;
@@ -120,6 +127,15 @@ export function TerminalSession({
    * 不传时 fallback 到 cwd。下侧 terminal 不传 persistentKey，此值不生效。
    */
   workspaceKey?: string;
+  /**
+   * 状态持久化 key（side pane terminal 传 tab.id）。
+   *
+   * 传入后把 `terminalId` 写进 sessionStorage：页面刷新后重挂时带 `terminalId` 调 create，
+   * 若 runner 侧终端仍存活则以同一 id 重挂（docs/next/workspace-tools.md Decision 5），
+   * 首个数据事件是序列化屏幕，因此重挂后先 reset xterm 再写第一块，避免与旧内容重复。
+   * 不传（下侧 terminal）不持久化，行为不变。
+   */
+  terminalPersistentKey?: string;
 }) {
   const { intl } = useNexIntl();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -534,6 +550,10 @@ export function TerminalSession({
         if (entry.terminalId) {
           void services.terminalService.dispose({ id: entry.terminalId });
         }
+        // 关 tab（真回收）时同步清掉持久化的 terminalId，避免下次同名 tab 重挂到已结束的终端。
+        if (terminalPersistentKey) {
+          clearPersistedTerminalId(terminalPersistentKey);
+        }
         try {
           term.dispose();
         } catch (error) {
@@ -544,13 +564,29 @@ export function TerminalSession({
 
       // 创建 PTY（异步）
       const initialCreateSize = initialTerminalSize ?? { cols: term.cols, rows: term.rows };
+      // 刷新前该 tab 的终端 id：存在时请求重挂（runner 侧存活则返回同一 id）。
+      const storedTerminalId = terminalPersistentKey
+        ? readPersistedTerminalId(terminalPersistentKey)
+        : null;
       void services.terminalService
-        .create({ cols: initialCreateSize.cols, rows: initialCreateSize.rows, cwd })
+        .create({
+          cols: initialCreateSize.cols,
+          rows: initialCreateSize.rows,
+          cwd,
+          ...(storedTerminalId ? { terminalId: storedTerminalId } : {}),
+        })
         .then(({ id, shell, fontFamily, fontSize, theme, fontFamilySource, windowsPty }) => {
           if (ptyCancelled) {
             // cleanup 已发生：杀掉这个孤儿 PTY，不进 entry
             void services.terminalService.dispose({ id });
             return;
+          }
+          const isReattach = resolveTerminalCreateOutcome({
+            sentTerminalId: storedTerminalId,
+            returnedTerminalId: id,
+          });
+          if (terminalPersistentKey) {
+            persistTerminalId(terminalPersistentKey, id);
           }
           entry.terminalId = id;
           terminalIdRef.current = id;
@@ -571,6 +607,7 @@ export function TerminalSession({
           const nextShellLabel = formatShellLabel(shell);
           logger.info("[Terminal] shell resolved (persistent):", {
             cwd,
+            reattached: isReattach,
             fontFamilySource,
             shell,
             shellLabel: nextShellLabel,
@@ -583,9 +620,18 @@ export function TerminalSession({
             requestFocus();
           }
 
-          // data 订阅 → term.write（进 registry，detached 时仍累积 scrollback）
+          // data 订阅 → term.write（进 registry，detached 时仍累积 scrollback）。
+          // 重挂时第一块是 runner 的序列化屏幕：先 reset 清掉本页遗留的旧内容再写入，
+          // 否则刷新前的屏幕会和序列化快照叠加成重复输出。
+          let isFirstDataChunk = true;
           registryDisposers.push(
             services.terminalService.onDynamicData(id)((data) => {
+              if (isFirstDataChunk) {
+                isFirstDataChunk = false;
+                if (isReattach) {
+                  term.reset();
+                }
+              }
               term.write(normalizePowerShellReadlineRedraw(data, shell));
             }),
           );
@@ -1082,6 +1128,7 @@ export function TerminalSession({
     services,
     sessionId,
     persistentKey,
+    terminalPersistentKey,
   ]);
 
   const handleCopy = () => {

@@ -1,7 +1,7 @@
 import { FileTextIcon, GlobeIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
-import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
+import { useWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import {
   type AssistantPreviewCard,
@@ -104,7 +104,8 @@ function useAssistantPreviewCardValidation(
     workspaceRemoteSessionId?: string;
   } = {},
 ): AssistantPreviewCardValidationResult {
-  const { fileService } = useWorkspaceServices(
+  // 文件卡存在性校验按卡片所属 workspace 绑定 file 服务（多 runner 下同一路径可能来自另一台机器）。
+  const { fileService } = useWorkspaceBoundServices(
     scope.workspacePath,
     scope.workspaceRemoteSessionId,
     scope.workspaceIdentity,

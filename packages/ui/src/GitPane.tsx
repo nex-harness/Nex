@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select.js";
 import { type GitPaneFileChange, type GitPaneRepositoryState } from "@/hooks/useGitRepository.js";
-import { useServices } from "@/hooks/useServices.js";
+import { useWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { useFileContextActions } from "@/hooks/useFileContextActions.js";
 import { useWorkspaceOpenInEditorTarget } from "@/hooks/useWorkspaceOpenInEditorTarget.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
@@ -71,7 +71,12 @@ export function GitPane({
   onRefresh: () => void;
   onRevealFileInTree?: (path: string) => void;
 }) {
-  const { gitService } = useServices();
+  // Git 面板按所属 workspace 绑定 git 服务：多 runner 下 server 按身份路由到正确机器。
+  const { gitService } = useWorkspaceBoundServices(
+    workspacePath,
+    workspaceRemoteSessionId,
+    workspaceIdentity,
+  );
   const { intl } = useNexIntl();
   const theme = useNexStore((state) => state.theme);
   const codePreviewSettings = useNexStore((state) => state.codePreviewSettings);

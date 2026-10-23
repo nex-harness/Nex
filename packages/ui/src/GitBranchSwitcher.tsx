@@ -30,6 +30,8 @@ import { ChevronDownIcon, GitBranchIcon, GitGraph, LoaderIcon, PlusIcon } from "
 
 interface GitBranchSwitcherProps {
   workspacePath: string;
+  /** 目标 workspace 的 server 路由身份（多 runner）；桌面/local host 忽略。 */
+  workspaceIdentity?: string;
   gitSummary: GitRepositorySummary;
   dirtyFileCount: number;
   onRefreshGit: () => void;
@@ -45,6 +47,7 @@ interface GitBranchSwitcherProps {
 
 export function GitBranchSwitcher({
   workspacePath,
+  workspaceIdentity,
   gitSummary,
   dirtyFileCount,
   onRefreshGit,
@@ -83,6 +86,7 @@ export function GitBranchSwitcher({
     commitAndSwitchBranch,
   } = useGitBranchSwitcher({
     workspacePath,
+    workspaceIdentity,
     currentBranchName: gitSummary.branchName,
     headRefType: gitSummary.headRefType,
     onRefreshGit,
@@ -357,6 +361,7 @@ export function GitBranchSwitcher({
       <GitGraphDialog
         open={gitGraphDialogOpen}
         workspacePath={workspacePath}
+        workspaceIdentity={workspaceIdentity}
         onOpenChange={setGitGraphDialogOpen}
       />
 

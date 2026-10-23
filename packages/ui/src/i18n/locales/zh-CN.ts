@@ -1372,6 +1372,8 @@ const zhCN: Record<string, string> = {
   "directoryBrowser.selectDir": "选择此目录",
   "directoryBrowser.errorSystem": "无法获取系统信息",
   "directoryBrowser.errorReadDir": "无法读取目录：{error}",
+  "directoryBrowser.machine.title": "机器",
+  "directoryBrowser.machine.local": "本机",
 
   // 更新按钮
   "updateReady.shortTitle": "更新",

@@ -1483,6 +1483,8 @@ const enUS: Record<string, string> = {
   "directoryBrowser.selectDir": "Select this directory",
   "directoryBrowser.errorSystem": "Failed to get system info",
   "directoryBrowser.errorReadDir": "Failed to read directory: {error}",
+  "directoryBrowser.machine.title": "Machine",
+  "directoryBrowser.machine.local": "This machine",
 
   // Update ready button
   "updateReady.shortTitle": "Update",

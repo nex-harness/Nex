@@ -15,7 +15,7 @@ import type {
 import { buildTurnChangeSummary, toWorkspaceRelativePath } from "@/lib/taskChangeSummary.js";
 import { logger } from "@/logger.js";
 import { shouldEnableWorkspaceRpc } from "@/lib/workspaceRpcAvailability.js";
-import { useServices } from "@/hooks/useServices.js";
+import { useWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { useResolvedRemoteWorkspaceSessionId } from "@/hooks/useResolvedRemoteWorkspaceSessionId.js";
 
 type GitRepositorySourceId = Extract<GitChangeSourceId, "unstaged" | "staged" | "branch">;
@@ -388,7 +388,12 @@ export function useGitRepository(options: {
     remoteTarget,
     workspaceIdentity = null,
   } = options;
-  const { gitService } = useServices();
+  // refresh 是 git 热路径；绑定 workspace 后 server 才能按身份把同一路径路由到正确 runner。
+  const { gitService } = useWorkspaceBoundServices(
+    workspacePath,
+    preferredRemoteSessionId,
+    workspaceIdentity,
+  );
   const remoteSessionId = useResolvedRemoteWorkspaceSessionId(
     workspacePath,
     preferredRemoteSessionId,

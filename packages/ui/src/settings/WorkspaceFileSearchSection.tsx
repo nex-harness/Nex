@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea.js";
 import { toast } from "@/components/ui/toast.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
+import { bindServicesToWorkspace } from "@/lib/workspaceBoundServices.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { SettingsGroupCard } from "@/settings/SettingsPageParts.js";
 import { logger } from "@/logger.js";
@@ -62,7 +63,11 @@ function ActiveWorkspaceFileSearchEditor({
   const { intl } = useNexIntl();
   const platform = usePlatform();
   const resolution = useWorkspaceServicesResolution(workspacePath, undefined, workspaceIdentity);
-  const services = resolution.services;
+  // .nexignore 读写按该 workspace 绑定 file 服务：多 runner 下同一路径可能来自另一台机器；
+  // 桌面/local host 忽略多注入的路由字段，行为不变。
+  const services =
+    bindServicesToWorkspace(resolution.services, { workspacePath, workspaceIdentity }) ??
+    resolution.services;
   const rpcReady = resolution.rpcReady;
 
   const [loaded, setLoaded] = useState<IgnoreFileState | null>(null);

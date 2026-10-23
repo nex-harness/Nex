@@ -45,7 +45,7 @@ import {
   filterCommitPreviewFilesByCurrentSession,
   getCurrentSessionFilePaths,
 } from "@/git-action-menu/currentSessionFileScope.js";
-import { useServices } from "@/hooks/useServices.js";
+import { useWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { getErrorMessage } from "@/lib/errorMessage.js";
 import { formatCommandShortcutLabel, matchesPrimaryShortcut } from "@/lib/keyboardShortcuts.js";
@@ -112,6 +112,7 @@ interface GitCommitDialogProps {
   loading: boolean;
   state: GitCommitDialogState | null;
   workspacePath: string;
+  workspaceIdentity?: string;
   message: string;
   error: string | null;
   mutationPending: boolean;
@@ -190,6 +191,7 @@ function GitCommitDialog({
   loading,
   state,
   workspacePath,
+  workspaceIdentity,
   message,
   error,
   mutationPending,
@@ -403,6 +405,7 @@ function GitCommitDialog({
             <div className="flex min-w-0 items-center justify-between gap-3 px-4 py-3">
               <GitBranchSwitcher
                 workspacePath={workspacePath}
+                workspaceIdentity={workspaceIdentity}
                 gitSummary={state.summary}
                 dirtyFileCount={dirtyFileCount}
                 onRefreshGit={onRefreshGit}
@@ -829,7 +832,8 @@ export function GitActionMenu({
   triggerIconOnly = false,
   triggerLayout = "header",
 }: GitActionMenuProps) {
-  const { gitService } = useServices();
+  // Git 提交/推送/暂存同样绑定当前 workspace 的 git 服务（多 runner 路由）。
+  const { gitService } = useWorkspaceBoundServices(workspacePath, null, workspaceIdentity);
   const { intl, locale } = useNexIntl();
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
   const [commitDialogLoading, setCommitDialogLoading] = useState(false);
@@ -1346,6 +1350,7 @@ export function GitActionMenu({
         loading={commitDialogLoading}
         state={commitDialogState}
         workspacePath={workspacePath}
+        workspaceIdentity={workspaceIdentity}
         message={commitMessage}
         error={commitError}
         mutationPending={mutationPending}

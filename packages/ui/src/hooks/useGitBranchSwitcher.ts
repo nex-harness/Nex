@@ -19,13 +19,15 @@ import {
   type GitBranchSwitchAssistDialogStep,
   type GitBranchSwitchAssistState,
 } from "@/git-branch-switcher/switchAssist.js";
-import { useServices } from "@/hooks/useServices.js";
+import { useWorkspaceBoundServices } from "@/hooks/useWorkspaceServices.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { getErrorMessage } from "@/lib/errorMessage.js";
 import { logger } from "@/logger.js";
 
 interface UseGitBranchSwitcherOptions {
   workspacePath: string;
+  /** 目标 workspace 的 server 路由身份；多 runner 下分支操作按身份路由。 */
+  workspaceIdentity?: string;
   // gitSummary 是 HEAD 的真实来源(由文件 watcher 实时回灌)。传入它的当前分支/HEAD 类型，
   // 用于在底层 HEAD 变化时丢弃可能过期的本地分支快照。
   currentBranchName: string | null;
@@ -35,11 +37,13 @@ interface UseGitBranchSwitcherOptions {
 
 export function useGitBranchSwitcher({
   workspacePath,
+  workspaceIdentity,
   currentBranchName,
   headRefType,
   onRefreshGit,
 }: UseGitBranchSwitcherOptions) {
-  const { gitService } = useServices();
+  // 分支操作绑定 workspace 的 git 服务：server 按身份路由，桌面/local host 忽略多注入字段。
+  const { gitService } = useWorkspaceBoundServices(workspacePath, null, workspaceIdentity);
   const { intl, locale } = useNexIntl();
   const numberFormatter = new Intl.NumberFormat(locale);
   const [open, setOpen] = useState(false);

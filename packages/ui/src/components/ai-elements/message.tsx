@@ -1502,6 +1502,7 @@ export const MessageResponse = memo(
           <MarkdownImage
             {...imageProps}
             workspacePath={workspacePath}
+            workspaceIdentity={workspaceIdentity}
             workspaceHomePath={workspaceHomePath}
             sessionId={sessionId}
             readAttachment={readAttachment}
