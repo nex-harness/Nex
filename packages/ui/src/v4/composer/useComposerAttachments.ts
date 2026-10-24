@@ -7,6 +7,7 @@ import { WORKSPACE_FILE_DRAG_MIME } from "@/lib/workspaceFileDrag.js";
 import {
   MAX_CHAT_ATTACHMENTS,
   MissingInlinePdfContentError,
+  OversizedInlineFileAttachmentError,
   OversizedInlinePdfAttachmentError,
   OversizedInlineVideoAttachmentError,
   createChatComposerAttachment,
@@ -156,6 +157,7 @@ function isTransientAttachmentUploadError(error: unknown): boolean {
   if (isAbortError(error)) return false;
   if (error instanceof OversizedInlineVideoAttachmentError) return false;
   if (error instanceof OversizedInlinePdfAttachmentError) return false;
+  if (error instanceof OversizedInlineFileAttachmentError) return false;
   if (error instanceof MissingInlinePdfContentError) return false;
   if (
     error instanceof Error &&
@@ -169,6 +171,38 @@ function isTransientAttachmentUploadError(error: unknown): boolean {
   // 避免扩大 message 正则后改变 image 超限的既有判定。
   return !/(?:payloadTooLarge|invalidBase64|invalidServerProgress|frameTooLarge|permission|EACCES|ENOENT|not found|unsupported|附件缺少|缺少可读取内容|远端附件未完成物化)/iu.test(
     message,
+  );
+}
+
+/**
+ * 超限附件的用户可见文案按 locale 格式化（序列化边界只抛结构化错误）。
+ * 视频/PDF/普通二进制共用同一组占位符，按错误类型选择消息 id；其他错误返回 null。
+ */
+function formatOversizedAttachmentMessage(
+  error: unknown,
+  formatMessage: (descriptor: { id: string }, values?: Record<string, string>) => string,
+  formatSize: (bytes: number) => string,
+): string | null {
+  const messageId =
+    error instanceof OversizedInlineVideoAttachmentError
+      ? "chat.attachments.oversizedInlineVideo"
+      : error instanceof OversizedInlinePdfAttachmentError
+        ? "chat.attachments.oversizedInlinePdf"
+        : error instanceof OversizedInlineFileAttachmentError
+          ? "chat.attachments.oversizedInlineFile"
+          : null;
+  if (messageId === null) return null;
+  const oversized = error as
+    | OversizedInlineVideoAttachmentError
+    | OversizedInlinePdfAttachmentError
+    | OversizedInlineFileAttachmentError;
+  return formatMessage(
+    { id: messageId },
+    {
+      filename: oversized.filename,
+      size: formatSize(oversized.sizeBytes),
+      maxSize: formatSize(oversized.maxSizeBytes),
+    },
   );
 }
 
@@ -412,32 +446,15 @@ export function useComposerAttachments(
         if (!current) return;
         // 结构化超限错误在 UI 层按 locale 格式化（与 chatAttachments 序列化边界约定一致）。
         const message =
-          error instanceof OversizedInlineVideoAttachmentError
+          formatOversizedAttachmentMessage(error, intl.formatMessage, formatAttachmentSize) ??
+          (error instanceof MissingInlinePdfContentError
             ? intl.formatMessage(
-                { id: "chat.attachments.oversizedInlineVideo" },
-                {
-                  filename: error.filename,
-                  size: formatAttachmentSize(error.sizeBytes),
-                  maxSize: formatAttachmentSize(error.maxSizeBytes),
-                },
+                { id: "chat.attachments.missingInlinePdfContent" },
+                { filename: error.filename },
               )
-            : error instanceof OversizedInlinePdfAttachmentError
-              ? intl.formatMessage(
-                  { id: "chat.attachments.oversizedInlinePdf" },
-                  {
-                    filename: error.filename,
-                    size: formatAttachmentSize(error.sizeBytes),
-                    maxSize: formatAttachmentSize(error.maxSizeBytes),
-                  },
-                )
-              : error instanceof MissingInlinePdfContentError
-                ? intl.formatMessage(
-                    { id: "chat.attachments.missingInlinePdfContent" },
-                    { filename: error.filename },
-                  )
-                : error instanceof Error
-                  ? error.message
-                  : String(error);
+            : error instanceof Error
+              ? error.message
+              : String(error));
         const transient = isTransientAttachmentUploadError(error);
         if (transient && current.autoRetryCount < 1) {
           updateItem(targetScopeKey, attachmentId, (item) => ({

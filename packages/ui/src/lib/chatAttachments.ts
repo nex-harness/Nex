@@ -7,6 +7,7 @@ import {
 } from "@nex/shared";
 import { PROTOCOL_V4_LIMITS } from "@nex/shared/nex-protocol-v4";
 import {
+  OversizedInlineFileAttachmentError,
   OversizedInlineImageAttachmentError,
   OversizedInlinePdfAttachmentError,
   OversizedInlineVideoAttachmentError,
@@ -22,6 +23,7 @@ import {
 export {
   MissingInlineImageContentError,
   MissingInlinePdfContentError,
+  OversizedInlineFileAttachmentError,
   OversizedInlineImageAttachmentError,
   OversizedInlinePdfAttachmentError,
   OversizedInlineVideoAttachmentError,
@@ -250,16 +252,43 @@ export async function serializeChatComposerAttachment(
     };
   }
 
-  const textContent =
-    attachment.file && isTextLikeAttachment(attachment)
-      ? await readAttachmentText(attachment.file)
-      : undefined;
+  if (attachment.file && isTextLikeAttachment(attachment)) {
+    return {
+      kind: "file",
+      filename: attachment.filename,
+      mimeType,
+      sizeBytes: attachment.sizeBytes,
+      textContent: await readAttachmentText(attachment.file),
+    };
+  }
+
+  if (attachment.file) {
+    // 无本地路径的二进制文件（web 的 .zip/.xlsx/.docx/.bin 等）过去只带元信息，
+    // 在上传分派处因“无 localPath/dataBase64/textContent”被直接丢弃并告警，用户看到
+    // 附件消失。V4 upload 事务本身接受任意 mime，所以按图片/PDF 同样的方式内联 base64，
+    // 交给 uploadComposerAttachment 分块上传；超限在编码前按 transport 上限拦截。
+    if (attachment.sizeBytes > PROTOCOL_V4_LIMITS.attachmentMaxBytes) {
+      throw new OversizedInlineFileAttachmentError({
+        filename: attachment.filename,
+        maxSizeBytes: PROTOCOL_V4_LIMITS.attachmentMaxBytes,
+        sizeBytes: attachment.sizeBytes,
+      });
+    }
+    return {
+      kind: "file",
+      filename: attachment.filename,
+      mimeType,
+      dataBase64: await readAttachmentBase64(attachment),
+      sizeBytes: attachment.sizeBytes,
+    };
+  }
+
+  // 既无路径也无字节（桌面路径附件元信息）时保持原样，由分派处决定是否可发。
   return {
     kind: "file",
     filename: attachment.filename,
     mimeType,
     sizeBytes: attachment.sizeBytes,
-    ...(textContent !== undefined ? { textContent } : {}),
   };
 }
 
