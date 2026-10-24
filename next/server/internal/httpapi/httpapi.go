@@ -14,7 +14,6 @@ import (
 	"io"
 	"log/slog"
 	"mime"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -285,21 +284,13 @@ func clearedSessionCookie(r *http.Request) string {
 	return strings.Join(attributes, "; ")
 }
 
-// clientIP keys the login rate limiter. It deliberately uses only the TCP peer
-// address and never X-Forwarded-For: the server does not know which proxies are
-// trusted, and trusting that header lets any client spoof an innocent key or
-// evade the per-IP lockout by rotating it. Behind a reverse proxy every client
-// shares the proxy address, which is the safe failure mode; operators can
-// terminate login rate limiting at the proxy.
+// clientIP keys the login rate limiter.
+//
+// 修复：反向代理后所有客户端的 TCP 对端都是代理地址，5 次错误登录会把所有人一起锁 60 秒。
+// 只有显式配置 NEX_TRUSTED_PROXIES 时才读取 X-Forwarded-For，并且只信任受信代理追加的
+// 那一跳（从右往左跳过受信代理），客户端无法伪造自己的限流 key；未配置时仍只用 TCP 对端。
 func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		if r.RemoteAddr != "" {
-			return r.RemoteAddr
-		}
-		return "unknown"
-	}
-	return host
+	return limiterKey(r)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

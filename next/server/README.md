@@ -32,6 +32,7 @@ answers 404 for non-API paths, which is enough for the API/WebSocket tests.
 | `-web-root`        | `NEX_WEB_STATIC_ROOT`         | `packages/web/dist` (relative to cwd) | Built web client                                                                                         |
 | `-name`            | `NEX_SERVER_NAME`             | hostname                              | Display name in `/api/server-info`                                                                       |
 | `-allowed-origins` | `NEX_ALLOWED_ORIGINS`         | — (same host only)                    | Comma-separated extra `Origin` host patterns accepted by `/ws` (for reverse proxies that rewrite `Host`) |
+| `-trusted-proxies` | `NEX_TRUSTED_PROXIES`         | — (TCP peer only)                     | Comma-separated proxy IPs/CIDRs whose `X-Forwarded-For` keys the login rate limiter (rightmost untrusted hop); without it every client behind a proxy shares one lockout |
 | —                  | `NEX_SERVER_AUTH_TOKEN`       | **required**                          | Browser login token                                                                                      |
 | —                  | `NEX_RUNNER_TOKEN`            | **required**                          | Bearer token for `GET /runner`                                                                           |
 

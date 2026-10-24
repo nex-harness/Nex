@@ -43,6 +43,9 @@ type Config struct {
 	// rewrites Host, which would otherwise make same-origin browser handshakes
 	// fail the Origin check.
 	AllowedOrigins []string
+	// TrustedProxies lists reverse-proxy IPs/CIDRs whose X-Forwarded-For is
+	// believed for the login rate limiter (NEX_TRUSTED_PROXIES).
+	TrustedProxies []string
 }
 
 // Load parses flags from args (without the program name) and applies the
@@ -58,6 +61,7 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 	webRoot := fs.String("web-root", "", "web static root (default packages/web/dist, env NEX_WEB_STATIC_ROOT)")
 	name := fs.String("name", "", "server display name (default hostname, env NEX_SERVER_NAME)")
 	origins := fs.String("allowed-origins", "", "comma-separated WebSocket Origin host patterns (env NEX_ALLOWED_ORIGINS)")
+	trusted := fs.String("trusted-proxies", "", "comma-separated reverse-proxy IPs/CIDRs whose X-Forwarded-For is trusted for login rate limiting (env NEX_TRUSTED_PROXIES)")
 
 	if err := fs.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parsing flags: %w", err)
@@ -72,6 +76,7 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 		RunnerToken:    strings.TrimSpace(getenv("NEX_RUNNER_TOKEN")),
 		ServerName:     firstNonEmpty(*name, getenv("NEX_SERVER_NAME")),
 		AllowedOrigins: splitList(firstNonEmpty(*origins, getenv("NEX_ALLOWED_ORIGINS"))),
+		TrustedProxies: splitList(firstNonEmpty(*trusted, getenv("NEX_TRUSTED_PROXIES"))),
 	}
 
 	if cfg.AuthToken == "" {

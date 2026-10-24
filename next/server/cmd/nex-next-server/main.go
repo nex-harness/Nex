@@ -14,6 +14,7 @@ import (
 
 	"github.com/tylinux/nex-next/server/internal/app"
 	"github.com/tylinux/nex-next/server/internal/config"
+	"github.com/tylinux/nex-next/server/internal/httpapi"
 )
 
 // Version is overridable at build time with -ldflags "-X main.Version=...".
@@ -30,6 +31,14 @@ func run() int {
 	if err != nil {
 		logger.Error("invalid configuration", "error", err)
 		return 2
+	}
+
+	if invalid := httpapi.SetTrustedProxies(cfg.TrustedProxies); len(invalid) > 0 {
+		logger.Error("invalid NEX_TRUSTED_PROXIES entries", "entries", invalid)
+		return 2
+	}
+	if len(cfg.TrustedProxies) > 0 {
+		logger.Info("login rate limiter trusts X-Forwarded-For from proxies", "proxies", cfg.TrustedProxies)
 	}
 
 	application, err := app.New(app.Options{

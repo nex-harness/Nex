@@ -760,15 +760,35 @@ set -a
 . "$SECRETS"
 set +a
 TOKEN="${NEX_SERVER_AUTH_TOKEN:-${NEX_NEXT_BROWSER_TOKEN:-}}"
+# 修复：服务刚启动时 runner 还没重连，第一次 server-info 总是报 0 个 workspace，
+# 部署日志看起来像失败。server 健康后再给 runner 最多 30 秒注册，最后报告实际数量。
+healthy=0
 for _ in $(seq 1 60); do
-  if payload="$(curl -fsS "http://127.0.0.1:$PORT/api/server-info?token=$TOKEN" 2>/dev/null)"; then
-    printf '%s' "$payload" | python3 -c 'import json,sys;d=json.load(sys.stdin);print("[deploy] server",d.get("version"),"| workspaces:",len(d.get("workspaces") or []))'
-    exit 0
+  if curl -fsS "http://127.0.0.1:$PORT/api/server-info?token=$TOKEN" >/dev/null 2>&1; then
+    healthy=1
+    break
   fi
   sleep 2
 done
-echo "[deploy] server did not become healthy; check its journal/log" >&2
-exit 1
+if [[ "$healthy" -ne 1 ]]; then
+  echo "[deploy] server did not become healthy; check its journal/log" >&2
+  exit 1
+fi
+count=0
+payload=""
+for _ in $(seq 1 15); do
+  payload="$(curl -fsS "http://127.0.0.1:$PORT/api/server-info?token=$TOKEN" 2>/dev/null || true)"
+  count="$(printf '%s' "$payload" | python3 -c 'import json,sys
+try: print(len(json.load(sys.stdin).get("workspaces") or []))
+except Exception: print(0)')"
+  [[ "$count" -gt 0 ]] && break
+  sleep 2
+done
+printf '%s' "$payload" | python3 -c 'import json,sys;d=json.load(sys.stdin);print("[deploy] server",d.get("version"),"| workspaces:",len(d.get("workspaces") or []))'
+if [[ "$count" -eq 0 ]]; then
+  echo "[deploy] warning: no runner registered a workspace within 30 s; check the runner journal/log" >&2
+fi
+exit 0
 REMOTE_HEALTH
 )" "$SECRETS_FILE" "$PORT"
 
