@@ -696,7 +696,7 @@ function applyGitHubUpdateProvider(options: InitAutoUpdaterOptions): void {
   // 读取 release 资产里的 latest-mac.yml / latest.yml / latest-linux.yml。
   autoUpdater.setFeedURL({
     provider: "github",
-    owner: "tylinux",
+    owner: "nex-harness",
     repo: "Nex",
   });
   logger.info("[auto-update] GitHub Releases update provider applied");

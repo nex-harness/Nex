@@ -22,7 +22,7 @@ Nex 是 AI 编程工作台，提供桌面应用、浏览器界面和终端 Agent
 
 镜像只有一个：`nex-server`（SEA 单文件二进制 + 同一次构建的 Web 静态资源，不含 Electron 和 monorepo 源码）。同一个进程提供 API、WebSocket 与 Web UI，不再需要 nginx / `nex-web`。
 
-拉取发布的镜像 `ghcr.io/tylinux/nex-server`，或在本机先构建 SEA 与 Web，再装配镜像（Dockerfile 不负责编译，产物准备见 `scripts/stage-docker-context.sh`）：
+拉取发布的镜像 `ghcr.io/nex-harness/nex-server`，或在本机先构建 SEA 与 Web，再装配镜像（Dockerfile 不负责编译，产物准备见 `scripts/stage-docker-context.sh`）：
 
 ```bash
 pnpm --filter @nex/web build

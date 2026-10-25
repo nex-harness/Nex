@@ -761,7 +761,7 @@ export default {
     // electron-builder 会产出 latest-mac.yml / latest.yml / latest-linux.yml
     // 并随安装包上传到 release，客户端 electron-updater 的 github provider 直接消费。
     provider: "github",
-    owner: "tylinux",
+    owner: "nex-harness",
     repo: "Nex",
   },
 };

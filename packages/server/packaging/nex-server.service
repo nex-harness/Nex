@@ -10,7 +10,7 @@
 #   config  /etc/nex-server/env (NEX_SERVER_AUTH_TOKEN and other env vars)
 [Unit]
 Description=Nex Server (single binary)
-Documentation=https://github.com/tylinux/Nex
+Documentation=https://github.com/nex-harness/Nex
 After=network-online.target
 Wants=network-online.target
 

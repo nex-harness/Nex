@@ -11,7 +11,7 @@
 
 ## 产品规则
 
-- 只发布一个镜像 `ghcr.io/tylinux/nex-server`，进程监听容器内 3030，同时提供 API、WebSocket 与 Web UI。**废弃 `nex-web` 镜像和 nginx 配置**；不再有 8080 端口。
+- 只发布一个镜像 `ghcr.io/nex-harness/nex-server`，进程监听容器内 3030，同时提供 API、WebSocket 与 Web UI。**废弃 `nex-web` 镜像和 nginx 配置**；不再有 8080 端口。
 - 镜像内容 = SEA 二进制 `nex-server` + 与之同一次构建的 `web/dist` + 运行时依赖（`git`、`openssh-client`、`ca-certificates`、`curl`）。不再包含 monorepo 源码和 `node_modules`。
 - **镜像不负责编译。** `Dockerfile` 只装配已构建好的产物：构建上下文只有 `dist-docker/`（`.dockerignore` 放行的唯一目录），由 `scripts/stage-docker-context.sh <target>` 从 `packages/server/dist/sea/nex-server-<target>` 与 `packages/web/dist` 复制而来。SEA 的构建步骤沿用 `release-server.yaml`（同样的 Node 24.14.0、typecheck、agent bundle、web build、`build-sea.mjs`），`docker.yaml` 在 `docker build` 之前执行同样的步骤。这样 Docker 构建只剩两层 COPY，不重复构建、不依赖镜像内再次下载依赖。
 - 架构：`docker.yaml` 只发布 `linux/amd64`（`--target linux-x64`）。`stage-docker-context.sh linux-arm64` 与 `docker build --platform linux/arm64` 可在本机使用，但 arm64 的 runtime 层需要 QEMU 才能执行 `apt-get`，CI 不在本期范围。
