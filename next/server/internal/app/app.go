@@ -11,13 +11,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/tylinux/nex-next/server/internal/auth"
-	"github.com/tylinux/nex-next/server/internal/browserws"
-	"github.com/tylinux/nex-next/server/internal/configstore"
-	"github.com/tylinux/nex-next/server/internal/httpapi"
-	"github.com/tylinux/nex-next/server/internal/local"
-	"github.com/tylinux/nex-next/server/internal/runners"
-	"github.com/tylinux/nex-next/server/internal/runnerws"
+	"github.com/nex-harness/nex/server/internal/auth"
+	"github.com/nex-harness/nex/server/internal/browserws"
+	"github.com/nex-harness/nex/server/internal/configstore"
+	"github.com/nex-harness/nex/server/internal/httpapi"
+	"github.com/nex-harness/nex/server/internal/local"
+	"github.com/nex-harness/nex/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/runnerws"
 )
 
 // Options are the resolved runtime options (see internal/config).

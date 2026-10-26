@@ -12,7 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
 )
 
 // Stub is a channel whose methods return a fixed JSON document and whose

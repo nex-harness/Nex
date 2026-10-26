@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
 )
 
 // ChannelName is the browser channel that carries these methods.

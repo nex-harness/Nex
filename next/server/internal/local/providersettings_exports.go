@@ -7,7 +7,7 @@ import (
 	"encoding/base64"
 	"sort"
 
-	"github.com/tylinux/nex-next/server/internal/configstore"
+	"github.com/nex-harness/nex/server/internal/configstore"
 )
 
 func randomSuffix() string {

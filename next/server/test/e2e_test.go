@@ -15,9 +15,9 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/tylinux/nex-next/server/internal/app"
-	"github.com/tylinux/nex-next/server/internal/configstore"
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/app"
+	"github.com/nex-harness/nex/server/internal/configstore"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
 )
 
 const (

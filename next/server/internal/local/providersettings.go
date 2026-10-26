@@ -23,7 +23,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tylinux/nex-next/server/internal/configstore"
+	"github.com/nex-harness/nex/server/internal/configstore"
 )
 
 // ReasonationLevels are the values the composer's option validator accepts.

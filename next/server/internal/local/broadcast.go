@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
 )
 
 const (

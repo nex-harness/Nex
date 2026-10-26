@@ -24,8 +24,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tylinux/nex-next/server/internal/configstore"
-	"github.com/tylinux/nex-next/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/configstore"
+	"github.com/nex-harness/nex/server/internal/runners"
 )
 
 // configPushTimeout bounds one push write (it is a single frame write).

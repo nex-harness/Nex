@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tylinux/nex-next/server/internal/local"
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
-	"github.com/tylinux/nex-next/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/local"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/runners"
 )
 
 // fakeRunner serves nex-task list/mutation calls from an in-memory task table

@@ -13,7 +13,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/tylinux/nex-next/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/runners"
 )
 
 // TestMain shortens the handshake deadline once, before any server goroutine

@@ -26,9 +26,9 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/tylinux/nex-next/server/internal/configstore"
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
-	"github.com/tylinux/nex-next/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/configstore"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/runners"
 )
 
 // ModelSelection serves the model-selection channel.

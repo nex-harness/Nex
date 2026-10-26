@@ -16,8 +16,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/tylinux/nex-next/server/internal/auth"
-	"github.com/tylinux/nex-next/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/auth"
+	"github.com/nex-harness/nex/server/internal/runners"
 )
 
 // Link timing. PingInterval/PingTimeout follow docs/next/README.md.

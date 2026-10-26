@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tylinux/nex-next/server/internal/auth"
+	"github.com/nex-harness/nex/server/internal/auth"
 )
 
 func TestTokensEqual(t *testing.T) {

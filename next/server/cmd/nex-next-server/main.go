@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tylinux/nex-next/server/internal/app"
-	"github.com/tylinux/nex-next/server/internal/config"
-	"github.com/tylinux/nex-next/server/internal/httpapi"
+	"github.com/nex-harness/nex/server/internal/app"
+	"github.com/nex-harness/nex/server/internal/config"
+	"github.com/nex-harness/nex/server/internal/httpapi"
 )
 
 // Version is overridable at build time with -ldflags "-X main.Version=...".

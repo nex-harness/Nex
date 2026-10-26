@@ -7,8 +7,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tylinux/nex-next/server/internal/configstore"
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/configstore"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
 )
 
 func (p *ProviderSettings) reorderProviders(ctx context.Context, arg rpcwire.Value) (rpcwire.Value, error) {

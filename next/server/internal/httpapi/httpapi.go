@@ -22,8 +22,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tylinux/nex-next/server/internal/auth"
-	"github.com/tylinux/nex-next/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/auth"
+	"github.com/nex-harness/nex/server/internal/runners"
 )
 
 // maxRequestBody bounds login bodies.

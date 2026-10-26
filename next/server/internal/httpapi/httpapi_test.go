@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tylinux/nex-next/server/internal/app"
-	"github.com/tylinux/nex-next/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/app"
+	"github.com/nex-harness/nex/server/internal/runners"
 )
 
 const (

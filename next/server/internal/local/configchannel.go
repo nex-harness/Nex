@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tylinux/nex-next/server/internal/configstore"
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/configstore"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
 )
 
 // configChannel serves the parts of the `config` channel the browser may call.

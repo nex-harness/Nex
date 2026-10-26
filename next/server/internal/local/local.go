@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
-	"github.com/tylinux/nex-next/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/runners"
 )
 
 // Env is the per-connection context handed to local channels.

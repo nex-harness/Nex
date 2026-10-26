@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tylinux/nex-next/server/internal/config"
+	"github.com/nex-harness/nex/server/internal/config"
 )
 
 func env(values map[string]string) func(string) string {

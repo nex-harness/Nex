@@ -10,7 +10,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
 )
 
 // Settings implements the `setting` channel from

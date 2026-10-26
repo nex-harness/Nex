@@ -3,7 +3,7 @@ package runners_test
 import (
 	"testing"
 
-	"github.com/tylinux/nex-next/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/runners"
 )
 
 func TestBuildIdentity(t *testing.T) {

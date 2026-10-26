@@ -1,4 +1,4 @@
-module github.com/tylinux/nex-next/server
+module github.com/nex-harness/nex/server
 
 go 1.27
 

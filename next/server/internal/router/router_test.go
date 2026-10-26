@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/tylinux/nex-next/server/internal/router"
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
-	"github.com/tylinux/nex-next/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/router"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/runners"
 )
 
 func localNone(string) bool         { return false }

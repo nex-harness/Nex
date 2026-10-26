@@ -11,9 +11,9 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/tylinux/nex-next/server/internal/browserws"
-	"github.com/tylinux/nex-next/server/internal/local"
-	"github.com/tylinux/nex-next/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/browserws"
+	"github.com/nex-harness/nex/server/internal/local"
+	"github.com/nex-harness/nex/server/internal/runners"
 )
 
 // NEX_ALLOWED_ORIGINS exists for proxies that rewrite Host; an explicitly

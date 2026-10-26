@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tylinux/nex-next/server/internal/configstore"
+	"github.com/nex-harness/nex/server/internal/configstore"
 )
 
 // UploadBundleFiles stores one skill/prompt bundle and references it in the doc

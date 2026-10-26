@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tylinux/nex-next/server/internal/local"
-	"github.com/tylinux/nex-next/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/local"
+	"github.com/nex-harness/nex/server/internal/runners"
 )
 
 func testConnection(t *testing.T, queueSize int) *connection {

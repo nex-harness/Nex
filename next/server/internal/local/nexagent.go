@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
 )
 
 // v4WireProtocolVersion mirrors V4_WIRE_PROTOCOL_VERSION in

@@ -13,10 +13,10 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/tylinux/nex-next/server/internal/browserws"
-	"github.com/tylinux/nex-next/server/internal/local"
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
-	"github.com/tylinux/nex-next/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/browserws"
+	"github.com/nex-harness/nex/server/internal/local"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/runners"
 )
 
 func newHandler(t *testing.T) (*httptest.Server, *runners.Registry) {

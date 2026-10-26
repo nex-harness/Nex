@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tylinux/nex-next/server/internal/local"
-	"github.com/tylinux/nex-next/server/internal/rpcwire"
+	"github.com/nex-harness/nex/server/internal/local"
+	"github.com/nex-harness/nex/server/internal/rpcwire"
 )
 
 func getSettings(t *testing.T, settings *local.Settings) map[string]json.RawMessage {
