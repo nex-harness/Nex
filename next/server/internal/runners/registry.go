@@ -53,6 +53,10 @@ type Link interface {
 type Target struct {
 	WorkspacePath     string
 	WorkspaceIdentity string
+	// RunnerID routes directly to one runner (tool id bindings: the listen of a
+	// terminal/watcher id must reach the machine that owns the id, regardless
+	// of path identities). Empty means identity/path resolution as before.
+	RunnerID string
 }
 
 // ErrNoRunnerForWorkspace means no connected runner serves the requested
@@ -109,6 +113,10 @@ type binding struct {
 	// workspaceIdentity is set for identity-routed listens. It is the
 	// reconnect key: only the runner with this id may ever receive the stream.
 	workspaceIdentity string
+	// targetRunnerID routes an id-only listen (terminal data/exit, watcher
+	// change) to the machine that owns the tool id. The binding dies with that
+	// runner (the ids die with it).
+	targetRunnerID string
 	// firstRunner marks a channel with no workspace in its argument
 	// (model-selection/provider-settings onDidChange): it follows whichever
 	// runner is connected first.
@@ -218,6 +226,9 @@ func (r *Registry) planLocked() []listenRequest {
 // another runner that happens to serve the same path must never receive the
 // stream. Path bindings attach only while exactly one runner serves the path.
 func (r *Registry) bindingRunnerLocked(b *binding) *runner {
+	if b.targetRunnerID != "" {
+		return r.runners[b.targetRunnerID]
+	}
 	if b.workspaceIdentity != "" {
 		runnerID, _, ok := ParseIdentity(b.workspaceIdentity)
 		if !ok {
@@ -252,6 +263,9 @@ type Registry struct {
 	nextOrder int64
 	subs      map[int64]func()
 	nextSub   int64
+	// dropSubs observe runner disconnects (tool id bindings cleanup).
+	dropSubs map[int64]func(string)
+	nextDrop int64
 }
 
 // NewRegistry returns an empty registry.
@@ -381,10 +395,30 @@ func (r *Registry) Unregister(id string, link Link) {
 	// otherwise model-selection.onDidChange would stay dead until an unrelated
 	// reconnect.
 	requests := r.planLocked()
+	dropFns := make([]func(string), 0, len(r.dropSubs))
+	for _, fn := range r.dropSubs {
+		dropFns = append(dropFns, fn)
+	}
 	r.mu.Unlock()
 	r.logger.Info("runner disconnected", "runnerId", id)
 	r.issueListens(requests)
+	// Tool id bindings (terminals/watchers) die with the process.
+	for _, fn := range dropFns {
+		fn(id)
+	}
 	r.notify()
+}
+
+// OnRunnerDisconnected registers a callback invoked with the runner id after
+// it disconnects (tool id bindings and other per-runner cleanup).
+func (r *Registry) OnRunnerDisconnected(fn func(runnerID string)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.dropSubs == nil {
+		r.dropSubs = map[int64]func(string){}
+	}
+	r.nextDrop++
+	r.dropSubs[r.nextDrop] = fn
 }
 
 // removeLocked detaches a runner and its identities/paths. Bindings keep their
@@ -439,6 +473,20 @@ func (r *Registry) RunnerIDForPath(workspacePath string) (string, bool) {
 	return owners[0].info.RunnerID, true
 }
 
+// RunnerForTarget resolves the runner of a workspace target using the same
+// rules as resolveLocked (identity first, then a unique path). It reports the
+// runner id for callers that only need routing (tool id bindings), without
+// the link.
+func (r *Registry) RunnerForTarget(target Target) (string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	entry, err := r.resolveLocked(target)
+	if err != nil || entry == nil {
+		return "", false
+	}
+	return entry.info.RunnerID, true
+}
+
 // RunnerIDsForPath returns every runner serving workspacePath in registration
 // order.
 func (r *Registry) RunnerIDsForPath(workspacePath string) []string {
@@ -470,6 +518,13 @@ func (r *Registry) RunnerIDForIdentity(identity string) (string, bool) {
 // a valid runner identity the legacy path rule applies and requires a unique
 // owner.
 func (r *Registry) resolveLocked(target Target) (*runner, error) {
+	if id := strings.TrimSpace(target.RunnerID); id != "" {
+		// Tool id bindings name the machine directly.
+		if entry, live := r.runners[id]; live {
+			return entry, nil
+		}
+		return nil, OfflineError{}
+	}
 	if identity := strings.TrimSpace(target.WorkspaceIdentity); identity != "" {
 		if runnerID, _, ok := ParseIdentity(identity); ok {
 			// The identity table is the fast path. A live runner id is still
@@ -558,7 +613,8 @@ func (r *Registry) RegisterListen(owner string, ownerListenID uint32, target Tar
 	if _, _, ok := ParseIdentity(workspaceIdentity); !ok {
 		workspaceIdentity = ""
 	}
-	first := workspacePath == "" && workspaceIdentity == ""
+	targetRunnerID := strings.TrimSpace(target.RunnerID)
+	first := workspacePath == "" && workspaceIdentity == "" && targetRunnerID == ""
 
 	b := &binding{
 		id:                id,
@@ -569,12 +625,13 @@ func (r *Registry) RegisterListen(owner string, ownerListenID uint32, target Tar
 		arg:               arg,
 		workspacePath:     workspacePath,
 		workspaceIdentity: workspaceIdentity,
+		targetRunnerID:    targetRunnerID,
 		firstRunner:       first,
 		emit:              emit,
 	}
 
 	r.mu.Lock()
-	if !first && workspaceIdentity == "" {
+	if !first && workspaceIdentity == "" && targetRunnerID == "" {
 		// Legacy path listen: reject ambiguity up front instead of silently
 		// attaching the stream to an arbitrary machine.
 		if len(r.paths[workspacePath]) > 1 {

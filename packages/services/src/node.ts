@@ -80,6 +80,9 @@ export { createGitCheckpointService } from "./git/gitCheckpointService.js";
 export { createSystemService } from "./system/systemService.js";
 export { listSSHConfigAliasesFromLocalConfig } from "./system/sshConfigAlias.js";
 export { createTerminalService } from "./terminal/terminalService.js";
+// 终端字体/主题档案解析（runner 的 workspace-tools 通道在无 setting service 的
+// 环境下复用同一份探测逻辑）。
+export { resolveTerminalFontProfile } from "./terminal/terminalProfile.js";
 export {
   createSettingService,
   createSettingServiceWithMigrations,

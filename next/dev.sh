@@ -14,6 +14,7 @@
 #   next/dev.sh --e2e=files        # run the file-changes E2E (diffs, Undo, edit with rewind)
 #   next/dev.sh --e2e=settings     # run the server-owned provider settings E2E (settings -> picker -> chat)
 #   next/dev.sh --e2e=mcp          # run the MCP + skills E2E (settings -> echo server -> tool call -> /skill:)
+#   next/dev.sh --e2e=tools        # run the workspace tools E2E (terminal + files + git on the runner)
 #   next/dev.sh --e2e=all          # every suite, settings and mcp last
 #
 # Environment:
@@ -54,6 +55,7 @@ for arg in "$@"; do
     --e2e=files) E2E_MODE="files" ;;
     --e2e=settings) E2E_MODE="settings" ;;
     --e2e=mcp) E2E_MODE="mcp" ;;
+    --e2e=tools) E2E_MODE="tools" ;;
     --e2e=all) E2E_MODE="all" ;;
     -h | --help)
       sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -363,6 +365,7 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   multi_status=0
   settings_status=0
   mcp_status=0
+  tools_status=0
   if [[ "$E2E_MODE" == "acceptance" || "$E2E_MODE" == "all" ]]; then
     (
       cd "$REPO_ROOT"
@@ -501,6 +504,20 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
     mcp_status=$?
     log "mcp-skills E2E exited with $mcp_status"
   fi
+  if [[ "$E2E_MODE" == "tools" || "$E2E_MODE" == "all" ]]; then
+    # Batch 1 workspace tools (docs/next/workspace-tools.md): terminal (incl.
+    # reload reattach), files side pane, git pane — all on the runner.
+    curl -fsS -X DELETE http://127.0.0.1:18080/state >/dev/null 2>&1 || true
+    (
+      cd "$REPO_ROOT"
+      NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
+        NEX_E2E_TOKEN="$BROWSER_TOKEN" \
+        NEX_E2E_WORKSPACE="$WORKSPACE" \
+        node next/e2e/workspace-tools.mjs
+    )
+    tools_status=$?
+    log "workspace-tools E2E exited with $tools_status"
+  fi
   set -e
   if [[ "$acceptance_status" -ne 0 ]]; then
     exit "$acceptance_status"
@@ -526,7 +543,10 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   if [[ "$settings_status" -ne 0 ]]; then
     exit "$settings_status"
   fi
-  exit "$mcp_status"
+  if [[ "$mcp_status" -ne 0 ]]; then
+    exit "$mcp_status"
+  fi
+  exit "$tools_status"
 fi
 
 wait

@@ -240,3 +240,72 @@ func TestResolveMcpSyncAndSkills(t *testing.T) {
 		t.Fatalf("commands route = %+v", route)
 	}
 }
+
+// TestResolveWorkspaceToolChannels covers the batch-1 routing (docs/next/
+// workspace-tools.md decision 1): file/git/watcher/media/terminal/system
+// forward by the injected workspace target and fall back to local stubs (or
+// first runner for system) without one; id-only calls route by the tool id
+// kinds the browserws dispatcher resolves through its binding tables.
+func TestResolveWorkspaceToolChannels(t *testing.T) {
+	target := json.RawMessage(`[{"workspacePath":"/w","workspaceIdentity":"runner:alpha:/w"}]`)
+
+	// Workspace-targeted calls forward to the runner.
+	for _, channel := range []string{"file", "git", "git-checkpoint", "media-preview"} {
+		for _, method := range []string{"readdir", "refresh", "prepare"} {
+			route := router.Resolve(channel, method, target, localNone)
+			if route.Kind != router.TargetWorkspace || route.WorkspaceIdentity != "runner:alpha:/w" {
+				t.Fatalf("%s.%s route = %+v, want TargetWorkspace alpha", channel, method, route)
+			}
+		}
+	}
+
+	// Without a target the call stays local (the stub answers the folder picker
+	// and conversation-workspace helpers).
+	for _, channel := range []string{"file", "git", "git-checkpoint", "media-preview"} {
+		route := router.Resolve(channel, "readdir", json.RawMessage(`[{"path":"/any"}]`), localNone)
+		if route.Kind != router.TargetLocal {
+			t.Fatalf("%s target-less route = %+v, want TargetLocal", channel, route)
+		}
+	}
+
+	// file-watcher: watch carries the target; unwatch routes by id binding.
+	if route := router.Resolve("file-watcher", "watch", target, localNone); route.Kind != router.TargetWorkspace {
+		t.Fatalf("file-watcher.watch route = %+v", route)
+	}
+	if route := router.Resolve("file-watcher", "unwatch", json.RawMessage(`[{"id":"w1"}]`), localNone); route.Kind != router.TargetWatchID {
+		t.Fatalf("file-watcher.unwatch route = %+v, want TargetWatchID", route)
+	}
+	if route := router.ResolveEvent("file-watcher", "onDynamicChange", json.RawMessage(`["w1"]`), localNone); route.Kind != router.TargetWatchID {
+		t.Fatalf("file-watcher.onDynamicChange route = %+v, want TargetWatchID", route)
+	}
+
+	// terminal: create routes by workspace (or first runner without a target);
+	// write/resize/dispose and the listens route by the terminal id binding.
+	if route := router.Resolve("terminal", "create", target, localNone); route.Kind != router.TargetWorkspace {
+		t.Fatalf("terminal.create route = %+v", route)
+	}
+	if route := router.Resolve("terminal", "create", rpcwire.Undefined{}, localNone); route.Kind != router.TargetFirstRunner {
+		t.Fatalf("terminal.create target-less route = %+v, want TargetFirstRunner", route)
+	}
+	for _, method := range []string{"write", "resize", "dispose"} {
+		route := router.Resolve("terminal", method, json.RawMessage(`[{"id":"t1","data":"x"}]`), localNone)
+		if route.Kind != router.TargetTerminalID {
+			t.Fatalf("terminal.%s route = %+v, want TargetTerminalID", method, route)
+		}
+	}
+	for _, event := range []string{"onDynamicData", "onDynamicExit"} {
+		route := router.ResolveEvent("terminal", event, json.RawMessage(`["t1"]`), localNone)
+		if route.Kind != router.TargetTerminalID {
+			t.Fatalf("terminal.%s route = %+v, want TargetTerminalID", event, route)
+		}
+	}
+
+	// system: host facts of the workspace machine; without a target the first
+	// runner answers (DirectoryBrowser's picker).
+	if route := router.Resolve("system", "info", target, localNone); route.Kind != router.TargetWorkspace {
+		t.Fatalf("system.info route = %+v", route)
+	}
+	if route := router.Resolve("system", "info", rpcwire.Undefined{}, localNone); route.Kind != router.TargetFirstRunner {
+		t.Fatalf("system.info target-less route = %+v, want TargetFirstRunner", route)
+	}
+}

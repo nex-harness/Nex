@@ -551,9 +551,14 @@ export function WorkspaceFileTree({
         // 即使未来有其它入口直接调用预览，也要在父级兜底阻止打开。
         return;
       }
-      onOpenPreview?.(createCodeViewerSourceForWorkspaceFile(row.path));
+      onOpenPreview?.(
+        createCodeViewerSourceForWorkspaceFile(row.path, {
+          workspacePath,
+          ...(workspaceIdentity ? { workspaceIdentity } : {}),
+        }),
+      );
     },
-    [handleDirectoryAction, onOpenPreview, treeData.gitStatusByPath],
+    [handleDirectoryAction, onOpenPreview, treeData.gitStatusByPath, workspacePath, workspaceIdentity],
   );
   const handleRowKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>, row: WorkspaceFileTreeRow) => {

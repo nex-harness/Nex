@@ -460,8 +460,19 @@ export function flattenWorkspaceFileTreeRows(params: {
   return rows;
 }
 
-export function createCodeViewerSourceForWorkspaceFile(path: string): CodeViewerSource {
+export function createCodeViewerSourceForWorkspaceFile(
+  path: string,
+  scope?: { workspacePath?: string; workspaceIdentity?: string },
+): CodeViewerSource {
   const title = getPathLeaf(path);
+  // 多 runner 路由：file tree 打开的预览必须带上所属 workspace 的
+  // {workspacePath, workspaceIdentity}，否则同一路径被两台机器服务时
+  // server 无法路由（"ambiguous workspace path"），PreviewPane 的
+  // readTextFile/预览全部失败。
+  const scopeFields = {
+    ...(scope?.workspacePath ? { workspacePath: scope.workspacePath } : {}),
+    ...(scope?.workspaceIdentity ? { workspaceIdentity: scope.workspaceIdentity } : {}),
+  };
   const mediaType = inferImageMediaType(path);
   if (mediaType && mediaType !== "image/svg+xml") {
     return {
@@ -469,6 +480,7 @@ export function createCodeViewerSourceForWorkspaceFile(path: string): CodeViewer
       title,
       path,
       mediaType,
+      ...scopeFields,
     };
   }
 
@@ -479,6 +491,7 @@ export function createCodeViewerSourceForWorkspaceFile(path: string): CodeViewer
       title,
       path,
       ...mediaPreview,
+      ...scopeFields,
     };
   }
 
@@ -486,5 +499,6 @@ export function createCodeViewerSourceForWorkspaceFile(path: string): CodeViewer
     type: "file",
     title,
     path,
+    ...scopeFields,
   };
 }

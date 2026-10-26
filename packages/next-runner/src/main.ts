@@ -16,6 +16,7 @@ import { registerChannels } from "./channels/register.js";
 import { RuntimeConfigManager } from "./config/applyRuntimeConfig.js";
 import { ConfigExecutor } from "./config/configAck.js";
 import { registerConfigChannel } from "./channels/configChannel.js";
+import { registerWorkspaceTools } from "./channels/workspaceTools.js";
 import { registerE2EProvider } from "./extensions/e2eProvider.js";
 
 async function main(): Promise<void> {
@@ -59,6 +60,14 @@ async function main(): Promise<void> {
     workspacePaths: config.workspaces,
   });
   registerConfigChannel(registry, { manager: runtimeConfig, logger: logger.child("config") });
+  // Batch 1 workspace tools (docs/next/workspace-tools.md): file/git/watcher/
+  // media/terminal/system channels on this runner, behind the same workspace
+  // guard. Registered on the raw registry: the guard wraps calls per handler
+  // inside (path containment is stricter than the workspacePath check).
+  const workspaceTools = registerWorkspaceTools(registry, {
+    logger: logger.child("tools"),
+    workspacePaths: config.workspaces,
+  });
   // `configApplied.facts` for the server's model-selection view: server-owned
   // mode reports the applied runtime, fallback mode reports pi's own catalog
   // (decision 2), so the composer works in both modes without a forward.
@@ -111,6 +120,7 @@ async function main(): Promise<void> {
     await link.stop();
     await runtimeConfig.dispose();
     channels.disposed();
+    await workspaceTools.dispose();
     publisher.dispose();
     await engine.dispose();
     process.exit(0);

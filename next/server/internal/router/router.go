@@ -36,6 +36,14 @@ const (
 	// TargetRunner forwards to the runner named by RunnerID (config export and
 	// other server-initiated runner facts).
 	TargetRunner
+	// TargetTerminalID routes by the terminal id in the argument (terminal
+	// write/resize/dispose and the data/exit listens): the server keeps the
+	// id→runner binding recorded when the terminal was created.
+	TargetTerminalID
+	// TargetWatchID routes by the watcher id in the argument (file-watcher
+	// unwatch and the change listen): the server keeps the id→runner binding
+	// recorded by the watch call.
+	TargetWatchID
 )
 
 // Route is the resolved destination for one channel request.
@@ -71,6 +79,15 @@ const (
 	// config-mcp-skills.md). provider-settings/model-selection are answered from
 	// it by the server; the rest of the channel is served locally too.
 	ChannelConfig = "config"
+	// Batch-1 workspace tool channels (docs/next/workspace-tools.md): the
+	// runner that owns the workspace answers file/git/watcher/media/terminal.
+	ChannelFile           = "file"
+	ChannelGit            = "git"
+	ChannelGitCheckpoint  = "git-checkpoint"
+	ChannelFileWatcher    = "file-watcher"
+	ChannelMediaPreview   = "media-preview"
+	ChannelTerminal       = "terminal"
+	ChannelSystem         = "system"
 )
 
 // workspaceTargetMethods enumerates forwarded nex-agent methods that carry a
@@ -254,6 +271,53 @@ func resolveSpecial(channel, method string, arg rpcwire.Value) (Route, bool) {
 			return Route{Kind: TargetFirstRunner}, true
 		}
 		return Route{Kind: TargetLocal}, true
+
+	case ChannelFile, ChannelGit, ChannelGitCheckpoint, ChannelMediaPreview:
+		// Batch 1 (docs/next/workspace-tools.md decision 1): every path-bearing
+		// call carries the workspace target injected by the UI's bound accessor;
+		// route to that runner. Without a target the call stays local (stubs keep
+		// the folder picker and `ensureConversationWorkspace` working).
+		if target := workspaceTarget(arg); target != (runners.Target{}) {
+			return workspaceRoute(arg)
+		}
+		return Route{Kind: TargetLocal}, true
+
+	case ChannelFileWatcher:
+		// watch carries the target; unwatch and the onDynamicChange listen carry
+		// only the watcher id, whose binding the server keeps (browserws stores
+		// watch id → target). The id-keyed lookups happen in browserws; here the
+		// target-bearing form routes normally.
+		if target := workspaceTarget(arg); target != (runners.Target{}) {
+			return workspaceRoute(arg)
+		}
+		if method == "unwatch" {
+			return Route{Kind: TargetWatchID}, true
+		}
+		return Route{Kind: TargetLocal}, true
+
+	case ChannelTerminal:
+		// create carries the workspace target (injected by the bound accessor);
+		// write/resize/dispose and the data/exit listens carry only the terminal
+		// id, whose →runner binding the server records from create's result.
+		if method == "create" {
+			if target := workspaceTarget(arg); target != (runners.Target{}) {
+				return workspaceRoute(arg)
+			}
+			return Route{Kind: TargetFirstRunner}, true
+		}
+		// id-only calls resolve through the terminal binding table in browserws;
+		// a missing binding must not fall back to a local stub (terminals do not
+		// exist server-side), so the dispatcher treats them as runner-bound.
+		return Route{Kind: TargetTerminalID}, true
+
+	case ChannelSystem:
+		// info/listIntegratedTerminalShells are host facts of the machine the
+		// workspace lives on: route with a target when present (the UI's bound
+		// callers inject it), else the first runner (DirectoryBrowser's picker).
+		if target := workspaceTarget(arg); target != (runners.Target{}) {
+			return workspaceRoute(arg)
+		}
+		return Route{Kind: TargetFirstRunner}, true
 	}
 	return Route{}, false
 }
@@ -283,6 +347,19 @@ func resolveSpecialEvent(channel, event string, arg rpcwire.Value) (Route, bool)
 	case ChannelConfig, ChannelMcpSync, ChannelSkills:
 		// mcp-sync/skills events carry no live state; a listen stays local (and
 		// never fires), so the browser's always-truthy proxy methods stay quiet.
+		return Route{Kind: TargetLocal}, true
+	case ChannelFileWatcher:
+		// onDynamicChange(id): the listen argument is the watcher id (or
+		// {id}); it inherits the watch call's binding (browserws keeps the map).
+		if event == "onDynamicChange" {
+			return Route{Kind: TargetWatchID}, true
+		}
+		return Route{Kind: TargetLocal}, true
+	case ChannelTerminal:
+		// onDynamicData(id)/onDynamicExit(id): routed by the terminal id binding.
+		if event == "onDynamicData" || event == "onDynamicExit" {
+			return Route{Kind: TargetTerminalID}, true
+		}
 		return Route{Kind: TargetLocal}, true
 	}
 	return Route{}, false

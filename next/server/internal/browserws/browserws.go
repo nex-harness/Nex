@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -66,6 +67,9 @@ type Deps struct {
 	// reverse proxy rewrites Host. Empty means "same host as the request"
 	// only, which the websocket library enforces for us.
 	AllowedOrigins []string
+	// ToolIDs holds the server-global terminal/watcher id → runner bindings
+	// (batch 1 workspace tools). Nil builds an internal store.
+	ToolIDs *IDBindings
 }
 
 // Handler serves GET /ws.
@@ -76,6 +80,20 @@ type Handler struct {
 
 // NewHandler builds the /ws handler.
 func NewHandler(deps Deps) *Handler {
+	if deps.ToolIDs == nil {
+		deps.ToolIDs = NewIDBindings()
+	}
+	if deps.Logger == nil {
+		deps.Logger = slog.Default()
+	}
+	// Runner drop clears its tool id bindings: terminals and watchers die with
+	// the runner process, and a stale binding would route reattach attempts to
+	// an offline machine.
+	if deps.Registry != nil {
+		deps.Registry.OnRunnerDisconnected(func(runnerID string) {
+			deps.ToolIDs.DropRunner(runnerID)
+		})
+	}
 	return &Handler{deps: deps}
 }
 
@@ -494,6 +512,12 @@ func (c *connection) runPromise(ctx context.Context, entry *pendingPromise, requ
 		value, err := link.Call(ctx, request.Channel, request.Name, arg)
 		c.respondForwarded(ctx, request.ID, value, err)
 
+	case router.TargetTerminalID:
+		c.forwardIdRouted(ctx, request, c.deps.ToolIDs.Terminal, "terminal")
+
+	case router.TargetWatchID:
+		c.forwardIdRouted(ctx, request, c.deps.ToolIDs.Watcher, "watcher")
+
 	default:
 		c.enqueuePromiseError(request.ID, fmt.Sprintf("Channel name '%s' not found", request.Channel), "Unknown channel")
 	}
@@ -519,8 +543,179 @@ func (c *connection) forwardCall(ctx context.Context, request rpcwire.Request, t
 		c.enqueuePromiseError(request.ID, err.Error(), "Error")
 		return
 	}
+	// terminal.create / file-watcher.watch mint an id on the runner: record
+	// the id → runner binding from the result so the later id-only calls
+	// (write/resize/dispose, unwatch, the dynamic listens) route back.
+	record := c.bindingRecorderFor(request)
 	value, err := c.deps.Registry.CallWorkspace(ctx, target, request.Channel, request.Name, arg)
+	if record != nil && err == nil {
+		record(value)
+	}
 	c.respondForwarded(ctx, request.ID, value, err)
+}
+
+// bindingRecorderFor returns a result hook when this request mints a tool id.
+func (c *connection) bindingRecorderFor(request rpcwire.Request) func(json.RawMessage) {
+	kind := ""
+	switch request.Channel {
+	case router.ChannelTerminal:
+		if request.Name != "create" {
+			return nil
+		}
+		kind = "terminal"
+	case router.ChannelFileWatcher:
+		if request.Name != "watch" {
+			return nil
+		}
+		kind = "watcher"
+	default:
+		return nil
+	}
+	return func(result json.RawMessage) {
+		// Result shape: {"id":"..."} (terminal.create also carries shell/font
+		// fields; watch returns {"id"}).
+		var payload struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(result, &payload); err != nil || payload.ID == "" {
+			return
+		}
+		// Resolve the owning runner from the request's original target: the
+		// registry's identity/path tables answered the create; ask it again
+		// for the same target.
+		target := routerTargetOf(request)
+		runnerID, ok := c.deps.Registry.RunnerForTarget(target)
+		if !ok {
+			return
+		}
+		if kind == "terminal" {
+			c.deps.ToolIDs.RecordTerminal(payload.ID, runnerID)
+		} else {
+			c.deps.ToolIDs.RecordWatcher(payload.ID, runnerID)
+		}
+	}
+}
+
+// forwardIdRouted forwards one id-only call to the runner that owns the id.
+func (c *connection) forwardIdRouted(
+	ctx context.Context,
+	request rpcwire.Request,
+	resolveID func(string) (string, bool),
+	kind string,
+) {
+	id := idFieldOf(request.Arg)
+	if id == "" {
+		c.deps.Logger.Warn("id-routed call without id",
+			"kind", kind, "channel", request.Channel, "method", request.Name)
+		c.enqueuePromiseError(request.ID, kind+" id is required", "Error")
+		return
+	}
+	runnerID, ok := resolveID(id)
+	if !ok {
+		c.deps.Logger.Debug("id-routed call without binding",
+			"kind", kind, "id", id, "channel", request.Channel, "method", request.Name)
+		c.enqueuePromiseError(request.ID, "unknown "+kind+" id: "+id, "Error")
+		return
+	}
+	link, ok := c.deps.Registry.Runner(runnerID)
+	if !ok {
+		c.enqueuePromiseError(request.ID, "runner offline", "Error")
+		return
+	}
+	arg, err := rpcwire.ToJSON(request.Arg)
+	if err != nil {
+		c.enqueuePromiseError(request.ID, err.Error(), "Error")
+		return
+	}
+	value, err := link.Call(ctx, request.Channel, request.Name, arg)
+	c.respondForwarded(ctx, request.ID, value, err)
+}
+
+// routerTargetOf extracts the workspace target of one request's argument.
+func routerTargetOf(request rpcwire.Request) runners.Target {
+	fields := map[string]string{}
+	for _, entry := range argumentObjects(request.Arg) {
+		if path, ok := entry["workspacePath"].(string); ok {
+			fields["workspacePath"] = path
+		}
+		if identity, ok := entry["workspaceIdentity"].(string); ok {
+			fields["workspaceIdentity"] = identity
+		}
+	}
+	return runners.Target{
+		WorkspacePath:     fields["workspacePath"],
+		WorkspaceIdentity: fields["workspaceIdentity"],
+	}
+}
+
+// idFieldOf reads the `id` of an argument: an object field (`{id}`) or a bare
+// string (the dynamic-event listens pass the id directly as the listen arg).
+func idFieldOf(arg rpcwire.Value) string {
+	if id, ok := directString(arg); ok {
+		return id
+	}
+	for _, entry := range argumentObjects(arg) {
+		if id, ok := entry["id"].(string); ok && strings.TrimSpace(id) != "" {
+			return strings.TrimSpace(id)
+		}
+	}
+	return ""
+}
+
+// directString unwraps a bare string argument (the dynamic-event listen arg).
+func directString(arg rpcwire.Value) (string, bool) {
+	switch typed := arg.(type) {
+	case string:
+		if strings.TrimSpace(typed) != "" {
+			return strings.TrimSpace(typed), true
+		}
+	case json.RawMessage:
+		var decoded string
+		if err := json.Unmarshal(typed, &decoded); err == nil && strings.TrimSpace(decoded) != "" {
+			return strings.TrimSpace(decoded), true
+		}
+	}
+	return "", false
+}
+
+// argumentObjects lists the object elements of a positional argument envelope
+// (browser calls always wrap args in an array). rpcwire decodes array elements
+// as json.RawMessage (tag 5 objects), so both shapes are accepted.
+func argumentObjects(arg rpcwire.Value) []map[string]any {
+	var elements []any
+	switch typed := arg.(type) {
+	case []any:
+		elements = typed
+	case json.RawMessage, []byte:
+		var decoded []any
+		if err := json.Unmarshal(rawBytes(typed), &decoded); err == nil {
+			elements = decoded
+		}
+	}
+	out := make([]map[string]any, 0, len(elements))
+	for _, element := range elements {
+		switch typed := element.(type) {
+		case map[string]any:
+			out = append(out, typed)
+		case json.RawMessage:
+			var decoded map[string]any
+			if err := json.Unmarshal(typed, &decoded); err == nil && decoded != nil {
+				out = append(out, decoded)
+			}
+		}
+	}
+	return out
+}
+
+// rawBytes converts a json.RawMessage or []byte to bytes.
+func rawBytes(value rpcwire.Value) []byte {
+	switch typed := value.(type) {
+	case json.RawMessage:
+		return typed
+	case []byte:
+		return typed
+	}
+	return nil
 }
 
 func (c *connection) respondForwarded(ctx context.Context, id uint32, value json.RawMessage, err error) {
@@ -669,6 +864,56 @@ func (c *connection) handleListen(parent context.Context, request rpcwire.Reques
 			// The connection closed between storing the binding and recording
 			// the local listen id; UnregisterOwner may have already run before
 			// the binding existed, so drop it explicitly (idempotent).
+			c.deps.Registry.UnregisterListen(c.id, request.ID)
+		}
+
+	case router.TargetTerminalID, router.TargetWatchID:
+		// The id-only dynamic listens (terminal data/exit, watcher change):
+		// resolve the owning runner from the id binding, then register the
+		// listen against that runner's Target{RunnerID} so the registry's
+		// runner binding (not path resolution) keeps it alive.
+		id := idFieldOf(request.Arg)
+		kind := "watcher"
+		resolveID := c.deps.ToolIDs.Watcher
+		if route.Kind == router.TargetTerminalID {
+			kind = "terminal"
+			resolveID = c.deps.ToolIDs.Terminal
+		}
+		if id == "" {
+			c.enqueueEvent(request.ID, rpcwire.Undefined{})
+			cancel()
+			return
+		}
+		runnerID, ok := resolveID(id)
+		if !ok {
+			// Unknown id (runner restarted, or a listen racing the create
+			// result): stay silent like an unknown event, never fire.
+			c.deps.Logger.Debug("id-routed listen without binding",
+				"kind", kind, "id", id, "channel", request.Channel)
+			register(nil)
+			return
+		}
+		arg, err := rpcwire.ToJSON(request.Arg)
+		if err != nil {
+			c.enqueueEvent(request.ID, rpcwire.Undefined{})
+			cancel()
+			return
+		}
+		emit := func(data json.RawMessage) {
+			value, decodeErr := rpcwire.FromJSON(data)
+			if decodeErr != nil {
+				c.deps.Logger.Warn("invalid runner event value", "error", decodeErr)
+				return
+			}
+			c.enqueueEvent(request.ID, value)
+		}
+		target := runners.Target{RunnerID: runnerID}
+		if err := c.deps.Registry.RegisterListen(c.id, request.ID, target, request.Channel, request.Name, arg, emit); err != nil {
+			c.enqueueEvent(request.ID, rpcwire.Undefined{})
+			cancel()
+			return
+		}
+		if !register(nil) {
 			c.deps.Registry.UnregisterListen(c.id, request.ID)
 		}
 

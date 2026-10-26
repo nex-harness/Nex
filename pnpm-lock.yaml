@@ -820,6 +820,9 @@ importers:
       '@lydell/node-pty-win32-x64':
         specifier: 1.2.0-beta.10
         version: 1.2.0-beta.10
+      '@nex/services':
+        specifier: workspace:*
+        version: link:../services
       '@nex/shared':
         specifier: workspace:*
         version: link:../shared
