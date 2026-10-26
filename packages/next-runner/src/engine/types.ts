@@ -374,6 +374,17 @@ export interface Engine extends EngineSessions {
 
   catalog(): Promise<EngineCatalog>;
 
+  /** MCP statuses of the newest session, freshly sampled (P1 `mcp-sync`). */
+  refreshMcpStatus(): import("./pi/mcpStatusOps.js").McpStatusSnapshot;
+  /** Async live statuses (hidden status session; waits briefly for connecting servers). */
+  requestMcpStatus(settleMs?: number): Promise<import("./pi/mcpStatusOps.js").McpStatusSnapshot>;
+
+  /** pi's skills and prompt templates for a workspace (P2 catalog / `/` menu). */
+  piResources(workspacePath: string): Promise<import("./pi/piResources.js").PiResourceCatalog>;
+
+  /** Applied generation switches relevant to the `/` menu (P2). */
+  appliedConfig(): { skillsEnabled: boolean };
+
   /** Fires when session metadata (create/rename/delete/phase/title) changes. */
   onSessionsChanged(listener: (workspacePath: string) => void): () => void;
 

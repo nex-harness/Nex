@@ -67,6 +67,18 @@ type Deps struct {
 	// Config serves the authenticated config import endpoint. Nil disables it
 	// (unit tests that do not assemble the config manager).
 	Config ConfigAdmin
+	// Skills is the optional skill/prompt upload surface (P2). Nil disables the
+	// upload routes.
+	Skills SkillUploader
+}
+
+// SkillUploader stores skill/prompt bundles from the HTTP upload helpers.
+type SkillUploader interface {
+	// Upload decodes one body ("content" or "files") for kind "skill"/"prompt"
+	// and returns the doc version and digest.
+	Upload(ctx context.Context, kind, scope, runnerID, name string, body []byte) (any, error)
+	// Delete removes a bundle by name.
+	Delete(ctx context.Context, kind, scope, runnerID, name string) error
 }
 
 // ConfigAdmin is the server-side config surface the HTTP layer exposes.
@@ -113,6 +125,12 @@ func (s *Server) routes() {
 	if s.deps.Config != nil {
 		s.mux.HandleFunc("/api/config/import-runner", s.handleImportRunner)
 		s.mux.HandleFunc("/api/config/status", s.handleConfigStatus)
+	}
+	if s.deps.Skills != nil {
+		s.mux.HandleFunc("/api/config/skills", s.handleSkillUpload("skill"))
+		s.mux.HandleFunc("/api/config/skills/delete", s.handleSkillDelete("skill"))
+		s.mux.HandleFunc("/api/config/prompts", s.handleSkillUpload("prompt"))
+		s.mux.HandleFunc("/api/config/prompts/delete", s.handleSkillDelete("prompt"))
 	}
 	if s.deps.BrowserWS != nil {
 		s.mux.Handle("/ws", s.deps.BrowserWS)
@@ -448,6 +466,87 @@ func (s *Server) handleConfigStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"runners": runners,
 	})
+}
+
+// maxUploadBytes bounds one skill/prompt upload body.
+const maxUploadBytes = 4 << 20
+
+// handleSkillUpload stores one bundle (POST). There is no upload button in the
+// unchanged Skills page, so this is the documented import path
+// (docs/next/config-mcp-skills.md "Upload"):
+//
+//	POST /api/config/skills?name=pdf-tools  (body: SKILL.md text or {"files":[…]
+//	POST /api/config/prompts?name=review    (body: markdown text)
+//
+// `scope=runner&runnerId=<id>` writes the runner scope instead of global.
+func (s *Server) handleSkillUpload(kind string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		name := strings.TrimSpace(r.URL.Query().Get("name"))
+		if name == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+			return
+		}
+		scope, runnerID, err := uploadScope(r)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxUploadBytes+1))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if len(body) > maxUploadBytes {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "upload is too large"})
+			return
+		}
+		result, err := s.deps.Skills.Upload(r.Context(), kind, scope, runnerID, name, body)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	}
+}
+
+func (s *Server) handleSkillDelete(kind string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		name := strings.TrimSpace(r.URL.Query().Get("name"))
+		if name == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+			return
+		}
+		scope, runnerID, err := uploadScope(r)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := s.deps.Skills.Delete(r.Context(), kind, scope, runnerID, name); err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "name": name})
+	}
+}
+
+func uploadScope(r *http.Request) (string, string, error) {
+	scope := strings.TrimSpace(r.URL.Query().Get("scope"))
+	runnerID := strings.TrimSpace(r.URL.Query().Get("runnerId"))
+	if scope == "runner" && runnerID == "" {
+		return "", "", fmt.Errorf("runnerId is required with scope=runner")
+	}
+	if scope != "" && scope != "global" && scope != "runner" {
+		return "", "", fmt.Errorf("scope must be global or runner")
+	}
+	return scope, runnerID, nil
 }
 
 var staticMimeTypes = map[string]string{

@@ -11,6 +11,7 @@
 //   GET    /state                 -> {ok, callCount}
 //   POST   /configure {responses} -> append scripted answers
 //   DELETE /state                 -> reset the script and the counter
+//   GET    /prompts               -> every prompt received (turn starts only)
 //
 // A `responses` entry is one faux assistant message:
 //   { "text": "..." }
@@ -40,6 +41,8 @@ const faux = createFauxCore({
 });
 /** Scripted answers, replayed in order and then cycled. */
 let script = [];
+/** Prompts received so far (one per fresh turn), as the model saw them. */
+const receivedPrompts = [];
 
 function toMessage(step) {
   if (Array.isArray(step?.toolCalls)) {
@@ -93,6 +96,7 @@ function promptText(message) {
  *  - conversation: "run exactly this command: sleep <n>" → a turn that stays
  *    busy while the suite queues more input.
  */
+
 function scriptedTool(prompt) {
   // permissions: `create <file> containing exactly <word>`
   const write = /create ([\w.-]+) containing exactly (\w+)/iu.exec(prompt ?? "");
@@ -143,6 +147,24 @@ function scriptedTool(prompt) {
   // attachments: read the attached text file with the read tool
   if (/attached text file/iu.test(prompt ?? "")) {
     return { text: "attached-secret-2048" };
+  }
+  // multi-runner / mcp-skills: "Use the read_mcp_resource tool with uri <uri>" or
+  // "Echo the text <x> using the echo tool" → an MCP call. An MCP server without
+  // declared tools connects through pi's `read_mcp_resource` (its tools stay
+  // reachable only from codemode scripts); the echo tool is used when named.
+  const resource = /read_mcp_resource tool with uri (\S+?)(?:\.|\s+and|$)/u.exec(prompt ?? "");
+  if (resource) {
+    return {
+      text: "",
+      toolCall: {
+        name: "read_mcp_resource",
+        arguments: { server: "echo-server", uri: resource[1] },
+      },
+    };
+  }
+  const echo = /Echo the text "([^"]+)" using the echo tool/u.exec(prompt ?? "");
+  if (echo) {
+    return { text: "", toolCall: { name: "mcp__echo_server__echo", arguments: { text: echo[1] } } };
   }
   return null;
 }
@@ -212,6 +234,8 @@ function answer(payload) {
     .some((message) => message.role === "assistant" || message.role === "tool");
   if (!continuation) {
     const prompt = promptText(messages[lastUser]);
+    receivedPrompts.push(prompt);
+    if (receivedPrompts.length > 200) receivedPrompts.shift();
     const tool = scriptedTool(prompt);
     if (tool) return tool;
     const exact = exactReply(prompt);
@@ -287,9 +311,15 @@ const server = http.createServer(async (request, response) => {
     response.end(JSON.stringify({ ok: true, callCount: faux.state.callCount }));
     return;
   }
+  if (request.method === "GET" && url === "/prompts") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ prompts: receivedPrompts }));
+    return;
+  }
   if (request.method === "DELETE" && url === "/state") {
     script = [];
     scriptIndex = 0;
+    receivedPrompts.length = 0;
     faux.setResponses([]);
     faux.state.callCount = 0;
     response.writeHead(200, { "content-type": "application/json" });

@@ -88,7 +88,7 @@ export function createEngineCollaborators(engine: PiEngine) {
             void engine
               .startPrompt(
                 open.workspacePath,
-                open.session.sessionId,
+                open.sessionId ?? open.session.sessionId,
                 text,
                 `rewind_${Date.now()}`,
                 payload,

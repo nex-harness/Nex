@@ -70,6 +70,24 @@ export class CommandHandler {
   }
 
   async handle(workspacePath: string, envelope: CommandEnvelope): Promise<CommandAck> {
+    const ack = await this.handleCommand(workspacePath, envelope);
+    // A rejected/failed command is otherwise only visible as a reason code in the
+    // browser; the message (never payload text) makes the runner log diagnosable.
+    if (ack.status === "rejected" || ack.status === "failed") {
+      this.logger.warn("command not accepted", {
+        type: envelope.type,
+        status: ack.status,
+        reasonCode: ack.reasonCode,
+        message: ack.message,
+      });
+    }
+    return ack;
+  }
+
+  private async handleCommand(
+    workspacePath: string,
+    envelope: CommandEnvelope,
+  ): Promise<CommandAck> {
     const runtime = envelope.sessionId ? this.sessions.get(envelope.sessionId) : undefined;
     const previous =
       runtime?.acceptedCommands.get(envelope.commandId) ??

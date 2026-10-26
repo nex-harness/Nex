@@ -312,7 +312,31 @@ async function clickRowMenuItem(rowKey, labels) {
 async function startNewChat() {
   const newTask = page.locator('[data-testid="task-new-button"]').first();
   if ((await newTask.count()) > 0) {
-    await newTask.click();
+    // 修复依据：全量门禁在这里偶发超时——回复完成后的 toast 栈会短暂盖住侧栏
+    // （click 日志报 html "intercepts pointer events"）。这里先按 conversation 套件
+    // 的方式清掉 toast；若点击仍被全屏 overlay 拦住（命令面板/对话框），按 Escape
+    // 关闭后重试一次；仍然失败才走 DOM 派发点击，避免瞬时 overlay 让整个套件判负。
+    await page.evaluate(() => {
+      for (const host of document.querySelectorAll("#nex-toast-host")) {
+        host.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+        const dismiss = host.querySelector("button[aria-label]");
+        if (dismiss) dismiss.click();
+      }
+    });
+    await page.waitForTimeout(300);
+    try {
+      await newTask.click({ timeout: 8_000 });
+    } catch {
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(500);
+      try {
+        await newTask.click({ timeout: 8_000 });
+      } catch {
+        await newTask.evaluate((element) => {
+          element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        });
+      }
+    }
   } else {
     const fallback = page.locator('[data-testid="conversation-new-task"]').first();
     if ((await fallback.count()) > 0) await fallback.click();

@@ -394,6 +394,30 @@ export class FakeEngine implements Engine, WithFileOps {
     return this.catalogValue;
   }
 
+  /** P1: an empty live status set unless a test sets one. */
+  mcpStatusValue: { owned: boolean; statuses: Record<string, never> } = {
+    owned: false,
+    statuses: {},
+  };
+
+  refreshMcpStatus(): { owned: boolean; statuses: Record<string, never> } {
+    return this.mcpStatusValue;
+  }
+
+  async requestMcpStatus(): Promise<{ owned: boolean; statuses: Record<string, never> }> {
+    return this.mcpStatusValue;
+  }
+
+  /** P2: skill commands listed by default. */
+  appliedConfig(): { skillsEnabled: boolean } {
+    return { skillsEnabled: true };
+  }
+
+  /** P2: no pi resources by default. */
+  async piResources(): Promise<{ skills: []; prompts: [] }> {
+    return { skills: [], prompts: [] };
+  }
+
   setCatalog(catalog: T.EngineCatalog): void {
     this.catalogValue = catalog;
   }

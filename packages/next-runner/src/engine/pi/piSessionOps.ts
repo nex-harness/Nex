@@ -45,6 +45,8 @@ export interface SubmitHooks {
 
 export interface SubmitTarget {
   workspacePath: string;
+  /** The engine's id (the metadata row's); falls back to pi's session id. */
+  sessionId?: string;
   gate: { setMode(mode: PermissionMode, planEnabled: boolean): void };
   session: AgentSession;
 }
@@ -60,10 +62,13 @@ export async function submitPrompt(
   text: string,
   options: SubmitOptions,
 ): Promise<SubmitOutcome> {
-  const sessionId = target.session.sessionId;
+  const sessionId = target.sessionId ?? target.session.sessionId;
   const { workspacePath } = target;
   const meta = await hooks.metadata.get(workspacePath, sessionId);
-  if (meta?.seenRequestIds?.includes(options.requestId)) {
+  if (
+    meta?.seenRequestIds?.includes(options.requestId) &&
+    !meta.staleRequestIds?.includes(options.requestId)
+  ) {
     return { status: "duplicate", inputId: options.requestId };
   }
   if (options.modelSelection) await hooks.applySelection(options.modelSelection);

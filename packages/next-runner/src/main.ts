@@ -40,7 +40,11 @@ async function main(): Promise<void> {
     logger: logger.child("engine"),
     attachments,
     runtimeConfig,
+    // P1: the hidden MCP status session opens in the first served workspace.
+    workspacePaths: config.workspaces,
   });
+  // P1: an MCP status change becomes a fact right away (the settings list polls
+  // the runner's `mcp-sync.listWorkspaceMcpServerStatuses` for live state).
   await engine.init();
   const publisher = new ConversationPublisher({
     engine,
@@ -87,7 +91,13 @@ async function main(): Promise<void> {
       apply: async (frame) => {
         const result = await configExecutor.apply(frame);
         // New sessions adopt the applied generation; running sessions keep theirs.
-        if (result.ok) engine.adoptRuntimeConfig();
+        if (result.ok) {
+          engine.adoptRuntimeConfig();
+          // P1: warm the status set so a status query right after the push does
+          // not wait for the next session. A new MCP list replaces the hidden
+          // status session (the old one closes its stdio children on shutdown).
+          void engine.requestMcpStatus(0);
+        }
         return result;
       },
       applied: (result) => {

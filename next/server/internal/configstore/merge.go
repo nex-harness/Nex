@@ -17,6 +17,7 @@ func MergeLayers(layers ...Layer) Layer {
 		Providers:  map[string]*Provider{},
 		Settings:   map[string]json.RawMessage{},
 		ModelOrder: map[string][]string{},
+		MCP:        map[string]*McpServer{},
 	}
 	for _, layer := range layers {
 		for id, provider := range layer.Providers {
@@ -44,6 +45,26 @@ func MergeLayers(layers ...Layer) Layer {
 		if layer.ProviderOrder != nil {
 			out.ProviderOrder = append([]string(nil), layer.ProviderOrder...)
 		}
+		for name, server := range layer.MCP {
+			if server == nil {
+				delete(out.MCP, name)
+				continue
+			}
+			previous := out.MCP[name]
+			if server.isToggleOnly() && previous != nil {
+				toggled := *previous
+				toggled.Enabled = server.Enabled
+				out.MCP[name] = &toggled
+				continue
+			}
+			out.MCP[name] = CloneMcp(server)
+		}
+		if layer.Skills != nil {
+			out.Skills = append([]BundleRef(nil), layer.Skills...)
+		}
+		if layer.Prompts != nil {
+			out.Prompts = append([]BundleRef(nil), layer.Prompts...)
+		}
 		for providerID, order := range layer.ModelOrder {
 			if order == nil {
 				delete(out.ModelOrder, providerID)
@@ -57,6 +78,9 @@ func MergeLayers(layers ...Layer) Layer {
 	}
 	if len(out.ModelOrder) == 0 {
 		out.ModelOrder = nil
+	}
+	if len(out.MCP) == 0 {
+		out.MCP = nil
 	}
 	return out
 }

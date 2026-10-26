@@ -299,6 +299,18 @@ func cloneLayer(layer Layer) Layer {
 			out.Settings[key] = append(json.RawMessage(nil), value...)
 		}
 	}
+	if layer.MCP != nil {
+		out.MCP = make(map[string]*McpServer, len(layer.MCP))
+		for name, server := range layer.MCP {
+			out.MCP[name] = CloneMcp(server)
+		}
+	}
+	if layer.Skills != nil {
+		out.Skills = append([]BundleRef(nil), layer.Skills...)
+	}
+	if layer.Prompts != nil {
+		out.Prompts = append([]BundleRef(nil), layer.Prompts...)
+	}
 	if layer.ProviderOrder != nil {
 		out.ProviderOrder = append([]string(nil), layer.ProviderOrder...)
 	}

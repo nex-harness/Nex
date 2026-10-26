@@ -1,14 +1,18 @@
 import type { NexWorkspacePresentation } from "@nex/shared";
+import type { SlashCommandInfo } from "./piCatalog.js";
 
 /**
- * `nex-session.readWorkspacePresentation` minimal valid return: the UI turns `mode` into a
- * synthetic config option and passes `slashCommands` through. pi has no workspace slash
- * command catalog in this MVP, so the list is empty.
+ * `nex-session.readWorkspacePresentation`: the UI turns `mode` into a synthetic config
+ * option and passes `slashCommands` through. The list is pi's own prompt templates plus
+ * `/skill:<name>` commands (P2), which pi expands at prompt time.
  */
-export function readWorkspacePresentation(params: {
-  workspacePath: string;
-  workspaceIdentity?: string;
-}): NexWorkspacePresentation {
+export function readWorkspacePresentation(
+  params: {
+    workspacePath: string;
+    workspaceIdentity?: string;
+  },
+  slashCommands: SlashCommandInfo[] = [],
+): NexWorkspacePresentation {
   const { workspacePath } = params;
   // 多 runner：服务端按 `runner:<id>:<path>` 路由，UI 的 workspaceKey 统一取
   // `identity?.trim() || path`。这里必须回显请求里的身份，否则同路径的两台机器在
@@ -21,7 +25,7 @@ export function readWorkspacePresentation(params: {
       workspaceKey: workspaceIdentity || workspacePath,
     },
     mode: "build",
-    slashCommands: [],
+    slashCommands,
   };
 }
 

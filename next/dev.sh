@@ -13,7 +13,8 @@
 #   next/dev.sh --e2e=attachments  # run the attachments E2E (image + text file, restore)
 #   next/dev.sh --e2e=files        # run the file-changes E2E (diffs, Undo, edit with rewind)
 #   next/dev.sh --e2e=settings     # run the server-owned provider settings E2E (settings -> picker -> chat)
-#   next/dev.sh --e2e=all          # every suite, settings last
+#   next/dev.sh --e2e=mcp          # run the MCP + skills E2E (settings -> echo server -> tool call -> /skill:)
+#   next/dev.sh --e2e=all          # every suite, settings and mcp last
 #
 # Environment:
 #   NEX_NEXT_PORT           Go server port                 (default 3031)
@@ -52,6 +53,7 @@ for arg in "$@"; do
     --e2e=attachments) E2E_MODE="attachments" ;;
     --e2e=files) E2E_MODE="files" ;;
     --e2e=settings) E2E_MODE="settings" ;;
+    --e2e=mcp) E2E_MODE="mcp" ;;
     --e2e=all) E2E_MODE="all" ;;
     -h | --help)
       sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -307,6 +309,7 @@ fi
 start_prefixed web env \
   NEX_WEB_DEV_PORT="$WEB_PORT" \
   NEX_WEB_DEV_SERVER_ORIGIN="http://127.0.0.1:$PORT" \
+  VITE_NEX_E2E_STORE_BRIDGE=1 \
   pnpm --dir "$REPO_ROOT" --filter @nex/web dev
 
 # --- optional E2E -----------------------------------------------------------
@@ -359,6 +362,7 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   files_status=0
   multi_status=0
   settings_status=0
+  mcp_status=0
   if [[ "$E2E_MODE" == "acceptance" || "$E2E_MODE" == "all" ]]; then
     (
       cd "$REPO_ROOT"
@@ -467,11 +471,35 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
       NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
         NEX_E2E_TOKEN="$BROWSER_TOKEN" \
         NEX_E2E_SERVER_CONFIG="$SERVER_CONFIG" \
+        NEX_E2E_SERVER_DATA="$SERVER_DATA" \
         NEX_E2E_WORKSPACE="$WORKSPACE" \
         node next/e2e/settings.mjs
     )
     settings_status=$?
     log "settings E2E exited with $settings_status"
+  fi
+  if [[ "$E2E_MODE" == "mcp" || "$E2E_MODE" == "all" ]]; then
+    # Own stack state: the server config doc (an MCP server and a skill stay
+    # after the run) and the scripted provider's prompt log.
+    curl -fsS -X DELETE http://127.0.0.1:18080/state >/dev/null 2>&1 || true
+    if [[ "$E2E_MODE" == "mcp" ]]; then
+      rm -rf "$SERVER_CONFIG" "$RUNNER_DATA/sessions" "$RUNNER_DATA/workspaces"
+    fi
+    (
+      cd "$REPO_ROOT"
+      # Runs after `settings` in `all`: it needs the doc it creates itself, and
+      # the settings suite asserts an empty provider catalog first.
+      NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
+        NEX_E2E_TOKEN="$BROWSER_TOKEN" \
+        NEX_E2E_SERVER_CONFIG="$SERVER_CONFIG" \
+        NEX_E2E_SERVER_DATA="$SERVER_DATA" \
+        NEX_E2E_WORKSPACE="$WORKSPACE" \
+        NEX_E2E_RUNNER_DATA="$RUNNER_DATA" \
+        NEX_E2E_FAUX_URL="http://127.0.0.1:${NEX_E2E_FAUX_PORT:-18080}" \
+        node next/e2e/mcp-skills.mjs
+    )
+    mcp_status=$?
+    log "mcp-skills E2E exited with $mcp_status"
   fi
   set -e
   if [[ "$acceptance_status" -ne 0 ]]; then
@@ -495,7 +523,10 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   if [[ "$multi_status" -ne 0 ]]; then
     exit "$multi_status"
   fi
-  exit "$settings_status"
+  if [[ "$settings_status" -ne 0 ]]; then
+    exit "$settings_status"
+  fi
+  exit "$mcp_status"
 fi
 
 wait

@@ -44,6 +44,9 @@ import { createEngineCollaborators } from "./engineCollaborators.js";
 import { buildCatalog } from "./modelCatalog.js";
 import { openPiSession, type OpenSession } from "./sessionLifecycle.js";
 import { createSessionFactoryDeps } from "./sessionFactoryDeps.js";
+import { mcpSessionWiring, type McpGeneration } from "../../config/mcpConfig.js";
+import { createMcpStatusOps } from "./mcpStatusOps.js";
+import type { McpServerStatus } from "../../config/applyRuntimeConfig.js";
 import { createPromptHooks } from "./piPromptHooks.js";
 import { createEngineEventHook } from "./piEngineWiring.js";
 import { createConversationOps } from "./piConversationWiring.js";
@@ -82,8 +85,16 @@ export class PiEngine implements Engine {
   settingsManager: SettingsManager | null = null;
   private catalogCache: EngineCatalog | null = null;
   private initialized = false;
+  private readonly mcpOps: ReturnType<typeof createMcpStatusOps>;
 
   constructor(readonly options: PiEngineOptions) {
+    this.mcpOps = createMcpStatusOps({
+      options,
+      sessions: this.sessions,
+      init: () => this.init(),
+      settingsManager: () => this.settingsManager,
+      runtime: () => this.requireRuntime(),
+    });
     this.metadata = new SessionMetaStore(options.dataDir, options.logger);
     this.attachments =
       options.attachments ??
@@ -296,13 +307,47 @@ export class PiEngine implements Engine {
     this.catalogCache = null;
   }
 
+  /**
+   * P1/P2 accessors live in `createMcpStatusOps` (file-size cap); the engine
+   * forwards so its public surface is unchanged.
+   */
+  get mcpStatusOps() {
+    return this.mcpOps;
+  }
+
+  reportMcpStatus(workspacePath: string, sessionId: string, statuses: McpServerStatus[]): void {
+    this.mcpOps.reportMcpStatus(workspacePath, sessionId, statuses);
+  }
+
+  refreshMcpStatus() {
+    return this.mcpOps.refreshMcpStatus();
+  }
+
+  requestMcpStatus(settleMs?: number) {
+    return this.mcpOps.requestMcpStatus(settleMs);
+  }
+
+  piResources(workspacePath: string) {
+    return this.mcpOps.piResources(workspacePath);
+  }
+
+  appliedConfig() {
+    return this.mcpOps.appliedConfig();
+  }
+
   onSessionsChanged(listener: (workspacePath: string) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
   async dispose(): Promise<void> {
-    for (const open of this.sessions.values()) void teardownSession(open);
+    // 修复依据：此前 teardownSession 以 fire-and-forget 方式触发，abort 之后 pi
+    // 仍会在后台落盘会话/元数据；测试或进程退出后临时目录被删，随即出现 ENOENT
+    // rename，并作为“测试结束后的异步活动”把无关用例判失败。这里等所有会话真正
+    // 关闭（写入顺序保持不变），dispose 返回后不再有后台写。
+    await Promise.allSettled([...this.sessions.values()].map((open) => teardownSession(open)));
+    // P1: the hidden status session owns MCP connections too; close them before exit.
+    await this.mcpOps.disposeStatusProbe();
     this.sessions.clear();
     this.listeners.clear();
     this.attachments.dispose();
@@ -311,8 +356,11 @@ export class PiEngine implements Engine {
   // ── internals ──
 
   attach(open: OpenSession): void {
-    this.sessions.get(open.session.sessionId)?.unsubscribe();
-    this.sessions.set(open.session.sessionId, open);
+    const sessionId = open.sessionId ?? open.session.sessionId;
+    // pi events of a draft can arrive before the engine resolved it (a background
+    // start racing the create call); own the id now that the session exists.
+    this.sessions.get(sessionId)?.unsubscribe();
+    this.sessions.set(sessionId, open);
   }
 
   onPiEventHook(path: string, sessionId: string, event: AgentSessionEvent): Promise<void> {
@@ -377,6 +425,9 @@ export class PiEngine implements Engine {
       logger: this.options.logger,
       runtime: () => this.requireRuntime(),
       sessionsChanged: (path) => this.emitSessionsChanged(path),
+      currentMcp: () =>
+        mcpSessionWiring(this.options.runtimeConfig?.current.config.mcp ?? EMPTY_MCP),
+      reopenDraft: (sessionId) => this.sessionLifecycle.reopenDraft(sessionId),
     });
   }
 
@@ -405,6 +456,15 @@ export class PiEngine implements Engine {
       attachmentOps: this.attachmentOps,
       sessions: this.sessions,
       onPiEvent: (w, id, event) => void this.onPiEventHook(w, id, event),
+      onMcpStatus: (workspacePath, sessionId, statuses) =>
+        this.reportMcpStatus(workspacePath, sessionId, statuses),
     });
   }
 }
+
+const EMPTY_MCP: McpGeneration = Object.freeze({
+  owned: false,
+  key: "",
+  servers: Object.freeze([]),
+  issues: Object.freeze([]),
+});

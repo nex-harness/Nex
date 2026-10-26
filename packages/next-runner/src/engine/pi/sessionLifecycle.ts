@@ -12,11 +12,22 @@ import type { EngineEvent } from "../types.js";
 import { createPiSessionWithGate } from "./piSessionFactory.js";
 import type { PiCheckpointHook } from "./piCheckpointHook.js";
 import type { PiTranslateContext } from "./events.js";
+import type { McpStatusTracker } from "./mcpStatusExtension.js";
+import type { McpWiring } from "../../config/mcpConfig.js";
+import type { McpServerStatus } from "../../config/applyRuntimeConfig.js";
 
 /** One open pi session plus its approval gate and subscribers. */
 export interface OpenSession {
   workspacePath: string;
   session: AgentSession;
+  /**
+   * The id this session is registered under (the metadata row's id). pi can give a
+   * session file header its own id while the engine has already registered the draft
+   * under the requested id, so `session.sessionId` is not always the engine's id.
+   */
+  sessionId?: string;
+  /** pi's `session_start` ran: pi's own runtime does its first run in the background. */
+  sessionStarted?: boolean;
   gate: PermissionGate;
   unsubscribe: () => void;
   /** Subscribers of translated pi events plus gate events (approval/mode). */
@@ -36,6 +47,10 @@ export interface OpenSession {
    * Input of the user message the session is delivering right now (spec A): set at its
    * `message_start`, read by the `message_end` translate context, cleared by the engine.
    */
+  /** MCP status sampler of a server-owned session (P1). */
+  mcpTracker?: McpStatusTracker;
+  /** The MCP list the session was built with (pi reads it at `session_start`). */
+  mcpStartedWith?: McpWiring;
   claimedUserInput?: {
     text: string;
     attachments?: import("@nex/shared/nex-protocol-v4").AttachmentRef[];
@@ -55,6 +70,13 @@ export interface SessionFactoryDeps {
   translateContext?: (sessionId: string) => PiTranslateContext;
   /** Metadata transitions (phase/title) stay owned by the engine. */
   onPiEvent: (workspacePath: string, sessionId: string, event: AgentSessionEvent) => void;
+  /** MCP wiring of the session's config generation (P1). */
+  mcpSession?: McpWiring;
+  /** Receives MCP status changes with the session id. */
+  onMcpStatus?: (workspacePath: string, sessionId: string, statuses: McpServerStatus[]) => void;
+  /** Materialized bundle directories of the generation (P2). */
+  additionalSkillPaths?: ReadonlyArray<string>;
+  additionalPromptTemplatePaths?: ReadonlyArray<string>;
   /**
    * File checkpoints for a session about to open (spec B). `undefined` disables the hooks for
    * this session (e.g. git missing → Undo is hidden because no turn has fileChanges).
@@ -86,12 +108,18 @@ export interface SessionFactoryDeps {
  * Builds the pi session with the inline permission-gate extension. pi's SDK does not
  * reload a supplied resource loader, so the loader is reloaded inside the factory; inline
  * extensions load after disk extensions and therefore see every `tool_call` last.
+ *
+ * `expectedSessionId` is the engine's id for this session (the metadata row's): pi's
+ * background first write can stamp the session file with another id, and every event
+ * the engine records must be addressed by the id it registered.
  */
 export async function openPiSession(
   deps: SessionFactoryDeps,
   workspacePath: string,
   sessionManager: SessionManager,
   model: Model<never> | undefined,
+  expectedSessionId?: string,
+  sessionStartReason?: "startup" | "reload" | "new" | "resume" | "fork",
 ): Promise<{ session: AgentSession; gate: PermissionGate; open: OpenSession }> {
   const settingsManager =
     deps.createSettingsManager?.(workspacePath) ??
@@ -106,17 +134,21 @@ export async function openPiSession(
     : undefined;
   /** The open session as soon as it exists (note/attachment hooks run per event). */
   const openRef: { current: OpenSession | null } = { current: null };
+  /** The engine's id of this session (see `expectedSessionId`). */
+  const engineId = (): string =>
+    expectedSessionId ?? openRef.current?.sessionId ?? sessionIdRef.current;
   // Each open session builds its own hook; persistence and live events read `sessionIdRef`
   // so they address the real id once pi has created the session.
   const checkpoints = deps.checkpointsFor?.(workspacePath, sessionIdRef);
   const created = await createPiSessionWithGate({
     workspacePath,
+    ...(sessionStartReason ? { sessionStartReason } : {}),
     sessionManager,
     model,
     modelRuntime: deps.modelRuntime(),
     settingsManager,
     onPiEvent: (event) => {
-      deps.onPiEvent(workspacePath, sessionIdRef.current, event);
+      deps.onPiEvent(workspacePath, engineId(), event);
     },
     ...(deps.translateContext ? { translateContext: deps.translateContext } : {}),
     ...(checkpoints ? { checkpoints } : {}),
@@ -131,16 +163,31 @@ export async function openPiSession(
       if (openRef.current) deps.onPiEventBeforeTranslate?.(openRef.current, event);
     },
     ...(attachmentInputs ? { attachmentInputs } : {}),
+    ...(deps.mcpSession
+      ? {
+          mcp: deps.mcpSession,
+          ...(deps.onMcpStatus ? { onMcpStatus: deps.onMcpStatus } : {}),
+        }
+      : {}),
+    ...(deps.additionalSkillPaths ? { additionalSkillPaths: deps.additionalSkillPaths } : {}),
+    ...(deps.additionalPromptTemplatePaths
+      ? { additionalPromptTemplatePaths: deps.additionalPromptTemplatePaths }
+      : {}),
   });
   sessionIdRef.current = created.session.sessionId;
   const open: OpenSession = {
     workspacePath,
     session: created.session,
+    sessionId: expectedSessionId ?? created.session.sessionId,
+    // pi continues its own startup in the background after this call returns.
+    sessionStarted: true,
     gate: created.gate,
     listeners: created.listeners,
     inflight: null,
     unsubscribe: created.unsubscribe,
     ...(checkpoints ? { checkpoints } : {}),
+    ...(created.mcpTracker ? { mcpTracker: created.mcpTracker } : {}),
+    ...(created.mcp ? { mcpStartedWith: created.mcp } : {}),
     sessionManager,
   };
   openRef.current = open;

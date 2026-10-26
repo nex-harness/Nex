@@ -93,6 +93,10 @@ func New(options Options, logger *slog.Logger) (*App, error) {
 	localRegistry.Register("provider-settings", local.NewProviderSettingsChannel(configManager))
 	localRegistry.Register("model-selection", local.NewModelSelectionChannel(configManager))
 	localRegistry.Register("config", local.NewConfigChannel(configManager))
+	// P1/P2 of the same doc: MCP servers and skill bundles are server-owned; live
+	// MCP statuses are forwarded to the owning runner by the router.
+	localRegistry.Register("mcp-sync", local.NewMcpSyncChannel(configManager))
+	localRegistry.Register("skills", local.NewSkillsChannel(configManager))
 	for name, channel := range local.StubChannels() {
 		localRegistry.Register(name, channel)
 	}
@@ -133,6 +137,7 @@ func (a *App) Handler() http.Handler {
 		BrowserWS:  browser,
 		RunnerWS:   runnerHandler,
 		Config:     configAdmin{a.Config},
+		Skills:     skillUploader{a.Config},
 	}).Handler()
 }
 
@@ -144,6 +149,18 @@ func (c configAdmin) ImportFromRunner(ctx context.Context, runnerID string) (any
 }
 
 func (c configAdmin) KnownRunners() []string { return c.manager.KnownRunners() }
+
+// skillUploader adapts *local.Manager to httpapi.SkillUploader.
+type skillUploader struct{ manager *local.Manager }
+
+func (u skillUploader) Upload(ctx context.Context, kind, scope, runnerID, name string, body []byte) (any, error) {
+	return u.manager.UploadSkillOrPrompt(kind, scope, runnerID, name, body)
+}
+
+func (u skillUploader) Delete(ctx context.Context, kind, scope, runnerID, name string) error {
+	_, err := u.manager.DeleteSkillOrPrompt(kind, scope, runnerID, name)
+	return err
+}
 
 // loadOrCreateServerID persists a random id so /api/server-info is stable
 // across restarts.

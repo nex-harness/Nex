@@ -4,7 +4,9 @@
 // A small PNG is attached through the composer's hidden file input; the row must render the
 // image preview (chunked read from the runner) and the vision-capable model receives it as a
 // prompt image. A .txt file attached the same way must reach the model as a path reference
-// that it reads back. Both rows carry the refs the runner admitted.
+// that it reads back. A small .zip (binary, no text decoding) must upload through the v4
+// attachment transaction as base64 and render as a file chip instead of being dropped.
+// Every row carries the refs the runner admitted.
 //
 // Environment:
 //   NEX_E2E_BASE_URL  Web origin to drive        (default http://localhost:5174)
@@ -239,13 +241,61 @@ const PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMElEQVR42mNkYPhfz0DFgK5gYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYAAAW0sL1m+Sz7wAAAAASUVORK5CYII=";
 const TEXT_CONTENT = "attached-secret-2048\nsecond line\n";
 
+/** A minimal stored (uncompressed) ZIP container: local header + data + EOCD. */
+function buildZipBuffer(fileName, content) {
+  const name = Buffer.from(fileName, "utf8");
+  const data = Buffer.from(content, "utf8");
+  const crc = crc32(data);
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt16LE(20, 4); // version needed
+  local.writeUInt16LE(0, 6); // flags
+  local.writeUInt16LE(0, 8); // method: stored
+  local.writeUInt32LE(crc, 14);
+  local.writeUInt32LE(data.length, 18);
+  local.writeUInt32LE(data.length, 22);
+  local.writeUInt16LE(name.length, 26);
+  local.writeUInt16LE(0, 28);
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt16LE(20, 4);
+  central.writeUInt16LE(20, 6);
+  central.writeUInt16LE(0, 10); // method: stored
+  central.writeUInt32LE(crc, 16);
+  central.writeUInt32LE(data.length, 20);
+  central.writeUInt32LE(data.length, 24);
+  central.writeUInt16LE(name.length, 28);
+  central.writeUInt32LE(0, 42); // local header offset
+  const centralOffset = local.length + name.length + data.length;
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(1, 8);
+  eocd.writeUInt16LE(1, 10);
+  eocd.writeUInt32LE(central.length + name.length, 12);
+  eocd.writeUInt32LE(centralOffset, 16);
+  return Buffer.concat([local, name, data, central, name, eocd]);
+}
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
 let summary;
 try {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const pngPath = path.join(OUT_DIR, "attachment-pixel.png");
   const txtPath = path.join(OUT_DIR, "attachment-notes.txt");
+  const zipPath = path.join(OUT_DIR, "attachment-bundle.zip");
   fs.writeFileSync(pngPath, Buffer.from(PNG_BASE64, "base64"));
   fs.writeFileSync(txtPath, TEXT_CONTENT);
+  fs.writeFileSync(zipPath, buildZipBuffer("payload.txt", "zip-payload-2048\n"));
 
   await page.goto(`${BASE_URL}/`, { waitUntil: "load" });
   await page.waitForTimeout(2_000);
@@ -330,6 +380,64 @@ try {
   );
   check("modelReadTextFile", Boolean(replyRead));
   await shot("attach-04-text-reply");
+
+  // ── 3. binary (.zip) attachment ────────────────────────────────────────
+  // Regression: web files without a local path used to serialize as metadata-only and be
+  // dropped (warning + no chip). The zip must upload (base64 → chunked v4 transaction) and
+  // appear as a file chip; an oversized/upload error would fail that chip (failed status).
+  await startNewChat();
+  await page.waitForTimeout(2_000);
+  await typeMessage("Reply with exactly zipReceived.", { send: false });
+  await attachFile(zipPath);
+  // Upload runs after the draft gets a session; wait for the composer chip to leave
+  // queued/uploading/failed and become ready before sending.
+  const readZipChips = () =>
+    page.evaluate(() => {
+      const scope = document.querySelector('[data-testid="v4-composer"]');
+      const chips = [...(scope?.querySelectorAll('[data-composer-attachment-kind="file"]') ?? [])];
+      return chips.map((chip) => ({
+        text: (chip.textContent ?? "").trim(),
+        status: chip.getAttribute("data-upload-status"),
+      }));
+    });
+  const zipChipReady = await waitUntil(
+    "zipChipReady",
+    async () => {
+      const chips = await readZipChips();
+      return chips.some(
+        (chip) => chip.text.includes("attachment-bundle") && chip.status === "ready",
+      );
+    },
+    60_000,
+  );
+  check("zipComposerChipReady", Boolean(zipChipReady), await readZipChips());
+  await composer().press("Enter");
+  const zipRow = await waitUntil(
+    "zipRow",
+    async () => {
+      const row = await lastRowAttachments();
+      return row && row.chips.some((name) => name.includes("attachment-bundle")) ? row : null;
+    },
+    REPLY_TIMEOUT_MS,
+  );
+  check("binaryRowHasChip", Boolean(zipRow), zipRow);
+  await shot("attach-05-zip-row");
+  const zipReply = await waitUntil(
+    "zipReply",
+    async () => {
+      const text = await page.evaluate(() => document.body.innerText);
+      return text.includes("zipReceived") ? text : null;
+    },
+    REPLY_TIMEOUT_MS,
+  );
+  check("binaryAttachmentTurnCompleted", Boolean(zipReply));
+  // The failed-upload state lives on the composer chip while the draft exists; after send
+  // the toast/log path is the remaining signal (an oversized file never uploads at all).
+  check(
+    "noUploadErrorToast",
+    !logs.some((line) => /too large|上传失败|upload failed/iu.test(line)),
+  );
+  await shot("attach-06-zip-reply");
 
   const significantErrors = logs.filter(
     (line) =>

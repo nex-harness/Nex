@@ -208,3 +208,35 @@ func TestResolveFileChangesWithoutWorkspaceIsNotForwarded(t *testing.T) {
 		t.Fatalf("route = %+v, want TargetLocalUnsupported", route)
 	}
 }
+
+func TestResolveMcpSyncAndSkills(t *testing.T) {
+	// Saving/loading MCP is server-owned (the config doc); live statuses belong
+	// to the runner that owns the workspace.
+	if route := router.Resolve("mcp-sync", "saveMcpToUserDirectory", json.RawMessage(`[{"action":"upsert","name":"x"}]`), localNone); route.Kind != router.TargetLocal {
+		t.Fatalf("save route = %+v", route)
+	}
+	if route := router.Resolve("mcp-sync", "loadMcpFromUserDirectory", json.RawMessage(`[{"workspacePath":"/w"}]`), localNone); route.Kind != router.TargetLocal {
+		t.Fatalf("load route = %+v", route)
+	}
+	statuses := router.Resolve("mcp-sync", "listWorkspaceMcpServerStatuses",
+		json.RawMessage(`[{"workspacePath":"/w","workspaceIdentity":"runner:beta:/w"}]`), localNone)
+	if statuses.Kind != router.TargetWorkspace || statuses.WorkspaceIdentity != "runner:beta:/w" {
+		t.Fatalf("statuses route = %+v", statuses)
+	}
+	// Without a workspace there is one candidate: the first connected runner.
+	if route := router.Resolve("mcp-sync", "listWorkspaceMcpServerStatuses", rpcwire.Undefined{}, localNone); route.Kind != router.TargetFirstRunner {
+		t.Fatalf("workspace-less statuses route = %+v", route)
+	}
+	listen := router.ResolveEvent("mcp-sync", "onDidChange", rpcwire.Undefined{}, localNone)
+	if listen.Kind != router.TargetLocal {
+		t.Fatalf("mcp-sync event = %+v", listen)
+	}
+	for _, method := range []string{"list", "setEnabled", "deleteSkill"} {
+		if route := router.Resolve("skills", method, json.RawMessage(`[{"workspacePath":"/w"}]`), localNone); route.Kind != router.TargetLocal {
+			t.Fatalf("skills.%s route = %+v", method, route)
+		}
+	}
+	if route := router.Resolve("commands", "list", rpcwire.Undefined{}, func(name string) bool { return name == "commands" }); route.Kind != router.TargetLocal {
+		t.Fatalf("commands route = %+v", route)
+	}
+}

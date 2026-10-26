@@ -573,7 +573,11 @@ try {
   check("compactTurnCompleted", Boolean(compactTurnDone));
   await waitForIdle(REPLY_TIMEOUT_MS);
 
+  // With a non-empty `/` catalog, the first Enter picks the highlighted suggestion (it
+  // becomes a `/compact` chip, as in the old app) and the second Enter sends it.
   await typeAndSend("/compact");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
   // The marker row renders one of the compaction status strings; a short session is
   // `skipped` (noop), a long one `completed`. Either proves the runner served /compact.
   const compactSettled = await waitUntil(

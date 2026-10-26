@@ -1680,3 +1680,124 @@ func mustReadFile(t *testing.T, path string) string {
 	}
 	return string(raw)
 }
+
+// P2: skills/prompts enter through the HTTP upload helper (the unchanged
+// Settings page has no upload button), are pushed with their verified files and
+// appear in the server-owned `skills` channel.
+func TestSkillUploadEndpointAndSkillsChannel(t *testing.T) {
+	h := newHarness(t)
+	session := h.login(t)
+	runner := h.dialRunner(t)
+	runnerHelloWithVersion(t, runner, runnerID, workspace, 0)
+	browser := newBrowserClient(t, h.dialBrowser(t, session))
+
+	skillBody := "---\nname: echo-helper\ndescription: Helps with echo.\n---\n\n# Echo helper\n"
+	request, _ := http.NewRequest(http.MethodPost,
+		h.server.URL+"/api/config/skills?name=echo-helper", strings.NewReader(skillBody))
+	request.Header.Set("Cookie", "nex_session="+session)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+	raw, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("upload status = %d: %s", response.StatusCode, raw)
+	}
+	var uploaded struct {
+		Name    string `json:"name"`
+		Digest  string `json:"digest"`
+		Files   int    `json:"files"`
+		Version uint64 `json:"version"`
+	}
+	if err := json.Unmarshal(raw, &uploaded); err != nil {
+		t.Fatalf("upload body: %v (%s)", err, raw)
+	}
+	if uploaded.Digest == "" || uploaded.Files != 1 || !strings.HasPrefix(uploaded.Digest, "sha256:") {
+		t.Fatalf("upload result = %s", raw)
+	}
+
+	prompt, _ := http.NewRequest(http.MethodPost,
+		h.server.URL+"/api/config/prompts?name=review", strings.NewReader("Review $1 carefully.\n"))
+	prompt.Header.Set("Cookie", "nex_session="+session)
+	promptResponse, err := http.DefaultClient.Do(prompt)
+	if err != nil {
+		t.Fatalf("prompt upload: %v", err)
+	}
+	promptResponse.Body.Close()
+	if promptResponse.StatusCode != http.StatusOK {
+		t.Fatalf("prompt upload status = %d", promptResponse.StatusCode)
+	}
+
+	// The push carries the enabled references and the bundle files.
+	frames := drainConfigFrames(t, runner)
+	if len(frames) == 0 {
+		t.Fatal("no config push after the upload")
+	}
+	doc, _ := h.app.Config.Store().Snapshot()
+	payload, _, _ := h.app.Config.Store().ProjectPush(runnerID)
+	if len(payload.Doc.Skills) != 1 || payload.Doc.Skills[0].Name != "echo-helper" {
+		t.Fatalf("pushed skills = %#v", payload.Doc.Skills)
+	}
+	if len(payload.Doc.Prompts) != 1 || len(payload.Bundles) != 2 {
+		t.Fatalf("pushed prompts/bundles = %#v %d", payload.Doc.Prompts, len(payload.Bundles))
+	}
+	if doc.Version < uploaded.Version {
+		t.Fatalf("version went backwards: %d < %d", doc.Version, uploaded.Version)
+	}
+
+	list := responseObject(t, browser.call(150, "skills", "list",
+		jsArg(t, []any{map[string]any{"workspacePath": workspace, "provider": "nex-agent"}})))
+	skills, _ := list["skills"].([]any)
+	if len(skills) != 1 {
+		t.Fatalf("skills.list = %+v", list)
+	}
+	entry := skills[0].(map[string]any)
+	if entry["name"] != "echo-helper" || entry["id"] != "glm:echo-helper" || entry["enabled"] != true {
+		t.Fatalf("skill row = %+v", entry)
+	}
+	capability, _ := list["capability"].(map[string]any)
+	if capability["userScopeAvailable"] != false {
+		t.Fatalf("capability = %+v", capability)
+	}
+
+	// setEnabled → the row is disabled; deleteSkill → the list is empty.
+	disabled := responseObject(t, browser.call(151, "skills", "setEnabled",
+		jsArg(t, []any{map[string]any{"workspacePath": workspace, "provider": "nex-agent",
+			"scope": "user", "skillId": "glm:echo-helper", "enabled": false}})))
+	if rows, _ := disabled["skills"].([]any); len(rows) != 1 || rows[0].(map[string]any)["enabled"] != false {
+		t.Fatalf("setEnabled = %+v", disabled)
+	}
+	deleted := responseObject(t, browser.call(152, "skills", "deleteSkill",
+		jsArg(t, []any{map[string]any{"workspacePath": workspace, "skillId": "glm:echo-helper"}})))
+	if rows, _ := deleted["skills"].([]any); len(rows) != 0 {
+		t.Fatalf("deleteSkill = %+v", deleted)
+	}
+
+	// Statuses with a workspace go to that runner: the test runner answers.
+	// Statuses are forwarded to the owning runner; an unresponsive one fails the
+	// call instead of answering a false "everything is down".
+	offline := browser.call(154, "mcp-sync", "listWorkspaceMcpServerStatuses",
+		jsArg(t, []any{map[string]any{"workspacePath": workspace, "workspaceIdentity": identityFor(runnerID, workspace)}}))
+	if offline.Type == rpcwire.ResponsePromiseSuccess {
+		t.Fatalf("statuses without a runner answer succeeded: %+v", offline)
+	}
+	// Loading the MCP list from the doc never needs a runner round trip.
+	mcp := responseObject(t, browser.call(153, "mcp-sync", "loadMcpFromUserDirectory",
+		jsArg(t, []any{map[string]any{"workspacePath": workspace}})))
+	if servers, ok := mcp["servers"].([]any); !ok || len(servers) != 0 {
+		t.Fatalf("mcp load = %+v", mcp)
+	}
+
+	// An upload without a name is a client error, not a silent no-op.
+	bad, _ := http.NewRequest(http.MethodPost, h.server.URL+"/api/config/skills", strings.NewReader("x"))
+	bad.Header.Set("Cookie", "nex_session="+session)
+	badResponse, err := http.DefaultClient.Do(bad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	badResponse.Body.Close()
+	if badResponse.StatusCode != http.StatusBadRequest {
+		t.Fatalf("nameless upload status = %d", badResponse.StatusCode)
+	}
+}

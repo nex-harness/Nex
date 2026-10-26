@@ -64,7 +64,21 @@ func (m *ModelSelection) executableModels(target viewTarget) ([]modelOption, str
 	runnerID := m.providerSettings.runnerFor(target)
 	effective := doc.EffectiveForRunner(runnerID)
 	facts, factsRunner := runnerModelFacts(manager, runnerID)
-	if len(effective.ProviderList()) == 0 {
+	// 修复依据：runner 判定 server-owned 的谓词是「enabled provider 数 > 0」
+	// （packages/next-runner/src/config/runtimeConfig.ts 的 enabledProviders），
+	// 而 ProviderList() 含 disabled provider。一个只剩 disabled provider 的 doc
+	// （settings 套件禁用了自己创建的 provider 后）在 runner 侧是 fallback 模式
+	// （保留本机 catalog），但这里按 ProviderList 非空走了 server-owned 分支，
+	// 遍历时 disabled provider 全部被跳过，view 变成空列表——composer 显示
+	// "No model available" 而 runner 实际仍有模型。fallback 判定必须数 enabled
+	// providers，与 OwnsProviders 的语义一致，picker 才不会与 runtime 分歧。
+	enabledCount := 0
+	for _, provider := range effective.ProviderList() {
+		if provider.Enabled {
+			enabledCount++
+		}
+	}
+	if enabledCount == 0 {
 		// Fallback mode is decided by exactly the same predicate the router and
 		// the config push use, so the picker never disagrees with the runtime.
 		if !manager.OwnsProviders() {

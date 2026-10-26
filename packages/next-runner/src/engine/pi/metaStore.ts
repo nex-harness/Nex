@@ -34,6 +34,12 @@ export interface SessionMetaEntry {
   lastCompact?: { entryId: string; sourceCommandId: string };
   seenRequestIds?: string[];
   /**
+   * Requests that ran on a session built before the latest MCP/config generation
+   * (P1). A later submission of the same id is not a duplicate: its own run never
+   * reached the model, it is the retry the client sends after the config push.
+   */
+  staleRequestIds?: string[];
+  /**
    * Sidebar organization state (docs/next/task-state.md). Files written by older runners
    * lack these keys; missing means "not pinned / not archived / read" everywhere.
    */
@@ -96,7 +102,11 @@ export class SessionMetaStore {
   upsert(
     workspacePath: string,
     sessionId: string,
-    patch: Partial<Omit<SessionMetaEntry, "sessionId">> & { seenRequestId?: string },
+    patch: Partial<Omit<SessionMetaEntry, "sessionId">> & {
+      seenRequestId?: string;
+      /** Merge (never replace) ids whose run never reached the model. */
+      staleRequestIds?: string[];
+    },
   ): Promise<void> {
     return this.queue.run(workspacePath, async () => {
       const file = await this.read(workspacePath);
@@ -121,6 +131,13 @@ export class SessionMetaStore {
       if (patch.seenRequestId) {
         const ids = [...(current.seenRequestIds ?? []), patch.seenRequestId];
         next.seenRequestIds = ids.slice(-MAX_SEEN_REQUEST_IDS);
+      }
+      const stale = patch.staleRequestIds;
+      if (stale) {
+        const known = new Set([...(current.staleRequestIds ?? []), ...stale]);
+        // A request that later runs for real is no longer stale.
+        for (const id of next.seenRequestIds ?? []) known.delete(id);
+        next.staleRequestIds = [...known].slice(-MAX_SEEN_REQUEST_IDS);
       }
       if (index === -1) file.sessions.push(next);
       else file.sessions[index] = next;

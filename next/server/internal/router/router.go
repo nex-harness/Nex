@@ -62,6 +62,11 @@ const (
 	ChannelNexTask          = "nex-task"
 	ChannelModelSelection   = "model-selection"
 	ChannelProviderSettings = "provider-settings"
+	// ChannelMcpSync is the MCP settings channel: load/save are server-owned
+	// (the config doc); statuses come from the owning runner's live sessions.
+	ChannelMcpSync = "mcp-sync"
+	// ChannelSkills is the Settings → Skills channel (doc bundles).
+	ChannelSkills = "skills"
 	// ChannelConfig is the server-owned desired configuration (docs/next/
 	// config-mcp-skills.md). provider-settings/model-selection are answered from
 	// it by the server; the rest of the channel is served locally too.
@@ -113,7 +118,6 @@ var workspaceTargetMethods = map[string]struct{}{
 	"readSessionDebug":                 {},
 	"readSessionPromptContext":         {},
 	"readSessionEvents":                {},
-	"listMcpServerStatuses":            {},
 	"listPlugins":                      {},
 	"getPluginsOverview":               {},
 	"installPlugin":                    {},
@@ -193,6 +197,24 @@ func resolveSpecial(channel, method string, arg rpcwire.Value) (Route, bool) {
 		// local table (helloConversationV4 etc.) by the browser dispatcher.
 		return Route{Kind: TargetLocalUnsupported}, true
 
+	case ChannelMcpSync:
+		// Live server statuses belong to the machine running the session.
+		// Everything else (load/save of the doc's servers) is server-owned.
+		if method == "listWorkspaceMcpServerStatuses" || method == "listMcpServerStatuses" {
+			// The status set is the machine's live sessions; without a workspace in
+			// the argument there is one candidate: the first connected runner.
+			if target := workspaceTarget(arg); target != (runners.Target{}) {
+				return workspaceRoute(arg)
+			}
+			return Route{Kind: TargetFirstRunner}, true
+		}
+		return Route{Kind: TargetLocal}, true
+
+	case ChannelSkills:
+		// list/setEnabled/deleteSkill read and write the doc; copy/remove of the
+		// shared store are no-ops in this release (all server-owned).
+		return Route{Kind: TargetLocal}, true
+
 	case ChannelNexSession, ChannelNexTask:
 		// Every workspace-bound method on these channels carries the target at
 		// the top level of its argument.
@@ -258,7 +280,9 @@ func resolveSpecialEvent(channel, event string, arg rpcwire.Value) (Route, bool)
 		// onDidChange follows getView: server-owned in both modes (a config
 		// version or a runner's fresh facts re-broadcast the view).
 		return Route{Kind: TargetLocal}, true
-	case ChannelConfig:
+	case ChannelConfig, ChannelMcpSync, ChannelSkills:
+		// mcp-sync/skills events carry no live state; a listen stays local (and
+		// never fires), so the browser's always-truthy proxy methods stay quiet.
 		return Route{Kind: TargetLocal}, true
 	}
 	return Route{}, false

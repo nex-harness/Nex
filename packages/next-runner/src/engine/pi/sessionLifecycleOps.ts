@@ -19,7 +19,9 @@ import type { PromptAttachmentPayload } from "./piSessionOps.js";
 import { submitPrompt, type SubmitHooks } from "./piSessionOps.js";
 import { withAttachmentMarkers } from "./attachmentEntry.js";
 import { toEngineBranchHistory } from "./translate.js";
+import { disposePiSession } from "./disposePiSession.js";
 import { createEngineSession, restoreEngineSession } from "./sessionCreateOps.js";
+
 import { deleteTaskImpl } from "./taskStateOps.js";
 import { listDeletedSessions, listEngineSessions } from "./sessionListing.js";
 
@@ -64,6 +66,57 @@ export function createSessionLifecycleOps(deps: SessionLifecycleDeps) {
     openOf: (sessionId) => deps.sessions.get(sessionId),
   });
   const listDeletedSessionIds = listDeletedSessions({ init: deps.init, metadata: deps.metadata });
+  /** Serializes draft rebuilds per session (a rebuild must never interleave with itself). */
+  const rebuildTails = new Map<string, Promise<void>>();
+
+  /**
+   * One rebuild: reads the session now, releases it, restores the same file under the
+   * same id. A session pi already started keeps its (hidden, never prompted) runtime and
+   * is reloaded in place, so its MCP extension and skills are what changes.
+   */
+  const rebuildDraftNow = async (sessionId: string): Promise<OpenSession> => {
+    const open = deps.sessions.get(sessionId);
+    if (!open) throw new Error(`Session ${sessionId} is not open`);
+    const meta = await deps.metadata.get(open.workspacePath, sessionId);
+    // 旧 draft 记下的 request id 没有产生任何一轮（触发重建的这次发送由客户端
+    // 重发），标记为 stale，避免重发被当成 duplicate。
+    if (meta?.seenRequestIds?.length) {
+      await deps.metadata.upsert(open.workspacePath, sessionId, {
+        staleRequestIds: [...meta.seenRequestIds],
+      });
+    }
+    // 重建期间（await 之后）会话可能已被删除/作废：最新的在册会话不是这份 draft 时，
+    // 不再重建，直接把"已不在册"交给调用方按未打开会话处理。
+    if (deps.sessions.get(sessionId) !== open) throw new Error(`Session ${sessionId} is not open`);
+    // 修复依据：draft 在 pi 自己的后台启动（`session_start` 及会话文件的首次写入）之后
+    // 才会被重建，而此前总是释放并在新会话对象上恢复：
+    //  - `SessionManager.open` 以文件头里的 id 为准，pi 的异步首写用的是另一个 id，于是
+    //    重建出的会话不在引擎登记的 id 名下（提交立即 send_failed），作废/删除也管不到它；
+    //  - 界面仍持有旧会话的事件订阅，看不见这一轮的输出（E2E 里 echo 调用后卡片不出现）。
+    // 现在原地重建：同一个会话文件、同一个 id、同一组订阅者，按当前列表重新构建 pi 会话
+    // （与新建会话同一路径）。pi 的 `session_start` 由会话文件 header 决定 reason（"resume"
+    // 不关闭连接），所以这里用 "reload" 让 MCP 扩展先发 session_shutdown，再连接新列表。
+    const sessionFile = open.session.sessionManager.getSessionFile?.();
+    // 修复：重建出的会话带着一组全新的空 listeners，而 v4 运行时（UI 的会话订阅）早已
+    // `subscribe` 在旧会话的集合上，这一轮的事件发给了没人听的新集合：模型收到了提示、
+    // 侧栏出现任务行，但聊天视图停在欢迎页（MCP E2E 的 echo 卡片永远不出现）。
+    // 释放旧会话前取走订阅者，重建后接到新会话上。
+    const subscribers = [...open.listeners];
+    await disposePiSession(open.session, "reload");
+    if (deps.sessions.get(sessionId) === open) deps.sessions.delete(sessionId);
+    const rebuilt = await restoreEngineSession(
+      deps.hooks.sessionCreateDeps(),
+      open.workspacePath,
+      sessionId,
+      {
+        ...(sessionFile ? { sessionFile } : {}),
+        sessionStartReason: "reload",
+      },
+    );
+    for (const listener of subscribers) rebuilt.listeners.add(listener);
+    return rebuilt;
+  };
+
   return {
     createSession(workspacePath: string, options: CreateEngineSessionOptions) {
       return deps
@@ -74,7 +127,38 @@ export function createSessionLifecycleOps(deps: SessionLifecycleDeps) {
       if (deps.sessions.has(sessionId)) return Promise.resolve();
       return deps
         .init()
-        .then(() => restoreEngineSession(deps.hooks.sessionCreateDeps(), workspacePath, sessionId));
+        .then(() => restoreEngineSession(deps.hooks.sessionCreateDeps(), workspacePath, sessionId))
+        .then(() => undefined);
+    },
+    /**
+     * Rebuilds a not-yet-started draft with the current config (docs/next/
+     * config-mcp-skills.md P1/P2).
+     *
+     * 修复依据：pi 在 `session_start` 时读取 MCP 列表（`loadConfig`）与技能目录，
+     * 之后不再改变；UI 会先创建 draft（`createSession`），配置 push 到达后
+     * draft 仍带着旧列表，新加的 MCP 服务器/技能要等下一次新开会话才生效。
+     * 未产生任何一轮（无进行中 run、无排队输入、会话日志只有 header）的 draft
+     * 在这里用同一个会话文件重建：id 不变，已提交的输入随后照常进入。
+     *
+     * 修复依据：重建与会话作废/删除是并发的异步操作。此前调用方把提交时的 `open`
+     * 直接传进来，作废赢下后重建仍会跑完（会话已不在册时 restore 抛错被吞成
+     * `send_failed`，或重建出一个不在册的会话再在它上面起一轮）。这里按会话 id 在
+     * 重建时刻重新取会话，并把同一会话的重建串行化，等重建返回时再核对一次它在册。
+     */
+    async reopenDraft(sessionId: string): Promise<OpenSession> {
+      await deps.init();
+      const previous = rebuildTails.get(sessionId) ?? Promise.resolve();
+      const current = previous.catch(() => undefined).then(() => rebuildDraftNow(sessionId));
+      const tail = current.then(
+        () => undefined,
+        () => undefined,
+      );
+      rebuildTails.set(sessionId, tail);
+      try {
+        return await current;
+      } finally {
+        if (rebuildTails.get(sessionId) === tail) rebuildTails.delete(sessionId);
+      }
     },
     deleteSession(workspacePath: string, sessionId: string): Promise<void> {
       return deps
@@ -91,9 +175,10 @@ export function createSessionLifecycleOps(deps: SessionLifecycleDeps) {
       return withAttachmentMarkers(toEngineBranchHistory(branch, meta?.lastCompact), branch);
     },
     subscribe(sessionId: string, listener: (event: EngineEvent) => void): EngineEventSubscription {
-      const open = deps.requireOpen(sessionId);
-      open.listeners.add(listener);
-      return { dispose: () => open.listeners.delete(listener) };
+      deps.requireOpen(sessionId).listeners.add(listener);
+      // The open session can be rebuilt under the same id (draft reopen); remove the
+      // listener from whichever session currently holds it.
+      return { dispose: () => deps.sessions.get(sessionId)?.listeners.delete(listener) };
     },
     /**
      * Submission. `submitPrompt` is the single start path (idempotency, model selection,

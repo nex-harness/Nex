@@ -88,6 +88,24 @@ type Layer struct {
 	ProviderOrder []string `json:"providerOrder,omitempty"`
 	// ModelOrder keeps per-provider model order overrides (replaces per key).
 	ModelOrder map[string][]string `json:"modelOrder,omitempty"`
+	// MCP holds MCP servers by name (merge by key, null deletes,
+	// `{enabled}` toggles an inherited entry).
+	MCP map[string]*McpServer `json:"mcp,omitempty"`
+	// Skills and Prompts are content-addressed bundles; arrays replace per layer.
+	Skills  []BundleRef `json:"skills,omitempty"`
+	Prompts []BundleRef `json:"prompts,omitempty"`
+}
+
+// BundleRef is one content-addressed skill or prompt bundle (P2).
+type BundleRef struct {
+	// Name is the skill's or template's name (unique per list).
+	Name string `json:"name"`
+	// Digest addresses the bundle content: "sha256:<hex>".
+	Digest string `json:"digest"`
+	// Kind is "skill" (a directory with SKILL.md) or "prompt" (one markdown file).
+	Kind        string `json:"kind"`
+	Enabled     bool   `json:"enabled"`
+	Description string `json:"description,omitempty"`
 }
 
 // Provider is one provider entry. ID, API type and BaseURL are required.
@@ -133,7 +151,8 @@ type ModelCost struct {
 // Empty reports whether the layer carries no patch at all.
 func (l Layer) Empty() bool {
 	return len(l.Providers) == 0 && len(l.Settings) == 0 &&
-		len(l.ProviderOrder) == 0 && len(l.ModelOrder) == 0
+		len(l.ProviderOrder) == 0 && len(l.ModelOrder) == 0 && len(l.MCP) == 0 &&
+		len(l.Skills) == 0 && len(l.Prompts) == 0
 }
 
 // EmptyDoc returns a schema-1 doc with empty layers.
@@ -181,6 +200,27 @@ func ValidateDoc(doc ConfigDoc) []Issue {
 			}
 			issues = append(issues, validateProvider(path, id, provider)...)
 		}
+		for name, server := range layer.MCP {
+			path := scopePath + ".mcp." + name
+			if strings.TrimSpace(name) == "" {
+				issues = append(issues, Issue{Path: path, Code: "mcp-name-invalid", Message: "server name is empty"})
+				continue
+			}
+			if server == nil {
+				continue
+			}
+			if server.isToggleOnly() {
+				continue
+			}
+			normalized := *server
+			NormalizeMcp(&normalized)
+			if server.Name == "" {
+				normalized.Name = name
+			}
+			issues = append(issues, ValidateMcpServer(path, &normalized)...)
+		}
+		issues = append(issues, validateBundles(scopePath+".skills", layer.Skills, "skill")...)
+		issues = append(issues, validateBundles(scopePath+".prompts", layer.Prompts, "prompt")...)
 		for modelID, order := range layer.ModelOrder {
 			seen := make(map[string]struct{}, len(order))
 			for _, entry := range order {

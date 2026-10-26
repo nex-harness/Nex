@@ -84,7 +84,7 @@ export class AttachmentPromptTable {
     text: string,
     attachments: readonly AttachmentRef[] | undefined,
   ): Promise<string> {
-    const sessionId = open.session.sessionId;
+    const sessionId = open.sessionId ?? open.session.sessionId;
     const mapped = await mapPromptAttachments(this.deps.host, sessionId, attachments);
     const accepted = this.acceptedRefs(attachments, mapped.rejected);
     this.logRejected(sessionId, mapped.rejected);
@@ -115,7 +115,7 @@ export class AttachmentPromptTable {
    */
   adopt(open: OpenSession, text: string, prepared: PreparedPrompt): void {
     const block = prepared.block ? prepared.prompt.promptText.slice(text.length) : "";
-    const sessionId = open.session.sessionId;
+    const sessionId = open.sessionId ?? open.session.sessionId;
     this.prompts.enqueue(
       sessionId,
       {
@@ -131,7 +131,7 @@ export class AttachmentPromptTable {
 
   /** pi event hook (before translation): claims, rewrite, marker, steer accounting. */
   handlePiEvent(open: OpenSession, event: AgentSessionEvent): void {
-    const sessionId = open.session.sessionId;
+    const sessionId = open.sessionId ?? open.session.sessionId;
     if (event.type === "message_start" && event.message.role === "user") {
       const result = this.prompts.onUserMessageStart(sessionId, open.session);
       open.claimedUserInput = result.input

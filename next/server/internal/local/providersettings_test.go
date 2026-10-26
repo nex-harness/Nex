@@ -249,3 +249,45 @@ func TestModelSelectionFallbackFromFacts(t *testing.T) {
 		t.Fatalf("selection = %+v", result)
 	}
 }
+
+// TestModelSelectionFallbackWithDisabledProvider 锁住 settings→mcp 全量回归：
+// settings 套件会把自建的 provider 置为 disabled（doc 里只剩 disabled provider）。
+// runner 侧 owned = enabledProviders>0 → fallback 模式保留本机 catalog；若
+// executableModels 按 ProviderList()（含 disabled）判空，会误走 server-owned
+// 分支并返回空模型列表，composer 显示 "No model available" 而 runner 实际可用。
+// 这里断言：只剩 disabled provider 时，view 仍按 fallback facts 编译。
+func TestModelSelectionFallbackWithDisabledProvider(t *testing.T) {
+	settings, manager, registry := newTestProviderSettings(t)
+	callJSON(t, settings, "createPersonalProvider", `[{"providerName":"Acme"}]`)
+	doc, err := manager.store.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var providerID string
+	for id := range doc.Scopes.Global.Providers {
+		providerID = id
+	}
+	callJSON(t, settings, "savePersonalProviderOverlay", `["`+providerID+`",`+
+		`{"access":{"type":"api-key","apiKey":"sk-1"},"api":{"type":"openai-chat-completions","baseUrl":"https://api.acme.test/v1"}},`+
+		`{"enabled":false}]`)
+
+	registry.Register(runners.Info{RunnerID: "alpha", Workspaces: []runners.Workspace{{Path: "/w"}}}, &fakeLink{})
+	manager.ConfigApplied("alpha", 1, true, nil, map[string]any{
+		"mode": "fallback",
+		"modelsByProvider": map[string]any{
+			"faux": map[string]any{"configured": true, "models": []map[string]any{{
+				"providerId": "faux", "modelId": "faux-1", "name": "Faux 1",
+				"api": "openai-chat-completions", "baseUrl": "http://127.0.0.1:18080/v1",
+				"reasoningLevels": []string{"off"}, "contextWindow": 128000, "maxTokens": 8192,
+			}}},
+		},
+	})
+	selection := NewModelSelectionChannel(manager)
+	result := callSelection(t, selection, `[{"selection":{"providerId":"faux","modelId":"faux-1","options":{"reasoningLevel":"off"}}}]`)
+	if len(result.Providers) != 1 {
+		t.Fatalf("providers = %+v (a disabled-only doc must fall back to runner facts)", result.Providers)
+	}
+	if result.SelectionIssue != "" || result.EffectiveModel != "faux-1" {
+		t.Fatalf("selection = %+v", result)
+	}
+}

@@ -1,4 +1,4 @@
-import type { ModelSelection } from "@nex/shared";
+import { nexMcpServerStatusSnapshotSchema, type ModelSelection } from "@nex/shared";
 import { resolve as resolvePath } from "node:path";
 import type { Engine } from "../engine/types.js";
 import type { ChannelRegistryLike } from "../link/registry.js";
@@ -10,6 +10,8 @@ import type { AttachmentRegistry } from "../attachments/registry.js";
 import { readWorkspacePresentation, workspacePathFromParams } from "./nexSession.js";
 import { NexTaskChannel } from "./nexTask.js";
 import { buildModelSelectionViews } from "./modelViews.js";
+import { composeSlashCommands, loadCatalog, skillCatalogFrom } from "./piCatalog.js";
+import type { McpServerStatus } from "../config/applyRuntimeConfig.js";
 
 export interface RunnerChannelsOptions {
   engine: Engine;
@@ -207,8 +209,60 @@ export function registerChannels(
 
   // ── nex-session ──
 
+  // P2: the server doc's skills, forwarded to this runner, so the `/` menu of
+  // the workspace includes them before a session materializes them.
+  let serverSlashCommands: Array<{
+    name: string;
+    description?: string;
+    source?: "builtin" | "custom";
+  }> = [];
+  registry.call("nex-agent", "getSkillReferenceCatalog", async (arg) => {
+    const target = requireWorkspaceTarget(arg);
+    const resources = await engine.piResources(target.workspacePath);
+    const skills = skillCatalogFrom(resources);
+    serverSlashCommands = skills.map((skill) => ({
+      name: `skill:${skill.name}`,
+      description: skill.description,
+      source: "custom" as const,
+    }));
+    return { authority: "workspace", skills };
+  });
+
   registry.call("nex-session", "readWorkspacePresentation", async (arg) => {
-    return readWorkspacePresentation(requireWorkspaceTarget(arg));
+    const target = requireWorkspaceTarget(arg);
+    // P2: pi's own prompt templates and `/skill:` commands (pi expands them).
+    const { resources, skillCommands } = await loadCatalog(engine, target.workspacePath);
+    return readWorkspacePresentation(
+      target,
+      composeSlashCommands({ slashCommands: serverSlashCommands, resources, skillCommands }),
+    );
+  });
+
+  // P1: live MCP statuses of the newest session (the server forwards this).
+  //
+  // 修复依据：此前直接返回引擎内部的 `{state, toolCount}`，而浏览器按
+  // `nexMcpServerStatusSnapshotSchema`（`status`、`updatedAt` 必填）解析，整条结果
+  // 校验失败，Settings 里所有服务器都显示 “Unable to retrieve MCP status”。
+  // 这里按共享协议的线上形状映射，并且只在该 schema 校验通过后才返回。
+  // P1: 状态查询走隐藏的状态会话（引擎的 `requestMcpStatus`），在第一个聊天会话之前
+  // 也能给出真实的 connected/工具数；设置页的 "connect" 模式因此不必先开一次聊天。
+  registry.call("mcp-sync", "listWorkspaceMcpServerStatuses", async () => {
+    const snapshot = await engine.requestMcpStatus();
+    // Logged so a settings status that never leaves "connecting" is traceable
+    // to the runner's view (counts only, never values).
+    options.logger.info("mcp statuses reported", {
+      owned: snapshot.owned,
+      servers: Object.keys(snapshot.statuses).length,
+      states: Object.values(snapshot.statuses)
+        .map((status) => status.state)
+        .join(","),
+    });
+    const statuses: Record<string, unknown> = {};
+    for (const status of Object.values(snapshot.statuses)) {
+      const mapped = toWireStatus(status);
+      if (mapped) statuses[status.name] = mapped;
+    }
+    return { statuses };
   });
 
   // ── model-selection / provider-settings ──
@@ -300,6 +354,23 @@ function createWorkspaceGuardedRegistry(
     getListen: (channel, event) => registry.getListen(channel, event),
     listRegistered: () => registry.listRegistered(),
   };
+}
+
+/**
+ * Engine MCP status → `nexMcpServerStatusSnapshotSchema` (the browser validates
+ * every entry strictly; one bad row fails the whole list).
+ */
+function toWireStatus(status: McpServerStatus): Record<string, unknown> | null {
+  const parsed = nexMcpServerStatusSnapshotSchema.safeParse({
+    status: status.state === "error" ? "failed" : status.state,
+    transport: status.transport,
+    toolCount: status.toolCount,
+    ...(status.toolNames?.length ? { toolNames: status.toolNames } : {}),
+    updatedAt: new Date().toISOString(),
+    ...(status.error ? { error: status.error.slice(0, 500) } : {}),
+    ...(status.failureKind ? { failureKind: status.failureKind } : {}),
+  });
+  return parsed.success ? (parsed.data as Record<string, unknown>) : null;
 }
 
 function normalizeWorkspacePath(path: string): string {

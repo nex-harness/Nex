@@ -65,7 +65,7 @@ func StubChannels() map[string]Channel {
 		"file":                     newFileStub(),
 		"system":                   newSystemStub(),
 		"git":                      newGitStub(),
-		"mcp-sync":                 newMcpSyncStub(),
+		"commands":                 newCommandsStub(),
 		"coding-plan-subscription": newCodingPlanStub(),
 		"settings-sync":            newSettingsSyncStub(),
 		"subagents":                newSubagentsStub(),

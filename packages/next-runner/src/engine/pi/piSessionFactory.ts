@@ -17,10 +17,19 @@ import type { EngineEvent } from "../types.js";
 import { translatePiEvent, type PiTranslateContext } from "./events.js";
 import { createPermissionGateExtension } from "./permissionExtension.js";
 import type { PiCheckpointHook } from "./piCheckpointHook.js";
+import { type McpWiring } from "../../config/mcpConfig.js";
+import type { McpServerStatus } from "../../config/applyRuntimeConfig.js";
+import type { Logger } from "../../logger.js";
+import { createMcpStatusTracker, type McpStatusTracker } from "./mcpStatusExtension.js";
 import { createCheckpointExtension } from "./checkpointExtension.js";
 
 export interface PiSessionFactoryOptions {
   workspacePath: string;
+  /**
+   * The MCP item of `session_shutdown`/`session_start` events for `reload()`
+   * (`"new"` at creation). pi's MCP extension drops connections only on shutdown.
+   */
+  sessionStartReason?: "startup" | "reload" | "new" | "resume" | "fork";
   sessionManager: SessionManager;
   model: Model<never> | undefined;
   modelRuntime: ModelRuntime;
@@ -32,6 +41,8 @@ export interface PiSessionFactoryOptions {
    * (pi's compaction events carry no command id).
    */
   translateContext?: (sessionId: string) => PiTranslateContext;
+  /** Diagnostics (MCP status sampling). */
+  logger?: Logger;
   /**
    * File checkpoints (spec B). Optional: a session created before the service resolves (or
    * with git missing) simply has no checkpoint hooks.
@@ -47,6 +58,13 @@ export interface PiSessionFactoryOptions {
    * here, before translation, so `user_input` can carry the row text + attachment refs.
    */
   onPiEventBeforeTranslate?: (event: AgentSessionEvent) => void;
+  /** Materialized skill/prompt bundle directories of the session's generation (P2). */
+  additionalSkillPaths?: ReadonlyArray<string>;
+  additionalPromptTemplatePaths?: ReadonlyArray<string>;
+  /** MCP generation of the session (P1). */
+  mcp?: McpWiring;
+  /** Receives the session's MCP statuses when they change (config facts). */
+  onMcpStatus?: (workspacePath: string, sessionId: string, statuses: McpServerStatus[]) => void;
   /** The session whose input table a user `message_end` claims (spec A). */
   attachmentInputs?: {
     claim: (
@@ -63,6 +81,10 @@ export interface CreatedPiSession {
   gate: PermissionGate;
   listeners: Set<(event: EngineEvent) => void>;
   unsubscribe: () => void;
+  /** MCP status sampler of a server-owned session (P1). */
+  mcpTracker?: McpStatusTracker;
+  /** The MCP list this session was built with (it cannot change after start). */
+  mcp?: McpWiring;
 }
 
 /**
@@ -83,16 +105,48 @@ export async function createPiSessionWithGate(
       for (const listener of listeners) listener(event);
     },
   });
+  const mcpOwned = options.mcp?.owned ?? false;
+
+  // The tracker reads the `/mcp` command handler from the session's extension
+  // runner (filled by `createAgentSession`).
+  const runnerRef: { getRegisteredCommands(): Array<{ name: string; handler?: unknown }> } = {
+    getRegisteredCommands: () => registry.current?.getRegisteredCommands() ?? [],
+  };
+  const registry: { current?: AgentSession["extensionRunner"] } = {};
+  // pi creates the session inside createAgentSession; status callbacks fire later.
+  const sessionIdHolder = { current: "" };
+  const mcpTracker =
+    mcpOwned && options.onMcpStatus && options.mcp?.servers.length
+      ? createMcpStatusTracker({
+          commandRunner: runnerRef,
+          servers: options.mcp.servers.map((server) => ({
+            name: server.name,
+            transport: "url" in server.config ? "http" : "stdio",
+          })),
+          report: (statuses) =>
+            options.onMcpStatus?.(options.workspacePath, sessionIdHolder.current, statuses),
+          logger: options.logger ?? noopLogger,
+        })
+      : undefined;
   const resourceLoader = new DefaultResourceLoader({
     cwd: options.workspacePath,
     agentDir: getAgentDir(),
     settingsManager: options.settingsManager,
+    ...(options.additionalSkillPaths?.length
+      ? { additionalSkillPaths: [...options.additionalSkillPaths] }
+      : {}),
+    ...(options.additionalPromptTemplatePaths?.length
+      ? { additionalPromptTemplatePaths: [...options.additionalPromptTemplatePaths] }
+      : {}),
     extensionFactories: [
       createPermissionGateExtension(gate),
       ...(options.takeSystemNote ? [createSystemNoteExtension(options.takeSystemNote)] : []),
       ...(options.checkpoints ? [createCheckpointExtension(options.checkpoints)] : []),
-    ],
-  });
+      // P1: the doc's servers, or pi's own mcp.json discovery (builtin:mcp).
+      ...(options.mcp ? [options.mcp.extension] : []),
+      ...(mcpTracker ? [mcpTracker.extension] : []),
+    ] as never,
+  } as never);
   await resourceLoader.reload();
   const { session } = await createAgentSession({
     cwd: options.workspacePath,
@@ -101,7 +155,16 @@ export async function createPiSessionWithGate(
     sessionManager: options.sessionManager,
     resourceLoader,
     settingsManager: options.settingsManager,
-  });
+    // pi 的扩展钩子 `ctx.reload()` 缺省以 "resume" 重启会话：MCP 扩展只在
+    // `session_shutdown` 里关闭连接，而内部 reload 对这些 reason 并不关闭。以 "reload"
+    // 创建时（草稿原地重建），先关闭、再按新列表重连。
+    ...(options.sessionStartReason
+      ? {
+          sessionStartEvent: { type: "session_start", reason: options.sessionStartReason } as never,
+        }
+      : {}),
+  } as never);
+  registry.current = session.extensionRunner;
   const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
     // Attachment prompt bookkeeping must run before translation: an attachment prompt's
     // persisted user text is rewritten at its `message_start`, and its `message_entry`
@@ -128,7 +191,23 @@ export async function createPiSessionWithGate(
       for (const listener of listeners) listener(translated);
     }
   });
-  return { session, gate, listeners, unsubscribe };
+  // Bind AFTER subscribing: `session_start` reaches the MCP extension, which
+  // then drains its startup connections before the first prompt asks for its
+  // tools (pi lists MCP tools with its own `getMcpServers` at prompt start).
+  // Safe to call twice (idempotent).
+  await session.bindExtensions({});
+  sessionIdHolder.current = session.sessionId;
+  // The doc's servers connect in the background; check once they should be up,
+  // so the settings panel sees "connected" without waiting for a first turn.
+  mcpTracker?.kick();
+  return {
+    session,
+    gate,
+    listeners,
+    unsubscribe,
+    ...(mcpTracker ? { mcpTracker } : {}),
+    ...(options.mcp ? { mcp: options.mcp } : {}),
+  };
 }
 
 /** Translate context: manual compact + the session's attachment input table (spec A). */
@@ -162,3 +241,5 @@ function createSystemNoteExtension(take: () => string | undefined): InlineExtens
   };
   return { name: "nex-attachment-note", factory };
 }
+
+const noopLogger = { debug() {}, info() {}, warn() {}, error() {} } as unknown as Logger;

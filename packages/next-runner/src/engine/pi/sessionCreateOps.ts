@@ -30,13 +30,21 @@ export async function createEngineSession(
   const sessionDir = deps.sessionDir(workspacePath);
   await mkdir(sessionDir, { recursive: true });
   const sessionManager = SessionManager.create(workspacePath, sessionDir);
+  // Drafts are registered under the id pi's session manager assigned here (its
+  // background first write can stamp a different header id; pi events are
+  // addressed by `OpenSession.sessionId`, see `openPiSession`).
   const { session, open } = await openPiSession(
     deps.factoryDeps(),
     workspacePath,
     sessionManager,
     model,
+    sessionManager.getSessionId(),
   );
-  const sessionId = session.sessionId;
+  // 修复：draft 以 `open.sessionId`（session manager 分配的 id）注册进引擎，但这里原先用
+  // `session.sessionId` 写元数据并返回给 UI。pi 首次后台写入可能给会话头换一个 id，两者不同时，
+  // UI 订阅的 id 和引擎持有的 id 不一致：第一条消息被接收、模型也收到了，但聊天视图永远停在欢迎页。
+  // 元数据、返回值和引擎注册统一使用同一个 id。
+  const sessionId = open.sessionId ?? session.sessionId;
   const now = Date.now();
   const selection = model ? selectionFor(session) : undefined;
   await deps.metadata.upsert(workspacePath, sessionId, {
@@ -59,10 +67,11 @@ export async function restoreEngineSession(
   deps: SessionCreateDeps,
   workspacePath: string,
   sessionId: string,
-): Promise<void> {
+  options: { sessionFile?: string; sessionStartReason?: "reload" } = {},
+): Promise<OpenSession> {
   const meta = await deps.metadata.get(workspacePath, sessionId);
   if (meta?.deleted) throw new Error(`Session ${sessionId} is deleted`);
-  const sessionFile = await deps.findSessionFile(workspacePath, sessionId);
+  const sessionFile = options.sessionFile ?? (await deps.findSessionFile(workspacePath, sessionId));
   if (!sessionFile) throw new Error(`Session ${sessionId} not found`);
   const sessionManager = SessionManager.open(sessionFile, deps.sessionDir(workspacePath));
   const runtime = deps.runtime();
@@ -74,6 +83,8 @@ export async function restoreEngineSession(
     workspacePath,
     sessionManager,
     restoredModel,
+    sessionId,
+    options.sessionStartReason,
   );
   if (meta?.model?.thought) session.setThinkingLevel(meta.model.thought as never);
   gate.setMode(meta?.mode ?? "build", meta?.planEnabled ?? false);
@@ -87,4 +98,5 @@ export async function restoreEngineSession(
     phase: session.isStreaming ? "running" : (meta?.phase ?? "completedSuccess"),
     ...(meta?.followupMode ? { followupMode: meta.followupMode } : {}),
   });
+  return open;
 }

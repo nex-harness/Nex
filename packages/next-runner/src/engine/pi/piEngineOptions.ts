@@ -26,4 +26,9 @@ export interface PiEngineOptions {
   attachments?: AttachmentRegistry;
   /** Test seam: per-session attachment disk quota. */
   attachmentSessionQuotaBytes?: number;
+  /**
+   * Workspaces this runner serves (P1). The hidden MCP status session opens in the
+   * first one; absent (tests without workspaces), status queries read sessions only.
+   */
+  workspacePaths?: ReadonlyArray<string>;
 }

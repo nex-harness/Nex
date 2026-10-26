@@ -6,6 +6,7 @@ import type {
   PermissionMode,
 } from "../types.js";
 import type { SessionMetaEntry } from "./metaStore.js";
+import { disposePiSession } from "./disposePiSession.js";
 
 /** Live facts the engine reads from an open pi session (absent = restored-only row). */
 export interface LiveSessionView {
@@ -35,7 +36,7 @@ export async function teardownSession(open: {
   }
   open.gate.dispose();
   open.unsubscribe();
-  open.session.dispose();
+  await disposePiSession(open.session);
 }
 
 /**

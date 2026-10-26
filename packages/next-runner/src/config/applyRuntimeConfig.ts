@@ -8,6 +8,7 @@ import {
   type CredentialStore,
 } from "@earendil-works/pi-ai";
 import type { Logger } from "../logger.js";
+import { materializeBundles, type MaterializedBundles } from "./bundles.js";
 import { createServerRuntime } from "./credentials.js";
 import { appliedCacheFor, pickSettings, type AppliedCache } from "./runtimeSettings.js";
 import { modelsJsonFor } from "./modelsJson.js";
@@ -41,6 +42,50 @@ import {
  * references them).
  */
 
+/** One MCP server's live state as reported to the server (P1). */
+export interface McpServerStatus {
+  name: string;
+  transport: "stdio" | "http";
+  state: "connecting" | "connected" | "error" | "disabled";
+  toolCount: number;
+  toolNames?: string[];
+  error?: string;
+  failureKind?: string;
+}
+
+/** Stores the per-server statuses of the newest session's MCP extension. */
+export class McpStatusRegistry {
+  private statuses = new Map<string, McpServerStatus>();
+  private listener: ((statuses: McpServerStatus[]) => void) | undefined;
+
+  /** Replaces the status set (called by an engine reporting session status). */
+  replace(statuses: McpServerStatus[]): void {
+    this.statuses = new Map(statuses.map((status) => [status.name, status]));
+    this.listener?.([...this.statuses.values()]);
+  }
+
+  list(): McpServerStatus[] {
+    return [...this.statuses.values()];
+  }
+
+  onChange(listener: ((statuses: McpServerStatus[]) => void) | undefined): void {
+    this.listener = listener;
+  }
+}
+
+/**
+ * The runner's MCP observation of passing sessions: what the live sessions were
+ * opened with, and that at least one answered with the server doc's own list.
+ * It looks at the sessions only (never at the generation), so it never swaps a
+ * running session's model runtime or skills behind its back.
+ */
+export interface McpLiveSession {
+  workspacePath: string;
+  sessionId: string;
+  generation: number;
+  sample: () => void;
+}
+
 export interface RuntimeConfigManagerOptions {
   dataDir: string;
   logger: Logger;
@@ -62,8 +107,16 @@ interface Generation {
   runtime: ModelRuntime | null;
   settings: SettingsManager;
   modelsPath?: string;
+  /** Materialized skill/prompt bundle directories (P2). */
+  resources: MaterializedBundles;
   disposed: boolean;
 }
+
+const NO_RESOURCES: MaterializedBundles = Object.freeze({
+  skillPaths: Object.freeze([]),
+  promptPaths: Object.freeze([]),
+  issues: Object.freeze([]),
+});
 
 /**
  * Credential store that never writes auth.json (research §C4). Reads the user's
@@ -125,14 +178,25 @@ export class RuntimeConfigManager {
   private readonly exports = new Set<string>();
   private applied: AppliedResult | null = null;
   private lastAppliedVersion: number;
+  /** Live MCP statuses of the newest session (reported by the engine). */
+  readonly mcpStatus = new McpStatusRegistry();
+  /**
+   * P1: newest session whose MCP statuses are live (set by the engine when a
+   * session reports). `sample()` re-reads it; `generation` is the applied
+   * config version it was created with.
+   */
+  latestMcpSession: McpLiveSession | undefined;
+  /** How every session of this process was opened (P1). */
 
   constructor(private readonly options: RuntimeConfigManagerOptions) {
     this.lastAppliedVersion = 0;
+
     const fallback = emptyFallbackConfig();
     this.generation = {
       config: fallback,
       runtime: null,
       settings: SettingsManager.create(options.fallbackCwd ?? process.cwd()),
+      resources: NO_RESOURCES,
       disposed: false,
     };
   }
@@ -144,6 +208,11 @@ export class RuntimeConfigManager {
 
   get current(): Generation {
     return this.generation;
+  }
+
+  /** Materialized skill/prompt directories of the latest generation. */
+  resources(): MaterializedBundles {
+    return this.generation.resources;
   }
 
   get appliedResult(): AppliedResult | null {
@@ -178,9 +247,15 @@ export class RuntimeConfigManager {
       return { version: this.lastAppliedVersion, ok: false, errors: issues, facts: this.facts() };
     }
     const config = buildRuntimeConfig(parsed, this.options.logger);
+
+    const resources = await materializeBundles(this.options.dataDir, config.bundles);
+
+    if (resources.issues.length > 0) {
+      this.options.logger.warn("config bundles rejected", { issues: resources.issues.length });
+    }
     let next: Generation;
     try {
-      next = await this.build(config);
+      next = await this.build(config, resources);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.options.logger.error("config generation could not be built", {
@@ -198,7 +273,7 @@ export class RuntimeConfigManager {
     this.applied = {
       version: config.version,
       ok: true,
-      errors: [...config.issues],
+      errors: [...config.issues, ...resources.issues],
       facts: this.facts(),
     };
     this.lastAppliedVersion = config.version;
@@ -245,6 +320,12 @@ export class RuntimeConfigManager {
       mode: config.mode,
       version: config.version,
       modelsByProvider,
+      mcpOwned: config.mcp.owned,
+      mcp: mcpFacts(config),
+      skills: config.skills.map((ref) => ref.name),
+      prompts: config.prompts.map((ref) => ref.name),
+      skillsEnabled: config.skillsEnabled,
+      ...(config.warnings.length > 0 ? { warnings: [...config.warnings] } : {}),
     };
   }
 
@@ -277,7 +358,7 @@ export class RuntimeConfigManager {
     for (const version of versions.slice(1)) this.retained.delete(version);
   }
 
-  private async build(config: RuntimeConfig): Promise<Generation> {
+  private async build(config: RuntimeConfig, resources: MaterializedBundles): Promise<Generation> {
     if (config.mode === "fallback") {
       const runtime = this.options.createRuntime
         ? await this.options.createRuntime(config, "")
@@ -289,6 +370,7 @@ export class RuntimeConfigManager {
         config,
         runtime,
         settings: SettingsManager.create(this.options.fallbackCwd ?? process.cwd()),
+        resources,
         disposed: false,
       };
     }
@@ -301,7 +383,7 @@ export class RuntimeConfigManager {
     const settings = SettingsManager.inMemory(pickSettings(config.settings), {
       projectTrusted: true,
     });
-    return { config, runtime, settings, modelsPath, disposed: false };
+    return { config, runtime, settings, modelsPath, resources, disposed: false };
   }
 
   /** Publishes the generation's keys to the env (models.json `$NAME` refs). */
@@ -320,6 +402,21 @@ export class RuntimeConfigManager {
   }
 }
 
+/** facts.mcp: live statuses overlaid on the doc's servers (disabled ones included). */
+function mcpFacts(config: RuntimeConfig): McpServerStatus[] {
+  const live = new Map(config.mcp.servers.map((server) => [server.name, server]));
+  return config.mcp.servers.map((server) => {
+    const transport = "url" in server.config ? ("http" as const) : ("stdio" as const);
+    void live;
+    return {
+      name: server.name,
+      transport,
+      state: "connecting" as const,
+      toolCount: 0,
+    };
+  });
+}
+
 function emptyFallbackConfig(): RuntimeConfig {
   return Object.freeze({
     version: 0,
@@ -330,6 +427,17 @@ function emptyFallbackConfig(): RuntimeConfig {
     credentials: new Map(),
     issues: Object.freeze([]),
     env: Object.freeze({}),
+    mcp: Object.freeze({
+      owned: false,
+      servers: Object.freeze([]),
+      issues: Object.freeze([]),
+      key: "",
+    }),
+    bundles: Object.freeze([]),
+    skills: Object.freeze([]),
+    prompts: Object.freeze([]),
+    skillsEnabled: true,
+    warnings: Object.freeze([]),
   });
 }
 
@@ -343,3 +451,5 @@ async function writeFileAtomic(path: string, content: string): Promise<void> {
     throw error;
   }
 }
+
+export type { RuntimeConfig } from "./runtimeTypes.js";

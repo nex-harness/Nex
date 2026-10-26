@@ -20,6 +20,7 @@ package local
 
 import (
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -290,4 +291,58 @@ func (m *Manager) SyncPush() {
 			m.logger.Warn("config push failed", "runnerId", id, "error", err)
 		}
 	}
+}
+
+// runnerFor resolves the runner whose scope/facts an MCP or skill view reads:
+// an explicit runnerId, then the `runner:<id>:<path>` identity, then the first
+// connected runner (the doc's global layer applies everywhere).
+func (m *Manager) runnerFor(target viewTarget) string {
+	if target.RunnerID != "" {
+		return target.RunnerID
+	}
+	if runnerID, _, ok := parseRunnerIdentity(target.WorkspaceIdentity); ok {
+		return runnerID
+	}
+	if m.reg == nil {
+		return ""
+	}
+	if first, ok := m.reg.FirstRunnerID(); ok {
+		return first
+	}
+	return ""
+}
+
+// HasMcpServersFor reports whether the doc defines any MCP server visible to
+// runnerID (any scope: the list is global in this release).
+func (m *Manager) HasMcpServersFor(runnerID string) bool {
+	doc, err := m.store.Snapshot()
+	if err != nil {
+		return false
+	}
+	return len(doc.EffectiveForRunner(runnerID).MCPServerList()) > 0
+}
+
+// forwardTarget resolves the runner that answers a workspace-scoped call the
+// server itself handles (MCP statuses): the explicit target's runner, else the
+// first connected runner. A nil link means no runner can answer.
+func (m *Manager) forwardTarget(target viewTarget) (runners.Link, string) {
+	if m.reg == nil {
+		return nil, ""
+	}
+	if runnerID := m.runnerFor(target); runnerID != "" {
+		if link, ok := m.reg.Runner(runnerID); ok {
+			return link, runnerID
+		}
+		// An explicitly named runner that is offline must not fall back to a
+		// different machine: it answers, or the call fails.
+		if target.RunnerID != "" || strings.HasPrefix(target.WorkspaceIdentity, "runner:") {
+			return nil, runnerID
+		}
+	}
+	if first, ok := m.reg.FirstRunnerID(); ok {
+		if link, ok := m.reg.Runner(first); ok {
+			return link, first
+		}
+	}
+	return nil, ""
 }
