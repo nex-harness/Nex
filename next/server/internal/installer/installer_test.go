@@ -148,15 +148,23 @@ func TestManagerDedupsConcurrentTargets(t *testing.T) {
 }
 
 func TestWriteRemoteFileCommandPOSIX(t *testing.T) {
-	command := writeRemoteFileCommand("~/.nex-next-runner/env", "A=1\nB=2\n", targetPlatform{GOOS: "linux"})
+	command := writeRemoteFileCommand("/home/u/.nex-next-runner/env", "A=1\nB=2\n", targetPlatform{GOOS: "linux"})
 	if !strings.HasPrefix(command, "printf ") || !strings.Contains(command, "A=1\\nB=2\\n") {
 		t.Fatalf("unexpected posix write command: %s", command)
 	}
 }
 
 func TestStartCommandIncludesLingerFallback(t *testing.T) {
-	command := buildStartCommand(targetPlatform{GOOS: "linux", GOArch: "x64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}})
-	for _, fragment := range []string{"systemctl --user enable --now nex-runner.service", "enable-linger 'u'", "setsid"} {
+	command := buildStartCommand(targetPlatform{GOOS: "linux", GOArch: "x64", NodeCmd: "node"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "/home/u")
+	for _, fragment := range []string{
+		"systemctl --user restart nex-runner.service",
+		"enable-linger 'u'",
+		// Container fallback: nohup (not setsid) with a runner.log tail.
+		"nohup", "setsid",
+		"/home/u/.nex-next-runner/runner.log",
+		// Absolute paths only (SFTP/units cannot use ~).
+		"cd /home/u/.nex-next-runner",
+	} {
 		if !strings.Contains(command, fragment) {
 			t.Fatalf("linux start command missing %q: %s", fragment, command)
 		}
@@ -164,15 +172,15 @@ func TestStartCommandIncludesLingerFallback(t *testing.T) {
 }
 
 func TestStartCommandDarwinUsesLaunchAgent(t *testing.T) {
-	command := buildStartCommand(targetPlatform{GOOS: "darwin", GOArch: "arm64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}})
-	if !strings.Contains(command, "LaunchAgents/cn.nex.runner.plist") || !strings.Contains(command, "launchctl load") {
+	command := buildStartCommand(targetPlatform{GOOS: "darwin", GOArch: "arm64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "/Users/u")
+	if !strings.Contains(command, "/Users/u/Library/LaunchAgents/cn.nex.runner.plist") || !strings.Contains(command, "launchctl load") {
 		t.Fatalf("darwin start command should write + load the LaunchAgent: %s", command)
 	}
 }
 
 func TestStartCommandWindowsUsesScheduledTask(t *testing.T) {
-	command := buildStartCommand(targetPlatform{GOOS: "win32", GOArch: "x64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}})
-	if !strings.Contains(command, "schtasks") || !strings.Contains(command, "onlogon") {
+	command := buildStartCommand(targetPlatform{GOOS: "win32", GOArch: "x64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "C:/Users/u")
+	if !strings.Contains(command, "schtasks") || !strings.Contains(command, "onlogon") || !strings.Contains(command, "C:/Users/u/.nex-next-runner") {
 		t.Fatalf("windows start command should use schtasks onlogon: %s", command)
 	}
 }
