@@ -109,17 +109,40 @@ await build({
 
 // --- node-pty 原生资产 ------------------------------------------------------
 
-/** 从 @lydell 平台包解析 prebuilds 目录（其 package exports 不暴露 package.json）。 */
-function resolveLydellPrebuildDir(platformKey) {
-  const packageName = `@lydell/node-pty-${platformKey}`;
-  let current = dirname(require.resolve(packageName));
+/**
+ * 解析 prebuilds 源目录。posix 平台来自 @lydell 平台包；win32 的 @lydell 包
+ * 只带 ConPTY DLL（无 pty.node），与桌面打包一致从 node-pty 本体的 prebuilds
+ * 取（packages/desktop/scripts/node-pty-package-assets.mjs 同一来源）。
+ */
+function resolvePrebuildSourceDir(platformKey) {
+  const fromLydell = resolveOptionalLydellPrebuildDir(platformKey);
+  if (fromLydell) return fromLydell;
+  // node-pty 的入口在 lib/index.js；prebuilds 与 lib 同级。
+  let current = dirname(require.resolve("node-pty"));
   for (;;) {
     const candidate = join(current, "prebuilds", platformKey);
     if (existsSync(join(candidate, "pty.node"))) return candidate;
     const parent = dirname(current);
-    if (parent === current) {
-      throw new Error(`${packageName} has no prebuilds/${platformKey}/pty.node`);
-    }
+    if (parent === current) break;
+    current = parent;
+  }
+  throw new Error(`no prebuilds/${platformKey}/pty.node in @lydell or node-pty`);
+}
+
+function resolveOptionalLydellPrebuildDir(platformKey) {
+  const packageName = `@lydell/node-pty-${platformKey}`;
+  let resolved;
+  try {
+    resolved = require.resolve(packageName);
+  } catch {
+    return null;
+  }
+  let current = dirname(resolved);
+  for (;;) {
+    const candidate = join(current, "prebuilds", platformKey);
+    if (existsSync(join(candidate, "pty.node"))) return candidate;
+    const parent = dirname(current);
+    if (parent === current) return null;
     current = parent;
   }
 }
@@ -134,10 +157,12 @@ const PTY_RUNTIME_FILES = [
   "conpty/conpty.node",
   "conpty/conpty.dll",
   "conpty/OpenConsole.exe",
+  "winpty-agent.exe",
+  "winpty.dll",
 ];
 
 function collectPtyAssets(platformKey) {
-  const sourceDir = resolveLydellPrebuildDir(platformKey);
+  const sourceDir = resolvePrebuildSourceDir(platformKey);
   const files = PTY_RUNTIME_FILES.filter((name) => existsSync(join(sourceDir, name)));
   if (!files.includes("pty.node")) throw new Error(`missing pty.node in ${sourceDir}`);
   return { sourceDir, files };

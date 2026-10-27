@@ -42,18 +42,24 @@ func run() int {
 	}
 
 	application, err := app.New(app.Options{
-		DataDir:        cfg.DataDir,
-		ConfigDir:      cfg.ConfigDir,
-		WebRoot:        cfg.WebRoot,
-		AuthToken:      cfg.AuthToken,
-		RunnerToken:    cfg.RunnerToken,
-		ServerName:     cfg.ServerName,
-		Version:        Version,
-		AllowedOrigins: cfg.AllowedOrigins,
+		DataDir:          cfg.DataDir,
+		ConfigDir:        cfg.ConfigDir,
+		WebRoot:          cfg.WebRoot,
+		AuthToken:        cfg.AuthToken,
+		RunnerToken:      cfg.RunnerToken,
+		ServerName:       cfg.ServerName,
+		Version:          Version,
+		AllowedOrigins:   cfg.AllowedOrigins,
+		PublicRunnerURL:  cfg.PublicRunnerURL,
+		RunnerBundlesDir: cfg.RunnerBundlesDir,
 	}, logger)
 	if err != nil {
 		logger.Error("cannot start server", "error", err)
 		return 1
+	}
+	if cfg.PublicRunnerURL != "" {
+		logger.Info("SSH runner install API enabled",
+			"runnerUrl", cfg.PublicRunnerURL, "bundles", cfg.RunnerBundlesDir)
 	}
 
 	if info, err := os.Stat(cfg.WebRoot); err != nil || !info.IsDir() {

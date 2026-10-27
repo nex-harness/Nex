@@ -15,6 +15,7 @@ import (
 	"github.com/nex-harness/nex/server/internal/browserws"
 	"github.com/nex-harness/nex/server/internal/configstore"
 	"github.com/nex-harness/nex/server/internal/httpapi"
+	"github.com/nex-harness/nex/server/internal/installer"
 	"github.com/nex-harness/nex/server/internal/local"
 	"github.com/nex-harness/nex/server/internal/runners"
 	"github.com/nex-harness/nex/server/internal/runnerws"
@@ -34,6 +35,11 @@ type Options struct {
 	// AllowedOrigins adds accepted /ws Origin host patterns for reverse
 	// proxies that rewrite Host.
 	AllowedOrigins []string
+	// PublicRunnerURL is the wss:// URL installed runners dial back; empty
+	// disables the SSH runner-install API (docs/next/runner-install.md).
+	PublicRunnerURL string
+	// RunnerBundlesDir overrides the per-platform bundle directory.
+	RunnerBundlesDir string
 }
 
 // App is one fully assembled server.
@@ -45,6 +51,9 @@ type App struct {
 	Local    *local.Registry
 	// Config owns the server-side desired config and the runner push.
 	Config *local.Manager
+	// Installs is the SSH runner-install manager (nil when
+	// NEX_PUBLIC_RUNNER_URL is unset — the API surface stays hidden).
+	Installs *installer.Manager
 
 	serverID string
 }
@@ -101,6 +110,26 @@ func New(options Options, logger *slog.Logger) (*App, error) {
 		localRegistry.Register(name, channel)
 	}
 
+	// SSH runner-install channel (docs/next/runner-install.md): enabled only
+	// when the operator set a public runner URL (the installed runner dials
+	// it). The bundles dir defaults next to the server binary.
+	var installs *installer.Manager
+	if options.PublicRunnerURL != "" {
+		bundlesDir := options.RunnerBundlesDir
+		if bundlesDir == "" {
+			bundlesDir = "bin/runner-bundles"
+		}
+		registryLookup := func(runnerID string) bool {
+			_, ok := registry.Runner(runnerID)
+			return ok
+		}
+		installs = installer.NewManager(logger)
+		installs.LookupRunner = registryLookup
+		installs.ServerURL = options.PublicRunnerURL
+		installs.RunnerToken = options.RunnerToken
+		installs.Bundles = installer.Bundles{Dir: bundlesDir}
+	}
+
 	return &App{
 		Options:  options,
 		Logger:   logger,
@@ -108,6 +137,7 @@ func New(options Options, logger *slog.Logger) (*App, error) {
 		Auth:     authService,
 		Local:    localRegistry,
 		Config:   configManager,
+		Installs: installs,
 		serverID: serverID,
 	}, nil
 }
@@ -138,6 +168,7 @@ func (a *App) Handler() http.Handler {
 		RunnerWS:   runnerHandler,
 		Config:     configAdmin{a.Config},
 		Skills:     skillUploader{a.Config},
+		Installs:   a.Installs,
 	}).Handler()
 }
 

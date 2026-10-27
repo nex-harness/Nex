@@ -46,6 +46,15 @@ type Config struct {
 	// TrustedProxies lists reverse-proxy IPs/CIDRs whose X-Forwarded-For is
 	// believed for the login rate limiter (NEX_TRUSTED_PROXIES).
 	TrustedProxies []string
+	// PublicRunnerURL is the wss:// URL installed runners dial (the SSH
+	// installer writes it into the target's env, NEX_PUBLIC_RUNNER_URL).
+	// Empty disables the runner-install HTTP surface.
+	PublicRunnerURL string
+	// RunnerBundlesDir holds the per-platform runner bundles the SSH
+	// installer uploads (NEX_RUNNER_BUNDLES_DIR; default
+	// <repo>/next/server/bin/runner-bundles). Only read when
+	// PublicRunnerURL is set.
+	RunnerBundlesDir string
 }
 
 // Load parses flags from args (without the program name) and applies the
@@ -62,21 +71,25 @@ func Load(args []string, getenv func(string) string) (Config, error) {
 	name := fs.String("name", "", "server display name (default hostname, env NEX_SERVER_NAME)")
 	origins := fs.String("allowed-origins", "", "comma-separated WebSocket Origin host patterns (env NEX_ALLOWED_ORIGINS)")
 	trusted := fs.String("trusted-proxies", "", "comma-separated reverse-proxy IPs/CIDRs whose X-Forwarded-For is trusted for login rate limiting (env NEX_TRUSTED_PROXIES)")
+	publicRunnerURL := fs.String("public-runner-url", "", "wss:// URL installed runners dial back (env NEX_PUBLIC_RUNNER_URL); enables the SSH installer API")
+	runnerBundles := fs.String("runner-bundles-dir", "", "per-platform runner bundle directory for the SSH installer (env NEX_RUNNER_BUNDLES_DIR)")
 
 	if err := fs.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parsing flags: %w", err)
 	}
 
 	cfg := Config{
-		Addr:           firstNonEmpty(*addr, getenv("NEX_SERVER_ADDR"), getenv("PORT")),
-		DataDir:        firstNonEmpty(*dataDir, getenv("NEX_DATA_DIR")),
-		ConfigDir:      firstNonEmpty(*configDir, getenv("NEX_SERVER_CONFIG_DIR")),
-		WebRoot:        firstNonEmpty(*webRoot, getenv("NEX_WEB_STATIC_ROOT")),
-		AuthToken:      strings.TrimSpace(getenv("NEX_SERVER_AUTH_TOKEN")),
-		RunnerToken:    strings.TrimSpace(getenv("NEX_RUNNER_TOKEN")),
-		ServerName:     firstNonEmpty(*name, getenv("NEX_SERVER_NAME")),
-		AllowedOrigins: splitList(firstNonEmpty(*origins, getenv("NEX_ALLOWED_ORIGINS"))),
-		TrustedProxies: splitList(firstNonEmpty(*trusted, getenv("NEX_TRUSTED_PROXIES"))),
+		Addr:             firstNonEmpty(*addr, getenv("NEX_SERVER_ADDR"), getenv("PORT")),
+		DataDir:          firstNonEmpty(*dataDir, getenv("NEX_DATA_DIR")),
+		ConfigDir:        firstNonEmpty(*configDir, getenv("NEX_SERVER_CONFIG_DIR")),
+		WebRoot:          firstNonEmpty(*webRoot, getenv("NEX_WEB_STATIC_ROOT")),
+		AuthToken:        strings.TrimSpace(getenv("NEX_SERVER_AUTH_TOKEN")),
+		RunnerToken:      strings.TrimSpace(getenv("NEX_RUNNER_TOKEN")),
+		ServerName:       firstNonEmpty(*name, getenv("NEX_SERVER_NAME")),
+		AllowedOrigins:   splitList(firstNonEmpty(*origins, getenv("NEX_ALLOWED_ORIGINS"))),
+		TrustedProxies:   splitList(firstNonEmpty(*trusted, getenv("NEX_TRUSTED_PROXIES"))),
+		PublicRunnerURL:  strings.TrimSpace(firstNonEmpty(*publicRunnerURL, getenv("NEX_PUBLIC_RUNNER_URL"))),
+		RunnerBundlesDir: strings.TrimSpace(firstNonEmpty(*runnerBundles, getenv("NEX_RUNNER_BUNDLES_DIR"))),
 	}
 
 	if cfg.AuthToken == "" {

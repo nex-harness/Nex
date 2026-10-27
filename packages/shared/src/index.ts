@@ -183,6 +183,8 @@ export type {
   RemoteSessionClosedEvent,
   RemoteServiceSession,
   SSHConfigAliasOption,
+  SSHInstallStatus,
+  SSHInstallTarget,
   ServerWorkspaceOption,
   TaskNotificationPayload,
   TaskNotificationPermission,

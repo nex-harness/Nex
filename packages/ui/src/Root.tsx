@@ -14,6 +14,7 @@ import { ServiceProvider } from "@/hooks/useServices.js";
 import { useDynamicWorkflowAvailabilityLoader } from "@/hooks/useDynamicWorkflowAvailability.js";
 import { DirectoryBrowser } from "@/DirectoryBrowser.js";
 import { RunnerWorkspacePicker } from "@/RunnerWorkspacePicker.js";
+import { RunnerInstallDialog } from "@/RunnerInstallDialog.js";
 import { useRunnerWorkspaceDirectory } from "@/hooks/useRunnerWorkspaceDirectory.js";
 import { useRunnerWorkspaceDirectoryStore } from "@/store/runnerWorkspaceDirectoryStore.js";
 import { useTabPersistence } from "@/hooks/useTabPersistence.js";
@@ -696,6 +697,19 @@ function RootInner({
       />
     </ScopedErrorBoundary>
   ) : null;
+  // SSH 安装向导（docs/next/runner-install.md）：只在平台实现 installRunnerOverSSH
+  // （web）时挂载；desktop 保持不提供该入口。
+  const [runnerInstallOpen, setRunnerInstallOpen] = useState(false);
+  const runnerInstallDialog = platform.installRunnerOverSSH ? (
+    <RunnerInstallDialog
+      open={runnerInstallOpen}
+      onOpenChange={setRunnerInstallOpen}
+      onInstalled={() => {
+        // 新机器装完直连 server：刷新机器目录，选择器立即可见。
+        void reloadRunnerWorkspaceDirectory();
+      }}
+    />
+  ) : null;
   // 只有实现 listServerWorkspaces 的平台（web）才挂载选择器；desktop 结构保持原样。
   const runnerWorkspacePickerDialog = platform.listServerWorkspaces ? (
     <ScopedErrorBoundary
@@ -709,6 +723,14 @@ function RootInner({
         loading={runnerWorkspacesLoading}
         onOpenChange={setRunnerWorkspacePickerOpen}
         onBrowseDirectory={handleOpenDirectoryBrowser}
+        onInstallRunner={
+          platform.installRunnerOverSSH
+            ? () => {
+                setRunnerWorkspacePickerOpen(false);
+                setRunnerInstallOpen(true);
+              }
+            : undefined
+        }
         onSelect={(workspace) => {
           setRunnerWorkspacePickerOpen(false);
           // 选择机器后与目录浏览器走同一条打开路径，只额外携带 runner 身份。
@@ -748,6 +770,7 @@ function RootInner({
         {remoteConnectionDialog}
         {directoryBrowserDialog}
         {runnerWorkspacePickerDialog}
+        {runnerInstallDialog}
         {/* HTML 启动壳已经展示 Nex SVG，但 React 接管 root 后旧壳会被整棵替换。
             之前阻塞恢复 tab / 初始 workspace 注入时重新渲染纯文字“加载中...”，所以启动被拆成两套 loading。
             这里复用同一套 SVG 启动画面，只把文案保留到 aria-label，保证视觉始终连续且不牺牲可访问性。 */}
@@ -770,6 +793,7 @@ function RootInner({
         {initialWorkspaceLoadingFallback}
         {directoryBrowserDialog}
         {runnerWorkspacePickerDialog}
+        {runnerInstallDialog}
       </RootShell>
     );
   }
@@ -780,6 +804,7 @@ function RootInner({
       {remoteConnectionDialog}
       {directoryBrowserDialog}
       {runnerWorkspacePickerDialog}
+        {runnerInstallDialog}
       <OccupationOnboarding
         showWindowControls={Boolean(isWindowsDesktop || (isDesktop && !isMacDesktop))}
         showChildrenWhileLoading={!workspaceShellPath && isSettingsTabActive}

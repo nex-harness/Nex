@@ -24,7 +24,13 @@ import {
   isConversationSharePath,
   resolveConversationShareCodeFromPath,
 } from "./share/conversationShareRoute.js";
-import type { IPlatformService, RemoteTarget, ServerRemoteInfo } from "@nex/shared";
+import type {
+  IPlatformService,
+  RemoteTarget,
+  ServerRemoteInfo,
+  SSHInstallStatus,
+  SSHInstallTarget,
+} from "@nex/shared";
 import { createWebMcpPlatform, type WebMcpSyncService } from "./webMcpPlatform.js";
 import { createWebTaskNotifier, type BrowserNotificationApi } from "./webTaskNotifier.js";
 import { WEB_DEFAULT_THEME, resolveWebInitialTheme } from "./webThemeSeed.js";
@@ -220,6 +226,35 @@ function createWebPlatform(mcpSyncService: WebMcpSyncService): IPlatformService 
               : [],
           )
         : [];
+    },
+    // SSH runner 安装渠道（docs/next/runner-install.md）：转调 server 的
+    // /api/runner-install（session cookie 认证）。密码只在请求内存中存在，
+    // server 端单次 SSH 会话使用后即丢。
+    installRunnerOverSSH: async (target) => {
+      const response = await fetch("/api/runner-install", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(target),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { installId?: string; error?: string }
+        | null;
+      if (!response.ok || !payload?.installId) {
+        throw new Error(payload?.error ?? `install request failed (${response.status})`);
+      }
+      return { installId: payload.installId };
+    },
+    getRunnerInstallStatus: async (installId) => {
+      const response = await fetch(`/api/runner-install/${encodeURIComponent(installId)}`, {
+        cache: "no-store",
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | (SSHInstallStatus & { error?: string })
+        | null;
+      if (!response.ok || !payload) {
+        throw new Error(`install status request failed (${response.status})`);
+      }
+      return payload;
     },
     ...createWebMcpPlatform(mcpSyncService),
     migrateLegacyCommonMcp: () =>

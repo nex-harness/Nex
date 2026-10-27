@@ -60,6 +60,7 @@ export function RunnerWorkspacePicker({
   onOpenChange,
   onSelect,
   onBrowseDirectory,
+  onInstallRunner,
 }: {
   open: boolean;
   workspaces: readonly ServerWorkspaceOption[];
@@ -67,6 +68,8 @@ export function RunnerWorkspacePicker({
   onOpenChange: (open: boolean) => void;
   onSelect: (workspace: ServerWorkspaceOption) => void;
   onBrowseDirectory: () => void;
+  /** 平台支持 SSH 安装（web）时提供；触发「安装新机器」向导。 */
+  onInstallRunner?: () => void;
 }) {
   const { intl } = useNexIntl();
   const groups = groupRunnerWorkspaceOptions(workspaces);
@@ -142,15 +145,29 @@ export function RunnerWorkspacePicker({
 
         {/* 手机宽度下按钮纵向铺满；sm 以上恢复横向布局。 */}
         <div className="flex shrink-0 flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <Button
-            type="button"
-            variant="ghost"
-            size="lg"
-            className="h-10 min-w-0 justify-start px-3 text-ui-base"
-            onClick={onBrowseDirectory}
-          >
-            {intl.formatMessage({ id: "runnerWorkspacePicker.browseDirectory" })}
-          </Button>
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+            <Button
+              type="button"
+              variant="ghost"
+              size="lg"
+              className="h-10 min-w-0 justify-start px-3 text-ui-base"
+              onClick={onBrowseDirectory}
+            >
+              {intl.formatMessage({ id: "runnerWorkspacePicker.browseDirectory" })}
+            </Button>
+            {onInstallRunner ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="lg"
+                className="h-10 min-w-0 justify-start px-3 text-ui-base"
+                onClick={onInstallRunner}
+                data-testid="runner-install-entry"
+              >
+                {intl.formatMessage({ id: "runnerInstall.entry" })}
+              </Button>
+            ) : null}
+          </div>
           <Button
             type="button"
             variant="secondary"

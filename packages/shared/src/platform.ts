@@ -636,6 +636,16 @@ export interface IPlatformService {
    */
   listServerWorkspaces?(): Promise<ServerWorkspaceOption[]>;
 
+  /**
+   * 通过 SSH 在目标机安装 runner（docs/next/runner-install.md）：SSH 只是
+   * 安装渠道，装好后 runner 直接与 server 通信。仅 Web 平台实现（转调
+   * server 的 /api/runner-install）；Desktop 不实现（undefined），机器管理
+   * 仍走本地部署。
+   */
+  installRunnerOverSSH?(target: SSHInstallTarget): Promise<{ installId: string }>;
+  /** 查询一次安装会话的状态与日志（与 installRunnerOverSSH 配套）。 */
+  getRunnerInstallStatus?(installId: string): Promise<SSHInstallStatus>;
+
   /** 读取宿主环境中的原生 MCP 用户目录配置；手机远控通过已连接桌面 host 转发。 */
   loadMcpFromUserDirectory?(
     payload?: LoadCliMcpFromUserDirectoryRequest,
@@ -1006,4 +1016,27 @@ export interface IPlatformService {
   onPetWindowAction?(
     handler: (action: import("./pets/index.js").PetWindowAction) => void,
   ): () => void;
+}
+
+/** SSH 安装目标（密码认证；凭据只在安装会话内存中存在，不落盘）。 */
+export interface SSHInstallTarget {
+  kind: "ssh";
+  host: string;
+  port?: number;
+  username: string;
+  password: string;
+  /** 机器显示名（缺省用 host）。 */
+  name?: string;
+}
+
+/** 一次 SSH 安装会话的快照（logs 为环形缓冲，≤200 行）。 */
+export interface SSHInstallStatus {
+  status: "running" | "succeeded" | "failed" | "timed-out" | "cancelled";
+  error?: string;
+  runnerId?: string;
+  logs: Array<{
+    ts: string;
+    level: "info" | "warn" | "error";
+    message: string;
+  }>;
 }

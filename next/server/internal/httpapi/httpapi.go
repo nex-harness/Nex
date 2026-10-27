@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/nex-harness/nex/server/internal/auth"
+	"github.com/nex-harness/nex/server/internal/installer"
 	"github.com/nex-harness/nex/server/internal/runners"
 )
 
@@ -70,6 +71,9 @@ type Deps struct {
 	// Skills is the optional skill/prompt upload surface (P2). Nil disables the
 	// upload routes.
 	Skills SkillUploader
+	// Installs is the optional SSH runner-install surface
+	// (docs/next/runner-install.md). Nil disables the install routes.
+	Installs *installer.Manager
 }
 
 // SkillUploader stores skill/prompt bundles from the HTTP upload helpers.
@@ -127,10 +131,14 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("/api/config/status", s.handleConfigStatus)
 	}
 	if s.deps.Skills != nil {
-		s.mux.HandleFunc("/api/config/skills", s.handleSkillUpload("skill"))
-		s.mux.HandleFunc("/api/config/skills/delete", s.handleSkillDelete("skill"))
-		s.mux.HandleFunc("/api/config/prompts", s.handleSkillUpload("prompt"))
-		s.mux.HandleFunc("/api/config/prompts/delete", s.handleSkillDelete("prompt"))
+	s.mux.HandleFunc("/api/config/skills", s.handleSkillUpload("skill"))
+	s.mux.HandleFunc("/api/config/skills/delete", s.handleSkillDelete("skill"))
+	s.mux.HandleFunc("/api/config/prompts", s.handleSkillUpload("prompt"))
+	s.mux.HandleFunc("/api/config/prompts/delete", s.handleSkillDelete("prompt"))
+	if s.deps.Installs != nil {
+		s.mux.HandleFunc("/api/runner-install", s.handleRunnerInstall)
+		s.mux.HandleFunc("/api/runner-install/", s.handleRunnerInstallGet)
+	}
 	}
 	if s.deps.BrowserWS != nil {
 		s.mux.Handle("/ws", s.deps.BrowserWS)
@@ -684,4 +692,53 @@ func RandomServerID() (string, error) {
 		return "", fmt.Errorf("generating server id: %w", err)
 	}
 	return "nex-" + hex.EncodeToString(raw[:]), nil
+}
+
+// handleRunnerInstall starts (or joins) one SSH runner install
+// (docs/next/runner-install.md decision 8). The password is memory-only: it
+// is accepted on this request, used for the single SSH session, and never
+// persisted, logged, or echoed back.
+func (s *Server) handleRunnerInstall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBody))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+	var payload installer.SSHTarget
+	if err := json.Unmarshal(body, &payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+	if err := payload.Validate(); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if payload.Name != "" && strings.ContainsAny(payload.Name, "'\n\"\\") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name must be a single line without quotes"})
+		return
+	}
+	session, started := s.deps.Installs.Start(payload)
+	s.deps.Logger.Info("runner install requested",
+		"target", session.Target, "installId", session.ID, "started", started)
+	writeJSON(w, http.StatusOK, map[string]string{"installId": session.ID})
+}
+
+// handleRunnerInstallGet reports one install session's status + logs.
+func (s *Server) handleRunnerInstallGet(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/runner-install/")
+	id = strings.Trim(id, "/")
+	if id == "" || strings.Contains(id, "/") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "install id is required"})
+		return
+	}
+	session, ok := s.deps.Installs.Get(id)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown install id"})
+		return
+	}
+	writeJSON(w, http.StatusOK, session.View())
 }
