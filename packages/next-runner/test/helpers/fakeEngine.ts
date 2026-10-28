@@ -67,6 +67,10 @@ export class FakeEngine implements Engine, WithFileOps {
   subscribe = this.lifecycle.subscribe;
   private readonly modes = new Map<string, { mode: T.PermissionMode; planEnabled: boolean }>();
   readonly tombstones = new Set<string>();
+  /** 搜索正文（sessionId → 文本）；未登记的会话按空正文处理。 */
+  readonly searchTexts = new Map<string, string>();
+  /** 正文读取次数：用于断言索引命中后走纯内存路径。 */
+  searchTextReads = 0;
   sequence = 0;
   catalogValue: T.EngineCatalog = {
     models: [SAMPLE_MODEL],
@@ -346,6 +350,17 @@ export class FakeEngine implements Engine, WithFileOps {
     }
     await this.deleteSession(workspacePath, sessionId);
     return true;
+  }
+
+  /** 搜索正文 double：与 pi 的 `SessionManager.list` 一样返回 sessionId → 全文本。 */
+  async listSessionSearchText(workspacePath: string): Promise<Map<string, string>> {
+    this.searchTextReads += 1;
+    const result = new Map<string, string>();
+    for (const session of this.sessions.values()) {
+      if (session.workspacePath !== workspacePath) continue;
+      result.set(session.sessionId, this.searchTexts.get(session.sessionId) ?? "");
+    }
+    return result;
   }
 
   compactState(sessionId: string): T.EngineCompactState {

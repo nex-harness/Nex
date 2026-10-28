@@ -44,7 +44,7 @@ import { createEngineCollaborators } from "./engineCollaborators.js";
 import { buildCatalog } from "./modelCatalog.js";
 import { openPiSession, type OpenSession } from "./sessionLifecycle.js";
 import { createSessionFactoryDeps } from "./sessionFactoryDeps.js";
-import { mcpSessionWiring, type McpGeneration } from "../../config/mcpConfig.js";
+import { EMPTY_MCP_GENERATION, mcpSessionWiring } from "../../config/mcpConfig.js";
 import { createMcpStatusOps } from "./mcpStatusOps.js";
 import type { McpServerStatus } from "../../config/applyRuntimeConfig.js";
 import { createPromptHooks } from "./piPromptHooks.js";
@@ -81,6 +81,8 @@ export class PiEngine implements Engine {
   readonly sessionControls!: SessionControls;
   /** Session/transcript half of the Engine surface (created in the constructor). */
   readonly sessionLifecycle!: SessionLifecycleOps;
+  /** 全文搜索正文读取器（`SessionManager.list`），见 `sessionSearchText.ts`。 */
+  readonly sessionSearchText!: (workspacePath: string) => Promise<Map<string, string>>;
   modelRuntime: ModelRuntime | null = null;
   settingsManager: SettingsManager | null = null;
   private catalogCache: EngineCatalog | null = null;
@@ -117,6 +119,7 @@ export class PiEngine implements Engine {
       titleSettings: wiring.titleSettings,
       sessionLifecycle: wiring.sessionLifecycle,
       conversation: wiring.conversation,
+      sessionSearchText: wiring.sessionSearchText,
     });
   }
 
@@ -159,6 +162,9 @@ export class PiEngine implements Engine {
   }
   listDeletedSessionIds(w: string): Promise<string[]> {
     return this.sessionLifecycle.listDeletedSessionIds(w);
+  }
+  listSessionSearchText(w: string): Promise<Map<string, string>> {
+    return this.sessionSearchText(w);
   }
   history(id: string): Promise<EngineMessage[]> {
     return this.sessionLifecycle.history(id);
@@ -426,7 +432,7 @@ export class PiEngine implements Engine {
       runtime: () => this.requireRuntime(),
       sessionsChanged: (path) => this.emitSessionsChanged(path),
       currentMcp: () =>
-        mcpSessionWiring(this.options.runtimeConfig?.current.config.mcp ?? EMPTY_MCP),
+        mcpSessionWiring(this.options.runtimeConfig?.current.config.mcp ?? EMPTY_MCP_GENERATION),
       reopenDraft: (sessionId) => this.sessionLifecycle.reopenDraft(sessionId),
     });
   }
@@ -454,17 +460,11 @@ export class PiEngine implements Engine {
       compactOps: this.compactOps,
       fileOps: this.fileOps,
       attachmentOps: this.attachmentOps,
-      sessions: this.sessions, metadata: this.metadata,
+      sessions: this.sessions,
+      metadata: this.metadata,
       onPiEvent: (w, id, event) => void this.onPiEventHook(w, id, event),
       onMcpStatus: (workspacePath, sessionId, statuses) =>
         this.reportMcpStatus(workspacePath, sessionId, statuses),
     });
   }
 }
-
-const EMPTY_MCP: McpGeneration = Object.freeze({
-  owned: false,
-  key: "",
-  servers: Object.freeze([]),
-  issues: Object.freeze([]),
-});

@@ -15,6 +15,8 @@
 #   next/dev.sh --e2e=settings     # run the server-owned provider settings E2E (settings -> picker -> chat)
 #   next/dev.sh --e2e=mcp          # run the MCP + skills E2E (settings -> echo server -> tool call -> /skill:)
 #   next/dev.sh --e2e=tools        # run the workspace tools E2E (terminal + files + git on the runner)
+#   next/dev.sh --e2e=automations  # run the server-owned automations E2E
+#   next/dev.sh --e2e=search       # run the ⌘K full-text search E2E (transcript snippets)
 #   next/dev.sh --e2e=all          # every suite, settings and mcp last
 #
 # Environment:
@@ -57,6 +59,7 @@ for arg in "$@"; do
     --e2e=mcp) E2E_MODE="mcp" ;;
     --e2e=tools) E2E_MODE="tools" ;;
     --e2e=automations) E2E_MODE="automations" ;;
+    --e2e=search) E2E_MODE="search" ;;
     --e2e=all) E2E_MODE="all" ;;
     -h | --help)
       sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -368,6 +371,7 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   mcp_status=0
   tools_status=0
   automations_status=0
+  search_status=0
   if [[ "$E2E_MODE" == "acceptance" || "$E2E_MODE" == "all" ]]; then
     (
       cd "$REPO_ROOT"
@@ -534,6 +538,20 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
     automations_status=$?
     log "automations E2E exited with $automations_status"
   fi
+  if [[ "$E2E_MODE" == "search" || "$E2E_MODE" == "all" ]]; then
+    # ⌘K full-text search (docs/next/automations-views-search.md §C): a word only
+    # in a chat's transcript is found with a snippet, before and after reload.
+    curl -fsS -X DELETE http://127.0.0.1:18080/state >/dev/null 2>&1 || true
+    (
+      cd "$REPO_ROOT"
+      NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
+        NEX_E2E_TOKEN="$BROWSER_TOKEN" \
+        NEX_E2E_WORKSPACE="$WORKSPACE" \
+        node next/e2e/search.mjs
+    )
+    search_status=$?
+    log "search E2E exited with $search_status"
+  fi
   set -e
   if [[ "$acceptance_status" -ne 0 ]]; then
     exit "$acceptance_status"
@@ -565,7 +583,10 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   if [[ "$tools_status" -ne 0 ]]; then
     exit "$tools_status"
   fi
-  exit "$automations_status"
+  if [[ "$automations_status" -ne 0 ]]; then
+    exit "$automations_status"
+  fi
+  exit "$search_status"
 fi
 
 wait

@@ -139,6 +139,20 @@ export function registerChannels(
     const workspacePath = requireWorkspace(arg);
     return nexTask.listDeletedTaskIds({ workspacePath });
   });
+  // 全文搜索（docs/next/automations-views-search.md §C）：只返回会话 id 与摘要片段，
+  // 行数据仍由 server 的行缓存提供。query 必须是字符串（空串按“无匹配”处理）。
+  registry.call("nex-task", "searchTasks", async (arg) => {
+    const target = requireWorkspaceTarget(arg);
+    const record = asRecord(arg);
+    const query = record["query"];
+    if (typeof query !== "string") throw new Error("query is required");
+    const limit = record["limit"];
+    return nexTask.searchTasks({
+      ...target,
+      query,
+      ...(typeof limit === "number" && Number.isFinite(limit) ? { limit } : {}),
+    });
+  });
   // Task context-menu paths: pi session files have no stable UI-facing path.
   registry.call("nex-task", "getTaskSessionFilePath", async (arg) => {
     requireWorkspace(arg);

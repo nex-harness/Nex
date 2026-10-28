@@ -3,6 +3,7 @@ import { nexTaskMetaSchema } from "@nex/shared";
 import type { Engine, EngineSessionState } from "../engine/types.js";
 import type { Logger } from "../logger.js";
 import { diffTaskSnapshots, isProjectRow, isTerminalPhase, toNexTaskMeta } from "./nexTaskRows.js";
+import { TaskSearchIndex, type TaskSearchResult } from "./taskSearchIndex.js";
 
 interface WorkspaceSnapshot {
   deleted: string[];
@@ -55,6 +56,8 @@ export class NexTaskChannel {
   private readonly engineUnsubscribe: () => void;
   private readonly workspacePaths: readonly string[];
   private readonly isSessionWatched: (sessionId: string) => boolean;
+  /** 全文搜索索引（docs/next/automations-views-search.md §C）：每 workspace 一份、懒构建。 */
+  private readonly searchIndex: TaskSearchIndex;
 
   constructor(
     private readonly engine: Engine,
@@ -63,7 +66,12 @@ export class NexTaskChannel {
   ) {
     this.workspacePaths = options.workspacePaths ?? [];
     this.isSessionWatched = options.isSessionWatched ?? (() => false);
+    // 索引必须在订阅之前就绪：`onSessionsChanged` 的第一次回调会调用 `invalidate`。
+    this.searchIndex = new TaskSearchIndex(engine, logger);
     this.engineUnsubscribe = engine.onSessionsChanged((workspacePath) => {
+      // 搜索索引与会话内容同源：任何元数据变更（新建/重命名/删除/新消息）都要失效，
+      // 否则命令中心会拿到旧标题/旧正文。放在 refresh 之前，避免并发搜索读到过期索引。
+      this.searchIndex.invalidate(workspacePath);
       this.scheduleRefresh(workspacePath, this.identities.get(workspacePath));
     });
   }
@@ -109,6 +117,27 @@ export class NexTaskChannel {
 
   async listDeletedTaskIds(params: { workspacePath: string }): Promise<string[]> {
     return this.engine.listDeletedSessionIds(params.workspacePath);
+  }
+
+  /**
+   * 全文搜索（docs/next/automations-views-search.md §C）：标题 + 可见消息正文。
+   *
+   * 返回的只有会话 id 和摘要片段 —— 行数据（标题/状态/pinned/archived/排序键）仍由
+   * server 的行缓存拥有，这里不做投影。pinned/archived 也参与搜索（与侧栏一致），
+   * draft/deleted 不参与（`listSessions` 已排除 deleted，索引构建再排除 draft）。
+   */
+  async searchTasks(params: {
+    workspacePath: string;
+    workspaceIdentity?: string;
+    query: string;
+    limit?: number;
+  }): Promise<TaskSearchResult> {
+    this.rememberIdentity(params.workspacePath, params.workspaceIdentity);
+    return this.searchIndex.search({
+      workspacePath: params.workspacePath,
+      query: params.query,
+      ...(params.limit !== undefined ? { limit: params.limit } : {}),
+    });
   }
 
   /**
@@ -239,6 +268,7 @@ export class NexTaskChannel {
     this.engineUnsubscribe();
     this.watchers.clear();
     this.snapshots.clear();
+    this.searchIndex.clear();
   }
 
   // ── internals ──

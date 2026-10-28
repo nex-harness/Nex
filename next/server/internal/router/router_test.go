@@ -105,6 +105,15 @@ func TestResolveNexTask(t *testing.T) {
 	if route.Kind != router.TargetFirstRunner {
 		t.Fatalf("listPinnedTaskIds route = %+v, want first runner", route)
 	}
+	// searchTasks 不在任何 allowlist 里：nex-task 按参数里的 workspace target
+	// 路由（docs/next/automations-views-search.md §C）。浏览器不直接调用它
+	// （只有 window-controller 通过 registry 扇出），这里只固化“带 target 就能
+	// 路由”的事实，避免以后误加一个仅限 controller 的本地条目。
+	route = router.Resolve("nex-task", "searchTasks",
+		json.RawMessage(`[{"workspacePath":"/w","query":"needle","limit":200}]`), localNone)
+	if route.Kind != router.TargetWorkspace || route.WorkspacePath != "/w" {
+		t.Fatalf("searchTasks route = %+v", route)
+	}
 	route = router.ResolveEvent("nex-task", "onDynamicWorkspaceEvent",
 		json.RawMessage(`[{"workspacePath":"/w"}]`), localNone)
 	if route.Kind != router.TargetWorkspace || route.WorkspacePath != "/w" {

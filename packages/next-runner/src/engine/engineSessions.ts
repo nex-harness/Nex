@@ -31,6 +31,13 @@ export interface EngineSessions {
   /** Tombstoned session ids (deleted, kept for the sidebar's negative membership join). */
   listDeletedSessionIds(workspacePath: string): Promise<string[]>;
 
+  /**
+   * 全文搜索的正文来源（docs/next/automations-views-search.md §C）：`sessionId → 可见
+   * 消息文本`，即 pi 的 `SessionInfo.allMessagesText`。实现自行按会话截断到上限；
+   * 是否参与搜索（draft/deleted 过滤）由调用方按行规则决定，引擎不做产品判断。
+   */
+  listSessionSearchText(workspacePath: string): Promise<Map<string, string>>;
+
   history(sessionId: string): Promise<EngineMessage[]>;
 
   subscribe(sessionId: string, listener: (event: EngineEvent) => void): EngineEventSubscription;

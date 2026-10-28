@@ -203,6 +203,14 @@ export function mcpListKey(
 /** pi's built-in MCP extension name (default `mcp.json` discovery). */
 export const BUILTIN_MCP = "builtin:mcp";
 
+/** 没有服务端 MCP 文档时的空 generation（runner 保留 pi 的本地 mcp.json 发现行为）。 */
+export const EMPTY_MCP_GENERATION: McpGeneration = Object.freeze({
+  owned: false,
+  key: "",
+  servers: Object.freeze([]),
+  issues: Object.freeze([]),
+});
+
 /** Session wiring: the extension entry and the generation it was built from. */
 /** One server of an effective list (name plus the pi config it loads). */
 export type McpWiringServer = McpGeneration["servers"][number];

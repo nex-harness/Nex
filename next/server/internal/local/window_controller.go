@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nex-harness/nex/server/internal/automations"
 	"github.com/nex-harness/nex/server/internal/rpcwire"
@@ -33,6 +34,16 @@ const (
 	// controllerRefreshDelay coalesces a burst of mutations (e.g. batch delete)
 	// into one refresh per workspace.
 	controllerRefreshDelay = 120 * time.Millisecond
+	// controllerSearchMinRunes 是走 runner 全文搜索的最小长度（rune 计数，不是
+	// 字节）。短于它的查询只做标题子串匹配，与引入搜索前的行为一致；用 rune
+	// 计数是为了让单个 CJK 字符不被当成两个字符。
+	controllerSearchMinRunes = 2
+	// controllerSearchLimit 是 runner 的搜索上限（默认 80、cap 200）。kind 过滤、
+	// 排序和浏览器 limit 都由 controller 在合并后应用，所以这里一次拿满。
+	controllerSearchLimit = 200
+	// controllerSearchTimeout 是单个 runner 的默认搜索预算；超时按“该 scope
+	// 退回标题匹配”处理，不能拖垮整个列表。
+	controllerSearchTimeout = 3 * time.Second
 )
 
 type controllerListener struct {
@@ -94,6 +105,10 @@ type WindowController struct {
 	// automationOutcomes receives the terminal runs of automation sessions.
 	automationOutcomes AutomationOutcomeSink
 
+	// searchTimeout is the per-runner budget for `nex-task.searchTasks`. A field
+	// (not just the package constant) so tests can shorten it.
+	searchTimeout time.Duration
+
 	registry *runners.Registry
 	logger   *slog.Logger
 }
@@ -117,9 +132,19 @@ func NewWindowController(registry *runners.Registry, logger *slog.Logger) *Windo
 		refreshPending:     make(map[string]time.Time),
 		internalSubscribed: make(map[string]struct{}),
 		activeScopes:       make(map[string]listScope),
+		searchTimeout:      controllerSearchTimeout,
 		registry:           registry,
 		logger:             logger,
 	}
+}
+
+// WithSearchTimeout overrides the per-runner search budget (tests use a short
+// value to exercise the timeout fallback without waiting 3 s).
+func (c *WindowController) WithSearchTimeout(timeout time.Duration) *WindowController {
+	if timeout > 0 {
+		c.searchTimeout = timeout
+	}
+	return c
 }
 
 // WithAutomationOutcomes makes the controller feed task-row outcomes to the
@@ -253,30 +278,55 @@ func (c *WindowController) listTaskList(ctx context.Context, arg rpcwire.Value) 
 	if err != nil {
 		return nil, err
 	}
-	items := make([]map[string]any, 0)
-	seen := make(map[string]struct{})
 	scopes := dedupeScopes(query.Scopes)
 	// 只有本次列表确实读取的 scope 才参与 automation outcome 回流：缓存里其它
 	// workspace 的行可能是旧的，用它们写终态会把已被后续运行覆盖的状态写回去。
 	c.markScopesActive(scopes)
+	// 全文搜索与行读取并发：两者互不依赖（搜索结果不写行缓存），并发后列表
+	// 延迟是二者较大值而不是相加。
+	searchDone := make(chan map[string]map[string]searchMatch, 1)
+	go func() {
+		searchDone <- c.searchScopes(ctx, scopes, query.Search)
+	}()
+	// 行只来自 rowsForScope：title/status/pinned/archived/排序键的唯一所有者是
+	// controller 的行缓存，搜索结果只用来决定“是否命中”和附加摘要。
+	type scopedRow struct {
+		key  string
+		row  taskRow
+		item map[string]any
+	}
+	candidates := make([]scopedRow, 0)
 	for _, scope := range scopes {
-		rows := c.rowsForScope(ctx, scope)
-		for _, row := range rows {
+		scopeKey := workspaceKey(scope.WorkspacePath, scope.WorkspaceIdentity)
+		for _, row := range c.rowsForScope(ctx, scope) {
 			if !matchesKind(row, query.Kind) {
 				continue
 			}
-			if query.Search != "" && !strings.Contains(strings.ToLower(row.title), strings.ToLower(query.Search)) {
-				continue
-			}
-			// Same workspace path on two runners yields distinct rows; the address
-			// (identity) keeps them apart, so dedupe on the full task address.
-			key := row.key()
-			if _, duplicate := seen[key]; duplicate {
-				continue
-			}
-			seen[key] = struct{}{}
-			items = append(items, listItem(row))
+			candidates = append(candidates, scopedRow{key: scopeKey, row: row, item: listItem(row)})
 		}
+	}
+	matches := <-searchDone
+
+	items := make([]map[string]any, 0, len(candidates))
+	seen := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		// 命中按 scope 隔离：同一个 taskId 在两个 identity 下是两个任务，不能
+		// 跨 scope 串用摘要或命中。
+		match, inScope := matches[candidate.key][candidate.row.taskID]
+		if query.Search != "" && !inScope && !titleMatches(candidate.row.title, query.Search) {
+			continue
+		}
+		// Same workspace path on two runners yields distinct rows; the address
+		// (identity) keeps them apart, so dedupe on the full task address.
+		key := candidate.row.key()
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		// 只有 runner 给出摘要时才附加字段；仅标题命中不带摘要，UI 会回退到
+		// 标题展示。
+		attachSearchMatch(candidate.item, match)
+		items = append(items, candidate.item)
 	}
 	sort.SliceStable(items, func(i, j int) bool {
 		leftAt, rightAt := itemSortValue(items[i], query.SortBy), itemSortValue(items[j], query.SortBy)
@@ -298,6 +348,122 @@ func (c *WindowController) listTaskList(ctx context.Context, arg rpcwire.Value) 
 		return nil, err
 	}
 	return json.RawMessage(body), nil
+}
+
+// titleMatches is the pre-search behavior: case-insensitive title substring.
+func titleMatches(title, search string) bool {
+	return strings.Contains(strings.ToLower(title), strings.ToLower(search))
+}
+
+// searchMatch is one runner hit: the task id plus the snippets the runner built.
+// Title-only matches carry no snippets.
+type searchMatch struct {
+	Snippet  string
+	Snippets []string
+}
+
+// searchScopes fans `nex-task.searchTasks` out to every scope's runner in
+// parallel and returns the matches keyed by workspace key, then task id.
+//
+// 键必须按 scope 隔离：同一个 taskId 在两个 identity 下是两个不同的任务，
+// 不能跨 scope 命中。nil registry（单测）和短查询都直接返回空表，调用方退回
+// 标题匹配。
+func (c *WindowController) searchScopes(ctx context.Context, scopes []listScope, search string) map[string]map[string]searchMatch {
+	if c.registry == nil || search == "" || utf8.RuneCountInString(search) < controllerSearchMinRunes {
+		return nil
+	}
+	var (
+		mu      sync.Mutex
+		results = make(map[string]map[string]searchMatch, len(scopes))
+		wg      sync.WaitGroup
+	)
+	for _, scope := range scopes {
+		key := workspaceKey(scope.WorkspacePath, scope.WorkspaceIdentity)
+		wg.Add(1)
+		go func(scope listScope, key string) {
+			defer wg.Done()
+			matches, err := c.searchScope(ctx, scope, search)
+			if err != nil {
+				// 单个 runner 失败/超时只让该 scope 退回标题匹配，列表整体不失败。
+				c.logger.Warn("window-controller searchTasks failed, falling back to title match",
+					"workspacePath", scope.WorkspacePath,
+					"workspaceIdentity", scope.WorkspaceIdentity,
+					"error", err)
+				return
+			}
+			mu.Lock()
+			results[key] = matches
+			mu.Unlock()
+		}(scope, key)
+	}
+	wg.Wait()
+	return results
+}
+
+// searchScope runs one runner search under its own timeout, derived from the
+// request context so a browser that goes away cancels the fan-out too.
+func (c *WindowController) searchScope(ctx context.Context, scope listScope, search string) (map[string]searchMatch, error) {
+	callCtx, cancel := context.WithTimeout(ctx, c.searchTimeout)
+	defer cancel()
+	payload := map[string]any{
+		"workspacePath": scope.WorkspacePath,
+		"query":         search,
+		"limit":         controllerSearchLimit,
+	}
+	// 空 identity 不发：runner 侧的 workspace target 校验把它当作“没有 identity”。
+	if scope.WorkspaceIdentity != "" {
+		payload["workspaceIdentity"] = scope.WorkspaceIdentity
+	}
+	arg, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	value, err := c.registry.CallWorkspace(callCtx, runners.Target{
+		WorkspacePath:     scope.WorkspacePath,
+		WorkspaceIdentity: scope.WorkspaceIdentity,
+	}, "nex-task", "searchTasks", arg)
+	if err != nil {
+		return nil, err
+	}
+	return decodeSearchResult(value)
+}
+
+// decodeSearchResult parses `{matches: [{taskId, searchSnippet?, searchSnippets?}], total, hasMore}`.
+func decodeSearchResult(value json.RawMessage) (map[string]searchMatch, error) {
+	var result struct {
+		Matches []struct {
+			TaskID         string   `json:"taskId"`
+			SearchSnippet  string   `json:"searchSnippet"`
+			SearchSnippets []string `json:"searchSnippets"`
+		} `json:"matches"`
+	}
+	if len(value) > 0 {
+		if err := json.Unmarshal(value, &result); err != nil {
+			return nil, err
+		}
+	}
+	matches := make(map[string]searchMatch, len(result.Matches))
+	for _, entry := range result.Matches {
+		if entry.TaskID == "" {
+			continue
+		}
+		matches[entry.TaskID] = searchMatch{
+			Snippet:  entry.SearchSnippet,
+			Snippets: entry.SearchSnippets,
+		}
+	}
+	return matches, nil
+}
+
+// attachSearchMatch copies the runner snippets onto the list item. Fields are
+// only present when the runner produced them (title-only rows stay unchanged).
+func attachSearchMatch(item map[string]any, match searchMatch) {
+	if match.Snippet != "" {
+		item["searchSnippet"] = match.Snippet
+	}
+	if len(match.Snippets) > 0 {
+		item["searchSnippets"] = match.Snippets
+	}
 }
 
 func dedupeScopes(scopes []listScope) []listScope {

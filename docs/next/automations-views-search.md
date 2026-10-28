@@ -74,6 +74,15 @@ runner task event ─▶ server controller refresh ─▶ row status terminal �
   in parallel (3 s timeout per runner), merges, sorts, applies the limit; results are not
   cached as list rows. Queries shorter than 2 characters match titles only.
 - Target p95 ≤ 400 ms warm for 3 runners × 2,000 sessions.
+- **Wire contract** (`nex-task.searchTasks`, positional `[arg]` like every runner call):
+  request `{workspacePath, workspaceIdentity?, query, limit?}` (limit default 80, capped
+  200); response `{matches: [{taskId, searchSnippet?, searchSnippets?}], total, hasMore}`.
+  Matches are only session ids plus snippets: rows (title, status, pinned, archived,
+  sort keys) stay owned by the controller's existing row cache, which applies the kind
+  filter, sort and limit exactly as for a title search. A match the controller has no row
+  for is dropped. Title-only matches (query < 2 chars, or no transcript hit) carry no
+  snippet fields. A runner that errors or times out contributes its title matches from
+  the row cache, so search degrades to today's behavior instead of failing.
 
 ## Acceptance
 
@@ -85,6 +94,8 @@ runner task event ─▶ server controller refresh ─▶ row status terminal �
 - Browser E2E `next/e2e/automations.mjs` (`--e2e=automations`, in `all`): create an
   automation from the page → run now → a new chat appears with the prompt and the reply,
   run history shows succeeded and jumps to the chat; pause/resume/delete; a 1-minute
-  schedule fires on its own. `next/e2e/search-groups.mjs` (`--e2e=search`): ⌘K finds a
-  chat by a word only in its transcript and shows the snippet; create / rename / delete a
-  task group and move a chat into it; reload keeps it.
+  schedule fires on its own. `next/e2e/search.mjs` (`--e2e=search`, in `all`): ⌘K finds a
+  chat by a word only in its transcript and shows the snippet, selecting it opens the
+  chat, the hit survives a reload, and a 1-character query stays title-only. Task groups
+  (create / rename / delete a group, move a chat into it, reload keeps it) get their own
+  suite when §B groups land.

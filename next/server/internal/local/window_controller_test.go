@@ -24,6 +24,19 @@ type fakeRunner struct {
 	listens  map[string]func(json.RawMessage)
 	callHook func(channel, method string, arg json.RawMessage)
 	done     chan struct{}
+	// searchTasks 的桩：命中按 workspacePath 隔离，方便断言跨 scope 不串。
+	searchMatches map[string][]fakeSearchMatch
+	searchDelay   time.Duration
+	searchErr     error
+	searchCalls   []string
+}
+
+// fakeSearchMatch is one `searchTasks` hit; snippets are optional so a
+// title-only hit carries no snippet fields.
+type fakeSearchMatch struct {
+	taskID   string
+	snippet  string
+	snippets []string
 }
 
 type fakeTask struct {
@@ -36,7 +49,62 @@ type fakeTask struct {
 }
 
 func newFakeRunner() *fakeRunner {
-	return &fakeRunner{tasks: map[string][]fakeTask{}, listens: map[string]func(json.RawMessage){}, done: make(chan struct{})}
+	return &fakeRunner{
+		tasks:         map[string][]fakeTask{},
+		listens:       map[string]func(json.RawMessage){},
+		searchMatches: map[string][]fakeSearchMatch{},
+		done:          make(chan struct{}),
+	}
+}
+
+// setSearch installs the runner's searchTasks hits for one workspace.
+func (f *fakeRunner) setSearch(path string, matches ...fakeSearchMatch) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.searchMatches[path] = matches
+}
+
+// searchTaskCalls lists the `searchTasks` query strings this runner saw.
+func (f *fakeRunner) searchTaskCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.searchCalls...)
+}
+
+// search serves `nex-task.searchTasks`. The delay respects ctx so a test can
+// exercise the controller's per-runner timeout (the real link also abandons the
+// wait when its context ends).
+func (f *fakeRunner) search(ctx context.Context, path, query string) (json.RawMessage, error) {
+	f.mu.Lock()
+	delay := f.searchDelay
+	err := f.searchErr
+	matches := append([]fakeSearchMatch(nil), f.searchMatches[path]...)
+	f.mu.Unlock()
+	if delay > 0 {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	items := make([]map[string]any, 0, len(matches))
+	for _, match := range matches {
+		item := map[string]any{"taskId": match.taskID}
+		if match.snippet != "" {
+			item["searchSnippet"] = match.snippet
+		}
+		if len(match.snippets) > 0 {
+			item["searchSnippets"] = match.snippets
+		}
+		items = append(items, item)
+	}
+	payload := map[string]any{"matches": items, "total": len(items), "hasMore": false}
+	return json.Marshal(payload)
 }
 
 func (f *fakeRunner) seed(path string, tasks ...fakeTask) {
@@ -51,7 +119,7 @@ func (f *fakeRunner) setTasks(path string, tasks ...fakeTask) {
 	f.tasks[path] = tasks
 }
 
-func (f *fakeRunner) Call(_ context.Context, channel, method string, arg json.RawMessage) (json.RawMessage, error) {
+func (f *fakeRunner) Call(ctx context.Context, channel, method string, arg json.RawMessage) (json.RawMessage, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, channel+"."+method)
 	hook := f.callHook
@@ -63,12 +131,18 @@ func (f *fakeRunner) Call(_ context.Context, channel, method string, arg json.Ra
 		WorkspacePath string   `json:"workspacePath"`
 		TaskID        string   `json:"taskId"`
 		TaskIDs       []string `json:"taskIds"`
+		Query         string   `json:"query"`
 	}
 	_ = json.Unmarshal(arg, &params)
 
 	switch method {
 	case "listTasks", "listPinnedTasks", "listArchivedTasks":
 		return f.list(params.WorkspacePath, method)
+	case "searchTasks":
+		f.mu.Lock()
+		f.searchCalls = append(f.searchCalls, params.Query)
+		f.mu.Unlock()
+		return f.search(ctx, params.WorkspacePath, params.Query)
 	case "deleteArchivedTask":
 		return json.RawMessage(`true`), nil
 	case "deleteArchivedTasks":
@@ -296,6 +370,344 @@ func TestListTaskListKeepsRowWhenOneRunnerFails(t *testing.T) {
 	})
 	if total != 1 || !equalStrings(taskIDs(items), []string{"a1"}) {
 		t.Fatalf("timeline = %v (total %d), want [a1] with beta offline", taskIDs(items), total)
+	}
+}
+
+// ── full-text search fan-out (docs/next/automations-views-search.md §C) ──
+
+func searchScopes(scopePairs ...[2]string) []map[string]any {
+	scopes := make([]map[string]any, 0, len(scopePairs))
+	for _, pair := range scopePairs {
+		scopes = append(scopes, map[string]any{"workspacePath": pair[0], "workspaceIdentity": pair[1]})
+	}
+	return scopes
+}
+
+// TestListTaskListSearchIncludesTranscriptOnlyMatchWithSnippets 覆盖：正文命中
+// 但标题不含关键词的行仍要出现，并带上 runner 的摘要字段。
+func TestListTaskListSearchIncludesTranscriptOnlyMatchWithSnippets(t *testing.T) {
+	registry, alpha, _ := newRegistryWithRunners(t)
+	alpha.seed("/w/one",
+		fakeTask{taskID: "a1", title: "Alpha notes", createdAt: 1, updatedAt: 10},
+		fakeTask{taskID: "a2", title: "Unrelated", createdAt: 2, updatedAt: 20},
+	)
+	alpha.setSearch("/w/one", fakeSearchMatch{
+		taskID:   "a2",
+		snippet:  "...the needle is here...",
+		snippets: []string{"...the needle is here...", "needle again"},
+	})
+	controller := local.NewWindowController(registry, nil)
+
+	items, total, _ := listTaskList(t, controller, map[string]any{
+		"kind":            "timeline",
+		"workspaceScopes": searchScopes([2]string{"/w/one", "runner:alpha:/w/one"}),
+		"sortBy":          "updated",
+		"search":          "needle",
+	})
+	if total != 1 || !equalStrings(taskIDs(items), []string{"a2"}) {
+		t.Fatalf("search = %v (total %d), want transcript-only [a2]", taskIDs(items), total)
+	}
+	if items[0]["searchSnippet"] != "...the needle is here..." {
+		t.Fatalf("searchSnippet = %v, want the runner snippet", items[0]["searchSnippet"])
+	}
+	snippets, _ := items[0]["searchSnippets"].([]any)
+	if len(snippets) != 2 || snippets[0] != "...the needle is here..." || snippets[1] != "needle again" {
+		t.Fatalf("searchSnippets = %v, want both runner snippets", items[0]["searchSnippets"])
+	}
+	if calls := alpha.searchTaskCalls(); len(calls) != 1 || calls[0] != "needle" {
+		t.Fatalf("runner searchTasks calls = %v, want one for %q", calls, "needle")
+	}
+}
+
+// TestListTaskListSearchTitleOnlyMatchHasNoSnippets 覆盖：标题命中但没有正文
+// 命中时，行不带任何摘要字段。
+func TestListTaskListSearchTitleOnlyMatchHasNoSnippets(t *testing.T) {
+	registry, alpha, _ := newRegistryWithRunners(t)
+	alpha.seed("/w/one", fakeTask{taskID: "a1", title: "Needle in title", createdAt: 1, updatedAt: 10})
+	// runner 也返回了同名任务，但没给摘要（runner 侧标题命中不带摘要）。
+	alpha.setSearch("/w/one", fakeSearchMatch{taskID: "a1"})
+	controller := local.NewWindowController(registry, nil)
+
+	items, total, _ := listTaskList(t, controller, map[string]any{
+		"kind":            "timeline",
+		"workspaceScopes": searchScopes([2]string{"/w/one", "runner:alpha:/w/one"}),
+		"sortBy":          "updated",
+		"search":          "needle",
+	})
+	if total != 1 || !equalStrings(taskIDs(items), []string{"a1"}) {
+		t.Fatalf("search = %v (total %d), want [a1]", taskIDs(items), total)
+	}
+	if _, present := items[0]["searchSnippet"]; present {
+		t.Fatalf("title-only match carried searchSnippet: %v", items[0])
+	}
+	if _, present := items[0]["searchSnippets"]; present {
+		t.Fatalf("title-only match carried searchSnippets: %v", items[0])
+	}
+}
+
+// TestListTaskListSearchDropsUnknownTaskIds 覆盖：runner 命中的 taskId 在行缓存
+// 里没有对应行时被丢弃（行只来自 rowsForScope）。
+func TestListTaskListSearchDropsUnknownTaskIds(t *testing.T) {
+	registry, alpha, _ := newRegistryWithRunners(t)
+	alpha.seed("/w/one", fakeTask{taskID: "a1", title: "Alpha", createdAt: 1, updatedAt: 10})
+	alpha.setSearch("/w/one",
+		fakeSearchMatch{taskID: "ghost", snippet: "not a row"},
+		fakeSearchMatch{taskID: "a1", snippet: "real"},
+	)
+	controller := local.NewWindowController(registry, nil)
+
+	items, total, _ := listTaskList(t, controller, map[string]any{
+		"kind":            "timeline",
+		"workspaceScopes": searchScopes([2]string{"/w/one", "runner:alpha:/w/one"}),
+		"sortBy":          "updated",
+		"search":          "alpha",
+	})
+	if total != 1 || !equalStrings(taskIDs(items), []string{"a1"}) {
+		t.Fatalf("search = %v (total %d), want [a1] with ghost dropped", taskIDs(items), total)
+	}
+}
+
+// TestListTaskListSearchMatchesAreScopedPerIdentity 覆盖：同一个 taskId 在两个
+// scope 下是两个任务，命中不能跨 scope 串。
+func TestListTaskListSearchMatchesAreScopedPerIdentity(t *testing.T) {
+	registry, alpha, beta := newRegistryWithRunners(t)
+	alpha.seed("/w/one", fakeTask{taskID: "shared", title: "One", createdAt: 1, updatedAt: 10})
+	beta.seed("/w/two", fakeTask{taskID: "shared", title: "Two", createdAt: 2, updatedAt: 20})
+	// 只有 alpha 的 runner 在正文里命中了 shared。
+	alpha.setSearch("/w/one", fakeSearchMatch{taskID: "shared", snippet: "alpha only"})
+	controller := local.NewWindowController(registry, nil)
+
+	items, total, _ := listTaskList(t, controller, map[string]any{
+		"kind": "timeline",
+		"workspaceScopes": searchScopes(
+			[2]string{"/w/one", "runner:alpha:/w/one"},
+			[2]string{"/w/two", "runner:beta:/w/two"},
+		),
+		"sortBy": "updated",
+		"search": "snippet-text",
+	})
+	if total != 1 {
+		t.Fatalf("search matched %d rows, want only the alpha scope's task", total)
+	}
+	if items[0]["workspaceIdentity"] != "runner:alpha:/w/one" {
+		t.Fatalf("matched row = %v, want the alpha scope's row", items[0])
+	}
+}
+
+// TestListTaskListSearchMergesScopesSortsAndLimits 覆盖：两个 scope 的正文命中
+// 合并后按 sortBy 排序、应用 limit，total/hasMore 描述合并后的全量。
+func TestListTaskListSearchMergesScopesSortsAndLimits(t *testing.T) {
+	registry, alpha, beta := newRegistryWithRunners(t)
+	alpha.seed("/w/one",
+		fakeTask{taskID: "a1", title: "A1", createdAt: 1, updatedAt: 100},
+		fakeTask{taskID: "a2", title: "A2", createdAt: 2, updatedAt: 300},
+	)
+	beta.seed("/w/two",
+		fakeTask{taskID: "b1", title: "B1", createdAt: 3, updatedAt: 200},
+		fakeTask{taskID: "b2", title: "B2", createdAt: 4, updatedAt: 400},
+	)
+	alpha.setSearch("/w/one",
+		fakeSearchMatch{taskID: "a1", snippet: "one"},
+		fakeSearchMatch{taskID: "a2", snippet: "two"},
+	)
+	beta.setSearch("/w/two",
+		fakeSearchMatch{taskID: "b1", snippet: "three"},
+		fakeSearchMatch{taskID: "b2", snippet: "four"},
+	)
+	controller := local.NewWindowController(registry, nil)
+	scopes := searchScopes(
+		[2]string{"/w/one", "runner:alpha:/w/one"},
+		[2]string{"/w/two", "runner:beta:/w/two"},
+	)
+
+	items, total, hasMore := listTaskList(t, controller, map[string]any{
+		"kind": "timeline", "workspaceScopes": scopes, "sortBy": "updated", "search": "hit",
+	})
+	if total != 4 || hasMore || !equalStrings(taskIDs(items), []string{"b2", "a2", "b1", "a1"}) {
+		t.Fatalf("search = %v (total %d, hasMore %v), want updated desc [b2 a2 b1 a1]", taskIDs(items), total, hasMore)
+	}
+	if items[0]["searchSnippet"] != "four" {
+		t.Fatalf("first row snippet = %v, want four", items[0]["searchSnippet"])
+	}
+
+	limited, total, hasMore := listTaskList(t, controller, map[string]any{
+		"kind": "timeline", "workspaceScopes": scopes, "sortBy": "updated", "search": "hit", "limit": 2,
+	})
+	if len(limited) != 2 || total != 4 || !hasMore {
+		t.Fatalf("limited search = %d rows (total %d, hasMore %v), want 2/4/true", len(limited), total, hasMore)
+	}
+	if !equalStrings(taskIDs(limited), []string{"b2", "a2"}) {
+		t.Fatalf("limited search = %v, want the two newest", taskIDs(limited))
+	}
+}
+
+// TestListTaskListSearchStillAppliesKindFilter 覆盖：合并后仍按 kind 过滤，正文
+// 命中但属于别的分区（如 archived）的行不会出现在 timeline。
+func TestListTaskListSearchStillAppliesKindFilter(t *testing.T) {
+	registry, alpha, _ := newRegistryWithRunners(t)
+	alpha.seed("/w/one",
+		fakeTask{taskID: "a1", title: "Active", createdAt: 1, updatedAt: 10},
+		fakeTask{taskID: "a2", title: "Archived", archived: true, createdAt: 2, updatedAt: 20},
+	)
+	alpha.setSearch("/w/one",
+		fakeSearchMatch{taskID: "a1", snippet: "active hit"},
+		fakeSearchMatch{taskID: "a2", snippet: "archived hit"},
+	)
+	controller := local.NewWindowController(registry, nil)
+
+	timeline, total, _ := listTaskList(t, controller, map[string]any{
+		"kind":            "timeline",
+		"workspaceScopes": searchScopes([2]string{"/w/one", "runner:alpha:/w/one"}),
+		"sortBy":          "updated",
+		"search":          "hit",
+	})
+	if total != 1 || !equalStrings(taskIDs(timeline), []string{"a1"}) {
+		t.Fatalf("timeline search = %v (total %d), want [a1]", taskIDs(timeline), total)
+	}
+
+	archived, total, _ := listTaskList(t, controller, map[string]any{
+		"kind":            "archived",
+		"workspaceScopes": searchScopes([2]string{"/w/one", "runner:alpha:/w/one"}),
+		"sortBy":          "updated",
+		"search":          "hit",
+	})
+	if total != 1 || !equalStrings(taskIDs(archived), []string{"a2"}) {
+		t.Fatalf("archived search = %v (total %d), want [a2]", taskIDs(archived), total)
+	}
+}
+
+// TestListTaskListShortSearchSkipsRunner 覆盖：短于 2 个 rune 的查询（含单个
+// CJK 字符）不调用 runner，只做标题匹配。
+func TestListTaskListShortSearchSkipsRunner(t *testing.T) {
+	registry, alpha, _ := newRegistryWithRunners(t)
+	alpha.seed("/w/one",
+		fakeTask{taskID: "a1", title: "笔记 alpha", createdAt: 1, updatedAt: 10},
+		fakeTask{taskID: "a2", title: "笔记 beta", createdAt: 2, updatedAt: 20},
+	)
+	alpha.setSearch("/w/one", fakeSearchMatch{taskID: "a2", snippet: "runner hit"})
+	controller := local.NewWindowController(registry, nil)
+	scopes := searchScopes([2]string{"/w/one", "runner:alpha:/w/one"})
+
+	// 单个 CJK 字符：按 rune 计数是 1，必须走标题匹配。
+	items, total, _ := listTaskList(t, controller, map[string]any{
+		"kind": "timeline", "workspaceScopes": scopes, "sortBy": "updated", "search": "笔",
+	})
+	if total != 2 || len(items) != 2 {
+		t.Fatalf("single-CJK search = %v (total %d), want both rows", taskIDs(items), total)
+	}
+	for _, item := range items {
+		if _, present := item["searchSnippet"]; present {
+			t.Fatalf("short query attached a snippet: %v", item)
+		}
+	}
+
+	// 一个 ASCII 字符同理。
+	if _, total, _ = listTaskList(t, controller, map[string]any{
+		"kind": "timeline", "workspaceScopes": scopes, "sortBy": "updated", "search": "a",
+	}); total != 2 {
+		t.Fatalf("single-ASCII search total = %d, want 2", total)
+	}
+
+	if calls := alpha.searchTaskCalls(); len(calls) != 0 {
+		t.Fatalf("runner searchTasks called %v for short queries, want none", calls)
+	}
+}
+
+// TestListTaskListSearchRunnerErrorFallsBackToTitle 覆盖：runner 报错时该 scope
+// 退回标题匹配，列表不失败。
+func TestListTaskListSearchRunnerErrorFallsBackToTitle(t *testing.T) {
+	registry, alpha, _ := newRegistryWithRunners(t)
+	alpha.seed("/w/one",
+		fakeTask{taskID: "a1", title: "Needle title", createdAt: 1, updatedAt: 10},
+		fakeTask{taskID: "a2", title: "Other", createdAt: 2, updatedAt: 20},
+	)
+	alpha.searchErr = fmt.Errorf("search exploded")
+	controller := local.NewWindowController(registry, nil)
+
+	items, total, _ := listTaskList(t, controller, map[string]any{
+		"kind":            "timeline",
+		"workspaceScopes": searchScopes([2]string{"/w/one", "runner:alpha:/w/one"}),
+		"sortBy":          "updated",
+		"search":          "needle",
+	})
+	if total != 1 || !equalStrings(taskIDs(items), []string{"a1"}) {
+		t.Fatalf("search after runner error = %v (total %d), want title-only [a1]", taskIDs(items), total)
+	}
+	if _, present := items[0]["searchSnippet"]; present {
+		t.Fatalf("fallback row carried a snippet: %v", items[0])
+	}
+}
+
+// TestListTaskListSearchTimeoutFallsBackToTitle 覆盖：runner 慢于单 scope 预算时
+// 只等约一个 timeout，然后退回标题匹配。
+func TestListTaskListSearchTimeoutFallsBackToTitle(t *testing.T) {
+	registry, alpha, _ := newRegistryWithRunners(t)
+	alpha.seed("/w/one", fakeTask{taskID: "a1", title: "Needle title", createdAt: 1, updatedAt: 10})
+	alpha.searchDelay = 2 * time.Second
+	controller := local.NewWindowController(registry, nil).WithSearchTimeout(80 * time.Millisecond)
+
+	started := time.Now()
+	items, total, _ := listTaskList(t, controller, map[string]any{
+		"kind":            "timeline",
+		"workspaceScopes": searchScopes([2]string{"/w/one", "runner:alpha:/w/one"}),
+		"sortBy":          "updated",
+		"search":          "needle",
+	})
+	elapsed := time.Since(started)
+	if total != 1 || !equalStrings(taskIDs(items), []string{"a1"}) {
+		t.Fatalf("search after timeout = %v (total %d), want title-only [a1]", taskIDs(items), total)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("listTaskList took %v, want it to give up near the 80ms budget", elapsed)
+	}
+}
+
+// TestListTaskListSearchQueriesScopesInParallel 覆盖：多个 runner 的搜索并发执行，
+// 总耗时接近单个 delay 而不是相加。
+func TestListTaskListSearchQueriesScopesInParallel(t *testing.T) {
+	registry, alpha, beta := newRegistryWithRunners(t)
+	alpha.seed("/w/one", fakeTask{taskID: "a1", title: "One", createdAt: 1, updatedAt: 10})
+	beta.seed("/w/two", fakeTask{taskID: "b1", title: "Two", createdAt: 2, updatedAt: 20})
+	alpha.setSearch("/w/one", fakeSearchMatch{taskID: "a1", snippet: "one"})
+	beta.setSearch("/w/two", fakeSearchMatch{taskID: "b1", snippet: "two"})
+	const delay = 300 * time.Millisecond
+	alpha.searchDelay = delay
+	beta.searchDelay = delay
+	controller := local.NewWindowController(registry, nil)
+
+	started := time.Now()
+	items, total, _ := listTaskList(t, controller, map[string]any{
+		"kind": "timeline",
+		"workspaceScopes": searchScopes(
+			[2]string{"/w/one", "runner:alpha:/w/one"},
+			[2]string{"/w/two", "runner:beta:/w/two"},
+		),
+		"sortBy": "updated",
+		"search": "hit",
+	})
+	elapsed := time.Since(started)
+	if total != 2 || !equalStrings(taskIDs(items), []string{"a1", "b1"}) {
+		t.Fatalf("search = %v (total %d), want both scopes merged", taskIDs(items), total)
+	}
+	// 串行会 ≥ 2×delay；留出调度余量仍必须明显小于 2×。
+	if elapsed >= 2*delay {
+		t.Fatalf("search fan-out took %v for two %v runners; want parallel (~1x)", elapsed, delay)
+	}
+}
+
+// TestListTaskListSearchWithoutRegistryStaysTitleOnly 覆盖：没有 runner registry
+// （单测里构造的 controller）时搜索不 panic、也不尝试调用 runner；没有行缓存
+// 所以结果是空列表，等价于只做标题匹配。
+func TestListTaskListSearchWithoutRegistryStaysTitleOnly(t *testing.T) {
+	controller := local.NewWindowController(nil, nil)
+	items, total, _ := listTaskList(t, controller, map[string]any{
+		"kind":            "timeline",
+		"workspaceScopes": searchScopes([2]string{"/w/one", "runner:alpha:/w/one"}),
+		"sortBy":          "updated",
+		"search":          "needle",
+	})
+	if total != 0 || len(items) != 0 {
+		t.Fatalf("nil-registry search = %v (total %d), want an empty list", taskIDs(items), total)
 	}
 }
 

@@ -8,6 +8,7 @@ import { createTaskStateApi } from "./taskStateOps.js";
 import { createEngineOps } from "./engineOps.js";
 import { createConversationCommands } from "./piConversationCommands.js";
 import { rewindWithAttachments } from "./piRewindWithAttachments.js";
+import { createSessionSearchTextReader } from "./sessionSearchText.js";
 import { teardownSession } from "./sessionViews.js";
 
 /**
@@ -112,5 +113,10 @@ export function createEngineCollaborators(engine: PiEngine) {
     titleSettings: ops.titleSettings,
     sessionLifecycle,
     conversation,
+    // 搜索正文读取器：dataDir 只在引擎侧，channel 不需要知道 pi 的会话目录布局。
+    sessionSearchText: createSessionSearchTextReader({
+      init: () => engine.init(),
+      sessionDir: sessionDirFactory(options.dataDir),
+    }),
   };
 }
