@@ -18,6 +18,7 @@
 #   next/dev.sh --e2e=automations  # run the server-owned automations E2E
 #   next/dev.sh --e2e=search       # run the ⌘K full-text search E2E (transcript snippets)
 #   next/dev.sh --e2e=onboarding   # run the model onboarding E2E (import a machine's pi config)
+#   next/dev.sh --e2e=folders      # run the runner folders E2E (choose a folder outside the workspaces)
 #   next/dev.sh --e2e=all          # every suite, settings and mcp last
 #
 # Environment:
@@ -62,6 +63,7 @@ for arg in "$@"; do
     --e2e=automations) E2E_MODE="automations" ;;
     --e2e=search) E2E_MODE="search" ;;
     --e2e=onboarding) E2E_MODE="onboarding" ;;
+    --e2e=folders) E2E_MODE="folders" ;;
     --e2e=all) E2E_MODE="all" ;;
     -h | --help)
       sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -138,7 +140,11 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   # `runner:<runnerId>:<path>` workspace identities, and a new id every run turns
   # the restored workspace into "runner offline" (sidebar + task list fail).
   RUNNER_DATA="$DATA_DIR/runner-e2e"
-  rm -rf "$RUNNER_DATA/sessions" "$RUNNER_DATA/workspaces"
+  # workspaces.json holds folders the user added on the runner
+  # (docs/next/runner-folders.md). Every suite expects the env workspaces only:
+  # a folder left by an earlier run (e.g. the home directory) changes which
+  # workspace a restored tab opens and what the picker lists.
+  rm -rf "$RUNNER_DATA/sessions" "$RUNNER_DATA/workspaces" "$RUNNER_DATA/workspaces.json"
   # The server persists the browser's last workspace tabs (with their identities)
   # in settings.json. A stale identity from an earlier runner id is routed as
   # "runner offline", so E2E runs get their own settings store.
@@ -177,7 +183,7 @@ fi
 # Exported after the E2E override so both branches reach the server.
 export NEX_SERVER_CONFIG_DIR="$SERVER_CONFIG"
 if [[ "$RUN_MULTI" -eq 1 ]]; then
-  rm -rf "$BETA_RUNNER_DATA/sessions" "$BETA_RUNNER_DATA/workspaces"
+  rm -rf "$BETA_RUNNER_DATA/sessions" "$BETA_RUNNER_DATA/workspaces" "$BETA_RUNNER_DATA/workspaces.json"
   # Fresh path per run: the multi E2E also asserts alpha never persisted a session for it.
   rm -rf "$MULTI_WORKSPACE"
 fi
@@ -375,6 +381,7 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   automations_status=0
   search_status=0
   onboarding_status=0
+  folders_status=0
   if [[ "$E2E_MODE" == "acceptance" || "$E2E_MODE" == "all" ]]; then
     (
       cd "$REPO_ROOT"
@@ -555,6 +562,26 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
     search_status=$?
     log "search E2E exited with $search_status"
   fi
+  if [[ "$E2E_MODE" == "folders" || "$E2E_MODE" == "all" ]]; then
+    # Runner folders (docs/next/runner-folders.md): choose a folder outside the
+    # runner's env workspaces → it is added on the runner and opens in the sidebar.
+    # The folder lives under the runner data dir, which is outside $WORKSPACE.
+    curl -fsS -X DELETE http://127.0.0.1:18080/state >/dev/null 2>&1 || true
+    # The runner already loaded workspaces.json at startup (cleared above), so
+    # only the folder itself is recreated here.
+    FOLDERS_EXTRA="$DATA_DIR/e2e-extra-folder"
+    rm -rf "$FOLDERS_EXTRA"
+    mkdir -p "$FOLDERS_EXTRA"
+    (
+      cd "$REPO_ROOT"
+      NEX_E2E_BASE_URL="http://localhost:$WEB_PORT" \
+        NEX_E2E_TOKEN="$BROWSER_TOKEN" \
+        NEX_E2E_EXTRA_FOLDER="$FOLDERS_EXTRA" \
+        node next/e2e/runner-folders.mjs
+    )
+    folders_status=$?
+    log "runner-folders E2E exited with $folders_status"
+  fi
   if [[ "$E2E_MODE" == "onboarding" || "$E2E_MODE" == "all" ]]; then
     # Model onboarding (docs/next/model-onboarding.md): Settings → Import from
     # machine → global scope → the imported model chats. Runs last in `all`: a
@@ -611,6 +638,9 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   fi
   if [[ "$search_status" -ne 0 ]]; then
     exit "$search_status"
+  fi
+  if [[ "$folders_status" -ne 0 ]]; then
+    exit "$folders_status"
   fi
   exit "$onboarding_status"
 fi

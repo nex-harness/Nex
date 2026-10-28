@@ -88,6 +88,11 @@ const (
 	ChannelMediaPreview  = "media-preview"
 	ChannelTerminal      = "terminal"
 	ChannelSystem        = "system"
+	// ChannelRunnerWorkspaces is the runner-owned folder list
+	// (docs/next/runner-folders.md decision 3): list/add/remove are answered by
+	// the machine named by the request's workspace target (the UI sends
+	// `runner:<id>:~`). It is never served locally.
+	ChannelRunnerWorkspaces = "runner-workspaces"
 )
 
 // workspaceTargetMethods enumerates forwarded nex-agent methods that carry a
@@ -313,6 +318,16 @@ func resolveSpecial(channel, method string, arg rpcwire.Value) (Route, bool) {
 			return workspaceRoute(arg)
 		}
 		return Route{Kind: TargetFirstRunner}, true
+
+	case ChannelRunnerWorkspaces:
+		// list/add/remove 由运行器拥有并执行（docs/next/runner-folders.md 决策 3）：
+		// 必须按请求里的 workspace target 路由到那台机器，绝不能落到本地。
+		// 没有 target 时无法判断哪台机器，返回本地不支持的错误而不是猜第一台
+		// （会改错机器的目录表）。
+		if target := workspaceTarget(arg); target != (runners.Target{}) {
+			return workspaceRoute(arg)
+		}
+		return Route{Kind: TargetLocalUnsupported}, true
 	}
 	return Route{}, false
 }
@@ -356,6 +371,10 @@ func resolveSpecialEvent(channel, event string, arg rpcwire.Value) (Route, bool)
 			return Route{Kind: TargetTerminalID}, true
 		}
 		return Route{Kind: TargetLocal}, true
+	case ChannelRunnerWorkspaces:
+		// 目录表变化由 workspaces 帧推动 /api/server-info，没有动态事件：listen
+		// 保持本地且永不触发，避免浏览器代理误判为未知通道。
+		return Route{Kind: TargetLocalUnsupported}, true
 	}
 	return Route{}, false
 }

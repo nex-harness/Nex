@@ -4209,6 +4209,9 @@ const zhCN: Record<string, string> = {
   "runnerWorkspacePicker.os.windows": "Windows",
   "runnerWorkspacePicker.os.linux": "Linux",
   "runnerWorkspacePicker.browseDirectory": "浏览服务器目录…",
+  "runnerWorkspacePicker.chooseFolder": "选择文件夹…",
+  "runnerWorkspacePicker.addFailed": "无法添加该文件夹：{error}",
+  "runnerWorkspacePicker.addUnsupported": "当前平台不支持在机器上添加文件夹。",
   "runnerWorkspacePicker.empty": "当前服务端没有上报可用的机器工作区。",
   "runnerWorkspacePicker.loading": "正在加载机器…",
   "runnerInstall.title": "通过 SSH 安装 Runner",
@@ -4233,7 +4236,6 @@ const zhCN: Record<string, string> = {
   "runnerInstall.entry": "安装新机器（SSH）…",
   "runnerInstall.models.checking": "正在检查新机器的模型…",
   "runnerInstall.models.ready": "已就绪 — 可用模型 {count} 个",
-  "runnerInstall.models.done": "完成",
   "runnerInstall.models.needsModels":
     "这台机器还没有可用模型。可以从其他机器导入，或到设置里添加供应商。",
   "runnerInstall.models.sourcesTitle": "从其他机器导入",
@@ -4248,6 +4250,10 @@ const zhCN: Record<string, string> = {
   "runnerInstall.models.skipped": "已跳过 {name}：{message}",
   "runnerInstall.models.openSettings": "打开模型设置",
   "runnerInstall.models.later": "稍后",
+  "runnerInstall.models.openWorkspace": "打开工作区",
+  "runnerInstall.models.chooseFolder": "选择文件夹…",
+  "runnerInstall.openWorkspaceFailed":
+    "机器已连接，但还没出现在工作区列表里。请重新打开文件夹选择器再试。",
   "workspaceHeader.runnerMachine": "机器：{name}",
   "chat.emptyResult.title": "没有可展示内容",
   "chat.emptyResult.description": "这个任务没有生成聊天内容，可能是在模型返回正文前被停止了。",

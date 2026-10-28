@@ -486,3 +486,143 @@ func TestInvalidRunnerIDRejected(t *testing.T) {
 		t.Fatalf("invalid runner ids were registered: %+v", workspaces)
 	}
 }
+
+// A `workspaces` frame replaces the runner's catalogue
+// (docs/next/runner-folders.md decision 3): the old path stops resolving, the
+// new one resolves by path and identity, and /api/server-info changes.
+func TestUpdateWorkspacesReplacesCatalog(t *testing.T) {
+	registry := runners.NewRegistry(testLogger())
+	link := newFakeLink("r")
+	registry.Register(info("r", "/old"), link)
+
+	var mu sync.Mutex
+	notifications := 0
+	registry.Subscribe(func() {
+		mu.Lock()
+		notifications++
+		mu.Unlock()
+	})
+
+	if applied := registry.UpdateWorkspaces("r", link, []runners.Workspace{{Path: "/new", Label: "ignored"}}); !applied {
+		t.Fatal("UpdateWorkspaces from the current link was ignored")
+	}
+
+	if _, ok := registry.RunnerIDForPath("/old"); ok {
+		t.Fatal("old path still resolves after the catalogue was replaced")
+	}
+	if id, ok := registry.RunnerIDForPath("/new"); !ok || id != "r" {
+		t.Fatalf("RunnerIDForPath(/new) = %q,%v", id, ok)
+	}
+	if id, ok := registry.RunnerIDForIdentity("runner:r:/new"); !ok || id != "r" {
+		t.Fatalf("RunnerIDForIdentity(runner:r:/new) = %q,%v", id, ok)
+	}
+	if _, ok := registry.RunnerIDForIdentity("runner:r:/old"); ok {
+		t.Fatal("old identity still catalogued")
+	}
+
+	workspaces := registry.Workspaces()
+	if len(workspaces) != 1 || workspaces[0].Path != "/new" || workspaces[0].WorkspaceIdentity != "runner:r:/new" {
+		t.Fatalf("workspaces = %+v", workspaces)
+	}
+	// labelFor keeps the "<runnerName>: <basename>" format (decision 6).
+	if workspaces[0].Label != "r: new" {
+		t.Fatalf("label = %q", workspaces[0].Label)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if notifications != 1 {
+		t.Fatalf("notifications = %d, want 1", notifications)
+	}
+}
+
+// A frame from a link that is no longer current must be ignored: after a
+// reconnect the old socket can still deliver one, and it must never overwrite
+// the live catalogue.
+func TestUpdateWorkspacesIgnoresStaleLink(t *testing.T) {
+	registry := runners.NewRegistry(testLogger())
+	oldLink := newFakeLink("old")
+	registry.Register(info("r", "/old"), oldLink)
+	newLink := newFakeLink("new")
+	registry.Register(info("r", "/new"), newLink)
+
+	if applied := registry.UpdateWorkspaces("r", oldLink, []runners.Workspace{{Path: "/stale"}}); applied {
+		t.Fatal("a frame from the displaced link was applied")
+	}
+	if _, ok := registry.RunnerIDForPath("/stale"); ok {
+		t.Fatal("stale frame overwrote the catalogue")
+	}
+	if id, ok := registry.RunnerIDForPath("/new"); !ok || id != "r" {
+		t.Fatalf("live catalogue changed: %q,%v", id, ok)
+	}
+
+	// An unknown runner id is ignored as well.
+	if applied := registry.UpdateWorkspaces("ghost", newFakeLink("ghost"), []runners.Workspace{{Path: "/x"}}); applied {
+		t.Fatal("a frame for an unknown runner was applied")
+	}
+}
+
+// A pending listen bound to a newly added path must start as soon as the
+// workspaces frame lands, without a reconnect.
+func TestUpdateWorkspacesReplansPendingListen(t *testing.T) {
+	registry := runners.NewRegistry(testLogger())
+	link := newFakeLink("r")
+	registry.Register(info("r", "/old"), link)
+
+	// Path-routed listen for a folder the runner does not serve yet: the spec is
+	// stored unassigned (a unique path rule with zero owners), so it only starts
+	// when the catalogue gains that path. Identity listens attach to the runner
+	// id immediately and would not exercise the re-plan.
+	if err := registry.RegisterListen("conn", 9, runners.Target{WorkspacePath: "/new"},
+		"nex-agent", "onDynamicConversationFrame", json.RawMessage("null"), func(json.RawMessage) {}); err != nil {
+		t.Fatalf("RegisterListen: %v", err)
+	}
+	if got := link.listenFor("conn:9"); got != "" {
+		t.Fatalf("listen started before the path was served: %q", got)
+	}
+
+	registry.UpdateWorkspaces("r", link, []runners.Workspace{{Path: "/new"}})
+	if got := link.listenFor("conn:9"); got != "nex-agent.onDynamicConversationFrame" {
+		t.Fatalf("listen after the frame = %q, want it started", got)
+	}
+
+	// Removing the folder keeps the binding spec (a stale tab survives) but the
+	// path no longer routes.
+	registry.UpdateWorkspaces("r", link, []runners.Workspace{{Path: "/other"}})
+	if _, ok := registry.RunnerIDForPath("/new"); ok {
+		t.Fatal("removed path still routes")
+	}
+	if ids := registry.BindingsForRunner("r"); len(ids) != 1 {
+		t.Fatalf("binding spec dropped on removal: %v", ids)
+	}
+}
+
+// The machine browse scope is a routing identity, never a catalogued workspace.
+func TestMachineScopeIdentityRoutesButIsNotListed(t *testing.T) {
+	registry := runners.NewRegistry(testLogger())
+	link := newFakeLink("r")
+	registry.Register(info("r", "/w"), link)
+
+	if err := callTarget(t, registry, runners.Target{
+		WorkspacePath:     runners.MachineScopePath,
+		WorkspaceIdentity: "runner:r:~",
+	}); err != nil {
+		t.Fatalf("machine scope call: %v", err)
+	}
+	if link.callCount() != 1 {
+		t.Fatalf("calls = %d, want the machine scope call to reach the runner", link.callCount())
+	}
+
+	// A runner that (incorrectly) reports `~` must not put it in server-info.
+	registry.UpdateWorkspaces("r", link, []runners.Workspace{{Path: "~"}, {Path: "/w"}})
+	for _, workspace := range registry.Workspaces() {
+		if workspace.Path == runners.MachineScopePath {
+			t.Fatalf("machine scope listed as a workspace: %+v", workspace)
+		}
+	}
+	for _, path := range registry.Paths() {
+		if path == runners.MachineScopePath {
+			t.Fatalf("machine scope listed in Paths(): %v", registry.Paths())
+		}
+	}
+}

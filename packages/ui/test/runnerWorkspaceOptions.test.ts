@@ -58,6 +58,18 @@ test("same path on two machines stays in two groups", () => {
   assert.equal(groups[1]!.workspaces[0]!.workspaceIdentity, "runner:beta:/srv/app");
 });
 
+test("groups carry the runnerId needed for the machine-scope choose-folder action", () => {
+  // 「Choose folder…」用 runnerId 构造 `runner:<id>:~`，分组必须带出它。
+  const groups = groupRunnerWorkspaceOptions(options);
+  assert.deepEqual(
+    groups.map((group) => group.runnerId),
+    ["alpha", "beta"],
+  );
+  // 旧 server 的“本机”分组没有 runnerId，UI 据此隐藏该动作。
+  const localOnly = groupRunnerWorkspaceOptions([{ path: "/a" }]);
+  assert.equal(localOnly[0]!.runnerId, undefined);
+});
+
 test("missing runner name falls back to runner id and single-runner entries group together", () => {
   const groups = groupRunnerWorkspaceOptions([
     { path: "/w", runnerId: "runner_abc" },

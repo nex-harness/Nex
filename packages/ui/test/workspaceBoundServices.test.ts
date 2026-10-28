@@ -126,9 +126,30 @@ test("injects targets for every listed channel method and leaves others untouche
   }
 
   calls.length = 0;
-  // 未列出的频道（system）原样透传：连服务引用都不变。
-  assert.equal(bound.systemService, services.systemService);
+  // system.info 无参但有机器语义：绑定后必须注入目标，server 才能问对机器。
+  // 清理性检查：除 info 外的 system 方法仍原样透传。
+  assert.notEqual(bound.systemService, services.systemService);
   await bound.systemService.info();
+  assert.deepEqual(calls, [
+    {
+      channel: "system",
+      method: "info",
+      args: [{ workspacePath: "/srv/app", workspaceIdentity: "runner:alpha:/srv/app" }],
+    },
+  ]);
+
+  calls.length = 0;
+  await bound.systemService.listIntegratedTerminalShells();
+  assert.deepEqual(calls, [
+    { channel: "system", method: "listIntegratedTerminalShells", args: [] },
+  ]);
+
+  calls.length = 0;
+  // 只有路径、没有 runner 身份时不注入：server 应沿用“第一台 runner”的既有回落，
+  // 按 path 报错会打断 server 兜底创建的会话目录。
+  const pathOnly = bindServicesToWorkspace(services, { workspacePath: "/srv/app" });
+  assert.ok(pathOnly);
+  await pathOnly.systemService.info();
   assert.deepEqual(calls, [{ channel: "system", method: "info", args: [] }]);
 });
 
@@ -171,7 +192,8 @@ test("memoizes per accessor + target and separates machines sharing a path", () 
   assert.equal(bindServicesToWorkspace(null, target), null);
 });
 
-test("binding table covers the six routing channels", () => {
+test("binding table covers the seven routing channels", () => {
+  // system 只绑定 info（机器级浏览要问对 homedir），其余系统方法保持透传。
   const channels = WORKSPACE_BOUND_CHANNELS.map((binding) => binding.channel).sort();
   assert.deepEqual(channels, [
     "file",
@@ -179,6 +201,7 @@ test("binding table covers the six routing channels", () => {
     "git",
     "git-checkpoint",
     "media-preview",
+    "system",
     "terminal",
   ]);
 });

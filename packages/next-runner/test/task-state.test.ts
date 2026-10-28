@@ -77,7 +77,7 @@ test("task state: archive hides the row from listTasks and surfaces it in the ar
 test("task state: pinned rows leave the project list and appear in pinned (never both)", async () => {
   const engine = new FakeEngine();
   seed(engine, session("a"), session("b"));
-  const channel = new NexTaskChannel(engine, logger, { workspacePaths: [WORKSPACE] });
+  const channel = new NexTaskChannel(engine, logger, { servedPaths: () => [WORKSPACE] });
 
   const pinned = await channel.setTaskPinned({
     taskId: "a",
@@ -382,7 +382,7 @@ test("task state: workspace-less pinned list spans served workspaces and skips u
     [],
   );
   const channel = new NexTaskChannel(engine, logger, {
-    workspacePaths: [WORKSPACE, other, "/workspace/missing"],
+    servedPaths: () => [WORKSPACE, other, "/workspace/missing"],
   });
   const ids = (await channel.listPinnedTaskIds()).sort();
   assert.deepEqual(ids, ["a", "b"]);
@@ -396,7 +396,7 @@ test("task state: nex-task ignores a directory that vanished while listing", asy
   // Sanity check that collectTasks swallows per-workspace failures rather than failing
   // the whole workspace-less query: no seeded sessions + a missing path must not throw.
   const engine = new FakeEngine();
-  const channel = new NexTaskChannel(engine, logger, { workspacePaths: ["/workspace/empty"] });
+  const channel = new NexTaskChannel(engine, logger, { servedPaths: () => ["/workspace/empty"] });
   assert.deepEqual(await channel.listPinnedTaskIds(), []);
   channel.dispose();
 });

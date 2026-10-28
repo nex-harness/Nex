@@ -397,6 +397,19 @@ func (c *Conn) dispatch(data []byte) {
 		if c.config != nil {
 			c.config.ConfigApplied(c.info.RunnerID, ack.Version, ack.OK, ack.Errors, ack.Facts)
 		}
+	case "workspaces":
+		// 运行器拥有自己服务的目录列表（docs/next/runner-folders.md 决策 3）：
+		// add/remove 之后它推送完整列表，server 只按此镜像目录表用于路由和
+		// /api/server-info。旧 server 忽略未知帧，新 runner 仍保留启动目录。
+		var frame struct {
+			Workspaces []runners.Workspace `json:"workspaces"`
+		}
+		if err := json.Unmarshal(data, &frame); err != nil {
+			c.logger.Warn("dropping malformed workspaces frame", "error", err)
+			return
+		}
+		// c 是该 runner 的当前链路；registry 会再校验一次，忽略过期连接的帧。
+		c.reg.UpdateWorkspaces(c.info.RunnerID, c, frame.Workspaces)
 	case "ping":
 		_ = c.sendControl("pong")
 	case "pong":

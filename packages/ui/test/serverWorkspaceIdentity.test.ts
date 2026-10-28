@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildRunnerMachineIdentity,
   buildServerWorkspaceIdentity,
   isServerWorkspaceIdentity,
+  parseRunnerMachineIdentity,
   parseServerWorkspaceIdentity,
+  RUNNER_MACHINE_SCOPE_PATH,
 } from "@nex/shared";
 
 // 运行（在 packages/ui 下）：
@@ -61,5 +64,21 @@ test("parse trims surrounding whitespace but not the path", () => {
   assert.deepEqual(parseServerWorkspaceIdentity("  runner:alpha:/w  "), {
     runnerId: "alpha",
     workspacePath: "/w",
+  });
+});
+
+test("machine scope identity is `runner:<id>:~` and parses only in that form", () => {
+  // 决策 2：机器级浏览身份是唯一能进 readdir/stat/info 的非 workspace 目标。
+  assert.equal(buildRunnerMachineIdentity("alpha"), "runner:alpha:~");
+  assert.equal(buildRunnerMachineIdentity("a:b"), null);
+  assert.deepEqual(parseRunnerMachineIdentity("runner:alpha:~"), { runnerId: "alpha" });
+  // 普通 workspace 身份不是机器目标。
+  assert.equal(parseRunnerMachineIdentity("runner:alpha:/home/me"), null);
+  assert.equal(parseRunnerMachineIdentity("runner:alpha:"), null);
+  assert.equal(parseRunnerMachineIdentity("/plain/path"), null);
+  // 机器身份仍可被通用解析器读出（server/runner 的边缘共用一套格式）。
+  assert.deepEqual(parseServerWorkspaceIdentity("runner:alpha:~"), {
+    runnerId: "alpha",
+    workspacePath: RUNNER_MACHINE_SCOPE_PATH,
   });
 });

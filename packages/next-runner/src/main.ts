@@ -2,7 +2,6 @@ import { createLogger, parseLogLevel } from "./logger.js";
 import {
   resolveConfig,
   resolveRunnerId,
-  labelForWorkspace,
   runnerPlatform,
   runnerArch,
   seedAgentDirFromEnv,
@@ -18,6 +17,8 @@ import { ConfigExecutor } from "./config/configAck.js";
 import { registerConfigChannel } from "./channels/configChannel.js";
 import { registerWorkspaceTools } from "./channels/workspaceTools.js";
 import { registerE2EProvider } from "./extensions/e2eProvider.js";
+import { WorkspaceRoots } from "./workspaces/workspaceRoots.js";
+import { publishWorkspaceFrames } from "./workspaces/workspaceFrames.js";
 
 async function main(): Promise<void> {
   // E2E only: seed the isolated agent dir before pi reads it.
@@ -27,6 +28,15 @@ async function main(): Promise<void> {
   // No-op outside the E2E stack (marker file absent).
   registerE2EProvider(logger.child("config"));
   const runnerId = await resolveRunnerId(config.dataDir, config.runnerId);
+  // Served folders are runner-owned (docs/next/runner-folders.md decision 1):
+  // env roots + persisted folders, read before any channel is built so the guard,
+  // the file-tools root check and the hello all share one live owner.
+  const roots = new WorkspaceRoots({
+    envRoots: config.workspaces,
+    dataDir: config.dataDir,
+    logger: logger.child("workspaces"),
+  });
+  await roots.load();
   // One ref authority for the process (spec A): the engine feeds pi from it and the v4
   // runtime posts each session's listings into it, so a read and the sweep see one truth.
   const attachments = new AttachmentRegistry({ dataDir: config.dataDir });
@@ -42,6 +52,8 @@ async function main(): Promise<void> {
     attachments,
     runtimeConfig,
     // P1: the hidden MCP status session opens in the first served workspace.
+    // It stays on the env roots: the probe is a startup-time status session, and a
+    // folder added later must not move it.
     workspacePaths: config.workspaces,
   });
   // P1: an MCP status change becomes a fact right away (the settings list polls
@@ -57,7 +69,8 @@ async function main(): Promise<void> {
     engine,
     publisher,
     logger,
-    workspacePaths: config.workspaces,
+    roots,
+    runnerId,
   });
   registerConfigChannel(registry, { manager: runtimeConfig, logger: logger.child("config") });
   // Batch 1 workspace tools (docs/next/workspace-tools.md): file/git/watcher/
@@ -66,7 +79,7 @@ async function main(): Promise<void> {
   // inside (path containment is stricter than the workspacePath check).
   const workspaceTools = registerWorkspaceTools(registry, {
     logger: logger.child("tools"),
-    workspacePaths: config.workspaces,
+    roots,
   });
   // `configApplied.facts` for the server's model-selection view: server-owned
   // mode reports the applied runtime, fallback mode reports pi's own catalog
@@ -90,10 +103,9 @@ async function main(): Promise<void> {
       version: config.version,
       os: runnerPlatform,
       arch: runnerArch,
-      workspaces: config.workspaces.map((path) => ({
-        path,
-        label: labelForWorkspace(path),
-      })),
+      // Read at (re)connect time so a folder added while the link was down is
+      // reported by the next hello (docs/next/runner-folders.md decision 1).
+      workspaces: () => roots.list().map((folder) => ({ path: folder.path, label: folder.label })),
     },
     config: {
       lastAppliedVersion: () => runtimeConfig.appliedVersion,
@@ -115,6 +127,10 @@ async function main(): Promise<void> {
     },
   });
 
+  // Push the full served list after an add/remove (docs/next/runner-folders.md
+  // decision 3). Only while connected: a reconnect's hello already carries it.
+  publishWorkspaceFrames(roots, link);
+
   const shutdown = async (signal: string): Promise<void> => {
     logger.info("runner shutting down", { signal });
     await link.stop();
@@ -131,7 +147,7 @@ async function main(): Promise<void> {
   logger.info("runner starting", {
     runnerId,
     serverUrl: config.serverUrl,
-    workspaces: config.workspaces,
+    workspaces: roots.list().map((folder) => folder.path),
     dataDir: config.dataDir,
   });
   link.start();

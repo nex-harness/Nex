@@ -13,8 +13,6 @@
  *   sentinel into real buffers for the browser.
  * - terminal/system live in `terminalChannel.ts` (pty-host + replay).
  */
-import { realpath } from "node:fs/promises";
-import { resolve } from "node:path";
 import {
   createFileService,
   createFileWatcherService,
@@ -23,15 +21,22 @@ import {
 } from "@nex/services/node";
 import type { IFileService, IFileWatcherService } from "@nex/services";
 import type { IGitService, IMediaPreviewService } from "@nex/services";
+import type { FileEntry } from "@nex/shared";
 import type { ChannelRegistration } from "../link/registry.js";
 import type { JsonValue } from "../link/frames.js";
 import type { Logger } from "../logger.js";
+import type { WorkspaceRoots } from "../workspaces/workspaceRoots.js";
+import {
+  isMachineScopeTarget,
+  createMachineScopeGuardedRegistration,
+} from "../workspaces/machineScope.js";
 import {
   asString,
   recordArg,
   errorMessage,
   resolveInsideWorkspace,
   resolveInsideWorkspaceReal,
+  resolveMachineScopePath,
 } from "./workspaceToolsShared.js";
 import { registerTerminalChannel, type RegisteredTerminalChannel } from "./terminalChannel.js";
 
@@ -45,7 +50,8 @@ export {
 
 export interface WorkspaceToolsOptions {
   logger: Logger;
-  workspacePaths: readonly string[];
+  /** The live served-folder owner; root checks read it at call time. */
+  roots: WorkspaceRoots;
   /** Static settings surface for the terminal font profile (no setting service on the runner). */
   terminalSettings?: { terminalFontFamily?: string; terminalInheritSystemProfile?: boolean };
 }
@@ -73,32 +79,19 @@ export function decodeWireBuffer(value: unknown): Uint8Array | null {
 }
 
 export function registerWorkspaceTools(
-  registry: ChannelRegistration,
+  baseRegistry: ChannelRegistration,
   options: WorkspaceToolsOptions,
 ): RegisteredWorkspaceTools {
   const { logger } = options;
-  const servedRoots = [...options.workspacePaths];
-  // macOS 上 served 根（/var/folders/...）可能本身是 symlink（/private/var），
-  // realpath 化后 containment 对 caller 的路径与 symlink 目标都成立。
-  const realRootsPromise = Promise.all(
-    servedRoots.map(async (root) => {
-      try {
-        return await realpath(root);
-      } catch {
-        return resolve(root);
-      }
-    }),
-  ).then((real) => [
-    ...new Set([...real.map((path) => resolve(path)), ...servedRoots.map((path) => resolve(path))]),
-  ]);
-  // 惰性解析：首次路径校验前等待一次。
-  let realRootsCache: readonly string[] | null = null;
-  const rootsForCheck = async (): Promise<readonly string[]> => {
-    if (realRootsCache === null) {
-      realRootsCache = await realRootsPromise;
-    }
-    return realRootsCache;
-  };
+  // 机器级目标（`workspacePath: "~"`）只允许 readdir/stat/system.info 与
+  // runner-workspaces.*（docs/next/runner-folders.md 决策 2）。这些频道注册在原始
+  // registry 上（不经 register.ts 的 workspace guard），因此在这里补同一道闸门：
+  // 否则带 `~` 的 readTextFile/terminal/git 调用会绕过限制。
+  const registry = createMachineScopeGuardedRegistration(baseRegistry);
+  // 根集合是活的（docs/next/runner-folders.md decision 1）：每次校验都读
+  // WorkspaceRoots，新增的目录无需重启即可生效；realRoots 内部缓存并在变更时失效。
+  const rootsForCheck = (): Promise<readonly string[]> => options.roots.realRoots();
+  const servedPaths = (): readonly string[] => options.roots.list().map((folder) => folder.path);
 
   const fileService: IFileService = createFileService();
   const watcherService: IFileWatcherService = createFileWatcherService({
@@ -114,7 +107,10 @@ export function registerWorkspaceTools(
   });
   const gitService: IGitService = createGitService();
 
-  const requirePathInside = async (arg: Record<string, unknown>, field: string): Promise<string> => {
+  const requirePathInside = async (
+    arg: Record<string, unknown>,
+    field: string,
+  ): Promise<string> => {
     const raw = asString(arg[field]);
     if (!raw) throw new Error(`${field} is required`);
     const resolved = await resolveInsideWorkspaceReal(raw, await rootsForCheck());
@@ -122,7 +118,28 @@ export function registerWorkspaceTools(
     return resolved;
   };
 
-  const requireRootInside = async (arg: Record<string, unknown>, field: string): Promise<string> => {
+  /**
+   * 修复依据（docs/next/runner-folders.md 决策 2）：目录浏览器在机器级作用域
+   * （`workspacePath: "~"`）下必须能浏览 served 根之外的目录，否则用户无法选中
+   * 新文件夹。这里只在目标为机器级时放开到「任意绝对路径 + realpath」，其余
+   * 调用仍走 served 根 containment。
+   */
+  const requirePathForBrowse = async (
+    arg: Record<string, unknown>,
+    field: string,
+  ): Promise<{ path: string; machineScope: boolean }> => {
+    if (isMachineScopeTarget(arg)) {
+      const raw = asString(arg[field]);
+      if (!raw) throw new Error(`${field} is required`);
+      return { path: await resolveMachineScopePath(raw), machineScope: true };
+    }
+    return { path: await requirePathInside(arg, field), machineScope: false };
+  };
+
+  const requireRootInside = async (
+    arg: Record<string, unknown>,
+    field: string,
+  ): Promise<string> => {
     const raw = asString(arg[field]);
     if (!raw) throw new Error(`${field} is required`);
     const resolved = resolveInsideWorkspace(raw, await rootsForCheck());
@@ -154,14 +171,18 @@ export function registerWorkspaceTools(
     });
   });
   passthroughFile("readdir", async (arg) => {
-    const path = await requirePathInside(arg, "path");
-    return fileService.readdir({
+    const { path, machineScope } = await requirePathForBrowse(arg, "path");
+    const entries = await fileService.readdir({
       path,
       ...(arg["includeHidden"] === true ? { includeHidden: true } : {}),
     });
+    // 机器级作用域只列目录：文件既不能成为 served 根，也不需要展示。
+    return machineScope
+      ? entries.filter((entry: FileEntry) => entry.type === "directory")
+      : entries;
   });
   passthroughFile("stat", async (arg) => {
-    const path = await requirePathInside(arg, "path");
+    const { path } = await requirePathForBrowse(arg, "path");
     return fileService.stat({ path });
   });
   passthroughFile("checkFilesExist", async (arg) => {
@@ -172,7 +193,10 @@ export function registerWorkspaceTools(
       paths.map(async (raw) => {
         const resolved = await resolveInsideWorkspaceReal(raw, roots);
         if (resolved === null) return { path: raw, exists: false };
-        return { path: raw, exists: await fileService.stat({ path: resolved }).then(Boolean, () => false) };
+        return {
+          path: raw,
+          exists: await fileService.stat({ path: resolved }).then(Boolean, () => false),
+        };
       }),
     );
     return checked;
@@ -246,7 +270,7 @@ export function registerWorkspaceTools(
   passthroughFile("ensureConversationWorkspace", async () => {
     // Web already answers this from a server stub; on the runner the
     // conversation scratch space is per-workspace state owned by the engine.
-    return { path: servedRoots[0] ?? "", created: false, workspacePurpose: "conversation" };
+    return { path: servedPaths()[0] ?? "", created: false, workspacePurpose: "conversation" };
   });
 
   // ── media-preview ──
@@ -256,7 +280,10 @@ export function registerWorkspaceTools(
     const expectedKindRaw = asString(record["expectedKind"]);
     const expectedKind: "audio" | "video" | null =
       expectedKindRaw === "video" || expectedKindRaw === "audio" ? expectedKindRaw : null;
-    return (await mediaService.prepare({ path, expectedKind: expectedKind ?? "audio" })) as JsonValue;
+    return (await mediaService.prepare({
+      path,
+      expectedKind: expectedKind ?? "audio",
+    })) as JsonValue;
   });
 
   // ── file-watcher ──
@@ -292,7 +319,9 @@ export function registerWorkspaceTools(
     registry.call("git", method, async (arg) => {
       const record = recordArg(arg);
       const workspacePath = await requireRootInside(record, "workspacePath");
-      const handler = (gitService as unknown as Record<string, (params: never) => Promise<unknown>>)[method];
+      const handler = (
+        gitService as unknown as Record<string, (params: never) => Promise<unknown>>
+      )[method];
       if (typeof handler !== "function") throw new Error(`git method not found: ${method}`);
       try {
         return (await handler({ ...record, workspacePath } as never)) as JsonValue;
@@ -330,17 +359,32 @@ export function registerWorkspaceTools(
     const branchName = asString(record["branchName"]);
     const files = Array.isArray(record["files"]) ? record["files"] : [];
     const names = files
-      .map((file) => (typeof file === "object" && file !== null ? (file as Record<string, unknown>)["path"] : null))
+      .map((file) =>
+        typeof file === "object" && file !== null
+          ? (file as Record<string, unknown>)["path"]
+          : null,
+      )
       .filter((name): name is string => typeof name === "string");
     const summary = branchName
-      ? `${branchName}: ${names.slice(0, 5).map((name) => name.split("/").pop()).join(", ")}`
-      : `changes: ${names.slice(0, 5).map((name) => name.split("/").pop()).join(", ")}`;
+      ? `${branchName}: ${names
+          .slice(0, 5)
+          .map((name) => name.split("/").pop())
+          .join(", ")}`
+      : `changes: ${names
+          .slice(0, 5)
+          .map((name) => name.split("/").pop())
+          .join(", ")}`;
     return { message: summary, providerId: "", model: "" } as JsonValue;
   });
 
   // git-checkpoint: the runner's checkpoints live in the engine (pi hooks); the
   // UI has no callers. Register the channel so routing never 404s.
-  for (const method of ["createCheckpoint", "diffCheckpoints", "restoreBetweenCheckpoints", "deleteCheckpoint"]) {
+  for (const method of [
+    "createCheckpoint",
+    "diffCheckpoints",
+    "restoreBetweenCheckpoints",
+    "deleteCheckpoint",
+  ]) {
     registry.call("git-checkpoint", method, async () => {
       throw new Error("git checkpoints are not exposed on the runner channel (engine-owned)");
     });
@@ -350,7 +394,7 @@ export function registerWorkspaceTools(
   const terminalChannel: RegisteredTerminalChannel = registerTerminalChannel(registry, {
     logger,
     rootsForCheck,
-    servedRoots,
+    servedRoots: servedPaths,
     terminalSettings: options.terminalSettings,
   });
 

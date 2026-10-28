@@ -16,13 +16,20 @@ import type { JsonValue } from "../link/frames.js";
 import type { Logger } from "../logger.js";
 import { PtyHostClient } from "../pty-host/client.js";
 import { resolveTerminalShell } from "../pty-host/shell.js";
-import { recordArg, resolveInsideWorkspaceReal, asString, errorMessage } from "./workspaceToolsShared.js";
+import { isMachineScopeTarget } from "../workspaces/machineScope.js";
+import {
+  recordArg,
+  resolveInsideWorkspaceReal,
+  asString,
+  errorMessage,
+} from "./workspaceToolsShared.js";
 
 export interface TerminalChannelOptions {
   logger: Logger;
   /** Absolute path check against the served workspace roots. */
   rootsForCheck: () => Promise<readonly string[]>;
-  servedRoots: readonly string[];
+  /** Live served roots (first one is reported as the machine's home). */
+  servedRoots: () => readonly string[];
   terminalSettings?: { terminalFontFamily?: string; terminalInheritSystemProfile?: boolean };
 }
 
@@ -94,7 +101,8 @@ export function registerTerminalChannel(
     const fontProfile = resolveTerminalFontProfile({
       settings: {
         terminalFontFamily: options.terminalSettings?.terminalFontFamily,
-        terminalInheritSystemProfile: options.terminalSettings?.terminalInheritSystemProfile ?? true,
+        terminalInheritSystemProfile:
+          options.terminalSettings?.terminalInheritSystemProfile ?? true,
       },
       env: process.env,
     });
@@ -192,10 +200,15 @@ export function registerTerminalChannel(
   });
 
   // ── system（host facts of the runner machine）──
-  registry.call("system", "info", async () => ({
-    homedir: options.servedRoots[0] ?? homedir(),
-    platform: process.platform,
-  }));
+  // 机器级作用域（docs/next/runner-folders.md 决策 2）下目录浏览器从这里取起点：
+  // 必须回报 runner 机器的真实 homedir，而不是第一个 served 根（那只是安装器写的
+  // 默认目录，用户要在其之外选择新文件夹）。
+  registry.call("system", "info", async (arg) => {
+    if (isMachineScopeTarget(arg)) {
+      return { homedir: homedir(), platform: process.platform };
+    }
+    return { homedir: options.servedRoots()[0] ?? homedir(), platform: process.platform };
+  });
   registry.call("system", "listIntegratedTerminalShells", async () => []);
   registry.call("system", "probeIntranet", async (arg) => {
     const record = recordArg(arg);

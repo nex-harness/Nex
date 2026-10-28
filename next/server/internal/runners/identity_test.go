@@ -66,6 +66,15 @@ func TestParseIdentity(t *testing.T) {
 			path:     "/w",
 			ok:       true,
 		},
+		{
+			// 机器浏览 scope（docs/next/runner-folders.md 决策 2）：`~` 不是绝对
+			// 路径，但 server 必须能把它解析成 runner 身份才能路由。
+			name:     "machine scope",
+			identity: "runner:alpha:~",
+			runnerID: "alpha",
+			path:     runners.MachineScopePath,
+			ok:       true,
+		},
 		{name: "empty", identity: "", ok: false},
 		{name: "wrong prefix", identity: "remote:ssh:host:22:user:/w", ok: false},
 		{name: "missing path", identity: "runner:alpha", ok: false},

@@ -19,6 +19,7 @@ import {
   resolveInsideWorkspace,
 } from "../src/channels/workspaceTools.js";
 import type { Logger } from "../src/logger.js";
+import { testRoots } from "./helpers/testRoots.js";
 
 const logger: Logger = {
   debug: () => undefined,
@@ -64,7 +65,7 @@ test("file channel: readdir/stat/readFileRange with path containment", async () 
   await writeFile(join(root, "outside", "secret.txt"), "nope");
 
   const registry = new ChannelRegistry();
-  const tools = registerWorkspaceTools(registry, { logger, workspacePaths: [workspace] });
+  const tools = registerWorkspaceTools(registry, { logger, roots: testRoots([workspace]) });
 
   try {
     const readdir = registry.getCall("file", "readdir");
@@ -84,7 +85,11 @@ test("file channel: readdir/stat/readFileRange with path containment", async () 
     // real buffer for the browser).
     const readRange = registry.getCall("file", "readFileRange");
     assert.ok(readRange);
-    const range = (await readRange({ path: join(workspace, "hello.txt"), offset: 0, length: 5 })) as {
+    const range = (await readRange({
+      path: join(workspace, "hello.txt"),
+      offset: 0,
+      length: 5,
+    })) as {
       $buf: string;
       $vs: boolean;
     };
@@ -106,7 +111,7 @@ test("file channel: symlink escaping the workspace root is refused", async () =>
   await symlink(join(outside, "secret.txt"), join(workspace, "leak.txt"));
 
   const registry = new ChannelRegistry();
-  const tools = registerWorkspaceTools(registry, { logger, workspacePaths: [workspace] });
+  const tools = registerWorkspaceTools(registry, { logger, roots: testRoots([workspace]) });
   try {
     const readdir = registry.getCall("file", "readdir");
     assert.ok(readdir);
@@ -119,97 +124,115 @@ test("file channel: symlink escaping the workspace root is refused", async () =>
   }
 });
 
-test("terminal channel: create, replay on first listen, reattach, two viewers, exit", {
-  timeout: 60_000,
-}, async () => {
-  const root = await mkdtemp(join(tmpdir(), "nex-term-"));
-  const workspace = join(root, "workspace");
-  await mkdir(workspace);
+test(
+  "terminal channel: create, replay on first listen, reattach, two viewers, exit",
+  {
+    timeout: 60_000,
+  },
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "nex-term-"));
+    const workspace = join(root, "workspace");
+    await mkdir(workspace);
 
-  const registry = new ChannelRegistry();
-  const tools = registerWorkspaceTools(registry, { logger, workspacePaths: [workspace] });
+    const registry = new ChannelRegistry();
+    const tools = registerWorkspaceTools(registry, { logger, roots: testRoots([workspace]) });
 
-  const create = registry.getCall("terminal", "create");
-  const write = registry.getCall("terminal", "write");
-  const resize = registry.getCall("terminal", "resize");
-  const disposeCall = registry.getCall("terminal", "dispose");
-  assert.ok(create && write && resize && disposeCall);
+    const create = registry.getCall("terminal", "create");
+    const write = registry.getCall("terminal", "write");
+    const resize = registry.getCall("terminal", "resize");
+    const disposeCall = registry.getCall("terminal", "dispose");
+    assert.ok(create && write && resize && disposeCall);
 
-  try {
-    // create with cwd inside the workspace.
-    const created = (await create({ cols: 80, rows: 24, cwd: workspace, workspacePath: workspace })) as { id: string; shell: string; fontFamily: string };
-    assert.ok(created.id);
-    assert.ok(created.fontFamily !== undefined);
+    try {
+      // create with cwd inside the workspace.
+      const created = (await create({
+        cols: 80,
+        rows: 24,
+        cwd: workspace,
+        workspacePath: workspace,
+      })) as { id: string; shell: string; fontFamily: string };
+      assert.ok(created.id);
+      assert.ok(created.fontFamily !== undefined);
 
-    // A cwd outside the served roots is refused.
-    await assert.rejects(
-      async () => create({ cols: 80, rows: 24, cwd: tmpdir(), workspacePath: workspace }),
-      /outside this runner's workspaces/,
-    );
+      // A cwd outside the served roots is refused.
+      await assert.rejects(
+        async () => create({ cols: 80, rows: 24, cwd: tmpdir(), workspacePath: workspace }),
+        /outside this runner's workspaces/,
+      );
 
-    // First data listener gets the serialize replay, then live output.
-    const marker = `term-ok-${Math.floor(Math.random() * 1_000_000)}`;
-    let viewerA = "";
-    let viewerB = "";
-    let replayA: string | null = null;
-    let replayB: string | null = null;
-    const listenA = registry.getListen("terminal", "onDynamicData");
-    const listenB = registry.getListen("terminal", "onDynamicData");
-    assert.ok(listenA && listenB);
-    const subscriptionA = listenA(created.id, (data) => {
-      if (typeof data === "string") {
-        if (replayA === null) replayA = data;
-        viewerA += data;
+      // First data listener gets the serialize replay, then live output.
+      const marker = `term-ok-${Math.floor(Math.random() * 1_000_000)}`;
+      let viewerA = "";
+      let viewerB = "";
+      let replayA: string | null = null;
+      let replayB: string | null = null;
+      const listenA = registry.getListen("terminal", "onDynamicData");
+      const listenB = registry.getListen("terminal", "onDynamicData");
+      assert.ok(listenA && listenB);
+      const subscriptionA = listenA(created.id, (data) => {
+        if (typeof data === "string") {
+          if (replayA === null) replayA = data;
+          viewerA += data;
+        }
+      });
+      const subscriptionB = listenB(created.id, (data) => {
+        if (typeof data === "string") {
+          if (replayB === null) replayB = data;
+          viewerB += data;
+        }
+      });
+
+      await write({ id: created.id, data: `echo ${marker}\n` });
+      const deadline = Date.now() + 20_000;
+      while (!viewerA.includes(marker) || !viewerB.includes(marker)) {
+        assert.ok(
+          Date.now() < deadline,
+          `timed out; A=${JSON.stringify(viewerA.slice(-200))} B=${JSON.stringify(viewerB.slice(-200))}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
-    });
-    const subscriptionB = listenB(created.id, (data) => {
-      if (typeof data === "string") {
-        if (replayB === null) replayB = data;
-        viewerB += data;
+      // Both viewers saw the marker; the replay snapshot preceded live output.
+      assert.ok(replayA !== null && replayB !== null);
+
+      // Second-listen semantics: both listeners receive live chunks (single
+      // writer, multiple viewers).
+
+      // Reattach: create with the same terminalId returns the same id.
+      const reattached = (await create({
+        cols: 100,
+        rows: 30,
+        cwd: workspace,
+        terminalId: created.id,
+        workspacePath: workspace,
+      })) as { id: string };
+      assert.equal(reattached.id, created.id);
+
+      // Exit listener fires on dispose and the id is reaped.
+      let exitCode: number | null = null;
+      const exitListen = registry.getListen("terminal", "onDynamicExit");
+      assert.ok(exitListen);
+      const exitSubscription = exitListen(created.id, (code) => {
+        if (typeof code === "number") exitCode = code;
+      });
+      await disposeCall({ id: created.id });
+      const exitDeadline = Date.now() + 10_000;
+      while (exitCode === null) {
+        assert.ok(Date.now() < exitDeadline, "timed out waiting for exit event");
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
-    });
-
-    await write({ id: created.id, data: `echo ${marker}\n` });
-    const deadline = Date.now() + 20_000;
-    while (!viewerA.includes(marker) || !viewerB.includes(marker)) {
-      assert.ok(Date.now() < deadline, `timed out; A=${JSON.stringify(viewerA.slice(-200))} B=${JSON.stringify(viewerB.slice(-200))}`);
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // SIGTERM 下的 shell 可能以非零 code 退出（或以信号终止）；这里只锁「exit
+      // 事件确实分发且 entry 被回收」。
+      assert.equal(typeof exitCode, "number");
+      // After exit the id is gone: a further write is rejected.
+      await assert.rejects(async () => write({ id: created.id, data: "x" }), /Terminal not found/);
+      subscriptionA?.dispose?.();
+      subscriptionB?.dispose?.();
+      exitSubscription?.dispose?.();
+    } finally {
+      await tools.dispose();
     }
-    // Both viewers saw the marker; the replay snapshot preceded live output.
-    assert.ok(replayA !== null && replayB !== null);
-
-    // Second-listen semantics: both listeners receive live chunks (single
-    // writer, multiple viewers).
-
-    // Reattach: create with the same terminalId returns the same id.
-    const reattached = (await create({ cols: 100, rows: 30, cwd: workspace, terminalId: created.id, workspacePath: workspace })) as { id: string };
-    assert.equal(reattached.id, created.id);
-
-    // Exit listener fires on dispose and the id is reaped.
-    let exitCode: number | null = null;
-    const exitListen = registry.getListen("terminal", "onDynamicExit");
-    assert.ok(exitListen);
-    const exitSubscription = exitListen(created.id, (code) => {
-      if (typeof code === "number") exitCode = code;
-    });
-    await disposeCall({ id: created.id });
-    const exitDeadline = Date.now() + 10_000;
-    while (exitCode === null) {
-      assert.ok(Date.now() < exitDeadline, "timed out waiting for exit event");
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    // SIGTERM 下的 shell 可能以非零 code 退出（或以信号终止）；这里只锁「exit
-    // 事件确实分发且 entry 被回收」。
-    assert.equal(typeof exitCode, "number");
-    // After exit the id is gone: a further write is rejected.
-    await assert.rejects(async () => write({ id: created.id, data: "x" }), /Terminal not found/);
-    subscriptionA?.dispose?.();
-    subscriptionB?.dispose?.();
-    exitSubscription?.dispose?.();
-  } finally {
-    await tools.dispose();
-  }
-});
+  },
+);
 
 test("git channel: getRepositorySummary on a temp repo (workspacePath routed)", async () => {
   const root = await mkdtemp(join(tmpdir(), "nex-git-"));
@@ -218,7 +241,7 @@ test("git channel: getRepositorySummary on a temp repo (workspacePath routed)", 
   await writeFile(join(workspace, "a.txt"), "a\n");
 
   const registry = new ChannelRegistry();
-  const tools = registerWorkspaceTools(registry, { logger, workspacePaths: [workspace] });
+  const tools = registerWorkspaceTools(registry, { logger, roots: testRoots([workspace]) });
   try {
     const summary = registry.getCall("git", "getRepositorySummary");
     assert.ok(summary);
@@ -243,7 +266,7 @@ test("system channel: info reports the runner platform and first served root", a
   const workspace = join(root, "workspace");
   await mkdir(workspace);
   const registry = new ChannelRegistry();
-  const tools = registerWorkspaceTools(registry, { logger, workspacePaths: [workspace] });
+  const tools = registerWorkspaceTools(registry, { logger, roots: testRoots([workspace]) });
   try {
     const info = registry.getCall("system", "info");
     assert.ok(info);

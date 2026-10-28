@@ -7,6 +7,7 @@ import { registerChannels } from "../src/channels/register.js";
 import { readWorkspacePresentation } from "../src/channels/nexSession.js";
 import { ConversationPublisher } from "../src/v4/publisher.js";
 import { FakeEngine } from "./helpers/fakeEngine.js";
+import { testRoots } from "./helpers/testRoots.js";
 import { createLogger } from "../src/logger.js";
 
 /**
@@ -31,7 +32,8 @@ function harness(workspacePaths: readonly string[] = [WORKSPACE]) {
     engine,
     publisher,
     logger,
-    workspacePaths: [...workspacePaths],
+    roots: testRoots(workspacePaths),
+    runnerId: "runner_alpha",
   });
   return { engine, publisher, registry, channels };
 }

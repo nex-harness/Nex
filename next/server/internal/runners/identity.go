@@ -9,6 +9,12 @@ import (
 // `runner:<runnerId>:<runner-local absolute path>` (docs/next/multi-runner.md).
 const IdentityPrefix = "runner:"
 
+// MachineScopePath is the pseudo path of the machine-level browse scope
+// (`runner:<runnerId>:~`, docs/next/runner-folders.md decision 2). It is a
+// routing identity only: the runner accepts it for readdir/stat/info and for
+// runner-workspaces, and it is never a catalogued workspace.
+const MachineScopePath = "~"
+
 // BuildIdentity returns the server-owned identity for one runner-local path.
 // The server builds identities from runner hello frames; runners never parse
 // them for IO.
@@ -22,6 +28,10 @@ func BuildIdentity(runnerID, path string) string {
 // contain ':' themselves (Windows `C:\Users\me`, UNC shares, POSIX names with
 // a colon). The identity is invalid when the prefix, the runner id or the path
 // is missing, or when the runner id contains ':' or whitespace.
+//
+// The machine-level browse scope `runner:<runnerId>:~` parses as well
+// (docs/next/runner-folders.md decision 2): the server only routes it, it never
+// comes from a runner catalogue.
 func ParseIdentity(identity string) (runnerID, path string, ok bool) {
 	rest, found := strings.CutPrefix(strings.TrimSpace(identity), IdentityPrefix)
 	if !found {

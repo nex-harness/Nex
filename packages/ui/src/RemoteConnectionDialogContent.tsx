@@ -428,7 +428,7 @@ export function RemoteConnectionDirectoryStep({
           <DirectoryBrowser
             services={services}
             embedded
-            onSelect={onSelect}
+            onSelect={(path) => onSelect(path)}
             onCancel={onCancel}
             onPathChange={setSelectedPath}
           />

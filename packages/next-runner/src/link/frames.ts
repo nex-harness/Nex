@@ -81,6 +81,16 @@ export interface ConfigAppliedFrame {
   facts: Record<string, unknown>;
 }
 
+/**
+ * The runner's served folder list changed (docs/next/runner-folders.md decision 3).
+ * A full list, never a delta; the server replaces its catalogue for this runner.
+ * Old servers ignore unknown frames, so a new runner keeps its startup folders.
+ */
+export interface WorkspacesFrame {
+  t: "workspaces";
+  workspaces: Array<{ path: string; label: string }>;
+}
+
 export interface PingFrame {
   t: "ping";
 }
@@ -95,7 +105,8 @@ export type ClientFrame =
   | PongFrame
   | ResultFrame
   | EventFrame
-  | ConfigAppliedFrame;
+  | ConfigAppliedFrame
+  | WorkspacesFrame;
 export type ServerFrame =
   | WelcomeFrame
   | CallFrame

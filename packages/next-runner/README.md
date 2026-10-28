@@ -25,18 +25,18 @@ pnpm dev
 
 ### Environment
 
-| Variable                 | Required    | Default                      | Meaning                                                          |
-| ------------------------ | ----------- | ---------------------------- | ---------------------------------------------------------------- |
-| `NEX_SERVER_URL`         | no          | `ws://127.0.0.1:3030/runner` | ws/wss URL; `/runner` is appended when missing                   |
-| `NEX_RUNNER_TOKEN`       | recommended | —                            | Bearer token for the upgrade request (`Authorization: Bearer …`) |
-| `NEX_RUNNER_ID`          | no          | persisted random id          | Stable identity; persisted in `<data>/runner-id.json`            |
-| `NEX_RUNNER_NAME`        | no          | hostname                     | Display name in the server registry                              |
-| `NEX_RUNNER_WORKSPACES`  | **yes**     | —                            | Absolute paths, `,`- or path-delimiter-separated (at least one)  |
-| `NEX_RUNNER_DATA_DIR`    | no          | `~/.nex-next/runner`         | Sessions + per-workspace metadata                                |
-| `NEX_RUNNER_LOG_LEVEL`   | no          | `info`                       | `debug` / `info` / `warn` / `error`                              |
-| `NEX_RUNNER_VERSION`     | no          | package version              | Reported in `hello`                                              |
-| `NEX_RUNNER_TITLES`      | no          | on                           | `off` disables model-generated session titles                    |
-| `NEX_RUNNER_TITLE_MODEL` | no          | session model                | `provider/modelId` used only for title generation                |
+| Variable                 | Required    | Default                      | Meaning                                                                                                    |
+| ------------------------ | ----------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `NEX_SERVER_URL`         | no          | `ws://127.0.0.1:3030/runner` | ws/wss URL; `/runner` is appended when missing                                                             |
+| `NEX_RUNNER_TOKEN`       | recommended | —                            | Bearer token for the upgrade request (`Authorization: Bearer …`)                                           |
+| `NEX_RUNNER_ID`          | no          | persisted random id          | Stable identity; persisted in `<data>/runner-id.json`                                                      |
+| `NEX_RUNNER_NAME`        | no          | hostname                     | Display name in the server registry                                                                        |
+| `NEX_RUNNER_WORKSPACES`  | **yes**     | —                            | Absolute paths, `,`- or path-delimiter-separated (at least one); env roots are never removable from the UI |
+| `NEX_RUNNER_DATA_DIR`    | no          | `~/.nex-next/runner`         | Sessions, per-workspace metadata and `workspaces.json`                                                     |
+| `NEX_RUNNER_LOG_LEVEL`   | no          | `info`                       | `debug` / `info` / `warn` / `error`                                                                        |
+| `NEX_RUNNER_VERSION`     | no          | package version              | Reported in `hello`                                                                                        |
+| `NEX_RUNNER_TITLES`      | no          | on                           | `off` disables model-generated session titles                                                              |
+| `NEX_RUNNER_TITLE_MODEL` | no          | session model                | `provider/modelId` used only for title generation                                                          |
 
 Logs go to stderr. Tokens and API keys are never logged; the model catalog view exposes
 an empty `apiKey` placeholder only.
@@ -54,6 +54,7 @@ frames:
 | `event`               | R→S       | one emit for the matching listen id                                      |
 | `config`              | S→R       | full merged snapshot; applied one at a time (a late version is ignored)  |
 | `configApplied`       | R→S       | `{version, ok, errors[], facts}` for every applied (or rejected) push    |
+| `workspaces`          | R→S       | full served-folder list after `runner-workspaces.add`/`remove`           |
 | `ping` / `pong`       | both      | application ping every 15 s; missing inbound traffic for 45 s reconnects |
 
 Rules implemented here:
@@ -128,9 +129,17 @@ src/
     throttle.ts           leading+trailing 10 fps throttle
   channels/
     register.ts           channel/method wiring
+    workspaceGuard.ts     live served-folder guard + machine-scope gate
+    runnerWorkspaces.ts   runner-workspaces.list/add/remove
+    workspaceTools.ts     file / file-watcher / media-preview / git channels
+    terminalChannel.ts    terminal + system channels (pty-host)
     nexTask.ts            sidebar task rows + workspace events
     nexSession.ts         readWorkspacePresentation
     modelViews.ts         model-selection / provider-settings views
+  workspaces/
+    workspaceRoots.ts     served folders (env + persisted), the single owner
+    machineScope.ts       `workspacePath: "~"` browse-only rules
+    workspaceFrames.ts    `{t:"workspaces"}` push on change
 ```
 
 ## Engine interface
@@ -172,6 +181,7 @@ applied to the session's permission gate before the prompt starts.
 | State                                             | Owner                                                              |
 | ------------------------------------------------- | ------------------------------------------------------------------ |
 | pi session files + transcript                     | pi `SessionManager` under `<data>/sessions/<sha1(workspacePath)>/` |
+| served folders (env + persisted)                  | `WorkspaceRoots` → `<data>/workspaces.json` (atomic write)         |
 | title/phase/mode/deleted tombstones/seen commands | `SessionMetaStore` (runner is the single writer)                   |
 | pending approvals + "allow always" set            | `PermissionGate` per open session (engine-owned, in memory)        |
 | `ConversationSnapshot`                            | derived per session by `SessionRuntimeStore`                       |

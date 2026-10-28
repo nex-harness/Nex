@@ -25,11 +25,17 @@ func TestMain(m *testing.M) {
 
 func newServer(t *testing.T) *httptest.Server {
 	t.Helper()
+	server, _ := newServerWithRegistry(t)
+	return server
+}
+
+func newServerWithRegistry(t *testing.T) (*httptest.Server, *runners.Registry) {
+	t.Helper()
 	registry := runners.NewRegistry(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		Serve(slog.New(slog.NewTextHandler(io.Discard, nil)), registry, "runner-secret", "9.9.9", w, r)
 	})
-	return httptest.NewServer(handler)
+	return httptest.NewServer(handler), registry
 }
 
 func TestRunnerTokenRequired(t *testing.T) {
@@ -140,5 +146,63 @@ func TestHelloRejectsInvalidRunnerID(t *testing.T) {
 		if readErr == nil {
 			t.Fatalf("server accepted hello %s", hello)
 		}
+	}
+}
+
+// A `workspaces` frame from a connected runner replaces its catalogue in the
+// registry (docs/next/runner-folders.md decision 3): the old path stops
+// routing, the new one routes by path and identity.
+func TestWorkspacesFrameUpdatesRegistry(t *testing.T) {
+	server, registry := newServerWithRegistry(t)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	conn, _, err := websocket.Dial(context.Background(), wsURL, &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": []string{"Bearer runner-secret"}},
+	})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer func() { _ = conn.CloseNow() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := conn.Write(ctx, websocket.MessageText,
+		[]byte(`{"t":"hello","runnerId":"r1","name":"n","version":"1","os":"linux","arch":"arm64","workspaces":[{"path":"/old"}]}`)); err != nil {
+		t.Fatalf("write hello: %v", err)
+	}
+	if _, _, err := conn.Read(ctx); err != nil {
+		t.Fatalf("read welcome: %v", err)
+	}
+	if id, ok := registry.RunnerIDForPath("/old"); !ok || id != "r1" {
+		t.Fatalf("hello catalogue = %q,%v", id, ok)
+	}
+
+	// The frame may repeat a path and (incorrectly) carry the machine scope; both
+	// are normalised away, so `~` never becomes a workspace row.
+	if err := conn.Write(ctx, websocket.MessageText,
+		[]byte(`{"t":"workspaces","workspaces":[{"path":"/new","label":"demo"},{"path":" /new "},{"path":"~"}]}`)); err != nil {
+		t.Fatalf("write workspaces frame: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, ok := registry.RunnerIDForPath("/new"); ok {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, ok := registry.RunnerIDForPath("/old"); ok {
+		t.Fatal("old path still routes after the workspaces frame")
+	}
+	if id, ok := registry.RunnerIDForPath("/new"); !ok || id != "r1" {
+		t.Fatalf("RunnerIDForPath(/new) = %q,%v", id, ok)
+	}
+	if id, ok := registry.RunnerIDForIdentity("runner:r1:/new"); !ok || id != "r1" {
+		t.Fatalf("RunnerIDForIdentity(runner:r1:/new) = %q,%v", id, ok)
+	}
+	workspaces := registry.Workspaces()
+	if len(workspaces) != 1 || workspaces[0].Path != "/new" || workspaces[0].WorkspaceIdentity != "runner:r1:/new" {
+		t.Fatalf("workspaces = %+v", workspaces)
 	}
 }

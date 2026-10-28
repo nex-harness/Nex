@@ -33,6 +33,8 @@ import type {
   SSHInstallStatus,
   SSHInstallTarget,
 } from "@nex/shared";
+import { buildRunnerMachineIdentity } from "@nex/shared";
+import { addRunnerWorkspaceOnServer } from "./runnerWorkspacesRpc.js";
 import { createWebMcpPlatform, type WebMcpSyncService } from "./webMcpPlatform.js";
 import { createWebTaskNotifier, type BrowserNotificationApi } from "./webTaskNotifier.js";
 import { WEB_DEFAULT_THEME, resolveWebInitialTheme } from "./webThemeSeed.js";
@@ -228,6 +230,15 @@ function createWebPlatform(mcpSyncService: WebMcpSyncService): IPlatformService 
               : [],
           )
         : [];
+    },
+    // 添加 runner 上的文件夹（docs/next/runner-folders.md 决策 3）：走
+    // `runner-workspaces.add` RPC，带机器级目标才能让 server 路由到那台机器。
+    addRunnerWorkspace: async (runnerId, path) => {
+      const machineIdentity = buildRunnerMachineIdentity(runnerId);
+      if (!machineIdentity) {
+        throw new Error(`invalid runner id: ${runnerId}`);
+      }
+      return addRunnerWorkspaceOnServer(runnerId, path, machineIdentity);
     },
     // SSH runner 安装渠道（docs/next/runner-install.md）：转调 server 的
     // /api/runner-install（session cookie 认证）。密码只在请求内存中存在，

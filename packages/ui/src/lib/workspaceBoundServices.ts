@@ -36,6 +36,14 @@ export interface WorkspaceChannelBinding {
   channel: string;
   /** 需要注入目标的方法名；其余方法（包括 onDynamic* 事件）透传。 */
   methods: readonly string[];
+  /**
+   * 无参方法是否也要注入目标。
+   *
+   * `system.info()` 不带参数，但多 runner 下 server 需要目标才能把「这台机器的
+   * homedir」问对地方（docs/next/runner-folders.md 决策 2/4）。桌面/local 实现
+   * 忽略多余参数，行为不变。
+   */
+  injectTargetIntoZeroArgCalls?: boolean;
 }
 
 export type WorkspaceServiceAccessorKey =
@@ -44,7 +52,8 @@ export type WorkspaceServiceAccessorKey =
   | "mediaPreviewService"
   | "gitService"
   | "gitCheckpointService"
-  | "terminalService";
+  | "terminalService"
+  | "systemService";
 
 export const WORKSPACE_BOUND_CHANNELS: readonly WorkspaceChannelBinding[] = [
   {
@@ -119,6 +128,13 @@ export const WORKSPACE_BOUND_CHANNELS: readonly WorkspaceChannelBinding[] = [
     // onDynamic* 是事件监听，沿同一 id 路由。
     methods: ["create"],
   },
+  {
+    accessor: "systemService",
+    channel: "system",
+    // info() 无参：机器级浏览需要一个目标才能问对“哪台机器的 homedir”。
+    methods: ["info"],
+    injectTargetIntoZeroArgCalls: true,
+  },
 ];
 
 const BINDING_BY_ACCESSOR = new Map<string, WorkspaceChannelBinding>(
@@ -166,9 +182,16 @@ export function injectWorkspaceTargetIntoParams(
 function wrapBoundMethod(
   method: (...args: unknown[]) => unknown,
   target: { workspacePath: string; workspaceIdentity?: string },
+  injectIntoZeroArgCalls: boolean,
 ): (...args: unknown[]) => unknown {
   return (...args: unknown[]) => {
     if (args.length === 0) {
+      // system.info() 无参但有机器语义：只有声明了该行为且**带身份**的绑定才补一个
+      // 目标对象。没有身份的 path-only workspace（例如 server 兜底创建的会话目录）
+      // 保持原调用形态，让 server 走既有的“第一台 runner”回落，而不是按路径报错。
+      if (injectIntoZeroArgCalls && target.workspaceIdentity) {
+        return method(injectWorkspaceTargetIntoParams({}, target));
+      }
       return method(...args);
     }
     const [first, ...rest] = args;
@@ -193,7 +216,11 @@ function createBoundService(
       }
       let bound = boundMethods.get(property);
       if (!bound) {
-        bound = wrapBoundMethod(value as (...args: unknown[]) => unknown, target);
+        bound = wrapBoundMethod(
+          value as (...args: unknown[]) => unknown,
+          target,
+          binding.injectTargetIntoZeroArgCalls === true,
+        );
         boundMethods.set(property, bound);
       }
       return bound;

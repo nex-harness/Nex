@@ -12,6 +12,7 @@ import { ChannelRegistry } from "../src/link/registry.js";
 import { ConversationPublisher } from "../src/v4/publisher.js";
 import { registerChannels } from "../src/channels/register.js";
 import { FakeEngine } from "./helpers/fakeEngine.js";
+import { testRoots } from "./helpers/testRoots.js";
 import { createLogger } from "../src/logger.js";
 
 const WORKSPACE = "/workspace/demo";
@@ -102,7 +103,13 @@ function harness() {
   const engine = new FakeEngine();
   const publisher = new ConversationPublisher({ engine, logger });
   const registry = new ChannelRegistry();
-  registerChannels(registry, { engine, publisher, logger, workspacePaths: [WORKSPACE] });
+  registerChannels(registry, {
+    engine,
+    publisher,
+    logger,
+    roots: testRoots([WORKSPACE]),
+    runnerId: "runner_test",
+  });
   return { engine, publisher, registry };
 }
 

@@ -21,6 +21,7 @@ import { PiEngine } from "../src/engine/pi/piEngine.js";
 import { createLogger } from "../src/logger.js";
 import { ChannelRegistry } from "../src/link/registry.js";
 import { registerChannels } from "../src/channels/register.js";
+import { testRoots } from "./helpers/testRoots.js";
 import { ConversationPublisher } from "../src/v4/publisher.js";
 import { RuntimeConfigManager } from "../src/config/applyRuntimeConfig.js";
 import { digestFiles, materializeBundles } from "../src/config/bundles.js";
@@ -198,7 +199,8 @@ test("P1: the doc's stdio MCP server connects, the model calls echo, statuses re
         attachmentRegistry: () => undefined,
       } as never,
       logger,
-      workspacePaths: [workspace],
+      roots: testRoots([workspace]),
+      runnerId: "runner_test",
     });
     void published;
 
@@ -529,7 +531,8 @@ test("P2: a skill bundle materializes, appears in the catalog and the / menu, an
         attachmentRegistry: () => undefined,
       } as never,
       logger,
-      workspacePaths: [workspace],
+      roots: testRoots([workspace]),
+      runnerId: "runner_test",
     });
 
     const catalogCall = registry.getCall("nex-agent", "getSkillReferenceCatalog");

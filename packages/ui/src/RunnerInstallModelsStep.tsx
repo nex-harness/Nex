@@ -1,9 +1,14 @@
 /**
- * 安装向导的「模型」步骤（docs/next/model-onboarding.md 决策 1）。
+ * 安装向导的「模型」步骤（docs/next/model-onboarding.md 决策 1，
+ * docs/next/runner-folders.md 决策 5）。
  *
  * 安装成功后向导不关闭，先在这里轮询新机器的模型状态：约每秒一次、最多 15s。
- * - 有模型 → Ready + 完成；
+ * - 有模型 → Ready + 「Open workspace」（默认动作）/「Choose folder…」；
  * - 没模型（含超时仍 unknown）→ 从其他机器导入 / 打开模型设置 / 稍后。
+ *
+ * 该步骤不再在 ready 时自动跳过：跳过后用户看不到任何结果，安装看起来像
+ * “对话框关了就什么都没发生”（runner-folders 的 bug 1）。所有出口（Ready/稍后/
+ * 打开模型设置）都会打开新机器的 home workspace；只有 X 取消不打开。
  *
  * 组件只读状态并触发一次性导入，不持有模型事实（spec 的 Owners 一节）。
  */
@@ -21,11 +26,16 @@ const MODEL_POLL_TIMEOUT_MS = 15_000;
 
 export function RunnerInstallModelsStep({
   runnerId,
-  onClose,
+  onOpenWorkspace,
+  onChooseFolder,
   onOpenModelSettings,
 }: {
   runnerId: string;
-  onClose: () => void;
+  /** Ready/稍后/打开设置：关闭向导并打开新机器的 home workspace。 */
+  onOpenWorkspace: () => void;
+  /** 「Choose folder…」：关闭向导并在该机器上打开目录浏览器。 */
+  onChooseFolder?: () => void;
+  /** 「Open model settings」：打开设置；Root 负责同时打开机器 workspace。 */
   onOpenModelSettings?: () => void;
 }) {
   const { intl } = useNexIntl();
@@ -146,9 +156,26 @@ export function RunnerInstallModelsStep({
           {intl.formatMessage({ id: "runnerInstall.models.ready" }, { count: state.modelCount })}
         </p>
         {importSummaryBlock}
-        <div className="flex justify-end pt-1">
-          <Button type="button" onClick={onClose} data-testid="runner-install-models-done">
-            {intl.formatMessage({ id: "runnerInstall.models.done" })}
+        {/* 手机宽度下按钮纵向铺满；sm 以上恢复横向布局。 */}
+        <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
+          {onChooseFolder ? (
+            <Button
+              type="button"
+              variant="ghost"
+              data-testid="runner-install-choose-folder"
+              onClick={onChooseFolder}
+            >
+              {intl.formatMessage({ id: "runnerInstall.models.chooseFolder" })}
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button
+            type="button"
+            onClick={onOpenWorkspace}
+            data-testid="runner-install-open-workspace"
+          >
+            {intl.formatMessage({ id: "runnerInstall.models.openWorkspace" })}
           </Button>
         </div>
       </div>
@@ -217,10 +244,7 @@ export function RunnerInstallModelsStep({
             type="button"
             variant="outline"
             data-testid="runner-install-models-open-settings"
-            onClick={() => {
-              onClose();
-              onOpenModelSettings();
-            }}
+            onClick={onOpenModelSettings}
           >
             {intl.formatMessage({ id: "runnerInstall.models.openSettings" })}
           </Button>
@@ -229,7 +253,7 @@ export function RunnerInstallModelsStep({
           type="button"
           variant="ghost"
           data-testid="runner-install-models-later"
-          onClick={onClose}
+          onClick={onOpenWorkspace}
         >
           {intl.formatMessage({ id: "runnerInstall.models.later" })}
         </Button>

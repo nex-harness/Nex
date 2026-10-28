@@ -1,5 +1,4 @@
 import { nexMcpServerStatusSnapshotSchema, type ModelSelection } from "@nex/shared";
-import { resolve as resolvePath } from "node:path";
 import type { Engine } from "../engine/types.js";
 import type { ChannelRegistryLike } from "../link/registry.js";
 import type { JsonValue } from "../link/frames.js";
@@ -12,33 +11,38 @@ import { NexTaskChannel } from "./nexTask.js";
 import { buildModelSelectionViews } from "./modelViews.js";
 import { composeSlashCommands, loadCatalog, skillCatalogFrom } from "./piCatalog.js";
 import type { McpServerStatus } from "../config/applyRuntimeConfig.js";
+import type { WorkspaceRoots } from "../workspaces/workspaceRoots.js";
+import { createWorkspaceGuardedRegistry, workspacePathFromArg } from "./workspaceGuard.js";
+import { registerRunnerWorkspaces } from "./runnerWorkspaces.js";
 
 export interface RunnerChannelsOptions {
   engine: Engine;
   publisher: ConversationPublisher;
   logger: Logger;
-  workspacePaths: string[];
-}
-
-interface WorkspaceArg {
-  workspacePath?: unknown;
-  workspaceIdentity?: unknown;
-  remoteSessionId?: unknown;
+  /**
+   * The live served-folder owner (docs/next/runner-folders.md decision 1). The
+   * guard, the workspace-less nex-task lists and `runner-workspaces` all read it
+   * at call time, so an added folder works without a restart.
+   */
+  roots: WorkspaceRoots;
+  /** Identity prefix for `runner-workspaces.add` results (`runner:<id>:<path>`). */
+  runnerId: string;
 }
 
 export function registerChannels(
   linkRegistry: ChannelRegistryLike,
   options: RunnerChannelsOptions,
 ): { nexTask: NexTaskChannel; disposed: () => void } {
-  const { engine, publisher, logger } = options;
+  const { engine, publisher, logger, roots, runnerId } = options;
   // 唯一 workspace 边界：所有 call/listen 在注册时统一包一层校验，handler 内部不再
-  // 逐个重复。server 可能按 `runner:<id>:<path>` 把一个本 runner 从未声明过的路径转发
-  // 过来（例如跨 runner 的陈旧 tab），runner 必须拒绝，而不是在别人的 cwd 上执行。
-  const registry = createWorkspaceGuardedRegistry(linkRegistry, options.workspacePaths);
+  // 逐个重复。校验读取的是活的 WorkspaceRoots，而不是启动时的数组。
+  const registry = createWorkspaceGuardedRegistry(linkRegistry, roots);
   const nexTask = new NexTaskChannel(engine, logger, {
-    workspacePaths: options.workspacePaths,
+    servedPaths: () => roots.list().map((folder) => folder.path),
     isSessionWatched: (sessionId) => publisher.sessions.isWatched(sessionId),
   });
+  // 机器级目标（`workspacePath: "~"`）下唯一的写入入口：添加/移除本机 served folder。
+  registerRunnerWorkspaces(registry, { roots, runnerId, logger: logger.child("workspaces") });
   let modelRevision = 0;
 
   const requireAttachments = (): AttachmentRegistry => {
@@ -315,61 +319,6 @@ export function registerChannels(
   };
 }
 
-function workspacePathFromArg(arg: JsonValue): string | null {
-  if (!isRecord(arg)) return null;
-  const record = arg as WorkspaceArg;
-  if (typeof record.workspacePath === "string" && record.workspacePath.length > 0) {
-    return record.workspacePath;
-  }
-  const workspace = arg["workspace"];
-  if (isRecord(workspace)) {
-    const nested = workspace["workspacePath"];
-    if (typeof nested === "string" && nested.length > 0) return nested;
-  }
-  return null;
-}
-
-/**
- * 唯一 workspace 边界：把 `workspacePath` 不属于本 runner 的调用/订阅统一拒绝。
- *
- * 服务端按 `runner:<runnerId>:<path>` 身份优先路由，但一个陈旧的 tab 可能带着本
- * runner 的 id、却指向它从未在 hello 中声明过的路径；若只信任服务端，runner 会在
- * 该路径上执行 cwd/文件操作并凭空生成任务。这里在注册层包一层而不是逐 handler 检查，
- * 一条规则覆盖所有 call/listen，以后新增 workspace 方法默认受保护。没有 workspacePath
- * 的全局调用（模型目录、listPinnedTaskIds）不受影响。
- */
-function createWorkspaceGuardedRegistry(
-  registry: ChannelRegistryLike,
-  workspacePaths: readonly string[],
-): ChannelRegistryLike {
-  const served = new Set(workspacePaths.map(normalizeWorkspacePath));
-  const assertServed = (arg: JsonValue): void => {
-    const path = workspacePathFromArg(arg);
-    if (!path) return;
-    if (served.has(normalizeWorkspacePath(path))) return;
-    throw new Error(`workspace not served by this runner: ${path}`);
-  };
-  return {
-    call(channel, method, handler) {
-      // async 包装保证校验失败总是以 rejected promise 形式回到 link 的错误分支，
-      // 与 handler 自身的异步失败路径一致（link 两者都会捕获，但调用方不该区分）。
-      registry.call(channel, method, async (arg) => {
-        assertServed(arg);
-        return handler(arg);
-      });
-    },
-    listen(channel, event, handler) {
-      registry.listen(channel, event, (arg, emit) => {
-        assertServed(arg);
-        return handler(arg, emit);
-      });
-    },
-    getCall: (channel, method) => registry.getCall(channel, method),
-    getListen: (channel, event) => registry.getListen(channel, event),
-    listRegistered: () => registry.listRegistered(),
-  };
-}
-
 /**
  * Engine MCP status → `nexMcpServerStatusSnapshotSchema` (the browser validates
  * every entry strictly; one bad row fails the whole list).
@@ -385,11 +334,6 @@ function toWireStatus(status: McpServerStatus): Record<string, unknown> | null {
     ...(status.failureKind ? { failureKind: status.failureKind } : {}),
   });
   return parsed.success ? (parsed.data as Record<string, unknown>) : null;
-}
-
-function normalizeWorkspacePath(path: string): string {
-  // 配置在启动时已经 `resolve()`；请求侧的尾斜杠/`.` 段也要归一再比较。
-  return resolvePath(path);
 }
 
 function workspaceIdentityFromArg(arg: JsonValue): string | undefined {

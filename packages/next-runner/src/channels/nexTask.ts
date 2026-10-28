@@ -14,8 +14,12 @@ interface WorkspaceSnapshot {
 }
 
 export interface NexTaskChannelOptions {
-  /** Every workspace this runner serves; workspace-less list calls span them. */
-  workspacePaths?: readonly string[];
+  /**
+   * Every workspace this runner serves right now; workspace-less list calls span
+   * them. A function because the runner's served set is live (a folder can be
+   * added while it runs, docs/next/runner-folders.md decision 1).
+   */
+  servedPaths?: () => readonly string[];
   /**
    * True while a browser is subscribed to the session's conversation. A terminal run in
    * the foreground must not raise an unread badge (docs/next/task-state.md).
@@ -54,7 +58,7 @@ export class NexTaskChannel {
   /** Serializes refreshes per workspace: a mutation emits re-entrantly via the engine. */
   private readonly refreshTails = new Map<string, Promise<void>>();
   private readonly engineUnsubscribe: () => void;
-  private readonly workspacePaths: readonly string[];
+  private readonly servedPaths: () => readonly string[];
   private readonly isSessionWatched: (sessionId: string) => boolean;
   /** 全文搜索索引（docs/next/automations-views-search.md §C）：每 workspace 一份、懒构建。 */
   private readonly searchIndex: TaskSearchIndex;
@@ -64,7 +68,7 @@ export class NexTaskChannel {
     private readonly logger: Logger,
     options: NexTaskChannelOptions = {},
   ) {
-    this.workspacePaths = options.workspacePaths ?? [];
+    this.servedPaths = options.servedPaths ?? (() => []);
     this.isSessionWatched = options.isSessionWatched ?? (() => false);
     // 索引必须在订阅之前就绪：`onSessionsChanged` 的第一次回调会调用 `invalidate`。
     this.searchIndex = new TaskSearchIndex(engine, logger);
@@ -304,7 +308,7 @@ export class NexTaskChannel {
               params.workspaceIdentity ?? this.identities.get(params.workspacePath),
           },
         ]
-      : this.workspacePaths.map((workspacePath) => ({
+      : this.servedPaths().map((workspacePath) => ({
           workspacePath,
           workspaceIdentity: this.identities.get(workspacePath),
         }));

@@ -1307,6 +1307,9 @@ importers:
       '@nex/client':
         specifier: workspace:*
         version: link:../client
+      '@nex/rpc':
+        specifier: workspace:*
+        version: link:../rpc
       '@nex/shared':
         specifier: workspace:*
         version: link:../shared

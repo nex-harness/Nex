@@ -4509,6 +4509,9 @@ const enUS: Record<string, string> = {
   "runnerWorkspacePicker.os.windows": "Windows",
   "runnerWorkspacePicker.os.linux": "Linux",
   "runnerWorkspacePicker.browseDirectory": "Browse server folders…",
+  "runnerWorkspacePicker.chooseFolder": "Choose folder…",
+  "runnerWorkspacePicker.addFailed": "Could not add that folder: {error}",
+  "runnerWorkspacePicker.addUnsupported": "This platform cannot add folders on a machine.",
   "runnerWorkspacePicker.empty": "No runner workspaces reported by the server.",
   "runnerWorkspacePicker.loading": "Loading machines…",
   "runnerInstall.title": "Install runner over SSH",
@@ -4533,7 +4536,6 @@ const enUS: Record<string, string> = {
   "runnerInstall.entry": "Install a new machine (SSH)…",
   "runnerInstall.models.checking": "Checking models on the new machine…",
   "runnerInstall.models.ready": "Ready — {count} models available",
-  "runnerInstall.models.done": "Done",
   "runnerInstall.models.needsModels":
     "This machine has no models yet. Import them from another machine, or add a provider in Settings.",
   "runnerInstall.models.sourcesTitle": "Import from another machine",
@@ -4548,6 +4550,10 @@ const enUS: Record<string, string> = {
   "runnerInstall.models.skipped": "Skipped {name}: {message}",
   "runnerInstall.models.openSettings": "Open model settings",
   "runnerInstall.models.later": "Later",
+  "runnerInstall.models.openWorkspace": "Open workspace",
+  "runnerInstall.models.chooseFolder": "Choose folder…",
+  "runnerInstall.openWorkspaceFailed":
+    "The machine is connected but its workspace is not listed yet. Open the folder picker and try again.",
   "workspaceHeader.runnerMachine": "Machine: {name}",
   "chat.emptyResult.title": "No visible output",
   "chat.emptyResult.description":

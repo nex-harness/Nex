@@ -2042,3 +2042,68 @@ func TestSkillUploadEndpointAndSkillsChannel(t *testing.T) {
 		t.Fatalf("nameless upload status = %d", badResponse.StatusCode)
 	}
 }
+
+// A `workspaces` frame from a live runner replaces the catalogued folders, and
+// /api/server-info reflects it (docs/next/runner-folders.md decisions 3 and 6).
+// The old folder disappears, the new one is listed once with the
+// "<runnerName>: <basename>" label, and the machine scope `~` is never listed.
+func TestWorkspacesFrameUpdatesServerInfo(t *testing.T) {
+	h := newHarness(t)
+	session := h.login(t)
+	runner := h.dialRunner(t)
+	runnerHelloNamed(t, runner, runnerID, "test-runner", "darwin", "/workspace/demo")
+	awaitRunnerKnown(t, h, runnerID)
+
+	frame, err := json.Marshal(map[string]any{
+		"t": "workspaces",
+		"workspaces": []map[string]string{
+			{"path": "/workspace/added", "label": "added"},
+			{"path": " /workspace/added "},
+			{"path": "~"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("encode workspaces frame: %v", err)
+	}
+	if err := runner.Write(context.Background(), websocket.MessageText, frame); err != nil {
+		t.Fatalf("write workspaces frame: %v", err)
+	}
+
+	serverInfo := func() []map[string]any {
+		t.Helper()
+		request, _ := http.NewRequest(http.MethodGet, h.server.URL+"/api/server-info", nil)
+		request.Header.Set("Cookie", "nex_session="+session)
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatalf("server-info: %v", err)
+		}
+		defer response.Body.Close()
+		var info struct {
+			Workspaces []map[string]any `json:"workspaces"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&info); err != nil {
+			t.Fatalf("decoding server-info: %v", err)
+		}
+		return info.Workspaces
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	var workspaces []map[string]any
+	for time.Now().Before(deadline) {
+		workspaces = serverInfo()
+		if len(workspaces) == 1 && workspaces[0]["path"] == "/workspace/added" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(workspaces) != 1 {
+		t.Fatalf("workspaces = %+v, want only the added folder", workspaces)
+	}
+	row := workspaces[0]
+	if row["path"] != "/workspace/added" ||
+		row["label"] != "test-runner: added" ||
+		row["workspaceIdentity"] != identityFor(runnerID, "/workspace/added") ||
+		row["runnerId"] != runnerID {
+		t.Fatalf("workspace row = %+v", row)
+	}
+}

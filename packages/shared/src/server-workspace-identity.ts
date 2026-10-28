@@ -78,3 +78,28 @@ export function parseServerWorkspaceIdentity(
 export function isServerWorkspaceIdentity(identity: string): boolean {
   return parseServerWorkspaceIdentity(identity) !== null;
 }
+
+/**
+ * 机器级浏览作用域的伪路径（docs/next/runner-folders.md 决策 2）。
+ *
+ * `runner:<runnerId>:~` 只用于把 `file.readdir`/`file.stat`/`system.info` 和
+ * `runner-workspaces.*` 路由到某台机器；它永远不是可编目的 workspace。
+ */
+export const RUNNER_MACHINE_SCOPE_PATH = "~";
+
+/**
+ * 构造机器级身份 `runner:<runnerId>:~`。runnerId 非法时返回 null，调用方
+ * 必须显式处理，不能产出无法路由的身份。
+ */
+export function buildRunnerMachineIdentity(runnerId: string): string | null {
+  return buildServerWorkspaceIdentity(runnerId, RUNNER_MACHINE_SCOPE_PATH);
+}
+
+/** 解析机器级身份；非 `runner:<id>:~` 形态返回 null。 */
+export function parseRunnerMachineIdentity(identity: string): { runnerId: string } | null {
+  const parsed = parseServerWorkspaceIdentity(identity);
+  if (!parsed || parsed.workspacePath !== RUNNER_MACHINE_SCOPE_PATH) {
+    return null;
+  }
+  return { runnerId: parsed.runnerId };
+}

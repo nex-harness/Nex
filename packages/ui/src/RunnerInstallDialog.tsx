@@ -35,6 +35,14 @@ interface RunnerInstallDialogProps {
   /** 安装成功后刷新机器列表（机器选择器数据源）。 */
   onInstalled?: () => void;
   /**
+   * 「Open workspace」/「Later」/「Open model settings」：Root 关闭对话框、打开新机器的
+   * home workspace（docs/next/runner-folders.md 决策 5）。未提供时退化为仅关闭。
+   * 返回是否真的打开了；Root 用它决定是否提示（hello 可能 5s 内才到）。
+   */
+  onOpenRunnerWorkspace?: (runnerId: string) => Promise<boolean>;
+  /** 「Choose folder…」：Root 关闭对话框并在该机器上打开目录浏览器。 */
+  onChooseRunnerFolder?: (runnerId: string) => void;
+  /**
    * 「打开模型设置」：由 Root 注入（关闭对话框 + 定位 Settings → Models）。
    * 不注入时该按钮退化为仅关闭对话框。
    */
@@ -54,6 +62,8 @@ export function RunnerInstallDialog({
   open,
   onOpenChange,
   onInstalled,
+  onOpenRunnerWorkspace,
+  onChooseRunnerFolder,
   onOpenModelSettings,
 }: RunnerInstallDialogProps) {
   const { intl } = useNexIntl();
@@ -392,8 +402,32 @@ export function RunnerInstallDialog({
         ) : modelRunnerId ? (
           <RunnerInstallModelsStep
             runnerId={modelRunnerId}
-            onClose={() => onOpenChange(false)}
-            onOpenModelSettings={onOpenModelSettings}
+            onOpenWorkspace={() => {
+              // 先关闭向导再打开 workspace：两个覆盖层同时存在会让新 tab 被对话框遮住。
+              onOpenChange(false);
+              void onOpenRunnerWorkspace?.(modelRunnerId);
+            }}
+            onChooseFolder={
+              onChooseRunnerFolder
+                ? () => {
+                    onOpenChange(false);
+                    onChooseRunnerFolder(modelRunnerId);
+                  }
+                : undefined
+            }
+            onOpenModelSettings={
+              onOpenModelSettings
+                ? () => {
+                    // 「Open model settings」也属于新机器收尾动作（决策 5）：
+                    // 先打开机器 home 的 workspace tab，再切到设置 tab；顺序反了
+                    // 会让 addTab 把设置页盖掉。
+                    onOpenChange(false);
+                    void Promise.resolve(onOpenRunnerWorkspace?.(modelRunnerId))
+                      .catch(() => false)
+                      .then(() => onOpenModelSettings());
+                  }
+                : undefined
+            }
           />
         ) : null}
       </DialogContent>

@@ -319,6 +319,54 @@ func TestResolveWorkspaceToolChannels(t *testing.T) {
 	}
 }
 
+// TestResolveRunnerWorkspacesAndMachineScope covers docs/next/runner-folders.md
+// decisions 2/3: `runner-workspaces.*` and the browse-only file/system calls
+// made with the machine identity `runner:<id>:~` must reach that runner, never a
+// local stub.
+func TestResolveRunnerWorkspacesAndMachineScope(t *testing.T) {
+	machine := json.RawMessage(`[{"workspacePath":"~","workspaceIdentity":"runner:abc:~","path":"/home/me/x"}]`)
+
+	for _, method := range []string{"list", "add", "remove"} {
+		route := router.Resolve("runner-workspaces", method, machine, localNone)
+		if route.Kind != router.TargetWorkspace {
+			t.Fatalf("runner-workspaces.%s route = %+v, want TargetWorkspace", method, route)
+		}
+		if route.WorkspaceIdentity != "runner:abc:~" || route.WorkspacePath != "~" {
+			t.Fatalf("runner-workspaces.%s target = %+v", method, route)
+		}
+		// The registry target carries the identity that routes to the machine.
+		if route.Target() != (runners.Target{WorkspacePath: "~", WorkspaceIdentity: "runner:abc:~"}) {
+			t.Fatalf("runner-workspaces.%s Target() = %+v", method, route.Target())
+		}
+	}
+
+	// Without a target there is no machine to address; it must not fall back to
+	// the first runner (that would edit the wrong machine's folder list).
+	if route := router.Resolve("runner-workspaces", "add", json.RawMessage(`[{"path":"/x"}]`), localNone); route.Kind != router.TargetLocalUnsupported {
+		t.Fatalf("target-less runner-workspaces route = %+v, want local unsupported", route)
+	}
+
+	// Browse-only machine scope: file.readdir / file.stat and system.info route
+	// to the machine; every other file method is the runner's own guard.
+	for _, method := range []string{"readdir", "stat"} {
+		route := router.Resolve("file", method, machine, localNone)
+		if route.Kind != router.TargetWorkspace || route.WorkspaceIdentity != "runner:abc:~" {
+			t.Fatalf("file.%s route = %+v", method, route)
+		}
+	}
+	if route := router.Resolve("system", "info", machine, localNone); route.Kind != router.TargetWorkspace || route.WorkspaceIdentity != "runner:abc:~" {
+		t.Fatalf("system.info route = %+v", route)
+	}
+
+	// The machine identity is not a workspace: sessions still route there only
+	// because the runner rejects them, but the server must not rewrite it to a
+	// path route.
+	identityOnly := json.RawMessage(`[{"workspaceIdentity":"runner:abc:~"}]`)
+	if route := router.Resolve("nex-task", "listTasks", identityOnly, localNone); route.Kind != router.TargetWorkspace || route.WorkspaceIdentity != "runner:abc:~" {
+		t.Fatalf("nex-task identity-only route = %+v", route)
+	}
+}
+
 // TestAutomationsStayLocal covers the server-owned automations channel
 // (docs/next/automations-views-search.md §A): all ten methods answer from the
 // NexAgentLocal automations delegate, never a runner forward. They carry

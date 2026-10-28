@@ -13,7 +13,14 @@ import { unknownMethodMessage, type ChannelRegistry } from "./registry.js";
 export interface RunnerLinkOptions {
   url: string;
   token: string | undefined;
-  hello: Omit<HelloFrame, "t">;
+  /**
+   * `workspaces` may be a function so every (re)connect reports the live served
+   * folders (docs/next/runner-folders.md decision 1): a folder added while the
+   * link was down must appear after the reconnect.
+   */
+  hello: Omit<HelloFrame, "t" | "workspaces"> & {
+    workspaces: HelloFrame["workspaces"] | (() => HelloFrame["workspaces"]);
+  };
   registry: ChannelRegistry;
   logger: Logger;
   /** 15 s per spec. */
@@ -122,6 +129,11 @@ export class RunnerLink {
     this.send({ t: "configApplied", ...result } satisfies ClientFrame);
   }
 
+  /** Sends the full served folder list after an add/remove (decision 3). */
+  sendWorkspaces(workspaces: HelloFrame["workspaces"]): void {
+    this.send({ t: "workspaces", workspaces } satisfies ClientFrame);
+  }
+
   private connect(): void {
     if (this.stopped) return;
     this.state = "connecting";
@@ -136,9 +148,11 @@ export class RunnerLink {
       this.lastInboundAt = Date.now();
       this.options.logger.info("runner link connected", { url: this.options.url });
       const lastApplied = this.options.config?.lastAppliedVersion() ?? 0;
+      const { workspaces, ...hello } = this.options.hello;
       this.send({
         t: "hello",
-        ...this.options.hello,
+        ...hello,
+        workspaces: typeof workspaces === "function" ? workspaces() : workspaces,
         ...(lastApplied > 0 ? { lastAppliedVersion: lastApplied } : {}),
       } satisfies ClientFrame);
       this.startPing();

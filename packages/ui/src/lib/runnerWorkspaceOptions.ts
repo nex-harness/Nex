@@ -13,6 +13,13 @@ export interface RunnerWorkspacePickerGroup {
   key: string;
   /** 机器展示名。 */
   runnerName: string;
+  /**
+   * 该组对应的 runnerId；旧 server 的“本机”分组为 undefined。
+   *
+   * “Choose folder…”是机器级动作（docs/next/runner-folders.md 决策 4），需要
+   * runnerId 才能构造 `runner:<id>:~` 机器目标，所以必须随分组带出。
+   */
+  runnerId?: string;
   /** 机器操作系统；未知时为 undefined，UI 不显示 os 徽标。 */
   runnerOs?: string;
   workspaces: ServerWorkspaceOption[];
@@ -32,7 +39,8 @@ export function groupRunnerWorkspaceOptions(
 
   for (const workspace of workspaces) {
     const runnerName = workspace.runnerName?.trim() || workspace.runnerId?.trim() || "";
-    const key = workspace.runnerId?.trim() || runnerName || "__local__";
+    const runnerId = workspace.runnerId?.trim() || undefined;
+    const key = runnerId || runnerName || "__local__";
     const existing = groups.get(key);
     if (existing) {
       existing.workspaces.push(workspace);
@@ -44,6 +52,7 @@ export function groupRunnerWorkspaceOptions(
     groups.set(key, {
       key,
       runnerName,
+      ...(runnerId ? { runnerId } : {}),
       ...(workspace.runnerOs?.trim() ? { runnerOs: workspace.runnerOs.trim() } : {}),
       workspaces: [workspace],
     });

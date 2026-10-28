@@ -343,6 +343,18 @@ export interface ServerWorkspaceOption {
   runnerOs?: string;
 }
 
+/**
+ * runner 侧「添加 served folder」的结果（docs/next/runner-folders.md 决策 3）。
+ *
+ * `path` 是 runner realpath 后的绝对路径，`workspaceIdentity` 是 server 路由身份
+ * `runner:<runnerId>:<path>`；UI 必须用它打开 workspace，不能自己拼。
+ */
+export interface RunnerWorkspaceAddResult {
+  path: string;
+  label: string;
+  workspaceIdentity: string;
+}
+
 export interface NexStdioTapDevState {
   enabled: boolean;
   visible: boolean;
@@ -635,6 +647,19 @@ export interface IPlatformService {
    * Desktop 不实现（返回 undefined），保持原有 SSH/WSL/Docker 入口行为不变。
    */
   listServerWorkspaces?(): Promise<ServerWorkspaceOption[]>;
+
+  /**
+   * 让某台 runner 把 `path` 加入它自己的 served folder 列表
+   * （docs/next/runner-folders.md 决策 3）。
+   *
+   * 这是 runner 调用 `runner-workspaces.add`，必须带机器级目标
+   * `{workspacePath: "~", workspaceIdentity: "runner:<id>:~"}`；runner 负责校验
+   * 绝对路径/存在/目录/可读并 realpath 后持久化。返回的 `workspaceIdentity`
+   * 是打开新 workspace tab 的唯一合法身份，UI 不得自行拼接。
+   *
+   * 仅 Web 平台实现（走已鉴权的 RPC 连接）；Desktop 不实现（undefined）。
+   */
+  addRunnerWorkspace?(runnerId: string, path: string): Promise<RunnerWorkspaceAddResult>;
 
   /**
    * 通过 SSH 在目标机安装 runner（docs/next/runner-install.md）：SSH 只是

@@ -76,3 +76,19 @@ export async function resolveInsideWorkspaceReal(
   if (resolveInsideWorkspace(real, servedRoots) === null) return null;
   return real;
 }
+
+/**
+ * Machine browse scope (docs/next/runner-folders.md decision 2): any absolute
+ * path the runner's OS user can reach, resolved through realpath. Relative
+ * paths are still refused, and the caller must be a browse-only method.
+ */
+export async function resolveMachineScopePath(candidate: string): Promise<string> {
+  if (!isAbsolute(candidate)) {
+    throw new Error(`path must be absolute: ${candidate}`);
+  }
+  try {
+    return await realpath(resolve(candidate));
+  } catch {
+    throw new Error(`path does not exist: ${candidate}`);
+  }
+}

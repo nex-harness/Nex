@@ -283,6 +283,28 @@ func NewRegistry(logger *slog.Logger) *Registry {
 	}
 }
 
+// normalizeWorkspaces trims and de-duplicates a runner-provided workspace
+// list. A runner may repeat a path (in hello or in a later workspaces frame);
+// listing it twice would duplicate the workspace in /api/server-info and
+// recentProjects. The machine browse scope `~` is a routing pseudo path and is
+// never catalogued as a workspace (docs/next/runner-folders.md decision 2).
+func normalizeWorkspaces(workspaces []Workspace) []Workspace {
+	accepted := make([]Workspace, 0, len(workspaces))
+	seenPaths := make(map[string]struct{}, len(workspaces))
+	for _, workspace := range workspaces {
+		path := strings.TrimSpace(workspace.Path)
+		if path == "" || path == MachineScopePath {
+			continue
+		}
+		if _, duplicate := seenPaths[path]; duplicate {
+			continue
+		}
+		seenPaths[path] = struct{}{}
+		accepted = append(accepted, Workspace{Path: path, Label: strings.TrimSpace(workspace.Label)})
+	}
+	return accepted
+}
+
 // Register adds a runner. The newest connection for a runner id wins and the
 // returned link (if non-nil) has already been closed; it is returned so callers
 // can log the displacement. Closing it before re-issuing listens guarantees the
@@ -311,21 +333,7 @@ func (r *Registry) Register(info Info, link Link) (displaced Link) {
 		r.logger.Warn("runner duplicate id, newest connection wins", "runnerId", info.RunnerID)
 	}
 
-	accepted := make([]Workspace, 0, len(info.Workspaces))
-	seenPaths := make(map[string]struct{}, len(info.Workspaces))
-	for _, workspace := range info.Workspaces {
-		path := strings.TrimSpace(workspace.Path)
-		if path == "" {
-			continue
-		}
-		// A hello may repeat a path; listing it twice would duplicate the
-		// workspace in /api/server-info and recentProjects.
-		if _, duplicate := seenPaths[path]; duplicate {
-			continue
-		}
-		seenPaths[path] = struct{}{}
-		accepted = append(accepted, Workspace{Path: path, Label: strings.TrimSpace(workspace.Label)})
-	}
+	accepted := normalizeWorkspaces(info.Workspaces)
 
 	r.nextOrder++
 	entry := &runner{
@@ -341,10 +349,7 @@ func (r *Registry) Register(info Info, link Link) (displaced Link) {
 		order: r.nextOrder,
 	}
 	r.runners[info.RunnerID] = entry
-	for _, workspace := range accepted {
-		r.identities[BuildIdentity(info.RunnerID, workspace.Path)] = entry
-		r.paths[workspace.Path] = append(r.paths[workspace.Path], entry)
-	}
+	r.addCatalogLocked(entry)
 
 	requests = r.planLocked()
 
@@ -359,6 +364,52 @@ func (r *Registry) Register(info Info, link Link) (displaced Link) {
 	r.issueListens(requests)
 	r.notify()
 	return displaced
+}
+
+// UpdateWorkspaces replaces a runner's catalogued workspaces from a live
+// `workspaces` frame (docs/next/runner-folders.md decision 3). The runner owns
+// its served folders; the server only mirrors them for routing and
+// /api/server-info.
+//
+// A frame from a stale link is ignored: after a reconnect the old socket may
+// still deliver one, and it must never overwrite the current catalogue. The
+// identity and path tables are swapped under one lock, then pending listens are
+// re-planned so a listen for a newly added path starts immediately. It reports
+// whether the frame was applied.
+func (r *Registry) UpdateWorkspaces(runnerID string, link Link, workspaces []Workspace) bool {
+	runnerID = strings.TrimSpace(runnerID)
+	if link == nil || !ValidRunnerID(runnerID) {
+		return false
+	}
+	accepted := normalizeWorkspaces(workspaces)
+
+	r.mu.Lock()
+	entry, ok := r.runners[runnerID]
+	if !ok || entry.link != link {
+		// 过期链路：该 runner 已重连或被替换，这一帧来自旧连接。若应用它，旧
+		// 连接就能覆盖新连接的目录表，导致路由到 runner 不再服务的路径。
+		r.mu.Unlock()
+		return false
+	}
+	r.removeCatalogLocked(entry)
+	entry.info.Workspaces = accepted
+	r.addCatalogLocked(entry)
+	requests := r.planLocked()
+	r.mu.Unlock()
+
+	r.issueListens(requests)
+	r.logger.Info("runner workspaces updated", "runnerId", runnerID, "workspaces", len(accepted))
+	r.notify()
+	return true
+}
+
+// addCatalogLocked registers the identity and path rows of entry's workspaces.
+// It must be called with mu held.
+func (r *Registry) addCatalogLocked(entry *runner) {
+	for _, workspace := range entry.info.Workspaces {
+		r.identities[BuildIdentity(entry.info.RunnerID, workspace.Path)] = entry
+		r.paths[workspace.Path] = append(r.paths[workspace.Path], entry)
+	}
 }
 
 // clearBindingRunner detaches link from b when b is still assigned to it, so a
@@ -421,12 +472,11 @@ func (r *Registry) OnRunnerDisconnected(fn func(runnerID string)) {
 	r.dropSubs[r.nextDrop] = fn
 }
 
-// removeLocked detaches a runner and its identities/paths. Bindings keep their
-// spec but lose the runner assignment.
-func (r *Registry) removeLocked(id string, entry *runner) {
-	delete(r.runners, id)
+// removeCatalogLocked detaches entry's identity and path rows. It must be called
+// with mu held; the runner entry itself stays registered.
+func (r *Registry) removeCatalogLocked(entry *runner) {
 	for _, workspace := range entry.info.Workspaces {
-		identity := BuildIdentity(id, workspace.Path)
+		identity := BuildIdentity(entry.info.RunnerID, workspace.Path)
 		if owner, ok := r.identities[identity]; ok && owner == entry {
 			delete(r.identities, identity)
 		}
@@ -443,6 +493,13 @@ func (r *Registry) removeLocked(id string, entry *runner) {
 			r.paths[workspace.Path] = remaining
 		}
 	}
+}
+
+// removeLocked detaches a runner and its identities/paths. Bindings keep their
+// spec but lose the runner assignment.
+func (r *Registry) removeLocked(id string, entry *runner) {
+	delete(r.runners, id)
+	r.removeCatalogLocked(entry)
 	for _, b := range r.bindings {
 		if b.runner == entry {
 			b.runner = nil
@@ -786,6 +843,11 @@ func (r *Registry) Workspaces() []WorkspaceInfo {
 	var all []ordered
 	for _, entry := range r.runners {
 		for _, workspace := range entry.info.Workspaces {
+			// 机器浏览 scope（`~`）只是路由身份，绝不能出现在工作区列表里
+			// （docs/next/runner-folders.md decision 2）。
+			if workspace.Path == MachineScopePath {
+				continue
+			}
 			all = append(all, ordered{
 				order:      entry.order,
 				runnerID:   entry.info.RunnerID,

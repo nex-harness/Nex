@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import type { IServiceAccessor } from "@nex/services";
 import type { FileEntry } from "@nex/shared";
+import { buildRunnerMachineIdentity, RUNNER_MACHINE_SCOPE_PATH } from "@nex/shared";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -64,10 +65,9 @@ function createDirectoryBrowserRequestGuard(): {
 /**
  * 目录浏览器当前要浏览的机器（web 多 runner）。
  *
- * TODO(docs/next/workspace-tools.md Decision 1)：server 目前没有“机器级”（非 workspace 根）
- * 的 `runner:` 路由身份，readdir/system.info 仍由本机 server 应答；这里先把目标固化成
- * 显式 prop，待 server 支持按 runnerId 路由后，把 `{workspacePath, workspaceIdentity}`
- * 改成 `{runnerId}` 目标即可，组件不需要再改结构。
+ * `id` 是 runnerId；`__local__` 表示旧 server 的“本机”。浏览请求带机器级身份
+ * `runner:<id>:~`（docs/next/runner-folders.md 决策 2），server 据此把
+ * readdir/system.info 转发给那台机器，runner 只允许这两个方法使用该作用域。
  */
 export interface DirectoryBrowserMachineTarget {
   /** 稳定的机器 key（runnerId；旧 server 为 "__local__"）。 */
@@ -92,7 +92,7 @@ export function DirectoryBrowser({
   machineTarget,
 }: {
   services: IServiceAccessor;
-  onSelect: (path: string) => void;
+  onSelect: (path: string, machineId: string | null) => void;
   onCancel: () => void;
   onPathChange?: (path: string) => void;
   embedded?: boolean;
@@ -128,7 +128,8 @@ export function DirectoryBrowser({
       machineOptions.find((option) => option.id === selectedMachineId) ?? machineOptions[0] ?? null
     );
   }, [machineOptions, selectedMachineId]);
-  const showMachineSelector = shouldShowDirectoryBrowserMachineSelector(machineOptions);
+  const showMachineSelector =
+    !machineTarget && shouldShowDirectoryBrowserMachineSelector(machineOptions);
   const activeMachineTarget = machineTarget ?? selectedMachine;
 
   // 有明确机器目标时把 readdir/system.info 绑定到该机器；未指定/本机时沿用传入的 services，
@@ -137,31 +138,46 @@ export function DirectoryBrowser({
     if (!activeMachineTarget || activeMachineTarget.id === "__local__") {
       return services;
     }
-    // TODO(docs/next/workspace-tools.md)：server 支持按 runnerId 路由后改为机器级身份。
+    // 修复依据（docs/next/runner-folders.md 决策 2）：此前用伪造的 `runner:<id>:/`，
+    // 能路由到机器但被 runner 的工作区根校验拒绝。机器级作用域固定是 `~`，
+    // runner 只对它开放 readdir/stat/info。
+    const machineIdentity = buildRunnerMachineIdentity(activeMachineTarget.id);
+    if (!machineIdentity) {
+      return services;
+    }
     return (
       bindServicesToWorkspace(services, {
-        workspacePath: "",
-        workspaceIdentity: `runner:${activeMachineTarget.id}:/`,
+        workspacePath: RUNNER_MACHINE_SCOPE_PATH,
+        workspaceIdentity: machineIdentity,
       }) ?? services
     );
   }, [activeMachineTarget, services]);
   const activeMachineId = activeMachineTarget?.id ?? null;
+  // 外层显式指定机器（选择器里的「Choose folder…」）必须落在该机器的 home；
+  // 下拉框切换机器仍保留“优先已编目 workspace 根”的既有行为。
+  const hasExplicitMachineTarget = Boolean(machineTarget);
 
   // 初始化/切换机器：从 system.info 取 homedir 作为起始路径。
-  // 非本机机器在有已编目 workspace 根时优先从根开始：机器级身份暂不可路由时，
-  // 拿到的 homedir 可能来自 server 而不是目标机器。
   useEffect(() => {
     const machine = machineOptions.find((option) => option.id === activeMachineId) ?? null;
-    const knownRootPath = resolveDirectoryBrowserMachineStartPath(
-      machine && machine.id !== "__local__" ? machine : null,
-      "",
-    );
+    const knownRootPath = hasExplicitMachineTarget
+      ? ""
+      : resolveDirectoryBrowserMachineStartPath(
+          machine && machine.id !== "__local__" ? machine : null,
+          "",
+        );
+    // 修复依据：system.info 是异步的，用户在它返回前已经输入路径并跳转时，迟到的
+    // 起始导航会把当前目录覆盖回 home，「选择此目录」随之选中 home。先占一个请求号，
+    // 期间任何用户导航都会让它过期，起始导航就不再执行。
+    const initialRequestId = requestGuardRef.current.begin();
     browserServices.systemService
       .info()
       .then((info) => {
+        if (!requestGuardRef.current.isCurrent(initialRequestId)) return;
         navigateTo(knownRootPath || info.homedir);
       })
       .catch((err) => {
+        if (!requestGuardRef.current.isCurrent(initialRequestId)) return;
         if (knownRootPath) {
           // system.info 不可用（例如路由未就绪）时仍进入已知 workspace 根，让用户继续浏览。
           navigateTo(knownRootPath);
@@ -172,7 +188,7 @@ export function DirectoryBrowser({
         setLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeMachineId, browserServices]);
+  }, [activeMachineId, browserServices, hasExplicitMachineTarget]);
 
   const navigateTo = async (
     path: string,
@@ -238,7 +254,11 @@ export function DirectoryBrowser({
       return;
     }
 
-    onSelect(selectedPath);
+    // 把当前浏览的机器一起交回：Root 需要它来决定用 `runner-workspaces.add`
+    // 还是本机打开（docs/next/runner-folders.md 决策 4）。
+    const selectedMachineId =
+      activeMachineTarget && activeMachineTarget.id !== "__local__" ? activeMachineTarget.id : null;
+    onSelect(selectedPath, selectedMachineId);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

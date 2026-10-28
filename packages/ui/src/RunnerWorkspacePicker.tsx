@@ -61,6 +61,7 @@ export function RunnerWorkspacePicker({
   onSelect,
   onBrowseDirectory,
   onInstallRunner,
+  onChooseFolder,
 }: {
   open: boolean;
   workspaces: readonly ServerWorkspaceOption[];
@@ -70,6 +71,11 @@ export function RunnerWorkspacePicker({
   onBrowseDirectory: () => void;
   /** 平台支持 SSH 安装（web）时提供；触发「安装新机器」向导。 */
   onInstallRunner?: () => void;
+  /**
+   * 在某台机器上选文件夹（docs/next/runner-folders.md 决策 4）：
+   * 提供时每个有 runnerId 的机器分组显示「Choose folder…」。
+   */
+  onChooseFolder?: (runnerId: string) => void;
 }) {
   const { intl } = useNexIntl();
   const groups = groupRunnerWorkspaceOptions(workspaces);
@@ -102,11 +108,14 @@ export function RunnerWorkspacePicker({
           ) : null}
           {groups.map((group) => {
             const osLabel = resolveRunnerOsLabel(group.runnerOs, intl);
+            // 「Choose folder…」是机器级动作：旧 server 的分组没有 runnerId，
+            // 无法构造 `runner:<id>:~`，因此不显示，保持原列表行为。
+            const canChooseFolder = Boolean(onChooseFolder && group.runnerId);
             return (
               <section key={group.key} className="flex min-w-0 flex-col gap-1">
                 <div className="flex min-w-0 items-center gap-2 px-2 pt-1 pb-0.5">
                   <RunnerOsIcon os={group.runnerOs} />
-                  <span className="min-w-0 truncate text-ui-sm font-medium text-foreground-subtle">
+                  <span className="min-w-0 flex-1 truncate text-ui-sm font-medium text-foreground-subtle">
                     {group.runnerName ||
                       intl.formatMessage({ id: "runnerWorkspacePicker.localMachine" })}
                   </span>
@@ -114,6 +123,18 @@ export function RunnerWorkspacePicker({
                     <Badge variant="outline" className="shrink-0">
                       {osLabel}
                     </Badge>
+                  ) : null}
+                  {canChooseFolder ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 shrink-0 px-2 text-ui-sm text-foreground-subtle hover:text-foreground"
+                      data-testid={`runner-workspace-choose-folder-${group.runnerId}`}
+                      onClick={() => onChooseFolder?.(group.runnerId as string)}
+                    >
+                      {intl.formatMessage({ id: "runnerWorkspacePicker.chooseFolder" })}
+                    </Button>
                   ) : null}
                 </div>
                 {group.workspaces.map((workspace) => (

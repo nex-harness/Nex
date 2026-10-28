@@ -15,7 +15,11 @@ import { useDynamicWorkflowAvailabilityLoader } from "@/hooks/useDynamicWorkflow
 import { DirectoryBrowser } from "@/DirectoryBrowser.js";
 import { RunnerWorkspacePicker } from "@/RunnerWorkspacePicker.js";
 import { RunnerInstallDialog } from "@/RunnerInstallDialog.js";
+import { toast } from "@/components/ui/toast.js";
+import { buildDirectoryBrowserMachineOptions } from "@/lib/directoryBrowserMachines.js";
 import { useRunnerWorkspaceDirectory } from "@/hooks/useRunnerWorkspaceDirectory.js";
+import { useOpenRunnerWorkspace } from "@/hooks/useOpenRunnerWorkspace.js";
+import { useRunnerFolderSelection } from "@/root/useRunnerFolderSelection.js";
 import { useRunnerWorkspaceDirectoryStore } from "@/store/runnerWorkspaceDirectoryStore.js";
 import { useTabPersistence } from "@/hooks/useTabPersistence.js";
 import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
@@ -170,6 +174,10 @@ function RootInner({
   const [remoteConnectionOpenPreference, setRemoteConnectionOpenPreference] =
     useState<RemoteConnectionOpenPreference | null>(null);
   const [directoryBrowserOpen, setDirectoryBrowserOpen] = useState(false);
+  // 目录浏览器绑定的机器（runnerId）。为 null 时保持原有行为：桌面/单 runner 浏览
+  // server 本机目录；由机器选择器的「Choose folder…」打开时才有值
+  // （docs/next/runner-folders.md 决策 4）。
+  const [directoryBrowserRunnerId, setDirectoryBrowserRunnerId] = useState<string | null>(null);
   const [runnerWorkspacePickerOpen, setRunnerWorkspacePickerOpen] = useState(false);
   const [remoteConnectionInProgress, setRemoteConnectionInProgress] = useState(false);
   const [remoteConnectionRequestId, setRemoteConnectionRequestId] = useState<string | null>(null);
@@ -356,6 +364,15 @@ function RootInner({
   }, []);
   const handleOpenDirectoryBrowser = useCallback(() => {
     setRunnerWorkspacePickerOpen(false);
+    // 无机器参数：桌面 / 单 runner 仍浏览 server 本机目录。
+    setDirectoryBrowserRunnerId(null);
+    setDirectoryBrowserOpen(true);
+  }, []);
+  // 「Choose folder…」：关闭选择器，在同一台机器上打开目录浏览器
+  // （docs/next/runner-folders.md 决策 4）。
+  const handleChooseRunnerFolder = useCallback((runnerId: string) => {
+    setRunnerWorkspacePickerOpen(false);
+    setDirectoryBrowserRunnerId(runnerId);
     setDirectoryBrowserOpen(true);
   }, []);
   const handleOpenRunnerWorkspacePicker = useCallback(() => {
@@ -391,6 +408,26 @@ function RootInner({
     openDirectoryBrowser: handleOpenDirectoryBrowser,
     openRunnerWorkspacePicker: handleOpenRunnerWorkspacePicker,
     onOpenRemoteConnection: allowRemoteWorkspace ? handleOpenRemoteConnection : undefined,
+  });
+  // 「安装向导收尾」/「Choose folder…」都要先定位机器再打开 workspace：
+  // 读的是 runner 目录的 reload 结果，装完新机器时会在 5s 内轮询到 hello 到达
+  // （docs/next/runner-folders.md 决策 4/5）。
+  const openRunnerWorkspace = useOpenRunnerWorkspace({
+    load: reloadRunnerWorkspaceDirectory,
+    // 已缓存该机器时直接打开；新装的机器要等 hello，走 5s 轮询。
+    readCached: () => useRunnerWorkspaceDirectoryStore.getState().workspaces,
+    onOpen: (path, workspaceIdentity) => {
+      void handleSelectProject(path, workspaceIdentity);
+    },
+  });
+  // 目录浏览器在某台机器上选目录：add → reload → 用 runner 返回的身份打开。
+  const selectRunnerFolder = useRunnerFolderSelection({
+    platform,
+    intl,
+    reload: reloadRunnerWorkspaceDirectory,
+    openWorkspace: (path, workspaceIdentity) => {
+      void handleSelectProject(path, workspaceIdentity);
+    },
   });
   const handleRemoteWorkspaceActivated = useCallback(
     ({
@@ -682,6 +719,20 @@ function RootInner({
       hideTriggerWhenClosed
     />
   ) : null;
+  // 「Choose folder…」给目录浏览器一个显式机器目标；没有目标时保持原行为。
+  const directoryBrowserMachineTarget = useMemo(() => {
+    if (!directoryBrowserRunnerId) {
+      return null;
+    }
+    const option = buildDirectoryBrowserMachineOptions(runnerWorkspaces ?? []).find(
+      (machine) => machine.id === directoryBrowserRunnerId,
+    );
+    return {
+      id: directoryBrowserRunnerId,
+      name: option?.name ?? "",
+      ...(option?.os ? { os: option.os } : {}),
+    };
+  }, [directoryBrowserRunnerId, runnerWorkspaces]);
   const directoryBrowserDialog = directoryBrowserOpen ? (
     <ScopedErrorBoundary
       scope="directory-browser"
@@ -690,8 +741,21 @@ function RootInner({
     >
       <DirectoryBrowser
         services={services}
+        machineTarget={directoryBrowserMachineTarget}
         onCancel={() => setDirectoryBrowserOpen(false)}
-        onSelect={(path) => {
+        onSelect={(path, machineId) => {
+          // 机器下拉里切换到的 runner 也是机器目标：选定目录同样必须先 add。
+          const runnerId = directoryBrowserRunnerId ?? machineId;
+          if (runnerId) {
+            // runner 机器：目录必须先加入该机器的 served folders，再用 runner
+            // 返回的身份打开；add 失败时留在浏览器里重试（决策 4）。
+            void selectRunnerFolder(runnerId, path).then((added) => {
+              if (added) {
+                setDirectoryBrowserOpen(false);
+              }
+            });
+            return;
+          }
           setDirectoryBrowserOpen(false);
           void handleSelectProject(path);
         }}
@@ -710,6 +774,21 @@ function RootInner({
         // 新机器装完直连 server：刷新机器目录，选择器立即可见。
         void reloadRunnerWorkspaceDirectory();
       }}
+      onOpenRunnerWorkspace={
+        // 向导收尾（Ready / Later / Open model settings）都打开新机器的 home
+        // workspace（决策 5）。找不到时提示，避免又变成“关了就什么都没发生”。
+        async (runnerId) => {
+          const opened = await openRunnerWorkspace(runnerId);
+          if (!opened) {
+            toast(intl.formatMessage({ id: "runnerInstall.openWorkspaceFailed" }), {
+              variant: "warning",
+              dismissible: true,
+            });
+          }
+          return opened;
+        }
+      }
+      onChooseRunnerFolder={handleChooseRunnerFolder}
       onOpenModelSettings={
         platform.listRunnerModelStatus
           ? () => {
@@ -734,6 +813,7 @@ function RootInner({
         loading={runnerWorkspacesLoading}
         onOpenChange={setRunnerWorkspacePickerOpen}
         onBrowseDirectory={handleOpenDirectoryBrowser}
+        onChooseFolder={platform.addRunnerWorkspace ? handleChooseRunnerFolder : undefined}
         onInstallRunner={
           platform.installRunnerOverSSH
             ? () => {
