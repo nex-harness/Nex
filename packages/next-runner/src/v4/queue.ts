@@ -12,9 +12,11 @@ import { randomId } from "../util/ids.js";
 import { deriveInputRouting } from "../projection/inputRouting.js";
 import {
   COMPACT_COMMAND_TEXT,
+  TurnAutomationLedger,
   consumedGuideIds,
   createQueueItem,
   findItem,
+  inputOptionFields,
   messageOf,
   moveQueueItem,
   nextDrainableItem,
@@ -48,6 +50,8 @@ export interface SendTextPayload {
   modelSelection?: ModelSelection;
   mode?: string;
   planEnabled?: boolean;
+  /** automation 派发的这一轮（server 对已绑定会话发 sendText 时带）；只随本轮提交。 */
+  automationId?: string;
 }
 
 export type CompactAdmission =
@@ -91,6 +95,8 @@ export class SessionQueue {
   private draining = false;
   /** >0 while a preemption (startNow / sendQueuedNow) owns the next `settled`. */
   private preempting = 0;
+  /** queueItemId → automationId（automation 轮只在该项被 promote 的那一轮生效）。 */
+  private readonly automationTurns = new TurnAutomationLedger();
 
   constructor(private readonly deps: SessionQueueDeps) {}
 
@@ -306,7 +312,7 @@ export class SessionQueue {
         "held queue changed after the confirmation was shown",
       );
     }
-    if (disposition === "clearQueueAndSend") this.items = [];
+    if (disposition === "clearQueueAndSend") this.setItems([]);
     this.autoDrain = true;
     this.pauseReason = undefined;
     this.commit();
@@ -323,18 +329,15 @@ export class SessionQueue {
   private submitNow(
     requestId: string,
     text: string,
-    payload: Omit<
+    payload: Pick<
       SendTextPayload,
-      "requestedDelivery" | "heldQueueDisposition" | "expectedHeldQueueItemIds"
+      "attachments" | "modelSelection" | "mode" | "planEnabled" | "automationId"
     >,
   ): Promise<unknown> {
-    const { attachments, modelSelection, mode, planEnabled } = payload;
     return this.deps.engine.submit(this.deps.sessionId, text, {
       requestId,
-      ...attachmentFields(attachments),
-      ...(modelSelection ? { modelSelection } : {}),
-      ...(mode ? { mode: mode as QueueItem["mode"] } : {}),
-      ...(planEnabled !== undefined ? { planEnabled } : {}),
+      ...inputOptionFields(payload),
+      ...(payload.automationId ? { automationId: payload.automationId } : {}),
     });
   }
 
@@ -346,23 +349,22 @@ export class SessionQueue {
     options: { fallbackReasonCode?: string; kind?: QueueItem["kind"] } = {},
   ): QueueItem {
     this.admissionSeq += 1;
-    const { attachments, modelSelection, mode, planEnabled } = payload;
     const item = createQueueItem({
       sourceCommandId: envelope.commandId,
       queueItemId: randomId("qi"),
       clientId: envelope.clientId || "runner",
       ...(options.kind ? { kind: options.kind } : {}),
       text: payload.text,
-      ...attachmentFields(attachments),
-      ...(modelSelection ? { modelSelection } : {}),
-      ...(mode ? { mode: mode as QueueItem["mode"] } : {}),
-      ...(planEnabled !== undefined ? { planEnabled } : {}),
+      ...inputOptionFields(payload),
       requested,
       admitted,
       ...(options.fallbackReasonCode ? { fallbackReasonCode: options.fallbackReasonCode } : {}),
       admissionSeq: this.admissionSeq,
       admittedAt: Date.now(),
     });
+    // automation 身份不进协议 QueueItem（shared 严格 schema），由队列旁路记账：
+    // 只在 promote 这一项时随提交下发，用户随后的输入自然回到有人值守。
+    this.automationTurns.remember(item.queueItemId, payload.automationId);
     this.setItems([...this.items, item]);
     return item;
   }
@@ -407,7 +409,11 @@ export class SessionQueue {
         // The compact owner runs it and owns the marker; the queue only dispatches.
         await this.deps.runQueuedCompact(item.sourceCommandId);
       } else {
-        await this.submitNow(item.sourceCommandId, item.text, item);
+        // 该项若是 automation 派发的，则只在这一轮打开无人值守审批。
+        await this.submitNow(item.sourceCommandId, item.text, {
+          ...item,
+          automationId: this.automationTurns.get(item.queueItemId),
+        });
         // Attachments-only input persists no user message; the runtime appends the row.
         if (item.text.trim().length === 0) this.deps.appendTextlessInput?.("", item.attachments);
       }
@@ -473,6 +479,8 @@ export class SessionQueue {
 
   private setItems(items: QueueItem[]): void {
     this.items = withQueuePositions(items);
+    // 队列是 automation 旁路账本的唯一生命周期所有者：项离开队列即遗忘。
+    this.automationTurns.prune(this.items);
     this.commit();
   }
 
@@ -485,10 +493,6 @@ export class SessionQueue {
     this.deps.logger.warn(message, { sessionId: this.deps.sessionId, message: messageOf(error) });
   }
 }
-
-// Attachments travel only when present (the protocol defaults the list to empty).
-const attachmentFields = (attachments: readonly AttachmentRef[] | undefined) =>
-  attachments?.length ? { attachments: [...attachments] } : {};
 
 const isRunningPhase = (phase: ProjectionState["phase"]) =>
   phase === "running" || phase === "prewarming";

@@ -17,6 +17,8 @@ export class FakeEngine implements Engine, WithFileOps {
     text: string;
     requestId: string;
     attachments?: import("@nex/shared/nex-protocol-v4").AttachmentRef[];
+    /** automation 派发的这一轮（sendText payload.automationId 透传，见 §A）。 */
+    automationId?: string;
   }> = [];
   readonly deleted: Array<{ workspacePath: string; sessionId: string }> = [];
   readonly renamed: Array<{ sessionId: string; title: string }> = [];
@@ -96,6 +98,7 @@ export class FakeEngine implements Engine, WithFileOps {
       text,
       requestId: options.requestId,
       ...(options.attachments?.length ? { attachments: options.attachments } : {}),
+      ...(options.automationId ? { automationId: options.automationId } : {}),
     });
     if (options.mode) {
       const mode: T.PermissionMode =

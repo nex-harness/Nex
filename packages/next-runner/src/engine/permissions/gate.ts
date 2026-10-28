@@ -78,6 +78,11 @@ export class PermissionGate {
   private readonly newInteractionId: () => string;
   /** automation 会话：ask 直接 deny，不创建 pending promise（否则这一轮永久挂起）。 */
   private readonly unattended: boolean;
+  /**
+   * 本轮是否无人值守（automation 通过 sendText 派发到既有会话的那一轮）。会话级标记
+   * `unattended` 只由创建/恢复路径决定，这里只覆盖单轮，见 {@link setTurnUnattended}。
+   */
+  private turnUnattended = false;
 
   constructor(options: PermissionGateOptions) {
     this.emit = options.emit;
@@ -90,6 +95,18 @@ export class PermissionGate {
 
   getMode(): { mode: PermissionMode; planEnabled: boolean } {
     return { mode: this.mode, planEnabled: this.planEnabled };
+  }
+
+  /**
+   * 标记“即将开始的这一轮”是否无人值守。
+   *
+   * 修复依据（docs/next/automations-views-search.md §A）：automation 绑定既有会话时用
+   * `sendText` 派发，会话本身仍是用户的普通会话。无人值守只属于 automation 那一轮：
+   * 每次提交（含 rewind 重新提示）都在开跑前重设本标记，用户随后的输入自然回到有人值守，
+   * 不会把会话永久改造成 automation 会话（也不写 automationId 元数据）。
+   */
+  setTurnUnattended(unattended: boolean): void {
+    this.turnUnattended = unattended;
   }
 
   /** Applies the mode of one submission; returns true when the projection must be updated. */
@@ -136,7 +153,10 @@ export class PermissionGate {
     // 是 abort）。所以直接按现有 deny 形状返回 block，并固定 reason 供 server 侧识别。
     // yolo 模式在 policy 里已是 allow，不会进到这个分支；这里保护的是 build/edit 模式。
     // 不 emit approval_request：UI 不该出现一张永远无法点击的审批卡。
-    if (this.unattended) return { block: true, reason: UNATTENDED_DENY_REASON };
+    // 会话级标记（automation 派发的会话）与单轮标记（automation sendText 进用户会话）
+    // 都按无人值守处理；后者只覆盖 automation 那一轮。
+    if (this.unattended || this.turnUnattended)
+      return { block: true, reason: UNATTENDED_DENY_REASON };
 
     const request: EngineApprovalRequest = {
       interactionId: this.newInteractionId(),

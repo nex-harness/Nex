@@ -13,6 +13,11 @@ export interface PromptAttachmentPayload {
   images: import("@earendil-works/pi-ai").ImageContent[];
   /** Streaming behavior of the prompt (followUp for a queued submit). */
   streamingBehavior: "followUp" | "steer";
+  /**
+   * automation 派发的这一轮（无人值守审批）。缺省 false = 有人值守；每次提示都显式
+   * 声明，避免上一轮 automation 的标记残留到用户自己的输入（含 rewind 重新提示）。
+   */
+  unattended?: boolean;
 }
 
 export interface SubmitHooks {
@@ -95,8 +100,16 @@ export async function submitPrompt(
     images: [],
     streamingBehavior: "followUp" as const,
   };
+  // 修复依据（docs/next/automations-views-search.md §A）：automation 绑定既有会话时用
+  // sendText 派发，无人值守只属于这一轮。这里显式声明（普通用户输入为 false），
+  // 让每轮开跑前都重设 gate 的单轮标记，上一轮 automation 的标记不会残留。
+  // 不写 automationId 元数据：会话仍是用户会话，侧栏不出现 cron 徽章。
+  const turnPayload: PromptAttachmentPayload = {
+    ...payload,
+    ...(options.automationId !== undefined ? { unattended: true } : {}),
+  };
   const inputId = hooks.startPrompt
-    ? await hooks.startPrompt(text, options.requestId, payload, hooks.onPromptStarted)
+    ? await hooks.startPrompt(text, options.requestId, turnPayload, hooks.onPromptStarted)
     : options.requestId;
   hooks.titles.maybeStart(workspacePath, sessionId, text, meta);
   return { status: "accepted", inputId };

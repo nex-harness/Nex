@@ -67,6 +67,7 @@ export function createPromptHooks(host: PromptHookHost) {
                 images: payload.images,
                 streamingBehavior: payload.streamingBehavior,
                 promptText: payload.promptText,
+                ...(payload.unattended ? { unattended: true } : {}),
                 ...(onStart ? { onStart } : {}),
               }
             : onStart

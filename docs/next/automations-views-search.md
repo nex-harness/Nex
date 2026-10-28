@@ -39,6 +39,12 @@ workspace and nothing serves it).
 - **Unattended approvals**: automation turns run with the automation's mode; the runner
   answers any approval request in an automation session as **deny** with reason
   "approval needed: automation runs unattended" (never waits), so a run cannot hang.
+  For an automation bound to an existing (user) session, unattended is a property of the
+  automation's **turn**, not the session. The `sendText` payload carries `automationId`,
+  and the queue keeps it per queue item (outside the strict protocol `QueueItem`). The
+  gate is reset before every prompt, so the user's next input asks for approval again.
+  The session's metadata is not marked as an automation session, so there is no cron
+  badge on a user's chat.
   Users who want writes pick "Edit automatically" or "Full access" for that automation.
 - **Outcome**: from the session's status in the runner's task rows (the server's
   window-controller already subscribes to runner task events): running → succeeded /

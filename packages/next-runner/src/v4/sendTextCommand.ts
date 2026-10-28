@@ -42,6 +42,7 @@ export async function handleSendText(
     requestedDelivery?: "startNow" | "queue" | "guide";
     heldQueueDisposition?: "clearQueueAndSend" | "keepQueueAndSend";
     expectedHeldQueueItemIds?: string[];
+    automationId?: string;
   };
   const attachments = normalizeAdmittedRefs(payload.attachments);
   if ((payload.text ?? "").trim().length === 0 && attachments.length === 0) {
@@ -65,6 +66,10 @@ export async function handleSendText(
       ...(payload.modelSelection ? { modelSelection: payload.modelSelection } : {}),
       ...(payload.mode ? { mode: payload.mode } : {}),
       ...(payload.planEnabled !== undefined ? { planEnabled: payload.planEnabled } : {}),
+      // 修复依据（docs/next/automations-views-search.md §A）：automation 绑定既有会话时
+      // 用 sendText 派发并带 automationId，这一轮必须无人值守；该字段只随本轮提交
+      // （队列按 queueItemId 记账），不写入会话元数据，用户后续输入照常需要审批。
+      ...(payload.automationId ? { automationId: payload.automationId } : {}),
     });
     if (admission.delivery === "startNow") {
       applyModeToProjection(ctx, runtime, payload.mode, payload.planEnabled);

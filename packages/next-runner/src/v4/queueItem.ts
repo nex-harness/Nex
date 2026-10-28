@@ -1,4 +1,4 @@
-import type { QueueItem } from "@nex/shared/nex-protocol-v4";
+import type { AttachmentRef, ModelSelection, QueueItem } from "@nex/shared/nex-protocol-v4";
 
 /**
  * Pure queue-item construction and list edits (docs/next/conversation-features.md
@@ -15,6 +15,59 @@ export const COMPACT_COMMAND_TEXT = "/compact";
 /** `auto` = the composer did not override the session routing. */
 export type RequestedDelivery = "auto" | "startNow" | "queue" | "guide";
 export type AdmittedDelivery = "startNow" | "queue" | "guide";
+
+/**
+ * The optional per-input fields a queue item and an engine submit share. Each travels only
+ * when present (the protocol defaults attachments to empty and the rest to the session's).
+ */
+export function inputOptionFields(input: {
+  attachments?: readonly AttachmentRef[] | undefined;
+  modelSelection?: ModelSelection | undefined;
+  mode?: string | undefined;
+  planEnabled?: boolean | undefined;
+}): {
+  attachments?: AttachmentRef[];
+  modelSelection?: ModelSelection;
+  mode?: QueueItem["mode"];
+  planEnabled?: boolean;
+} {
+  const { attachments, modelSelection, mode, planEnabled } = input;
+  return {
+    ...(attachments?.length ? { attachments: [...attachments] } : {}),
+    ...(modelSelection ? { modelSelection } : {}),
+    ...(mode ? { mode: mode as QueueItem["mode"] } : {}),
+    ...(planEnabled !== undefined ? { planEnabled } : {}),
+  };
+}
+
+/**
+ * automation 轮的旁路账本。
+ *
+ * 修复依据（docs/next/automations-views-search.md §A）：automation 绑定既有会话时 server
+ * 发 `sendText` 并带 `automationId`，这一轮必须无人值守。协议 `QueueItem` 是 shared 的严格
+ * schema，不携带该字段，所以 runner 在队列内部按 queueItemId 记录，promote 时随这一轮提交；
+ * 项离开队列（promote 完成/删除/guide 被消费）后同步清理，避免错配或泄漏。
+ */
+export class TurnAutomationLedger {
+  private readonly byItem = new Map<string, string>();
+
+  remember(queueItemId: string, automationId: string | undefined): void {
+    if (automationId) this.byItem.set(queueItemId, automationId);
+  }
+
+  get(queueItemId: string): string | undefined {
+    return this.byItem.get(queueItemId);
+  }
+
+  /** Keeps only ids still in the queue; called on every list rewrite. */
+  prune(items: readonly QueueItem[]): void {
+    if (this.byItem.size === 0) return;
+    const live = new Set(items.map((item) => item.queueItemId));
+    for (const id of this.byItem.keys()) {
+      if (!live.has(id)) this.byItem.delete(id);
+    }
+  }
+}
 
 export interface NewQueueItemInput {
   sourceCommandId: string;

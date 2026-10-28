@@ -158,6 +158,12 @@ export interface CreateEngineSessionOptions {
 export interface SubmitOptions {
   requestId: string;
   /**
+   * automation 派发的这一轮（server 对已绑定会话发 `sendText` 时带 `automationId`）。
+   * 只作用于本次提交：该轮的审批一律 deny（见 `PermissionGate.setTurnUnattended`），
+   * 不会把会话元数据标记成 automation 会话，用户后续输入照常需要审批。
+   */
+  automationId?: string;
+  /**
    * Admitted attachment refs resolved by the runner (blob refs or absolute paths). The
    * engine maps images to pi prompt images and every other type to an attachment block.
    */
