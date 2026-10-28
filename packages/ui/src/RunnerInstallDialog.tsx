@@ -4,8 +4,11 @@
  * SSH 只作为安装渠道：填一次 SSH 凭据 → server 拨 SSH 在目标机装好并启动
  * runner → runner 之后直连 server。凭据只驻安装会话内存，不落盘。
  *
- * 两步：表单（host/port/user/password/name）→ 进度（轮询 install 会话的
- * 日志环形缓冲，成功后提示机器已出现在机器选择器）。
+ * 认证方式参照桌面版 SSHDialog：密码 / 粘贴私钥内容（web 主路径——浏览器里的
+ * key 文件不在 server 上，server 只能收内容）/ server 侧私钥路径；私钥可带口令。
+ *
+ * 两步：表单（host/port/user/认证/name）→ 进度（轮询 install 会话的日志环形
+ * 缓冲，成功后提示机器已出现在机器选择器）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SSHInstallStatus } from "@nex/shared";
@@ -23,6 +26,7 @@ import { Label } from "@/components/ui/label.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { logger } from "@/logger.js";
+import { cn } from "@/components/lib/utils.js";
 
 interface RunnerInstallDialogProps {
   open: boolean;
@@ -33,6 +37,11 @@ interface RunnerInstallDialogProps {
 
 type Phase = "form" | "installing";
 
+/** 认证方式（与桌面版 SSHDialog 的 password/privateKey 对齐，web 增加粘贴内容）。 */
+type AuthMethod = "password" | "privateKey" | "privateKeyPath";
+
+const AUTH_METHODS: ReadonlyArray<AuthMethod> = ["password", "privateKey", "privateKeyPath"];
+
 const POLL_INTERVAL_MS = 1_000;
 
 export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerInstallDialogProps) {
@@ -42,23 +51,34 @@ export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerI
   const [host, setHost] = useState("");
   const [port, setPort] = useState("");
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [authMethod, setAuthMethod] = useState<AuthMethod>("password");
+  const [password, setPassword] = useState("");
+  const [privateKey, setPrivateKey] = useState("");
+  const [privateKeyPath, setPrivateKeyPath] = useState("");
+  const [privateKeyPassphrase, setPrivateKeyPassphrase] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<SSHInstallStatus | null>(null);
   const installIdRef = useRef<string | null>(null);
   const logTailRef = useRef<HTMLDivElement | null>(null);
 
-  const submitDisabled =
-    phase === "installing" || !host.trim() || !username.trim() || !password;
+  const credentialReady =
+    authMethod === "password"
+      ? password !== ""
+      : authMethod === "privateKey"
+        ? privateKey.trim() !== ""
+        : privateKeyPath.trim() !== "";
+  const submitDisabled = phase === "installing" || !host.trim() || !username.trim() || !credentialReady;
 
   const reset = useCallback(() => {
     setPhase("form");
     setError(null);
     setStatus(null);
     installIdRef.current = null;
-    // 密码立刻清空：表单提交或取消后不留驻组件状态。
+    // 凭据立刻清空：表单提交或取消后不留驻组件状态。
     setPassword("");
+    setPrivateKey("");
+    setPrivateKeyPassphrase("");
   }, []);
 
   useEffect(() => {
@@ -119,17 +139,24 @@ export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerI
         host: host.trim(),
         ...(Number.isFinite(portNumber) && portNumber > 0 ? { port: portNumber } : {}),
         username: username.trim(),
-        password,
+        ...(authMethod === "password" ? { password } : {}),
+        ...(authMethod === "privateKey" ? { privateKey } : {}),
+        ...(authMethod === "privateKeyPath" ? { privateKeyPath: privateKeyPath.trim() } : {}),
+        ...(authMethod !== "password" && privateKeyPassphrase
+          ? { privateKeyPassphrase }
+          : {}),
         ...(name.trim() ? { name: name.trim() } : {}),
       });
       installIdRef.current = installId;
-      // 密码已随请求交给 server（内存中单次使用），组件不再持有。
+      // 凭据已随请求交给 server（内存中单次使用），组件不再持有。
       setPassword("");
+      setPrivateKey("");
+      setPrivateKeyPassphrase("");
       setPhase("installing");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : String(submitError));
     }
-  }, [platform, host, port, username, password, name]);
+  }, [platform, host, port, username, name, authMethod, password, privateKey, privateKeyPath, privateKeyPassphrase]);
 
   return (
     <Dialog open={open} onOpenChange={(next) => onOpenChange(next)}>
@@ -172,18 +199,42 @@ export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerI
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="runner-install-user">
-                  {intl.formatMessage({ id: "runnerInstall.username" })}
-                </Label>
-                <Input
-                  id="runner-install-user"
-                  value={username}
-                  autoComplete="off"
-                  onChange={(event) => setUsername(event.target.value)}
-                />
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="runner-install-user">
+                {intl.formatMessage({ id: "runnerInstall.username" })}
+              </Label>
+              <Input
+                id="runner-install-user"
+                value={username}
+                autoComplete="off"
+                onChange={(event) => setUsername(event.target.value)}
+              />
+            </div>
+
+            {/* 认证方式（与桌面版 SSHDialog 相同的三选项 + web 场景说明）。 */}
+            <div className="flex flex-col gap-1.5">
+              <Label>{intl.formatMessage({ id: "runnerInstall.authMethod" })}</Label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {AUTH_METHODS.map((method) => (
+                  <button
+                    key={method}
+                    type="button"
+                    data-testid={`runner-install-auth-${method}`}
+                    className={cn(
+                      "h-9 rounded-lg border px-2 text-ui-sm transition-colors",
+                      authMethod === method
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border text-foreground-subtle hover:bg-surface-hover",
+                    )}
+                    onClick={() => setAuthMethod(method)}
+                  >
+                    {intl.formatMessage({ id: `runnerInstall.auth.${method}` })}
+                  </button>
+                ))}
               </div>
+            </div>
+
+            {authMethod === "password" ? (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="runner-install-password">
                   {intl.formatMessage({ id: "runnerInstall.password" })}
@@ -196,7 +247,55 @@ export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerI
                   onChange={(event) => setPassword(event.target.value)}
                 />
               </div>
-            </div>
+            ) : null}
+            {authMethod === "privateKey" ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="runner-install-key">
+                  {intl.formatMessage({ id: "runnerInstall.privateKey" })}
+                </Label>
+                <textarea
+                  id="runner-install-key"
+                  data-testid="runner-install-private-key"
+                  value={privateKey}
+                  rows={4}
+                  spellCheck={false}
+                  autoComplete="off"
+                  className="w-full resize-y rounded-lg border border-border bg-input px-2.5 py-2 font-mono text-ui-sm text-foreground placeholder:text-foreground-subtlest focus-visible:border-input-border-focused focus-visible:outline-none"
+                  placeholder={intl.formatMessage({ id: "runnerInstall.privateKeyPlaceholder" })}
+                  onChange={(event) => setPrivateKey(event.target.value)}
+                />
+              </div>
+            ) : null}
+            {authMethod === "privateKeyPath" ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="runner-install-key-path">
+                  {intl.formatMessage({ id: "runnerInstall.privateKeyPath" })}
+                </Label>
+                <Input
+                  id="runner-install-key-path"
+                  value={privateKeyPath}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={intl.formatMessage({ id: "runnerInstall.privateKeyPathPlaceholder" })}
+                  onChange={(event) => setPrivateKeyPath(event.target.value)}
+                />
+              </div>
+            ) : null}
+            {authMethod !== "password" ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="runner-install-passphrase">
+                  {intl.formatMessage({ id: "runnerInstall.passphrase" })}
+                </Label>
+                <Input
+                  id="runner-install-passphrase"
+                  type="password"
+                  value={privateKeyPassphrase}
+                  autoComplete="new-password"
+                  onChange={(event) => setPrivateKeyPassphrase(event.target.value)}
+                />
+              </div>
+            ) : null}
+
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="runner-install-name">
                 {intl.formatMessage({ id: "runnerInstall.name" })}

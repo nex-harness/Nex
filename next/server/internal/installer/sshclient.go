@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -26,13 +27,19 @@ const (
 	sshReadTimeout = 120 * time.Second
 )
 
-// SSHTarget is the validated install target.
+// SSHTarget is the validated install target. Auth is one of password /
+// pasted private key / server-side private key path (docs/next/
+// runner-install.md decision 2; the pasted key is the web main path —
+// the browser's key files are not on the server).
 type SSHTarget struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Name     string `json:"name"`
+	Host               string `json:"host"`
+	Port               int    `json:"port"`
+	Username           string `json:"username"`
+	Password           string `json:"password"`
+	PrivateKey         string `json:"privateKey"`
+	PrivateKeyPath     string `json:"privateKeyPath"`
+	PrivateKeyPassphrase string `json:"privateKeyPassphrase"`
+	Name               string `json:"name"`
 }
 
 func (t SSHTarget) defaultPort() int {
@@ -42,8 +49,8 @@ func (t SSHTarget) defaultPort() int {
 	return t.Port
 }
 
-// Validate checks the request shape (password auth only in this release;
-// privateKeyPath would require the server to read the user's local files).
+// Validate checks the request shape: a host/user plus at least one auth
+// method (password, pasted key content, or a server-readable key path).
 func (t SSHTarget) Validate() error {
 	if t.Host == "" {
 		return errors.New("host is required")
@@ -51,8 +58,12 @@ func (t SSHTarget) Validate() error {
 	if t.Username == "" {
 		return errors.New("username is required")
 	}
-	if t.Password == "" {
-		return errors.New("password authentication is required for the install channel in this release")
+	hasKey := strings.TrimSpace(t.PrivateKey) != "" || strings.TrimSpace(t.PrivateKeyPath) != ""
+	if t.Password == "" && !hasKey {
+		return errors.New("an authentication method is required: password, pasted private key, or a server-side private key path")
+	}
+	if t.PrivateKey != "" && t.PrivateKeyPath != "" {
+		return errors.New("provide either a pasted private key or a private key path, not both")
 	}
 	return nil
 }
@@ -69,20 +80,70 @@ type sshClient struct {
 	stdout  io.Reader
 }
 
+// authMethods builds the auth method list: private key (pasted content or
+// server-side path) first, password (plus keyboard-interactive for PAM
+// hosts like macOS) as fallback.
+func authMethods(target SSHTarget) ([]ssh.AuthMethod, error) {
+	var methods []ssh.AuthMethod
+	if keyText := strings.TrimSpace(target.PrivateKey); keyText != "" {
+		signer, err := parseSigner([]byte(keyText), target.PrivateKeyPassphrase)
+		if err != nil {
+			return nil, fmt.Errorf("parsing pasted private key: %w", err)
+		}
+		methods = append(methods, ssh.PublicKeys(signer))
+	} else if keyPath := strings.TrimSpace(target.PrivateKeyPath); keyPath != "" {
+		// The path is read server-side (deployment keys kept on the server);
+		// `~` expands to the server process user's home.
+		expanded := keyPath
+		if strings.HasPrefix(expanded, "~") {
+			home, err := os.UserHomeDir()
+			if err == nil {
+				expanded = filepath.Join(home, strings.TrimPrefix(expanded, "~"))
+			}
+		}
+		content, err := os.ReadFile(expanded)
+		if err != nil {
+			return nil, fmt.Errorf("reading private key %s: %w", keyPath, err)
+		}
+		signer, err := parseSigner(content, target.PrivateKeyPassphrase)
+		if err != nil {
+			return nil, fmt.Errorf("parsing private key %s: %w", keyPath, err)
+		}
+		methods = append(methods, ssh.PublicKeys(signer))
+	}
+	if target.Password != "" {
+		methods = append(methods, ssh.Password(target.Password))
+		methods = append(methods, ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
+			answers := make([]string, len(questions))
+			for i := range questions {
+				answers[i] = target.Password
+			}
+			return answers, nil
+		}))
+	}
+	if len(methods) == 0 {
+		return nil, errors.New("no authentication method")
+	}
+	return methods, nil
+}
+
+// parseSigner handles plain and passphrase-protected keys.
+func parseSigner(content []byte, passphrase string) (ssh.Signer, error) {
+	if passphrase == "" {
+		return ssh.ParsePrivateKey(content)
+	}
+	return ssh.ParsePrivateKeyWithPassphrase(content, []byte(passphrase))
+}
+
 // dialSSH opens the connection and the single reusable exec session.
 func dialSSH(target SSHTarget) (*sshClient, error) {
+	methods, err := authMethods(target)
+	if err != nil {
+		return nil, err
+	}
 	config := &ssh.ClientConfig{
-		User: target.Username,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(target.Password),
-			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
-				answers := make([]string, len(questions))
-				for i := range questions {
-					answers[i] = target.Password
-				}
-				return answers, nil
-			}),
-		},
+		User:            target.Username,
+		Auth:            methods,
 		// Host key trust: first-connect TOFU would persist trust state on the
 		// server; the spec leaves host-key pinning open, and accepting unknown
 		// hosts matches the one-shot install channel (credentials are

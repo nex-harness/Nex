@@ -17,7 +17,9 @@ func TestValidateTarget(t *testing.T) {
 		{"ok", SSHTarget{Host: "h", Username: "u", Password: "p"}, ""},
 		{"no host", SSHTarget{Username: "u", Password: "p"}, "host is required"},
 		{"no username", SSHTarget{Host: "h", Password: "p"}, "username is required"},
-		{"no password (privateKeyPath unsupported this release)", SSHTarget{Host: "h", Username: "u"}, "password authentication is required"},
+		{"no auth method", SSHTarget{Host: "h", Username: "u"}, "an authentication method is required"},
+		{"pasted key ok", SSHTarget{Host: "h", Username: "u", PrivateKey: "key"}, ""},
+		{"both key forms rejected", SSHTarget{Host: "h", Username: "u", PrivateKey: "a", PrivateKeyPath: "/k"}, "not both"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {

@@ -1018,13 +1018,27 @@ export interface IPlatformService {
   ): () => void;
 }
 
-/** SSH 安装目标（密码认证；凭据只在安装会话内存中存在，不落盘）。 */
+/**
+ * SSH 安装目标。认证三选一（参照桌面版 SSHDialog）：
+ * - `password`：密码登录；
+ * - `privateKey`：粘贴的私钥内容（web 主路径——浏览器里的 key 文件不在 server 上，
+ *   server 无法读路径，只能收内容）；
+ * - `privateKeyPath`：server 本机可读的私钥路径（运维把部署 key 放在 server 上时用）。
+ * 密钥可配 `privateKeyPassphrase`。凭据只在安装会话内存中存在，不落盘。
+ */
 export interface SSHInstallTarget {
   kind: "ssh";
   host: string;
   port?: number;
   username: string;
-  password: string;
+  /** 密码登录（与 privateKey/privateKeyPath 互斥，二者都给时优先私钥）。 */
+  password?: string;
+  /** 私钥内容（PEM 文本，直接粘贴）。 */
+  privateKey?: string;
+  /** 私钥路径（server 进程可读的绝对路径）。 */
+  privateKeyPath?: string;
+  /** 私钥口令（两种私钥形态通用）。 */
+  privateKeyPassphrase?: string;
   /** 机器显示名（缺省用 host）。 */
   name?: string;
 }
