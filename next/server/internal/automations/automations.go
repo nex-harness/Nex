@@ -59,6 +59,11 @@ type Command struct {
 	ModelSelection json.RawMessage
 	// Mode is the permission mode (nil = workspace default).
 	Mode *string
+	// AutomationID travels to the runner (firstInput.automationId /
+	// sendText payload) so automation sessions run unattended — the
+	// permission gate denies any approval request instead of hanging — and
+	// task rows carry the cron badge (cronAutomationId).
+	AutomationID string
 }
 
 // Dispatcher delivers one Command to the runner that owns the target
@@ -147,6 +152,14 @@ func New(options Options) (*Service, error) {
 }
 
 func (s *Service) now() time.Time { return s.nowFn() }
+
+// lifetimeContext is the context runner dispatches run under: the one passed
+// to Start, or Background before Start.
+func (s *Service) lifetimeContext() context.Context {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ctx
+}
 
 // OnChange registers a callback invoked after every persisted mutation, for
 // the browser notification. It is called without the service lock, after the

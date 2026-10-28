@@ -44,7 +44,18 @@ export interface PermissionGateOptions {
   emit: (event: EngineEvent) => void;
   now?: () => number;
   newInteractionId?: () => string;
+  /**
+   * 无人值守会话（automation 派发的会话）标记。见 {@link UNATTENDED_DENY_REASON}：
+   * 这类会话没有用户可回答审批，`ask` 决策必须在 runner 内立即以 deny 结束。
+   */
+  unattended?: boolean;
 }
+
+/**
+ * automation 无人值守会话的固定拒绝文案。server 侧 automations 引擎按此文案识别
+ * “因需审批而终止”的一轮，因此措辞是契约，不得按工具名或模式改写。
+ */
+export const UNATTENDED_DENY_REASON = "approval needed: automation runs unattended";
 
 /**
  * Per-session permission gate. It is the single writer of pending approval state: the pi
@@ -65,9 +76,12 @@ export class PermissionGate {
   private readonly emit: (event: EngineEvent) => void;
   private readonly now: () => number;
   private readonly newInteractionId: () => string;
+  /** automation 会话：ask 直接 deny，不创建 pending promise（否则这一轮永久挂起）。 */
+  private readonly unattended: boolean;
 
   constructor(options: PermissionGateOptions) {
     this.emit = options.emit;
+    this.unattended = options.unattended === true;
     this.now = options.now ?? Date.now;
     this.newInteractionId =
       options.newInteractionId ??
@@ -117,6 +131,12 @@ export class PermissionGate {
       };
     }
     if (this.disposed) return { block: true, reason: "The session is shutting down." };
+    // 新增：automation 会话无人值守。`ask` 走到这里说明这次调用需要人工审批，但没有任何
+    // 用户会回答；若落到下面的 pending promise，pi 的这一轮会一直等（stop 之外的唯一出口
+    // 是 abort）。所以直接按现有 deny 形状返回 block，并固定 reason 供 server 侧识别。
+    // yolo 模式在 policy 里已是 allow，不会进到这个分支；这里保护的是 build/edit 模式。
+    // 不 emit approval_request：UI 不该出现一张永远无法点击的审批卡。
+    if (this.unattended) return { block: true, reason: UNATTENDED_DENY_REASON };
 
     const request: EngineApprovalRequest = {
       interactionId: this.newInteractionId(),

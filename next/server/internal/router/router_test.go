@@ -309,3 +309,27 @@ func TestResolveWorkspaceToolChannels(t *testing.T) {
 		t.Fatalf("system.info target-less route = %+v, want TargetFirstRunner", route)
 	}
 }
+
+// TestAutomationsStayLocal covers the server-owned automations channel
+// (docs/next/automations-views-search.md §A): all ten methods answer from the
+// NexAgentLocal automations delegate, never a runner forward. They carry
+// workspacePath in their arguments, so a workspaceTargetMethods entry would
+// silently break them with runner UnknownMethod (found by the E2E: the form
+// submit failed while listAllAutomations — no such entry — worked).
+func TestAutomationsStayLocal(t *testing.T) {
+	for _, method := range []string{
+		"listAllAutomations", "listAutomations", "createAutomation", "updateAutomation",
+		"deleteAutomation", "setAutomationEnabled", "restartAutomation", "runAutomationNow",
+		"listAutomationRuns", "deleteAutomationRun",
+	} {
+		for _, arg := range []string{
+			`[{"workspacePath":"/w","title":"x"}]`,
+			`[{"automationId":"a:1"}]`,
+		} {
+			route := router.Resolve("nex-agent", method, json.RawMessage(arg), localNone)
+			if route.Kind != router.TargetLocalUnsupported {
+				t.Fatalf("%s(%s) = %v, want TargetLocalUnsupported (server-owned)", method, arg, route.Kind)
+			}
+		}
+	}
+}

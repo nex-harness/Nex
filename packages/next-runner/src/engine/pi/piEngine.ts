@@ -454,7 +454,7 @@ export class PiEngine implements Engine {
       compactOps: this.compactOps,
       fileOps: this.fileOps,
       attachmentOps: this.attachmentOps,
-      sessions: this.sessions,
+      sessions: this.sessions, metadata: this.metadata,
       onPiEvent: (w, id, event) => void this.onPiEventHook(w, id, event),
       onMcpStatus: (workspacePath, sessionId, statuses) =>
         this.reportMcpStatus(workspacePath, sessionId, statuses),

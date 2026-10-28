@@ -363,3 +363,42 @@ func (s *Service) callRaw(t *testing.T, method string, arg map[string]any) json.
 	}
 	return result
 }
+
+// TestRunNowOutlivesRequestContext proves the manual dispatch is not bound to
+// the RPC context: the browser call returns (and its context is cancelled)
+// before the runner answers.
+func TestRunNowOutlivesRequestContext(t *testing.T) {
+	gate := make(chan struct{})
+	dispatcher := DispatcherFunc(func(ctx context.Context, _ Target, command Command) (string, error) {
+		<-gate
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		return "session-" + command.CommandID, nil
+	})
+	service := newTestService(t, Options{Dispatcher: dispatcher}, "2026-03-10T10:00:00+08:00")
+	automation := service.create(t, everyMinute("*/5 * * * *"))
+
+	requestCtx, cancel := context.WithCancel(context.Background())
+	encoded, err := json.Marshal([]any{map[string]any{
+		"automationId": automation.AutomationID, "workspacePath": "/work/app",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.call(requestCtx, "runAutomationNow", json.RawMessage(encoded))
+	if err != nil || string(result) != `{"status":"queued"}` {
+		t.Fatalf("run-now: %s %v", result, err)
+	}
+	cancel()
+	close(gate)
+
+	waitFor(t, "manual run settled", func() bool {
+		runs := service.runs(t, automation.AutomationID)
+		return len(runs) == 1 && runs[0].DispatchStatus != DispatchClaimed
+	})
+	run := service.runs(t, automation.AutomationID)[0]
+	if run.DispatchStatus != DispatchDispatchedStatus || run.Error != "" {
+		t.Fatalf("manual run must dispatch after the request context ends: %+v", run)
+	}
+}

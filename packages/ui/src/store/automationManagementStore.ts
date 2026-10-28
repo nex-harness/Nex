@@ -93,11 +93,7 @@ interface AutomationManagementState {
     agentService: INexAgentService,
     force?: boolean,
   ) => Promise<void>;
-  deleteRun: (
-    automationId: string,
-    runId: string,
-    agentService: INexAgentService,
-  ) => Promise<void>;
+  deleteRun: (automationId: string, runId: string, agentService: INexAgentService) => Promise<void>;
 }
 
 function toMessage(error: unknown): string {
@@ -115,16 +111,23 @@ function sameWorkspace(
   return current.workspacePath === workspacePath && current.workspaceIdentity === workspaceIdentity;
 }
 
-function resolveAutomationActionScope(
+export function resolveAutomationActionScope(
   state: Pick<AutomationManagementState, "automations" | "workspacePath" | "workspaceIdentity">,
   automationId: string,
 ): { workspacePath: string; workspaceIdentity: string | null } | null {
   const automation = state.automations.find((candidate) => candidate.automationId === automationId);
-  const workspacePath = automation?.workspacePath ?? state.workspacePath;
-  if (!workspacePath) return null;
+  // 修复：自动化自带作用域时必须整体使用它，不能拿视图身份补缺。按路径落库（无 identity）
+  // 的自动化若补上视图的 `runner:` 身份，key 变成 identity，服务端按 key 校验必然 not found。
+  if (automation) {
+    return {
+      workspacePath: automation.workspacePath,
+      workspaceIdentity: automation.workspaceIdentity?.trim() || null,
+    };
+  }
+  if (!state.workspacePath) return null;
   return {
-    workspacePath,
-    workspaceIdentity: automation?.workspaceIdentity ?? state.workspaceIdentity,
+    workspacePath: state.workspacePath,
+    workspaceIdentity: state.workspaceIdentity,
   };
 }
 

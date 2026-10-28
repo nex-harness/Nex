@@ -80,7 +80,9 @@ func (s *Service) call(ctx context.Context, method string, arg json.RawMessage) 
 			return nil, err
 		}
 		// Dispatch asynchronously: the response only reports the claim.
-		go s.dispatchManual(ctx, automation, run)
+		// 修复：不能用请求 ctx——RPC 一返回它就被取消，派发必然 "context canceled"。
+		// 与定时派发一致，使用服务生命周期 ctx。
+		go s.dispatchManual(s.lifetimeContext(), automation, run)
 		return json.RawMessage(`{"status":"queued"}`), nil
 	case "listAutomationRuns":
 		id := stringField(payload, "automationId")

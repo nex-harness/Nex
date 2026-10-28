@@ -65,6 +65,10 @@ export interface PiSessionFactoryOptions {
   mcp?: McpWiring;
   /** Receives the session's MCP statuses when they change (config facts). */
   onMcpStatus?: (workspacePath: string, sessionId: string, statuses: McpServerStatus[]) => void;
+  /**
+   * automation 派发的会话：审批一律 deny（无人值守），见 `PermissionGateOptions.unattended`。
+   */
+  unattended?: boolean;
   /** The session whose input table a user `message_end` claims (spec A). */
   attachmentInputs?: {
     claim: (
@@ -104,6 +108,8 @@ export async function createPiSessionWithGate(
     emit: (event) => {
       for (const listener of listeners) listener(event);
     },
+    // automation 会话无人值守：ask 必须立即 deny，不能挂起等待用户（见 gate.ts）。
+    ...(options.unattended ? { unattended: true } : {}),
   });
   const mcpOwned = options.mcp?.owned ?? false;
 

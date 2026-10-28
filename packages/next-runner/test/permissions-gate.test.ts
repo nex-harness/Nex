@@ -8,9 +8,12 @@ import type { EngineEvent } from "../src/engine/types.js";
  * failure modes the spec calls out: no hang on abort, and idempotent resolve.
  */
 
-function makeGate(): { gate: PermissionGate; events: EngineEvent[] } {
+function makeGate(options: { unattended?: boolean } = {}): {
+  gate: PermissionGate;
+  events: EngineEvent[];
+} {
   const events: EngineEvent[] = [];
-  const gate = new PermissionGate({ emit: (event) => events.push(event) });
+  const gate = new PermissionGate({ emit: (event) => events.push(event), ...options });
   return { gate, events };
 }
 
@@ -236,4 +239,56 @@ test("gate: two concurrent approvals settle independently", async () => {
   assert.equal((await second).block, true);
   assert.equal(gate.pendingApprovals().length, 0);
   void deferred;
+});
+
+// ── automation 无人值守会话（新增）────────────────────────────────────────────
+
+test("gate: unattended session denies an ask immediately with the fixed reason", async () => {
+  const events: EngineEvent[] = [];
+  const gate = new PermissionGate({ emit: (event) => events.push(event), unattended: true });
+  // build 模式下 write 的决策是 ask：无人值守不能挂起，必须立即 deny。
+  const decision = await gate.authorize({
+    toolCallId: "t1",
+    toolName: "write",
+    input: { path: "a.txt", content: "x" },
+    signal: undefined,
+  });
+  assert.deepEqual(decision, { block: true, reason: "approval needed: automation runs unattended" });
+  // 不创建 pending、不 emit approval_request：UI 不该出现一张永远点不动的审批卡。
+  assert.equal(gate.pendingApprovals().length, 0);
+  assert.equal(events.filter((event) => event.type === "approval_request").length, 0);
+});
+
+test("gate: unattended session still allows read-only calls and yolo", async () => {
+  const { gate } = makeGate({ unattended: true });
+  const read = await gate.authorize({
+    toolCallId: "t1",
+    toolName: "bash",
+    input: { command: "ls -la" },
+    signal: undefined,
+  });
+  assert.deepEqual(read, { block: false });
+  gate.setMode("yolo", false);
+  const write = await gate.authorize({
+    toolCallId: "t2",
+    toolName: "write",
+    input: { path: "a.txt", content: "x" },
+    signal: undefined,
+  });
+  assert.deepEqual(write, { block: false });
+});
+
+test("gate: non-unattended session keeps asking (regression guard)", async () => {
+  const { gate, events } = makeGate({ unattended: false });
+  const pending = gate.authorize({
+    toolCallId: "t1",
+    toolName: "write",
+    input: { path: "a.txt", content: "x" },
+    signal: undefined,
+  });
+  assert.equal(gate.pendingApprovals().length, 1);
+  assert.equal(events.filter((event) => event.type === "approval_request").length, 1);
+  const request = gate.pendingApprovals()[0]!;
+  gate.resolve(request.interactionId, { optionId: "allowOnce" });
+  assert.deepEqual(await pending, { block: false });
 });

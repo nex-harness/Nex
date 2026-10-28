@@ -28,6 +28,14 @@ workspace and nothing serves it).
   retries are idempotent) to the runner owning `workspaceIdentity`; automations bound to
   an existing session send `sendText` instead. The run records the returned `sessionId`.
   Sessions carry `cronAutomationId` in runner metadata so rows show the cron badge.
+- **Scope**: create stores `workspaceKey = workspaceIdentity?.trim() || workspacePath`;
+  the editor's project options carry the tab's `runner:` identity, so web automations are
+  identity-keyed. Id-scoped calls (update/delete/enable/restart/run now/runs) send the
+  automation's own path + identity, never the view's identity as a fill-in (that turns a
+  path-keyed record into "automation not found").
+- **Run now**: the RPC returns `{status:"queued"}` after the claim is persisted; the
+  dispatch runs under the service lifetime context, not the request context (which ends
+  with the RPC).
 - **Unattended approvals**: automation turns run with the automation's mode; the runner
   answers any approval request in an automation session as **deny** with reason
   "approval needed: automation runs unattended" (never waits), so a run cannot hang.

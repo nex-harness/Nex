@@ -7,6 +7,7 @@ import { isClientRemoteWorkspaceIdentity } from "@/lib/workspaceIdentity.js";
 
 interface AutomationProjectOption {
   workspacePath: string;
+  workspaceIdentity?: string;
   label: string;
   workspacePurpose?: WorkspacePurpose;
 }
@@ -44,14 +45,19 @@ function resolveAutomationProjectOptions(
       conversationWorkspaceIncluded = true;
       result.push({
         workspacePath: tab.workspacePath,
+        ...(tab.workspaceIdentity ? { workspaceIdentity: tab.workspaceIdentity } : {}),
         label: "default",
         workspacePurpose: "conversation",
       });
       continue;
     }
 
+    // 修复：必须带上 `runner:` 身份。之前只给 path，自动化落库成按路径的 workspaceKey，
+    // 而视图用 `runner:<id>:<path>` 作身份，runNow 等按 key 校验时报 automation not found；
+    // 多 runner 同路径时派发也无法区分目标机器。
     result.push({
       workspacePath: tab.workspacePath,
+      ...(tab.workspaceIdentity ? { workspaceIdentity: tab.workspaceIdentity } : {}),
       label: tab.label || workspaceBasename(tab.workspacePath),
     });
   }

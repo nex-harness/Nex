@@ -39,6 +39,10 @@ export async function createEngineSession(
     sessionManager,
     model,
     sessionManager.getSessionId(),
+    // automation 会话在构建 pi 会话时就要定下无人值守标记：本函数的元数据写入在
+    // openPiSession 之后，按 id 回查元数据赶不上，所以由调用方显式传入。
+    undefined,
+    options.automationId,
   );
   // 修复：draft 以 `open.sessionId`（session manager 分配的 id）注册进引擎，但这里原先用
   // `session.sessionId` 写元数据并返回给 UI。pi 首次后台写入可能给会话头换一个 id，两者不同时，
@@ -57,6 +61,8 @@ export async function createEngineSession(
     mode: "build",
     planEnabled: false,
     ...(selection ? { model: selection } : {}),
+    // automation 身份随会话创建写入（upsert 是 patch 合并，后续写入不会清掉它）。
+    ...(options.automationId !== undefined ? { automationId: options.automationId } : {}),
   });
   deps.attach(open);
   deps.sessionsChanged(workspacePath);
@@ -97,6 +103,9 @@ export async function restoreEngineSession(
     model: selectionFor(session) ?? meta?.model,
     phase: session.isStreaming ? "running" : (meta?.phase ?? "completedSuccess"),
     ...(meta?.followupMode ? { followupMode: meta.followupMode } : {}),
+    // 恢复也必须带上 automation 身份：丢失会让侧栏 cron 徽章消失，并让该会话在重建后
+    // 重新变成“等待用户审批”。
+    ...(meta?.automationId !== undefined ? { automationId: meta.automationId } : {}),
   });
   return open;
 }

@@ -5,6 +5,7 @@ import type { PiEngineOptions } from "./piEngine.js";
 import type { PiCompactOps } from "./piCompactOps.js";
 import type { PiFileOps } from "./piFileOps.js";
 import type { AttachmentPromptTable } from "./piAttachmentOps.js";
+import type { SessionMetaStore } from "./metaStore.js";
 import type { OpenSession, SessionFactoryDeps } from "./sessionLifecycle.js";
 import type { PiTranslateContext } from "./events.js";
 
@@ -20,6 +21,8 @@ export function createSessionFactoryDeps(deps: {
   fileOps: PiFileOps;
   attachmentOps: AttachmentPromptTable;
   sessions: Map<string, OpenSession>;
+  /** automation 身份查询（`SessionMetaEntry.automationId`）；与 sessions 同源，供无人值守判定。 */
+  metadata: SessionMetaStore;
   /** Receives MCP statuses of a session (facts + live status). */
   onMcpStatus?: (workspacePath: string, sessionId: string, statuses: McpServerStatus[]) => void;
   onPiEvent: (
@@ -49,12 +52,30 @@ export function createSessionFactoryDeps(deps: {
       ? { createSettingsManager: deps.options.createSettingsManager }
       : {}),
     modelRuntime: () => deps.runtime(),
+    ...unattendedOption(deps),
     ...mcpAndResourceOptions(deps),
     translateContext: (sessionId): PiTranslateContext => {
       const compactCommandId = deps.compactOps.activeCommandId(sessionId);
       return compactCommandId ? { compactCommandId } : {};
     },
     onPiEvent: deps.onPiEvent,
+  };
+}
+
+/**
+ * automation 会话的无人值守判定：已在册会话直接看标记（draft 重建复用同一个
+ * `openPiSession`，标记会随新会话对象重建）；不在册（冷恢复）时按元数据缓存判断。
+ */
+function unattendedOption(deps: {
+  sessions: Map<string, OpenSession>;
+  /** automation 身份查询（`SessionMetaEntry.automationId`）；与 sessions 同源，供无人值守判定。 */
+  metadata: SessionMetaStore;
+}): Pick<SessionFactoryDeps, "isUnattended"> {
+  return {
+    isUnattended: (sessionId) =>
+      [...deps.sessions.values()].some(
+        (open) => open.sessionId === sessionId && open.unattended === true,
+      ) || deps.metadata.hasAutomationId(sessionId),
   };
 }
 

@@ -191,13 +191,15 @@ func (s *Service) skipMissedLocked(index int, now time.Time, scheduledAt int64) 
 // dispatchRun performs one runner call and settles the result. Failures are
 // retried with a 60 s delay up to three attempts.
 func (s *Service) dispatchRun(item pendingDispatch) {
-	ctx := s.ctx
+	ctx := s.lifetimeContext()
 	command := Command{
 		CommandID:     item.runID,
 		CreateSession: item.automation.TargetTaskID == "",
 		SessionID:     item.automation.TargetTaskID,
 		Text:          item.automation.Prompt,
 		Mode:          item.automation.Mode,
+		// automation 会话无人值守：runner 侧据此立即 deny 审批并打 cron 徽章。
+		AutomationID: item.automation.AutomationID,
 	}
 	if item.automation.ModelSelection != nil {
 		encoded, err := json.Marshal(item.automation.ModelSelection)
@@ -240,6 +242,8 @@ func (s *Service) dispatchManual(ctx context.Context, automation *Automation, ru
 		SessionID:     automation.TargetTaskID,
 		Text:          automation.Prompt,
 		Mode:          automation.Mode,
+		// 同 dispatchRun：manual run 同样无人值守。
+		AutomationID: automation.AutomationID,
 	}
 	if run.ModelSelection != nil {
 		if encoded, err := json.Marshal(run.ModelSelection); err == nil {

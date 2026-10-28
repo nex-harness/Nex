@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nex-harness/nex/server/internal/automations"
 	"github.com/nex-harness/nex/server/internal/rpcwire"
 	"github.com/nex-harness/nex/server/internal/runners"
 )
@@ -84,9 +85,23 @@ type WindowController struct {
 	// internalSubscribed tracks workspaces whose runner events the server listens to.
 	internalSubscribed map[string]struct{}
 	internalListenSeq  uint32
+	// activeScopes holds the read scopes the controller still serves (a
+	// browser listed or subscribed to them). The automation outcome feed only
+	// trusts terminal rows read from an active scope: a background read can
+	// fail without clearing the cache, so cached rows may be stale by the
+	// time a later workspace read runs.
+	activeScopes map[string]listScope
+	// automationOutcomes receives the terminal runs of automation sessions.
+	automationOutcomes AutomationOutcomeSink
 
 	registry *runners.Registry
 	logger   *slog.Logger
+}
+
+// AutomationOutcomeSink records a task row's status on the automation run that
+// created its session. *automations.Service satisfies it via RecordOutcome.
+type AutomationOutcomeSink interface {
+	RecordOutcome(outcome automations.Outcome) bool
 }
 
 // NewWindowController returns a controller bound to the runner registry.
@@ -101,9 +116,25 @@ func NewWindowController(registry *runners.Registry, logger *slog.Logger) *Windo
 		rowsByWorkspace:    make(map[string]map[string]taskRow),
 		refreshPending:     make(map[string]time.Time),
 		internalSubscribed: make(map[string]struct{}),
+		activeScopes:       make(map[string]listScope),
 		registry:           registry,
 		logger:             logger,
 	}
+}
+
+// WithAutomationOutcomes makes the controller feed task-row outcomes to the
+// automations service. Nil (the default) keeps the feed off.
+//
+// 限制（v1）：只有当前有浏览器列出过/订阅过的 workspace 会回流终态。自动化
+// 的 workspace 若从未被浏览（例如只在别的 workspace 里开着 Automations 页），
+// 其 run 的终态不会写回 run history；调度、runNow 和 run 记录本身不受影响。
+// 解决需要 app 启动时按 automations.json 里每个 automation 的 workspaceIdentity
+// 主动 RegisterListen，这里先不做。
+func (c *WindowController) WithAutomationOutcomes(sink AutomationOutcomeSink) *WindowController {
+	c.mu.Lock()
+	c.automationOutcomes = sink
+	c.mu.Unlock()
+	return c
 }
 
 // Call implements Channel.
@@ -126,6 +157,9 @@ func (c *WindowController) Call(ctx context.Context, env *Env, method string, ar
 		subscriptionID := fmt.Sprintf("ctl-%d", c.nextID)
 		c.topics[subscriptionID] = topic
 		c.subscriptionOwner[subscriptionID] = env.ConnectionID
+		// 订阅方要拿到全部 workspace 的快照；这些 scope 的缓存行也因此可被
+		// automation outcome 回流信任。
+		c.markScopesActiveLocked(c.scopesLocked())
 		rows := c.rowsLocked()
 		c.mu.Unlock()
 		c.emitSnapshot(env.ConnectionID, subscriptionID, topic, seq, rows)
@@ -221,7 +255,11 @@ func (c *WindowController) listTaskList(ctx context.Context, arg rpcwire.Value) 
 	}
 	items := make([]map[string]any, 0)
 	seen := make(map[string]struct{})
-	for _, scope := range dedupeScopes(query.Scopes) {
+	scopes := dedupeScopes(query.Scopes)
+	// 只有本次列表确实读取的 scope 才参与 automation outcome 回流：缓存里其它
+	// workspace 的行可能是旧的，用它们写终态会把已被后续运行覆盖的状态写回去。
+	c.markScopesActive(scopes)
+	for _, scope := range scopes {
 		rows := c.rowsForScope(ctx, scope)
 		for _, row := range rows {
 			if !matchesKind(row, query.Kind) {
@@ -365,7 +403,76 @@ func (c *WindowController) rowsForScope(ctx context.Context, scope listScope) ma
 	c.mu.Lock()
 	c.rowsByWorkspace[key] = rows
 	c.mu.Unlock()
+	c.recordAutomationOutcomes(scope, rows)
 	return rows
+}
+
+// markScopesActive remembers the scopes a browser read; refresh and subscribe
+// call this before trusting cached rows for the outcome feed.
+func (c *WindowController) markScopesActive(scopes []listScope) {
+	c.mu.Lock()
+	c.markScopesActiveLocked(scopes)
+	c.mu.Unlock()
+}
+
+func (c *WindowController) markScopesActiveLocked(scopes []listScope) {
+	for _, scope := range scopes {
+		c.activeScopes[workspaceKey(scope.WorkspacePath, scope.WorkspaceIdentity)] = scope
+	}
+}
+
+// scopesLocked lists the workspaces the controller currently caches rows for.
+func (c *WindowController) scopesLocked() []listScope {
+	scopes := make([]listScope, 0, len(c.rowsByWorkspace))
+	for _, rows := range c.rowsByWorkspace {
+		for _, row := range rows {
+			scopes = append(scopes, listScope{WorkspacePath: row.workspacePath, WorkspaceIdentity: row.workspaceIdentity})
+			break
+		}
+	}
+	return scopes
+}
+
+// isScopeActive reports whether the browser still serves scope.
+func (c *WindowController) isScopeActive(scope listScope) bool {
+	key := workspaceKey(scope.WorkspacePath, scope.WorkspaceIdentity)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.activeScopes[key]
+	return ok
+}
+
+// recordAutomationOutcomes feeds every row of one freshly read scope to the
+// automations service. RecordOutcome itself ignores non-automation sessions and
+// non-terminal statuses, so the whole partition is offered; Error is the row's
+// error text when the runner exposes one.
+func (c *WindowController) recordAutomationOutcomes(scope listScope, rows map[string]taskRow) {
+	c.mu.Lock()
+	sink := c.automationOutcomes
+	c.mu.Unlock()
+	if sink == nil {
+		return
+	}
+	for _, row := range rows {
+		if row.taskID == "" || row.status == "" {
+			continue
+		}
+		sink.RecordOutcome(automations.Outcome{
+			SessionID: row.taskID,
+			Status:    row.status,
+			Error:     automationRowError(row),
+		})
+	}
+}
+
+// automationRowError returns the row's error text as recorded by the runner.
+func automationRowError(row taskRow) string {
+	for _, field := range []string{"errorMessage", "lastError", "error"} {
+		if text := stringValue(row.meta[field]); text != "" {
+			return text
+		}
+	}
+	return ""
 }
 
 func (c *WindowController) readScope(ctx context.Context, scope listScope) (map[string]taskRow, error) {
@@ -715,21 +822,35 @@ func (c *WindowController) scheduleRefresh(workspacePath, workspaceIdentity stri
 		c.mu.Lock()
 		delete(c.refreshPending, key)
 		c.mu.Unlock()
+		scope := listScope{
+			WorkspacePath:     workspacePath,
+			WorkspaceIdentity: workspaceIdentity,
+		}
 		// Background work must not inherit a browser's cancellation.
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		rows, err := c.readScope(ctx, listScope{
-			WorkspacePath:     workspacePath,
-			WorkspaceIdentity: workspaceIdentity,
-		})
+		rows, err := c.readScope(ctx, scope)
 		if err != nil {
 			c.logger.Warn("window-controller refresh failed",
 				"workspacePath", workspacePath, "error", err)
+			// 这次读取失败，缓存行可能已过期。只有浏览器仍在服务的 scope
+			// （列表或订阅过）才用缓存行回流 automation 终态。
+			if !c.isScopeActive(scope) {
+				return
+			}
+			c.mu.Lock()
+			cached, ok := c.rowsByWorkspace[key]
+			c.mu.Unlock()
+			if !ok {
+				return
+			}
+			c.recordAutomationOutcomes(scope, cached)
 			return
 		}
 		c.mu.Lock()
 		c.rowsByWorkspace[key] = rows
 		c.mu.Unlock()
+		c.recordAutomationOutcomes(scope, rows)
 		c.publishSnapshot()
 	})
 }

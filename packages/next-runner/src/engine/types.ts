@@ -69,6 +69,11 @@ export interface EngineSessionState {
   archived?: boolean;
   /** Newest unread background completion; absent means read. */
   unreadAt?: number;
+  /**
+   * 该会话由哪条 automation 派发创建（createSession.firstInput.automationId）。侧栏
+   * cron 徽章经 `NexTaskMeta.cronAutomationId` 消费；也是“无人值守”的唯一判据。
+   */
+  automationId?: string;
 }
 
 /** Serialized result of a compare-and-clear unread write. */
@@ -143,6 +148,11 @@ export interface EngineCatalog {
 
 export interface CreateEngineSessionOptions {
   modelSelection?: ModelSelection;
+  /**
+   * automation 派发身份（server 侧 automations 引擎传 `firstInput.automationId`）。
+   * 写入会话元数据并标记该会话无人值守：审批请求一律以 deny 结束。
+   */
+  automationId?: string;
 }
 
 export interface SubmitOptions {

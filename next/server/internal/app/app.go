@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/nex-harness/nex/server/internal/auth"
+	"github.com/nex-harness/nex/server/internal/automations"
 	"github.com/nex-harness/nex/server/internal/browserws"
 	"github.com/nex-harness/nex/server/internal/configstore"
 	"github.com/nex-harness/nex/server/internal/httpapi"
@@ -54,8 +55,13 @@ type App struct {
 	// Installs is the SSH runner-install manager (nil when
 	// NEX_PUBLIC_RUNNER_URL is unset — the API surface stays hidden).
 	Installs *installer.Manager
+	// Automations owns the server-side automation definitions, schedule and run
+	// history (docs/next/automations-views-search.md §A).
+	Automations *automations.Service
 
-	serverID string
+	// automationsCancel stops the schedule timer's context on Close.
+	automationsCancel context.CancelFunc
+	serverID          string
 }
 
 // New assembles the server. It creates the data directory and persists a
@@ -92,7 +98,25 @@ func New(options Options, logger *slog.Logger) (*App, error) {
 	localRegistry := local.NewRegistry()
 	localRegistry.Register("setting", settings)
 	localRegistry.Register("broadcast", local.NewBroadcast())
-	localRegistry.Register("window-controller", local.NewWindowController(registry, logger))
+	// Automations are server-owned: definitions, the schedule timer and run
+	// history live in <ConfigDir>/automations.json, and a due run is dispatched
+	// to the runner that owns its workspace. The store is read at construction,
+	// so a corrupt or newer-schema file fails startup instead of being
+	// overwritten. The timer starts below, after every dependency exists.
+	automationService, err := automations.New(automations.Options{
+		Dir:        options.ConfigDir,
+		Logger:     logger,
+		Dispatcher: local.NewRunnerAutomationsDispatcher(registry),
+	})
+	if err != nil {
+		return nil, err
+	}
+	automationService.OnChange(func() {
+		// v1: no browser push; the Automations page reloads on its own actions.
+		logger.Debug("automations changed")
+	})
+	localRegistry.Register("window-controller",
+		local.NewWindowController(registry, logger).WithAutomationOutcomes(automationService))
 	// Server-owned config (docs/next/config-mcp-skills.md P0): provider-settings,
 	// model-selection and the config channel read the doc + runner facts in both
 	// modes (fallback compiles the runner's own catalog), and a doc change or a
@@ -130,25 +154,59 @@ func New(options Options, logger *slog.Logger) (*App, error) {
 		installs.Bundles = installer.Bundles{Dir: bundlesDir}
 	}
 
-	return &App{
-		Options:  options,
-		Logger:   logger,
-		Registry: registry,
-		Auth:     authService,
-		Local:    localRegistry,
-		Config:   configManager,
-		Installs: installs,
-		serverID: serverID,
-	}, nil
+	application := &App{
+		Options:     options,
+		Logger:      logger,
+		Registry:    registry,
+		Auth:        authService,
+		Local:       localRegistry,
+		Config:      configManager,
+		Installs:    installs,
+		Automations: automationService,
+		serverID:    serverID,
+	}
+	// Start arms the single schedule timer; missed windows are resolved on this
+	// first tick, so it must run before the HTTP server accepts traffic.
+	automationsCtx, automationsCancel := context.WithCancel(context.Background())
+	application.automationsCancel = automationsCancel
+	automationService.Start(automationsCtx)
+	return application, nil
+}
+
+// Close stops the automation timer and releases its in-flight claims (the next
+// process does not wait for the stale timeout). It is safe to call once.
+func (a *App) Close() {
+	if a == nil {
+		return
+	}
+	if a.automationsCancel != nil {
+		a.automationsCancel()
+		a.automationsCancel = nil
+	}
+	if a.Automations != nil {
+		a.Automations.Close()
+	}
 }
 
 // Handler builds the HTTP handler (auth middleware included).
 func (a *App) Handler() http.Handler {
+	// The automation methods have no workspace in their argument, so the router
+	// marks them TargetLocalUnsupported and the browser dispatcher reaches them
+	// through this per-connection table. Without the delegate they fall to the
+	// empty-list placeholder and the page stays empty.
+	var newNexAgent func() *local.NexAgentLocal = func() *local.NexAgentLocal {
+		return local.NewNexAgentLocal()
+	}
+	if automationService := a.Automations; automationService != nil {
+		newNexAgent = func() *local.NexAgentLocal {
+			return local.NewNexAgentLocal(local.WithAutomations(automationService))
+		}
+	}
 	browser := browserws.NewHandler(browserws.Deps{
 		Logger:         a.Logger,
 		Registry:       a.Registry,
 		Local:          a.Local,
-		NewNexAgent:    local.NewNexAgentLocal,
+		NewNexAgent:    newNexAgent,
 		AllowedOrigins: a.Options.AllowedOrigins,
 	})
 

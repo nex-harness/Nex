@@ -1,10 +1,8 @@
 import {
   COMMANDS_REQUIRING_BASE_REVISION,
-  type AttachmentRef,
   type CommandAck,
   type CommandEnvelope,
   type ConversationSnapshot,
-  type ModelSelection,
 } from "@nex/shared/nex-protocol-v4";
 import type { Logger } from "../logger.js";
 import type { Engine } from "../engine/types.js";
@@ -17,6 +15,7 @@ import {
 import { checkRevisionCas } from "./revisionCas.js";
 import { normalizeAdmittedRefs } from "../attachments/admitted.js";
 import type { AttachmentRegistry } from "../attachments/registry.js";
+import type { CreateSessionPayload } from "./createSessionPayload.js";
 import { handleCompact, type CompactCommandContext } from "./compactCommands.js";
 import { handleForkAssistant, type ForkCommandContext } from "./forkCommands.js";
 import { handleApplyFileRewind, type FileRewindCommandContext } from "./fileRewindCommands.js";
@@ -201,23 +200,14 @@ export class CommandHandler {
     workspacePath: string,
     envelope: CommandEnvelope,
   ): Promise<CommandAck> {
-    const payload = envelope.payload as {
-      firstInput?: {
-        text?: string;
-        /** Admitted attachment refs (spec A); registered before the prompt starts. */
-        attachments?: AttachmentRef[];
-        modelSelection?: ModelSelection;
-        mode?: string;
-        planEnabled?: boolean;
-      };
-      config?: { modelSelection?: ModelSelection; mode?: string; planEnabled?: boolean };
-    };
+    const payload = envelope.payload as CreateSessionPayload;
     const modelSelection = payload.firstInput?.modelSelection ?? payload.config?.modelSelection;
+    const automationId = payload.firstInput?.automationId?.trim() || undefined;
     try {
-      const { sessionId } = await this.engine.createSession(
-        workspacePath,
-        modelSelection ? { modelSelection } : {},
-      );
+      const { sessionId } = await this.engine.createSession(workspacePath, {
+        ...(modelSelection ? { modelSelection } : {}),
+        ...(automationId ? { automationId } : {}),
+      });
       const runtime = this.sessions.ensure(workspacePath, sessionId);
       const text = payload.firstInput?.text;
       const attachments = normalizeAdmittedRefs(payload.firstInput?.attachments);

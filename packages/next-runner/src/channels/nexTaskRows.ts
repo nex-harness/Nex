@@ -41,6 +41,9 @@ export function toNexTaskMeta(
     ...(session.model ? { model: session.model.modelId } : {}),
     ...(session.model ? { thoughtLevel: session.model.thought } : {}),
     ...(typeof session.unreadAt === "number" ? { unreadAt: session.unreadAt } : {}),
+    // 新增：automation 派发的会话带 cron 身份，UI 侧栏据此显示 cron 徽章
+    // （TaskListItem 读 NexTaskMeta.cronAutomationId）；普通会话不输出该键。
+    ...(session.automationId !== undefined ? { cronAutomationId: session.automationId } : {}),
     status:
       session.phase === "error"
         ? "error"

@@ -55,6 +55,8 @@ export interface OpenSession {
     text: string;
     attachments?: import("@nex/shared/nex-protocol-v4").AttachmentRef[];
   };
+  /** automation 派发会话：审批一律 deny（见 `PermissionGateOptions.unattended`）。 */
+  unattended?: boolean;
 }
 
 export interface SessionFactoryDeps {
@@ -87,6 +89,11 @@ export interface SessionFactoryDeps {
   ) => PiCheckpointHook | undefined;
   /** Reads and clears the pending per-run system-prompt note (spec A). */
   takeSystemNote?: () => string | undefined;
+  /**
+   * 会话是否为 automation 无人值守会话。按会话 id 查询（draft 原地重建会重新走
+   * `openPiSession`），元数据里的 automationId 是唯一事实来源。
+   */
+  isUnattended?: (sessionId: string) => boolean;
   /** Pre-translation pi event hook, addressed by the session it belongs to (spec A). */
   onPiEventBeforeTranslate?: (open: OpenSession, event: AgentSessionEvent) => void;
   /**
@@ -120,6 +127,11 @@ export async function openPiSession(
   model: Model<never> | undefined,
   expectedSessionId?: string,
   sessionStartReason?: "startup" | "reload" | "new" | "resume" | "fork",
+  /**
+   * createSession 时的 automation 身份。创建路径的元数据尚未落盘（稍后由
+   * `createEngineSession` 写入），这里作为一次性的显式标记；恢复/重建路径读元数据。
+   */
+  automationId?: string,
 ): Promise<{ session: AgentSession; gate: PermissionGate; open: OpenSession }> {
   const settingsManager =
     deps.createSettingsManager?.(workspacePath) ??
@@ -140,9 +152,15 @@ export async function openPiSession(
   // Each open session builds its own hook; persistence and live events read `sessionIdRef`
   // so they address the real id once pi has created the session.
   const checkpoints = deps.checkpointsFor?.(workspacePath, sessionIdRef);
+  // 无人值守标记属于会话而不是某一次打开：草稿重建/恢复后必须重新带上，否则 automation
+  // 会话在重建后会退回“等待用户审批”并永久挂起。
+  const unattended =
+    automationId !== undefined ||
+    (expectedSessionId ? deps.isUnattended?.(expectedSessionId) === true : false);
   const created = await createPiSessionWithGate({
     workspacePath,
     ...(sessionStartReason ? { sessionStartReason } : {}),
+    ...(unattended ? { unattended: true } : {}),
     sessionManager,
     model,
     modelRuntime: deps.modelRuntime(),
@@ -188,6 +206,7 @@ export async function openPiSession(
     ...(checkpoints ? { checkpoints } : {}),
     ...(created.mcpTracker ? { mcpTracker: created.mcpTracker } : {}),
     ...(created.mcp ? { mcpStartedWith: created.mcp } : {}),
+    ...(unattended ? { unattended: true } : {}),
     sessionManager,
   };
   openRef.current = open;

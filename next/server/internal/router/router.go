@@ -81,13 +81,13 @@ const (
 	ChannelConfig = "config"
 	// Batch-1 workspace tool channels (docs/next/workspace-tools.md): the
 	// runner that owns the workspace answers file/git/watcher/media/terminal.
-	ChannelFile           = "file"
-	ChannelGit            = "git"
-	ChannelGitCheckpoint  = "git-checkpoint"
-	ChannelFileWatcher    = "file-watcher"
-	ChannelMediaPreview   = "media-preview"
-	ChannelTerminal       = "terminal"
-	ChannelSystem         = "system"
+	ChannelFile          = "file"
+	ChannelGit           = "git"
+	ChannelGitCheckpoint = "git-checkpoint"
+	ChannelFileWatcher   = "file-watcher"
+	ChannelMediaPreview  = "media-preview"
+	ChannelTerminal      = "terminal"
+	ChannelSystem        = "system"
 )
 
 // workspaceTargetMethods enumerates forwarded nex-agent methods that carry a
@@ -126,33 +126,28 @@ var workspaceTargetMethods = map[string]struct{}{
 	"unsubscribeWorkspaceConfigV4":          {},
 	"setConnectionFlowStateV4":              {},
 	// Legacy/auxiliary methods also take NexAgentWorkspaceTarget.
-	"prepareStorage":                   {},
-	"initialize":                       {},
-	"createSession":                    {},
-	"resumeSession":                    {},
-	"listSessions":                     {},
-	"readSession":                      {},
-	"readSessionDebug":                 {},
-	"readSessionPromptContext":         {},
-	"readSessionEvents":                {},
-	"listPlugins":                      {},
-	"getPluginsOverview":               {},
-	"installPlugin":                    {},
-	"uninstallPlugin":                  {},
-	"updatePlugin":                     {},
-	"configurePlugin":                  {},
-	"validatePlugin":                   {},
-	"describePlugin":                   {},
-	"setPluginEnabled":                 {},
-	"listAutomations":                  {},
-	"createAutomation":                 {},
-	"updateAutomation":                 {},
-	"deleteAutomation":                 {},
-	"setAutomationEnabled":             {},
-	"restartAutomation":                {},
-	"runAutomationNow":                 {},
-	"listAutomationRuns":               {},
-	"deleteAutomationRun":              {},
+	"prepareStorage":           {},
+	"initialize":               {},
+	"createSession":            {},
+	"resumeSession":            {},
+	"listSessions":             {},
+	"readSession":              {},
+	"readSessionDebug":         {},
+	"readSessionPromptContext": {},
+	"readSessionEvents":        {},
+	"listPlugins":              {},
+	"getPluginsOverview":       {},
+	"installPlugin":            {},
+	"uninstallPlugin":          {},
+	"updatePlugin":             {},
+	"configurePlugin":          {},
+	"validatePlugin":           {},
+	"describePlugin":           {},
+	"setPluginEnabled":         {},
+	// Automations 的 10 个方法不走 runner 转发（不带 workspaceTargetMethods 语义）：
+	// 定义与 run history 由 server 拥有（docs/next/automations-views-search.md §A），
+	// 走 NexAgentLocal 的 automations 委托；之前列在这里会把带 workspacePath 的
+	// createAutomation/runAutomationNow 转发给 runner，runner 不认（UnknownMethod）。
 	"listSessionSubagents":             {},
 	"sendPrompt":                       {},
 	"compactSession":                   {},

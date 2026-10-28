@@ -32,6 +32,28 @@ func newConnectionID() string {
 	return "nex-next-" + hex.EncodeToString(raw[:])
 }
 
+// AutomationsDelegate is the subset of automations.Service the nex-agent
+// table delegates to. *automations.Service satisfies it.
+//
+// The automations methods carry no workspace in their argument, so the router
+// marks them TargetLocalUnsupported (internal/router/router.go) and the
+// browser dispatcher only reaches them through this table
+// (internal/browserws/browserws.go).
+type AutomationsDelegate interface {
+	HandlesCall(method string) bool
+	Call(ctx context.Context, method string, arg rpcwire.Value) (rpcwire.Value, error)
+}
+
+// NexAgentOption configures a NexAgentLocal.
+type NexAgentOption func(*NexAgentLocal)
+
+// WithAutomations routes the ten automation methods to svc instead of the
+// empty-list placeholder. Nil leaves the placeholder in place (tests that
+// build the table alone).
+func WithAutomations(svc AutomationsDelegate) NexAgentOption {
+	return func(n *NexAgentLocal) { n.automations = svc }
+}
+
 // NexAgentLocal answers the `nex-agent` methods that have no workspace in
 // their argument. Everything else is forwarded to the owning runner.
 //
@@ -44,15 +66,29 @@ type NexAgentLocal struct {
 	connectionID string
 	issued       bool
 	boundClient  string
+	// automations owns the server-side definitions and serves the automation
+	// methods (docs/next/automations-views-search.md §A). Nil = placeholder.
+	automations AutomationsDelegate
 }
 
 // NewNexAgentLocal creates the local nex-agent fallback table.
-func NewNexAgentLocal() *NexAgentLocal {
-	return &NexAgentLocal{connectionID: newConnectionID()}
+func NewNexAgentLocal(options ...NexAgentOption) *NexAgentLocal {
+	table := &NexAgentLocal{connectionID: newConnectionID()}
+	for _, option := range options {
+		if option != nil {
+			option(table)
+		}
+	}
+	return table
 }
 
 // HandlesCall reports whether method is answered locally.
 func (n *NexAgentLocal) HandlesCall(method string) bool {
+	// 修复：automations 服务注册后，它的 10 个方法（除 listAllAutomations 外）不在固定表里，
+	// 必须优先委托，否则除历史占位方法外的自动化调用都会落到 "Method not found"。
+	if n.automations != nil && n.automations.HandlesCall(method) {
+		return true
+	}
 	switch method {
 	case "helloConversationV4",
 		"initializeConversationV4",
@@ -65,7 +101,12 @@ func (n *NexAgentLocal) HandlesCall(method string) bool {
 }
 
 // Call implements the local table.
-func (n *NexAgentLocal) Call(_ context.Context, _ *Env, method string, arg rpcwire.Value) (rpcwire.Value, error) {
+func (n *NexAgentLocal) Call(ctx context.Context, _ *Env, method string, arg rpcwire.Value) (rpcwire.Value, error) {
+	// 先委托 automations：listAllAutomations 在下面固定表里也有一个返回 [] 的占位，
+	// 委托必须排在固定表前面，否则页面仍读到空列表。
+	if n.automations != nil && n.automations.HandlesCall(method) {
+		return n.automations.Call(ctx, method, arg)
+	}
 	switch method {
 	case "helloConversationV4":
 		n.mu.Lock()
@@ -121,6 +162,7 @@ func (n *NexAgentLocal) Call(_ context.Context, _ *Env, method string, arg rpcwi
 		return rpcwire.Undefined{}, nil
 
 	case "listAllAutomations":
+		// 占位只在未注入 automations.Service 时生效（单独构造表做协议测试）。
 		return json.RawMessage("[]"), nil
 
 	case "hasActiveCuaOperationTurn":

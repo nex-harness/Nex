@@ -120,7 +120,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	newNexAgent := h.deps.NewNexAgent
 	if newNexAgent == nil {
-		newNexAgent = local.NewNexAgentLocal
+		// 无依赖的默认表：automations 没有接线时 listAllAutomations 仍返回空列表占位。
+		newNexAgent = func() *local.NexAgentLocal { return local.NewNexAgentLocal() }
 	}
 	conn := &connection{
 		deps:       h.deps,

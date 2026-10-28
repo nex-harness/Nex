@@ -49,6 +49,11 @@ export interface SessionMetaEntry {
   archivedAt?: number;
   /** Newest unread background completion; missing = read. */
   unreadAt?: number;
+  /**
+   * 派发该会话的 automation（createSession.firstInput.automationId）。随 meta 持久化，
+   * 供 task rows 输出 `NexTaskMeta.cronAutomationId`，也是“无人值守”的唯一判据。
+   */
+  automationId?: string;
 }
 
 /** Sidebar state patch. `unreadAt: null` clears the field (undefined = leave unchanged). */
@@ -143,6 +148,19 @@ export class SessionMetaStore {
       else file.sessions[index] = next;
       await this.write(workspacePath, file);
     });
+  }
+
+  /**
+   * 同步查询：该会话是否由 automation 派发。会话文件按 workspace 分文件、懒加载，
+   * 且 `get/upsert` 是异步的；这里只读已载入的缓存，未命中返回 false（调用方据此
+   * 判定“普通会话”）。仅供构建 pi 会话时判定无人值守，不作为业务读接口。
+   */
+  hasAutomationId(sessionId: string): boolean {
+    for (const file of this.cache.values()) {
+      const entry = file.sessions.find((item) => item.sessionId === sessionId);
+      if (entry) return entry.automationId !== undefined;
+    }
+    return false;
   }
 
   markDeleted(workspacePath: string, sessionId: string): Promise<void> {

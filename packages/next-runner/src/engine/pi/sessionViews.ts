@@ -74,6 +74,8 @@ export function toEngineSessionStates(
       pinned: entry.pinned === true,
       archived: entry.archived === true,
       ...(typeof entry.unreadAt === "number" ? { unreadAt: entry.unreadAt } : {}),
+      // cron 徽章经 `toNexTaskMeta` 读取该字段（投影成 NexTaskMeta.cronAutomationId）。
+      ...(entry.automationId !== undefined ? { automationId: entry.automationId } : {}),
     });
   }
   states.sort((a, b) => b.lastActivityAt - a.lastActivityAt);

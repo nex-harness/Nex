@@ -57,6 +57,9 @@ func run() int {
 		logger.Error("cannot start server", "error", err)
 		return 1
 	}
+	// 优雅退出时停掉 automation 定时器并释放 in-flight claim，否则下次启动要等
+	// stale 回收（10 分钟）才能重新派发该窗口。
+	defer application.Close()
 	if cfg.PublicRunnerURL != "" {
 		logger.Info("SSH runner install API enabled",
 			"runnerUrl", cfg.PublicRunnerURL, "bundles", cfg.RunnerBundlesDir)
