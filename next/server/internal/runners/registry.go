@@ -461,6 +461,21 @@ func (r *Registry) Runner(id string) (Link, bool) {
 	return entry.link, true
 }
 
+// RunnerInfo returns the hello identity of a connected runner (the name the
+// machine reported, its version and OS). A runner known only through recorded
+// facts is offline and has no registry entry, so callers fall back to the id.
+func (r *Registry) RunnerInfo(id string) (Info, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	entry, ok := r.runners[strings.TrimSpace(id)]
+	if !ok {
+		return Info{}, false
+	}
+	info := entry.info
+	info.Workspaces = append([]Workspace(nil), entry.info.Workspaces...)
+	return info, true
+}
+
 // RunnerIDForPath returns the runner serving workspacePath when exactly one
 // runner does. It reports false for unknown and ambiguous paths.
 func (r *Registry) RunnerIDForPath(workspacePath string) (string, bool) {

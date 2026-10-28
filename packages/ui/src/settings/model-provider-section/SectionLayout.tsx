@@ -18,6 +18,8 @@ interface ModelProviderSectionLayoutProps {
   onSelectNavItem: (item: ModelProviderNavGroup["items"][number]) => void;
   onReorderProviderIds?: (providerIds: string[]) => Promise<void>;
   reorderableProviderIds?: ReadonlySet<string>;
+  /** 头部额外动作（例如「从机器导入」）；只在支持该能力的平台由调用方传入。 */
+  headerActions?: ReactNode;
   children: ReactNode;
 }
 
@@ -34,20 +36,27 @@ export function ModelProviderSectionLayout({
   onSelectNavItem,
   onReorderProviderIds,
   reorderableProviderIds,
+  headerActions,
   children,
 }: ModelProviderSectionLayoutProps) {
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-ui-base leading-6 text-foreground-subtle">{description}</p>
-        <SettingsResourceHeaderActions
-          onRefresh={onRefresh}
-          onNew={onAddProvider}
-          refreshing={loading}
-          refreshLabel={loading ? loadingLabel : refreshLabel}
-          newLabel={addProviderLabel}
-          newTestId={TID_MODEL_PROVIDER_ADD_PROVIDER_BUTTON}
-        />
+      {/* 头部动作可能因「从机器导入」多出一个按钮；允许换行，长翻译不挤压说明文字。 */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="min-w-0 flex-1 text-ui-base leading-6 text-foreground-subtle">
+          {description}
+        </p>
+        <div className="flex shrink-0 items-center gap-2">
+          {headerActions}
+          <SettingsResourceHeaderActions
+            onRefresh={onRefresh}
+            onNew={onAddProvider}
+            refreshing={loading}
+            refreshLabel={loading ? loadingLabel : refreshLabel}
+            newLabel={addProviderLabel}
+            newTestId={TID_MODEL_PROVIDER_ADD_PROVIDER_BUTTON}
+          />
+        </div>
       </div>
 
       <div className="overflow-clip rounded-xl border border-border bg-card">

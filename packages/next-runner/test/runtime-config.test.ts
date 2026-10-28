@@ -335,6 +335,55 @@ test("exportLocal reads models.json keys, settings and mcp.json", async () => {
   assert.equal((exported.mcp as { mcpServers: unknown }).mcpServers !== undefined, true);
 });
 
+test("exportLocal exports models.json apiKeys: literal and $ENV resolved, !command skipped", async () => {
+  const agentDir = await mkdtemp(join(tmpdir(), "nex-agent-"));
+  const provider = (apiKey: string) => ({
+    api: "openai-completions",
+    baseUrl: "http://127.0.0.1:1/v1",
+    apiKey,
+    models: [{ id: "m" }],
+  });
+  process.env["NEX_TEST_EXPORT_KEY"] = "sk-from-env";
+  try {
+    await writeFile(
+      join(agentDir, "models.json"),
+      JSON.stringify({
+        providers: {
+          literal: provider("sk-literal"),
+          braced: provider("${NEX_TEST_EXPORT_KEY}"),
+          bare: provider("$NEX_TEST_EXPORT_KEY"),
+          unset: provider("$NEX_TEST_EXPORT_KEY_UNSET"),
+          command: provider("!security find-generic-password -w"),
+          authWins: provider("sk-models-json"),
+        },
+      }),
+    );
+    await writeFile(
+      join(agentDir, "auth.json"),
+      JSON.stringify({ authWins: { type: "api_key", key: "sk-auth-json" } }),
+    );
+    const exported = (await exportLocal(agentDir, logger)) as {
+      providers: Record<string, unknown>;
+      keys: Record<string, string>;
+      errors?: Array<{ path: string; code: string }>;
+    };
+    assert.deepEqual(exported.keys, {
+      literal: "sk-literal",
+      braced: "sk-from-env",
+      bare: "sk-from-env",
+      authWins: "sk-auth-json",
+    });
+    // Providers without an exportable key are still imported (the key can be set later).
+    assert.ok(exported.providers["command"] && exported.providers["unset"]);
+    assert.deepEqual((exported.errors ?? []).map((error) => [error.path, error.code]).sort(), [
+      ["command.apiKey", "provider-key-command"],
+      ["unset.apiKey", "provider-key-env-unset"],
+    ]);
+  } finally {
+    delete process.env["NEX_TEST_EXPORT_KEY"];
+  }
+});
+
 test("MemoryCredentialStore never exposes values through list()", async () => {
   const store = new MemoryCredentialStore();
   await store.modify("p", async () => ({ type: "api_key", key: "sk" }));

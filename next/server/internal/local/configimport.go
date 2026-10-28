@@ -4,6 +4,11 @@ package local
 // keys, settings) stored as that runner's scope + secrets (docs/next/
 // config-mcp-skills.md decision 2, "Import from <runner>"). Split out of
 // config.go for the 400-line file budget.
+//
+// docs/next/model-onboarding.md decision 3 adds the shared (global) scope: the
+// UI's "Import from machine" writes `scopes.global` so the provider is editable
+// in Settings and reaches every runner. The HTTP default stays `runner` for
+// compatibility.
 
 import (
 	"context"
@@ -12,6 +17,15 @@ import (
 
 	"github.com/nex-harness/nex/server/internal/configstore"
 	"github.com/nex-harness/nex/server/internal/runners"
+)
+
+// Import scopes accepted by ImportFromRunner.
+const (
+	// ImportScopeRunner writes the source runner's scope (the historical
+	// behaviour and the HTTP default).
+	ImportScopeRunner = "runner"
+	// ImportScopeGlobal writes the shared global layer every runner sees.
+	ImportScopeGlobal = "global"
 )
 
 // ExportLocal calls `config.exportLocal` on one runner: its local ~/.pi/agent
@@ -54,18 +68,27 @@ type ExportResult struct {
 
 // AdminImportFromRunner is ImportFromRunner behind the HTTP layer's `any`-typed
 // interface (httpapi.ConfigAdmin).
-func (m *Manager) AdminImportFromRunner(ctx context.Context, runnerID string) (any, error) {
-	summary, err := m.ImportFromRunner(ctx, runnerID)
+func (m *Manager) AdminImportFromRunner(ctx context.Context, runnerID, scope string) (any, error) {
+	summary, err := m.ImportFromRunner(ctx, runnerID, scope)
 	if err != nil {
 		return nil, err
 	}
 	return summary, nil
 }
 
-// ImportFromRunner imports one runner's local providers into its runner scope and
-// stores their keys as secrets. The result reports provider ids and whether each
-// got a key — never a key value.
-func (m *Manager) ImportFromRunner(ctx context.Context, runnerID string) (ImportSummary, error) {
+// ImportFromRunner imports one runner's local providers into the requested scope
+// and stores their keys as secrets. The result reports provider ids and whether
+// each got a key — never a key value.
+//
+// An empty scope means "runner" (the HTTP default). A global import pushes to
+// every connected runner: the shared layer changes what all of them apply.
+func (m *Manager) ImportFromRunner(ctx context.Context, runnerID, scope string) (ImportSummary, error) {
+	if scope == "" {
+		scope = ImportScopeRunner
+	}
+	if scope != ImportScopeRunner && scope != ImportScopeGlobal {
+		return ImportSummary{}, fmt.Errorf("scope must be global or runner")
+	}
 	exported, err := m.ExportLocal(ctx, runnerID)
 	if err != nil {
 		return ImportSummary{}, err
@@ -82,12 +105,21 @@ func (m *Manager) ImportFromRunner(ctx context.Context, runnerID string) (Import
 	if len(exported.Settings) > 0 {
 		layer.Settings = exported.Settings
 	}
-	doc, imported, err := m.store.ImportLayer(runnerID, layer)
+	var (
+		doc      configstore.ConfigDoc
+		imported []string
+	)
+	if scope == ImportScopeGlobal {
+		doc, imported, err = m.store.ImportGlobalLayer(layer)
+	} else {
+		doc, imported, err = m.store.ImportLayer(runnerID, layer)
+	}
 	if err != nil {
 		return ImportSummary{}, err
 	}
 	summary := ImportSummary{
 		RunnerID:   runnerID,
+		Scope:      scope,
 		Version:    doc.Version,
 		Providers:  imported,
 		KeysStored: []string{},
@@ -106,8 +138,13 @@ func (m *Manager) ImportFromRunner(ctx context.Context, runnerID string) (Import
 		summary.KeysStored = append(summary.KeysStored, id)
 	}
 	// The import changed provider secrets without bumping a doc version for each:
-	// re-push so the runner sees the secrets it is entitled to.
-	m.push(runnerID)
+	// re-push so the runner sees the secrets it is entitled to. A global import
+	// is entitled to every runner, so it pushes all of them.
+	if scope == ImportScopeGlobal {
+		m.SyncPush()
+	} else {
+		m.push(runnerID)
+	}
 	m.notifyChange()
 	return summary, nil
 }
@@ -115,6 +152,7 @@ func (m *Manager) ImportFromRunner(ctx context.Context, runnerID string) (Import
 // ImportSummary is the browser-facing answer of the import endpoint.
 type ImportSummary struct {
 	RunnerID   string           `json:"runnerId"`
+	Scope      string           `json:"scope"`
 	Version    uint64           `json:"version"`
 	Providers  []string         `json:"providers"`
 	KeysStored []string         `json:"keysStored"`

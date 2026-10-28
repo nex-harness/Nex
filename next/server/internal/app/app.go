@@ -233,11 +233,27 @@ func (a *App) Handler() http.Handler {
 // configAdmin adapts *local.Manager to httpapi.ConfigAdmin.
 type configAdmin struct{ manager *local.Manager }
 
-func (c configAdmin) ImportFromRunner(ctx context.Context, runnerID string) (any, error) {
-	return c.manager.AdminImportFromRunner(ctx, runnerID)
+func (c configAdmin) ImportFromRunner(ctx context.Context, runnerID, scope string) (any, error) {
+	return c.manager.AdminImportFromRunner(ctx, runnerID, scope)
 }
 
 func (c configAdmin) KnownRunners() []string { return c.manager.KnownRunners() }
+
+func (c configAdmin) RunnerModelStatuses() []httpapi.RunnerModelStatus {
+	statuses := c.manager.RunnerModelStatuses()
+	out := make([]httpapi.RunnerModelStatus, 0, len(statuses))
+	for _, status := range statuses {
+		out = append(out, httpapi.RunnerModelStatus{
+			RunnerID:           status.RunnerID,
+			Name:               status.Name,
+			Connected:          status.Connected,
+			Mode:               status.Mode,
+			ModelCount:         status.ModelCount,
+			LastAppliedVersion: status.LastAppliedVersion,
+		})
+	}
+	return out
+}
 
 // skillUploader adapts *local.Manager to httpapi.SkillUploader.
 type skillUploader struct{ manager *local.Manager }

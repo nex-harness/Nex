@@ -8,7 +8,7 @@
  * key 文件不在 server 上，server 只能收内容）/ server 侧私钥路径；私钥可带口令。
  *
  * 两步：表单（host/port/user/认证/name）→ 进度（轮询 install 会话的日志环形
- * 缓冲，成功后提示机器已出现在机器选择器）。
+ * 缓冲）。安装成功后不关闭，进入「模型」步骤（docs/next/model-onboarding.md）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SSHInstallStatus } from "@nex/shared";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog.js";
 import { Input } from "@/components/ui/input.js";
 import { Label } from "@/components/ui/label.js";
+import { RunnerInstallModelsStep } from "@/RunnerInstallModelsStep.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { logger } from "@/logger.js";
@@ -33,9 +34,14 @@ interface RunnerInstallDialogProps {
   onOpenChange: (open: boolean) => void;
   /** 安装成功后刷新机器列表（机器选择器数据源）。 */
   onInstalled?: () => void;
+  /**
+   * 「打开模型设置」：由 Root 注入（关闭对话框 + 定位 Settings → Models）。
+   * 不注入时该按钮退化为仅关闭对话框。
+   */
+  onOpenModelSettings?: () => void;
 }
 
-type Phase = "form" | "installing";
+type Phase = "form" | "installing" | "models";
 
 /** 认证方式（与桌面版 SSHDialog 的 password/privateKey 对齐，web 增加粘贴内容）。 */
 type AuthMethod = "password" | "privateKey" | "privateKeyPath";
@@ -44,7 +50,12 @@ const AUTH_METHODS: ReadonlyArray<AuthMethod> = ["password", "privateKey", "priv
 
 const POLL_INTERVAL_MS = 1_000;
 
-export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerInstallDialogProps) {
+export function RunnerInstallDialog({
+  open,
+  onOpenChange,
+  onInstalled,
+  onOpenModelSettings,
+}: RunnerInstallDialogProps) {
   const { intl } = useNexIntl();
   const platform = usePlatform();
   const [phase, setPhase] = useState<Phase>("form");
@@ -59,6 +70,9 @@ export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerI
   const [privateKeyPassphrase, setPrivateKeyPassphrase] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<SSHInstallStatus | null>(null);
+  // 安装成功后的「模型」步骤只记录新机器 id；轮询与判定都在
+  // RunnerInstallModelsStep 内完成，向导本身不持有模型事实。
+  const [modelRunnerId, setModelRunnerId] = useState<string | null>(null);
   const installIdRef = useRef<string | null>(null);
   const logTailRef = useRef<HTMLDivElement | null>(null);
 
@@ -68,12 +82,13 @@ export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerI
       : authMethod === "privateKey"
         ? privateKey.trim() !== ""
         : privateKeyPath.trim() !== "";
-  const submitDisabled = phase === "installing" || !host.trim() || !username.trim() || !credentialReady;
+  const submitDisabled = phase !== "form" || !host.trim() || !username.trim() || !credentialReady;
 
   const reset = useCallback(() => {
     setPhase("form");
     setError(null);
     setStatus(null);
+    setModelRunnerId(null);
     installIdRef.current = null;
     // 凭据立刻清空：表单提交或取消后不留驻组件状态。
     setPassword("");
@@ -98,9 +113,16 @@ export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerI
         if (cancelled || !next) return;
         setStatus(next);
         if (next.status === "succeeded") {
-          setPhase("form");
           onInstalled?.();
-          onOpenChange(false);
+          // 装好后不关闭：进入「模型」步骤（spec 决策 1）。平台没有模型状态
+          // 能力时（desktop），或状态里没有 runnerId（无法查询）时保持旧行为直接关闭。
+          if (!platform.listRunnerModelStatus || !next.runnerId) {
+            setPhase("form");
+            onOpenChange(false);
+            return;
+          }
+          setModelRunnerId(next.runnerId);
+          setPhase("models");
         } else if (next.status !== "running") {
           setError(next.error ?? next.status);
           setPhase("form");
@@ -142,9 +164,7 @@ export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerI
         ...(authMethod === "password" ? { password } : {}),
         ...(authMethod === "privateKey" ? { privateKey } : {}),
         ...(authMethod === "privateKeyPath" ? { privateKeyPath: privateKeyPath.trim() } : {}),
-        ...(authMethod !== "password" && privateKeyPassphrase
-          ? { privateKeyPassphrase }
-          : {}),
+        ...(authMethod !== "password" && privateKeyPassphrase ? { privateKeyPassphrase } : {}),
         ...(name.trim() ? { name: name.trim() } : {}),
       });
       installIdRef.current = installId;
@@ -156,7 +176,18 @@ export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerI
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : String(submitError));
     }
-  }, [platform, host, port, username, name, authMethod, password, privateKey, privateKeyPath, privateKeyPassphrase]);
+  }, [
+    platform,
+    host,
+    port,
+    username,
+    name,
+    authMethod,
+    password,
+    privateKey,
+    privateKeyPath,
+    privateKeyPassphrase,
+  ]);
 
   return (
     <Dialog open={open} onOpenChange={(next) => onOpenChange(next)}>
@@ -276,7 +307,9 @@ export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerI
                   value={privateKeyPath}
                   autoComplete="off"
                   spellCheck={false}
-                  placeholder={intl.formatMessage({ id: "runnerInstall.privateKeyPathPlaceholder" })}
+                  placeholder={intl.formatMessage({
+                    id: "runnerInstall.privateKeyPathPlaceholder",
+                  })}
                   onChange={(event) => setPrivateKeyPath(event.target.value)}
                 />
               </div>
@@ -308,7 +341,11 @@ export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerI
               />
             </div>
             {error ? (
-              <p className="text-ui-base text-red-500" role="alert" data-testid="runner-install-error">
+              <p
+                className="text-ui-base text-red-500"
+                role="alert"
+                data-testid="runner-install-error"
+              >
                 {error}
               </p>
             ) : null}
@@ -326,7 +363,7 @@ export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerI
               </Button>
             </div>
           </div>
-        ) : (
+        ) : phase === "installing" ? (
           <div className="flex flex-col gap-3" data-testid="runner-install-progress">
             <p className="text-ui-base text-foreground-subtle">
               {intl.formatMessage({ id: "runnerInstall.installing" }, { host })}
@@ -352,7 +389,13 @@ export function RunnerInstallDialog({ open, onOpenChange, onInstalled }: RunnerI
             </div>
             {error ? <p className="text-ui-base text-red-500">{error}</p> : null}
           </div>
-        )}
+        ) : modelRunnerId ? (
+          <RunnerInstallModelsStep
+            runnerId={modelRunnerId}
+            onClose={() => onOpenChange(false)}
+            onOpenModelSettings={onOpenModelSettings}
+          />
+        ) : null}
       </DialogContent>
     </Dialog>
   );

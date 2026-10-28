@@ -646,6 +646,22 @@ export interface IPlatformService {
   /** 查询一次安装会话的状态与日志（与 installRunnerOverSSH 配套）。 */
   getRunnerInstallStatus?(installId: string): Promise<SSHInstallStatus>;
 
+  /**
+   * 列出已知 runner 的模型状态（docs/next/model-onboarding.md）。
+   *
+   * 数据来自 `GET /api/config/runners`；`modelCount` 与 composer 的
+   * model-selection 列表一致。仅 Web 平台实现；Desktop 不实现（undefined），
+   * UI 据此隐藏“从其他机器导入”等入口。
+   */
+  listRunnerModelStatus?(): Promise<RunnerModelStatus[]>;
+  /**
+   * 把某个 runner 的本地 pi 配置导入 server 共享（global）作用域。
+   *
+   * 转调 `POST /api/config/import-runner?runnerId=<id>&scope=<scope>`。UI 只传
+   * `global`：设置页只读写 global 层（spec 决策 3）。仅 Web 平台实现。
+   */
+  importRunnerModels?(runnerId: string, scope: RunnerImportScope): Promise<RunnerImportSummary>;
+
   /** 读取宿主环境中的原生 MCP 用户目录配置；手机远控通过已连接桌面 host 转发。 */
   loadMcpFromUserDirectory?(
     payload?: LoadCliMcpFromUserDirectoryRequest,
@@ -1053,4 +1069,43 @@ export interface SSHInstallStatus {
     level: "info" | "warn" | "error";
     message: string;
   }>;
+}
+
+/**
+ * 一台 runner 的模型状态（docs/next/model-onboarding.md）。
+ *
+ * `mode` 是 server 侧对这台 runner 的判定：`server` 表示它的有效层（global +
+ * runner scope）里有启用的 provider，`fallback` 表示仍用自己的本地 pi 目录，
+ * `unknown` 表示还没收到 facts（刚 hello 完、配置尚未下发时如此）。
+ * `modelCount` 与 composer 的 model-selection 列表一致。
+ */
+export interface RunnerModelStatus {
+  runnerId: string;
+  /** hello 里的机器名，缺失时回落 runnerId。 */
+  name: string;
+  connected: boolean;
+  mode: "server" | "fallback" | "unknown";
+  modelCount: number;
+  lastAppliedVersion: number;
+}
+
+/** 导入作用域；UI 只用 `global`，`runner` 保留给 HTTP 端点的兼容默认值。 */
+export type RunnerImportScope = "global" | "runner";
+
+/** 导入时被跳过的条目（例如 doc 无法表达的 api、只存在于 auth.json 的订阅登录）。 */
+export interface RunnerImportError {
+  scope?: string;
+  path?: string;
+  code?: string;
+  message?: string;
+}
+
+/** `POST /api/config/import-runner` 的返回摘要；密钥永远不回显。 */
+export interface RunnerImportSummary {
+  runnerId: string;
+  scope: RunnerImportScope;
+  version: number;
+  providers: string[];
+  keysStored: string[];
+  errors?: RunnerImportError[];
 }

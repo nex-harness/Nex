@@ -91,7 +91,14 @@ func NewManager(store *configstore.Store, reg *runners.Registry, logger *slog.Lo
 }
 
 // OwnsProviders reports whether the desired doc defines at least one enabled
-// provider (server-owned mode). Until then runners serve their local catalog.
+// provider in any scope (server-wide view).
+//
+// 修复依据：这是「服务端是否拥有过 provider」的诊断谓词，不是某个 runner 的
+// server-owned 判定。runner 侧的模式必须按 EffectiveForRunner(runnerID) 里
+// enabled provider 的数量判断（见 executableModelsForRunner 与
+// configstore.ownedMode）；用这个全局谓词会让另一个 runner scope 拥有
+// provider 时，本 runner 的 fallback catalog 被错误地清空
+// （docs/next/model-onboarding.md 决策 4）。
 func (m *Manager) OwnsProviders() bool {
 	doc, err := m.store.Snapshot()
 	if err != nil || doc.Version == 0 {

@@ -291,3 +291,125 @@ func TestModelSelectionFallbackWithDisabledProvider(t *testing.T) {
 		t.Fatalf("selection = %+v", result)
 	}
 }
+
+// TestModelSelectionFallbackWithOtherRunnerScope 锁住 model-onboarding 决策 4：
+// server-owned 模式必须按 runner 判定。另一个 runner 的 scope 拥有 enabled
+// provider 时，服务端全局 OwnsProviders() 为 true；此时一个 effective 层里 0 个
+// enabled provider 的 fallback runner 仍须用自己上报的 catalog 编译 view，而不是
+// 返回空列表（与 push 的 ownedMode 一致）。
+func TestModelSelectionFallbackWithOtherRunnerScope(t *testing.T) {
+	settings, manager, registry := newTestProviderSettings(t)
+	callJSON(t, settings, "createPersonalProvider", `[{"providerName":"Acme"}]`)
+	doc, err := manager.store.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var providerID string
+	for id := range doc.Scopes.Global.Providers {
+		providerID = id
+	}
+	// 把 provider 从 global 移出并只写进 beta 的 runner scope：alpha 的 effective
+	// 层因此没有任何 provider，而 OwnsProviders() 仍为 true。
+	callJSON(t, settings, "savePersonalProviderOverlay", `["`+providerID+`",`+
+		`{"access":{"type":"api-key","apiKey":"sk-1"},"api":{"type":"openai-chat-completions","baseUrl":"https://api.acme.test/v1"}},`+
+		`{"enabled":true}]`)
+	owned := testProviderForScope(providerID)
+	if _, _, err := manager.store.ImportLayer("beta", configstore.Layer{
+		Providers: map[string]*configstore.Provider{providerID: owned},
+	}); err != nil {
+		t.Fatalf("beta import: %v", err)
+	}
+	if _, err := manager.store.Update("test-move", func(doc *configstore.ConfigDoc) error {
+		delete(doc.Scopes.Global.Providers, providerID)
+		doc.Scopes.Global.ProviderOrder = nil
+		return nil
+	}); err != nil {
+		t.Fatalf("removing the global provider: %v", err)
+	}
+	if !manager.OwnsProviders() {
+		t.Fatal("beta's runner scope must make the server report owned providers")
+	}
+
+	registry.Register(runners.Info{RunnerID: "alpha", Name: "Alpha", Workspaces: []runners.Workspace{{Path: "/w"}}}, &fakeLink{})
+	manager.OnLinkReady("alpha", func(uint64, any) error { return nil })
+	manager.ConfigApplied("alpha", 1, true, nil, map[string]any{
+		"mode": "fallback",
+		"modelsByProvider": map[string]any{
+			"faux": map[string]any{"configured": true, "models": []map[string]any{{
+				"providerId": "faux", "modelId": "faux-1", "name": "Faux 1",
+				"api": "openai-chat-completions", "baseUrl": "http://127.0.0.1:18080/v1",
+				"reasoningLevels": []string{"off"}, "contextWindow": 128000, "maxTokens": 8192,
+			}}},
+		},
+	})
+	selection := NewModelSelectionChannel(manager)
+	result := callSelection(t, selection, `[{"selection":{"providerId":"faux","modelId":"faux-1","options":{"reasoningLevel":"off"}}}]`)
+	if len(result.Providers) != 1 {
+		t.Fatalf("providers = %+v (alpha has no enabled provider of its own, so it must fall back to its facts)", result.Providers)
+	}
+	if result.EffectiveModel != "faux-1" {
+		t.Fatalf("selection = %+v", result)
+	}
+
+	// The status endpoint reports the same count for alpha.
+	statuses := manager.RunnerModelStatuses()
+	if len(statuses) != 1 || statuses[0].RunnerID != "alpha" || statuses[0].ModelCount != 1 {
+		t.Fatalf("statuses = %+v", statuses)
+	}
+	if statuses[0].Mode != RunnerModeFallback || !statuses[0].Connected || statuses[0].Name != "Alpha" {
+		t.Fatalf("status = %+v", statuses[0])
+	}
+	if statuses[0].LastAppliedVersion != 1 {
+		t.Fatalf("lastAppliedVersion = %d", statuses[0].LastAppliedVersion)
+	}
+}
+
+// testProviderForScope builds a complete enabled provider for a runner scope.
+func testProviderForScope(id string) *configstore.Provider {
+	return &configstore.Provider{
+		ID: id, API: configstore.APITypeOpenAIChatCompletions,
+		BaseURL: "https://api.acme.test/v1", Enabled: true,
+		APIKey: configstore.SecretID(id),
+		Models: []configstore.Model{{
+			ID: "m1", Name: "M1", ReasoningLevels: []string{"off"},
+			ContextWindow: 128000, MaxTokens: 8192, Input: []string{"text"}, Enabled: true,
+		}},
+	}
+}
+
+// TestRunnerModelStatusesSortsByName 锁住 GET /api/config/runners 的排序与
+// name fallback：按 hello name 排序（同名再按 id），name 缺失时回退到 id，未上报
+// facts 的 runner 是 unknown 且 modelCount=0。
+func TestRunnerModelStatusesSortsByName(t *testing.T) {
+	_, manager, registry := newTestProviderSettings(t)
+	registry.Register(runners.Info{RunnerID: "zeta", Name: "Alpha", Workspaces: []runners.Workspace{{Path: "/z"}}}, &fakeLink{})
+	registry.Register(runners.Info{RunnerID: "beta", Name: "Beta", Workspaces: []runners.Workspace{{Path: "/b"}}}, &fakeLink{})
+	// KnownRunners/Connected come from the manager's links, not the registry.
+	manager.OnLinkReady("zeta", func(uint64, any) error { return nil })
+	manager.OnLinkReady("beta", func(uint64, any) error { return nil })
+	// Facts-only runner: offline and unnamed.
+	manager.ConfigApplied("ghost", 3, true, nil, map[string]any{"mode": "server"})
+
+	statuses := manager.RunnerModelStatuses()
+	if len(statuses) != 3 {
+		t.Fatalf("statuses = %+v", statuses)
+	}
+	// Sorted by name: "Alpha" (zeta), "Beta" (beta), "ghost" (id fallback).
+	if statuses[0].RunnerID != "zeta" || statuses[0].Name != "Alpha" {
+		t.Fatalf("order by name = %+v", statuses)
+	}
+	if statuses[1].RunnerID != "beta" || statuses[2].RunnerID != "ghost" || statuses[2].Name != "ghost" {
+		t.Fatalf("order by name/name fallback = %+v", statuses)
+	}
+	if statuses[2].Mode != RunnerModeServer || statuses[2].Connected || statuses[2].LastAppliedVersion != 3 {
+		t.Fatalf("facts-only status = %+v", statuses[2])
+	}
+	for _, status := range statuses[:2] {
+		if status.Mode != RunnerModeUnknown || status.ModelCount != 0 {
+			t.Fatalf("a runner without facts must be unknown/0: %+v", status)
+		}
+		if !status.Connected {
+			t.Fatalf("registered runner must report connected: %+v", status)
+		}
+	}
+}

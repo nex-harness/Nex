@@ -8,6 +8,7 @@ import { useModelProviders } from "@/hooks/useModelProviders.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { logger } from "@/logger.js";
 import { ModelProviderSectionDetail } from "./model-provider-section/Detail.js";
+import { ModelProviderImportMenu } from "./model-provider-section/ModelProviderImportMenu.js";
 import { ModelProviderSectionLayout } from "./model-provider-section/SectionLayout.js";
 import { ProviderTemplatePicker } from "./model-provider-section/ProviderTemplatePicker.js";
 import { useModelProviderNavigation } from "./model-provider-section/useModelProviderNavigation.js";
@@ -218,6 +219,15 @@ export function ModelProviderSection({
       onSelectNavItem={handleSelectNavItem}
       onReorderProviderIds={handleReorderProviderIds}
       reorderableProviderIds={reorderableProviderIds}
+      headerActions={
+        <ModelProviderImportMenu
+          onImported={() => {
+            // provider-settings 变更事件通常会推新列表；事件丢失时用 refresh 兜底，
+            // 保证导入后的 provider 立刻可见。
+            void refresh();
+          }}
+        />
+      }
     >
       {templatePickerOpen ? (
         <ProviderTemplatePicker

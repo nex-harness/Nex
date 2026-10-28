@@ -23,6 +23,7 @@ import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { SSHDialog } from "@/SSHDialog.js";
 import { SettingsPage } from "@/SettingsPage.js";
 import { setDefaultFileDisplayBasePath } from "@/lib/fileDisplay.js";
+import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
 import { countAllUnreadTasks } from "@/lib/unreadTaskCount.js";
 import {
   shouldBlockRootRender,
@@ -700,6 +701,7 @@ function RootInner({
   // SSH 安装向导（docs/next/runner-install.md）：只在平台实现 installRunnerOverSSH
   // （web）时挂载；desktop 保持不提供该入口。
   const [runnerInstallOpen, setRunnerInstallOpen] = useState(false);
+  const openSettingsTab = useTabStore((state) => state.openSettingsTab);
   const runnerInstallDialog = platform.installRunnerOverSSH ? (
     <RunnerInstallDialog
       open={runnerInstallOpen}
@@ -708,6 +710,15 @@ function RootInner({
         // 新机器装完直连 server：刷新机器目录，选择器立即可见。
         void reloadRunnerWorkspaceDirectory();
       }}
+      onOpenModelSettings={
+        platform.listRunnerModelStatus
+          ? () => {
+              // 与 V4ComposerToolbar 的「管理模型」一致：先写一次性分区意图，再开设置 tab。
+              setPendingSettingsSectionIntent("modelProvider");
+              openSettingsTab();
+            }
+          : undefined
+      }
     />
   ) : null;
   // 只有实现 listServerWorkspaces 的平台（web）才挂载选择器；desktop 结构保持原样。
@@ -804,7 +815,7 @@ function RootInner({
       {remoteConnectionDialog}
       {directoryBrowserDialog}
       {runnerWorkspacePickerDialog}
-        {runnerInstallDialog}
+      {runnerInstallDialog}
       <OccupationOnboarding
         showWindowControls={Boolean(isWindowsDesktop || (isDesktop && !isMacDesktop))}
         showChildrenWhileLoading={!workspaceShellPath && isSettingsTabActive}

@@ -1592,6 +1592,7 @@ func TestImportRunnerEndpoint(t *testing.T) {
 	session := h.login(t)
 	runner := h.dialRunner(t)
 	runnerHelloWithVersion(t, runner, runnerID, workspace, 0)
+	awaitRunnerKnown(t, h, runnerID)
 	go func() {
 		// The export call follows the welcome; any config push queued in
 		// between (proactive push of a reset doc) is skipped.
@@ -1646,6 +1647,16 @@ func TestImportRunnerEndpoint(t *testing.T) {
 	if strings.Contains(string(body), "local-key") {
 		t.Fatal("import response leaks the key")
 	}
+	// The default scope stays "runner" for compatibility.
+	var defaultSummary struct {
+		Scope string `json:"scope"`
+	}
+	if err := json.Unmarshal(body, &defaultSummary); err != nil {
+		t.Fatalf("import body: %v (%s)", err, body)
+	}
+	if defaultSummary.Scope != "runner" {
+		t.Fatalf("default scope = %q", defaultSummary.Scope)
+	}
 	doc, _ := h.app.Config.Store().Snapshot()
 	imported := doc.Scopes.Runner[runnerID].Providers["local-anthropic"]
 	if imported == nil || imported.APIKey != "sec_prov_local-anthropic_apikey" {
@@ -1670,6 +1681,236 @@ func TestImportRunnerEndpoint(t *testing.T) {
 func mustJSON(value any) string {
 	encoded, _ := json.Marshal(value)
 	return string(encoded)
+}
+
+// awaitRunnerKnown waits until the manager has the runner's link. The server
+// writes `welcome` before reg.Register/OnLinkReady, so a client that just read
+// the welcome can still race the import endpoint's KnownRunners check.
+func awaitRunnerKnown(t *testing.T, h *harness, id string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, known := range h.app.Config.KnownRunners() {
+			if known == id {
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("runner %s never became known", id)
+}
+
+// answerExportLocal reads runner frames until a `call` arrives and answers it
+// with a local pi export (providers + keys). Non-call frames (config pushes) are
+// skipped, so a push queued right after the welcome does not confuse it.
+func answerExportLocal(t *testing.T, conn *websocket.Conn, value map[string]any) {
+	t.Helper()
+	go func() {
+		var frame map[string]json.RawMessage
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+			frame = readRunnerFrame(t, conn, 5*time.Second)
+			if string(frame["t"]) == `"call"` {
+				break
+			}
+		}
+		if frame == nil || string(frame["t"]) != `"call"` {
+			return
+		}
+		var id string
+		encoded, _ := json.Marshal(frame["id"])
+		_ = json.Unmarshal(encoded, &id)
+		response, _ := json.Marshal(map[string]any{
+			"t":     "result",
+			"id":    id,
+			"ok":    true,
+			"value": value,
+		})
+		_ = conn.Write(context.Background(), websocket.MessageText, response)
+	}()
+}
+
+// TestImportRunnerGlobalScopeAndModelStatus covers docs/next/model-onboarding.md
+// decision 3 and the new status endpoint: a global import writes scopes.global
+// (not the runner scope), stores the key as a secret without echoing it, an
+// unknown scope is 400, and GET /api/config/runners reports name, mode and the
+// model count the composer would offer.
+func TestImportRunnerGlobalScopeAndModelStatus(t *testing.T) {
+	h := newHarness(t)
+	session := h.login(t)
+	runner := h.dialRunner(t)
+	runnerHelloWithVersion(t, runner, runnerID, workspace, 0)
+	awaitRunnerKnown(t, h, runnerID)
+
+	getRunners := func() []map[string]any {
+		t.Helper()
+		request, _ := http.NewRequest(http.MethodGet, h.server.URL+"/api/config/runners", nil)
+		request.Header.Set("Cookie", "nex_session="+session)
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatalf("runners: %v", err)
+		}
+		defer response.Body.Close()
+		raw, _ := io.ReadAll(response.Body)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("runners status = %d: %s", response.StatusCode, raw)
+		}
+		var body struct {
+			Runners []map[string]any `json:"runners"`
+		}
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatalf("runners body: %v (%s)", err, raw)
+		}
+		return body.Runners
+	}
+
+	// Before any facts: the runner is known and connected, but its mode is
+	// unknown and it has no models yet.
+	before := getRunners()
+	if len(before) != 1 {
+		t.Fatalf("runners = %+v", before)
+	}
+	if before[0]["runnerId"] != runnerID || before[0]["name"] != "test-runner" {
+		t.Fatalf("runner identity = %+v", before[0])
+	}
+	if before[0]["connected"] != true || before[0]["mode"] != "unknown" || before[0]["modelCount"] != float64(0) {
+		t.Fatalf("runner before facts = %+v", before[0])
+	}
+
+	// A second connected runner: a global import must push to every runner, not
+	// just the source machine. Its hello already produced the initial snapshot.
+	secondRunner := h.dialRunner(t)
+	runnerHelloWithVersion(t, secondRunner, "runner-2", "/workspace/other", 0)
+	if initial := readRunnerFrame(t, secondRunner, 5*time.Second); string(initial["t"]) != `"config"` {
+		t.Fatalf("second runner frame = %+v, want the initial config push", initial)
+	}
+
+	// An unknown scope is rejected before any export call.
+	bogus, _ := http.NewRequest(http.MethodPost,
+		h.server.URL+"/api/config/import-runner?runnerId="+runnerID+"&scope=bogus", nil)
+	bogus.Header.Set("Cookie", "nex_session="+session)
+	bogusResponse, err := http.DefaultClient.Do(bogus)
+	if err != nil {
+		t.Fatalf("bogus import: %v", err)
+	}
+	bogusBody, _ := io.ReadAll(bogusResponse.Body)
+	bogusResponse.Body.Close()
+	if bogusResponse.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bogus scope status = %d: %s", bogusResponse.StatusCode, bogusBody)
+	}
+
+	answerExportLocal(t, runner, map[string]any{
+		"providers": map[string]any{
+			"local-anthropic": map[string]any{
+				"id": "local-anthropic", "api": "anthropic-messages",
+				"baseUrl": "https://api.anthropic.com", "enabled": true,
+				"models": []map[string]any{{
+					"id": "claude-test", "reasoning": true,
+					"reasoningLevels": []string{"off", "low", "high"},
+					"contextWindow":   200000, "maxTokens": 8192, "enabled": true,
+					"input": []string{"text"},
+				}},
+			},
+		},
+		"keys": map[string]string{"local-anthropic": "local-key"},
+	})
+	request, _ := http.NewRequest(http.MethodPost,
+		h.server.URL+"/api/config/import-runner?runnerId="+runnerID+"&scope=global", nil)
+	request.Header.Set("Cookie", "nex_session="+session)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("global import: %v", err)
+	}
+	raw, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("global import status = %d: %s", response.StatusCode, raw)
+	}
+	if strings.Contains(string(raw), "local-key") {
+		t.Fatal("global import response leaks the key")
+	}
+	var summary struct {
+		RunnerID   string   `json:"runnerId"`
+		Scope      string   `json:"scope"`
+		Version    uint64   `json:"version"`
+		Providers  []string `json:"providers"`
+		KeysStored []string `json:"keysStored"`
+	}
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		t.Fatalf("global import body: %v (%s)", err, raw)
+	}
+	if summary.Scope != "global" || summary.RunnerID != runnerID || summary.Version == 0 {
+		t.Fatalf("summary = %+v", summary)
+	}
+	if len(summary.Providers) != 1 || summary.Providers[0] != "local-anthropic" {
+		t.Fatalf("providers = %v", summary.Providers)
+	}
+	if len(summary.KeysStored) != 1 || summary.KeysStored[0] != "local-anthropic" {
+		t.Fatalf("keysStored = %v", summary.KeysStored)
+	}
+
+	doc, err := h.app.Config.Store().Snapshot()
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	imported := doc.Scopes.Global.Providers["local-anthropic"]
+	if imported == nil || imported.APIKey != "sec_prov_local-anthropic_apikey" {
+		t.Fatalf("global provider = %+v", imported)
+	}
+	if len(doc.Scopes.Runner[runnerID].Providers) != 0 {
+		t.Fatalf("a global import must not write the runner scope: %+v", doc.Scopes.Runner)
+	}
+	if order := doc.Scopes.Global.ProviderOrder; len(order) != 1 || order[0] != "local-anthropic" {
+		t.Fatalf("global provider order = %v", order)
+	}
+	if value, ok, _ := h.app.Config.Store().Secrets().Get("sec_prov_local-anthropic_apikey"); !ok || value != "local-key" {
+		t.Fatalf("secret not stored: %q %v", value, ok)
+	}
+
+	// The doc alone answers the count: the key is provisioned, so the imported
+	// model is executable before the runner's facts arrive.
+	afterImport := getRunners()
+	if len(afterImport) != 2 {
+		t.Fatalf("runners after import = %+v", afterImport)
+	}
+	for _, status := range afterImport {
+		if status["modelCount"] != float64(1) || status["mode"] != "unknown" {
+			t.Fatalf("runner after import = %+v", status)
+		}
+	}
+
+	// The global import pushed to the second runner too (not only the source).
+	pushed := readRunnerFrame(t, secondRunner, 5*time.Second)
+	if string(pushed["t"]) != `"config"` {
+		t.Fatalf("second runner frame = %+v, want a config push", pushed)
+	}
+	if version, push := pushVersion(t, pushed); version != summary.Version {
+		t.Fatalf("second runner push version = %d, want %d (%+v)", version, summary.Version, push)
+	}
+
+	// Facts report the applied mode.
+	ack, _ := json.Marshal(map[string]any{
+		"t":       "configApplied",
+		"version": summary.Version,
+		"ok":      true,
+		"errors":  []any{},
+		"facts":   map[string]any{"mode": "server", "version": summary.Version},
+	})
+	if err := runner.Write(context.Background(), websocket.MessageText, ack); err != nil {
+		t.Fatalf("writing configApplied: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, status := range getRunners() {
+			if status["runnerId"] == runnerID && status["mode"] == "server" {
+				if status["lastAppliedVersion"] != float64(summary.Version) {
+					t.Fatalf("lastAppliedVersion = %+v", status)
+				}
+				return
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("mode never became server: %+v", getRunners())
 }
 
 func mustReadFile(t *testing.T, path string) string {

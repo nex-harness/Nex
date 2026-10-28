@@ -153,8 +153,29 @@ export async function exportLocal(
       models: provider.models,
     };
   }
+  // models.json 的 provider 级 apiKey：自定义 provider 最常见的写法就是把 key 写在这里，
+  // 只导出 auth.json 会让导入后的 provider 没有凭据（secret-not-provisioned）。
+  // server 推送只携带 sec_ 引用的密钥，`$NAME` 引用到了别的机器上也解析不到，所以在
+  // 源机器上按本进程环境解析成值；`!command` 每次请求时执行、结果可能会过期，不导出。
+  for (const [id, raw] of Object.entries(configured)) {
+    if (!isRecord(raw) || providers[id] === undefined) continue;
+    const resolved = resolveModelsJsonKey((raw as ModelsJsonProvider).apiKey);
+    if (resolved.key !== undefined) keys[id] = resolved.key;
+    if (resolved.error) {
+      errors.push({
+        scope: "import",
+        path: `${id}.apiKey`,
+        code: resolved.error,
+        message:
+          resolved.error === "provider-key-command"
+            ? "apiKey is a !command; set the key in Settings after import"
+            : "apiKey references an unset environment variable",
+      });
+    }
+  }
   // auth.json: api keys are `{ type:"api_key", key }`; OAuth entries are not
-  // exportable (a refresh token bound to this machine stays local).
+  // exportable (a refresh token bound to this machine stays local). A stored
+  // auth.json key wins over models.json, matching pi's credential order.
   if (isRecord(auth)) {
     for (const [id, credential] of Object.entries(auth)) {
       if (
@@ -187,6 +208,22 @@ export async function exportLocal(
     modelsPath,
     authPath,
   };
+}
+
+/** Resolves a models.json `apiKey`: literal, `$NAME` / `${NAME}` from this process, or `!command` (not exported). */
+function resolveModelsJsonKey(value: string | undefined): {
+  key?: string;
+  error?: "provider-key-command" | "provider-key-env-unset";
+} {
+  const trimmed = value?.trim() ?? "";
+  if (trimmed === "") return {};
+  if (trimmed.startsWith("!")) return { error: "provider-key-command" };
+  const reference = /^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))$/u.exec(trimmed);
+  if (reference) {
+    const resolved = process.env[reference[1] ?? reference[2] ?? ""]?.trim();
+    return resolved ? { key: resolved } : { error: "provider-key-env-unset" };
+  }
+  return { key: trimmed };
 }
 
 async function readJSON(

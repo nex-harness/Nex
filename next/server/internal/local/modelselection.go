@@ -56,12 +56,21 @@ type modelOption struct {
 // executableModels lists the models the composer may offer for one runner and
 // reports which source produced them (server doc or the runner's own catalog).
 func (m *ModelSelection) executableModels(target viewTarget) ([]modelOption, string, uint64, error) {
-	manager := m.providerSettings.manager
+	runnerID := m.providerSettings.runnerFor(target)
+	models, revision, err := executableModelsForRunner(m.providerSettings.manager, runnerID)
+	return models, runnerID, revision, err
+}
+
+// executableModelsForRunner compiles the composer's model list for one resolved
+// runner from the doc + that runner's facts.
+//
+// It is shared by the model-selection channel and Manager.RunnerModelStatus so
+// the picker and the HTTP status count can never disagree.
+func executableModelsForRunner(manager *Manager, runnerID string) ([]modelOption, uint64, error) {
 	doc, err := manager.store.Snapshot()
 	if err != nil {
-		return nil, "", 0, err
+		return nil, 0, err
 	}
-	runnerID := m.providerSettings.runnerFor(target)
 	effective := doc.EffectiveForRunner(runnerID)
 	facts, factsRunner := runnerModelFacts(manager, runnerID)
 	// 修复依据：runner 判定 server-owned 的谓词是「enabled provider 数 > 0」
@@ -72,6 +81,13 @@ func (m *ModelSelection) executableModels(target viewTarget) ([]modelOption, str
 	// 遍历时 disabled provider 全部被跳过，view 变成空列表——composer 显示
 	// "No model available" 而 runner 实际仍有模型。fallback 判定必须数 enabled
 	// providers，与 OwnsProviders 的语义一致，picker 才不会与 runtime 分歧。
+	//
+	// 修复依据（model-onboarding 决策 4）：own 的判定必须按 runner 计算，不能用
+	// 服务端全局的 OwnsProviders()。push 侧 ownedMode 只数该 runner 的
+	// EffectiveForRunner 里 enabled 的 provider；若另一个 runner 的 scope 拥有
+	// provider，全局 OwnsProviders() 为 true，这个 fallback runner 明明有本机
+	// catalog 却会走到「server-owned 但无模型」的空列表分支。effective 里 0 个
+	// enabled provider 就恒用本机 facts，与 push 的 ownedMode 完全一致。
 	enabledCount := 0
 	for _, provider := range effective.ProviderList() {
 		if provider.Enabled {
@@ -79,12 +95,8 @@ func (m *ModelSelection) executableModels(target viewTarget) ([]modelOption, str
 		}
 	}
 	if enabledCount == 0 {
-		// Fallback mode is decided by exactly the same predicate the router and
-		// the config push use, so the picker never disagrees with the runtime.
-		if !manager.OwnsProviders() {
-			return fallbackModels(facts, factsRunner, runnerID, doc.Version)
-		}
-		return nil, runnerID, doc.Version, nil
+		models, _, revision, err := fallbackModels(facts, factsRunner, runnerID, doc.Version)
+		return models, revision, err
 	}
 	secrets := manager.store.Secrets()
 	var models []modelOption
@@ -128,7 +140,7 @@ func (m *ModelSelection) executableModels(target viewTarget) ([]modelOption, str
 			models = append(models, option)
 		}
 	}
-	return models, runnerID, doc.Version, nil
+	return models, doc.Version, nil
 }
 
 // fallbackModels compiles the runner's own catalog (fallback mode, decision 2).

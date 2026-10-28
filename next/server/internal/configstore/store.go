@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -353,6 +354,56 @@ func (s *Store) ImportLayer(runnerID string, layer Layer) (ConfigDoc, []string, 
 			current.Settings[key] = append(json.RawMessage(nil), value...)
 		}
 		doc.Scopes.Runner[runnerID] = current
+		return nil
+	})
+	return doc, imported, err
+}
+
+// ImportGlobalLayer merges exported runner config into the global (shared)
+// scope (docs/next/model-onboarding.md decision 3: the UI's "Import from
+// machine" writes the shared layer so every runner sees and Settings can edit
+// the provider). Providers are upserted — an existing id is overwritten, the
+// rest stay — and settings merge like ImportLayer. Newly imported ids are
+// appended to ProviderOrder so they appear in Settings order.
+func (s *Store) ImportGlobalLayer(layer Layer) (ConfigDoc, []string, error) {
+	var imported []string
+	doc, err := s.Update("import:global", func(doc *ConfigDoc) error {
+		current := doc.Scopes.Global
+		if current.Providers == nil {
+			current.Providers = map[string]*Provider{}
+		}
+		for id, provider := range layer.Providers {
+			if provider == nil {
+				continue
+			}
+			if _, exists := current.Providers[id]; !exists {
+				imported = append(imported, id)
+			}
+			copied := cloneProvider(*provider)
+			copied.ID = id
+			current.Providers[id] = &copied
+		}
+		if current.Settings == nil {
+			current.Settings = map[string]json.RawMessage{}
+		}
+		for key, value := range layer.Settings {
+			current.Settings[key] = append(json.RawMessage(nil), value...)
+		}
+		// ProviderOrder drives the Settings list. Imported ids join the end in
+		// stable order; ids already listed keep their position.
+		listed := make(map[string]struct{}, len(current.ProviderOrder))
+		for _, id := range current.ProviderOrder {
+			listed[id] = struct{}{}
+		}
+		sort.Strings(imported)
+		for _, id := range imported {
+			if _, ok := listed[id]; ok {
+				continue
+			}
+			current.ProviderOrder = append(current.ProviderOrder, id)
+			listed[id] = struct{}{}
+		}
+		doc.Scopes.Global = current
 		return nil
 	})
 	return doc, imported, err

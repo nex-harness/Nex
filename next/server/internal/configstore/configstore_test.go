@@ -301,3 +301,74 @@ func TestImportLayer(t *testing.T) {
 		t.Fatalf("effective providers = %+v", docs.ProviderList())
 	}
 }
+
+// TestImportGlobalLayer 锁住 model-onboarding 决策 3 的合并语义：全局导入覆盖
+// 同 id 的 provider、保留其它 provider、合并 settings，并把新 id 追加到
+// ProviderOrder 末尾（Settings 列表顺序）。
+func TestImportGlobalLayer(t *testing.T) {
+	store := NewStore(t.TempDir(), testLogger())
+	existing := testProvider("keep")
+	if _, err := store.UpsertProvider(existing); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	overwritten := testProvider("replace")
+	overwritten.Name = "old name"
+	if _, err := store.UpsertProvider(overwritten); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := store.SetProviderOrder([]string{"replace", "keep"}); err != nil {
+		t.Fatalf("order: %v", err)
+	}
+
+	importedProvider := testProvider("replace")
+	importedProvider.Name = "imported name"
+	importedProvider.APIKey = SecretID("replace")
+	fresh := testProvider("fresh")
+	fresh.APIKey = SecretID("fresh")
+	layer := Layer{
+		Providers: map[string]*Provider{"replace": &importedProvider, "fresh": &fresh},
+		Settings:  map[string]json.RawMessage{"defaultProvider": json.RawMessage(`"replace"`)},
+	}
+	doc, ids, err := store.ImportGlobalLayer(layer)
+	if err != nil {
+		t.Fatalf("global import: %v", err)
+	}
+	if len(ids) != 1 || ids[0] != "fresh" {
+		t.Fatalf("newly imported ids = %v (replace already existed)", ids)
+	}
+	if doc.Scopes.Global.Providers["replace"].Name != "imported name" {
+		t.Fatalf("same-id provider not overwritten: %+v", doc.Scopes.Global.Providers["replace"])
+	}
+	if doc.Scopes.Global.Providers["replace"].APIKey != SecretID("replace") {
+		t.Fatalf("imported provider lost its secret ref: %+v", doc.Scopes.Global.Providers["replace"])
+	}
+	if doc.Scopes.Global.Providers["keep"] == nil {
+		t.Fatal("unrelated provider was removed")
+	}
+	if string(doc.Scopes.Global.Settings["defaultProvider"]) != `"replace"` {
+		t.Fatalf("settings not merged: %+v", doc.Scopes.Global.Settings)
+	}
+	order := doc.Scopes.Global.ProviderOrder
+	if len(order) != 3 || order[0] != "replace" || order[1] != "keep" || order[2] != "fresh" {
+		t.Fatalf("provider order = %v (existing positions kept, new ids appended)", order)
+	}
+	// The global layer is what every runner sees.
+	effective := doc.EffectiveForRunner("any-runner")
+	if len(effective.Providers) != 3 {
+		t.Fatalf("effective providers = %+v", effective.ProviderList())
+	}
+	if !ownedMode(providersOfLayer(effective)) {
+		t.Fatal("global import must put every runner in server-owned mode")
+	}
+}
+
+// providersOfLayer returns the effective provider values (test helper).
+func providersOfLayer(layer Layer) []Provider {
+	out := make([]Provider, 0, len(layer.Providers))
+	for _, provider := range layer.ProviderList() {
+		if provider != nil {
+			out = append(out, *provider)
+		}
+	}
+	return out
+}

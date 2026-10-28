@@ -85,12 +85,28 @@ type SkillUploader interface {
 	Delete(ctx context.Context, kind, scope, runnerID, name string) error
 }
 
+// RunnerModelStatus is one row of GET /api/config/runners
+// (docs/next/model-onboarding.md "API"). It is a plain data copy so the HTTP
+// layer does not depend on internal/local.
+type RunnerModelStatus struct {
+	RunnerID           string `json:"runnerId"`
+	Name               string `json:"name"`
+	Connected          bool   `json:"connected"`
+	Mode               string `json:"mode"`
+	ModelCount         int    `json:"modelCount"`
+	LastAppliedVersion uint64 `json:"lastAppliedVersion"`
+}
+
 // ConfigAdmin is the server-side config surface the HTTP layer exposes.
 type ConfigAdmin interface {
-	// ImportFromRunner imports one runner's local providers/keys into its scope.
-	ImportFromRunner(ctx context.Context, runnerID string) (any, error)
+	// ImportFromRunner imports one runner's local providers/keys into its scope
+	// (scope "" or "runner") or the shared global scope.
+	ImportFromRunner(ctx context.Context, runnerID, scope string) (any, error)
 	// KnownRunners lists runners with a live link or recorded facts.
 	KnownRunners() []string
+	// RunnerModelStatuses lists every known runner with its name, mode and the
+	// model count model-selection would offer it.
+	RunnerModelStatuses() []RunnerModelStatus
 }
 
 // Server is the HTTP mux.
@@ -128,17 +144,18 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/server-info", s.handleServerInfo)
 	if s.deps.Config != nil {
 		s.mux.HandleFunc("/api/config/import-runner", s.handleImportRunner)
+		s.mux.HandleFunc("/api/config/runners", s.handleConfigRunners)
 		s.mux.HandleFunc("/api/config/status", s.handleConfigStatus)
 	}
 	if s.deps.Skills != nil {
-	s.mux.HandleFunc("/api/config/skills", s.handleSkillUpload("skill"))
-	s.mux.HandleFunc("/api/config/skills/delete", s.handleSkillDelete("skill"))
-	s.mux.HandleFunc("/api/config/prompts", s.handleSkillUpload("prompt"))
-	s.mux.HandleFunc("/api/config/prompts/delete", s.handleSkillDelete("prompt"))
-	if s.deps.Installs != nil {
-		s.mux.HandleFunc("/api/runner-install", s.handleRunnerInstall)
-		s.mux.HandleFunc("/api/runner-install/", s.handleRunnerInstallGet)
-	}
+		s.mux.HandleFunc("/api/config/skills", s.handleSkillUpload("skill"))
+		s.mux.HandleFunc("/api/config/skills/delete", s.handleSkillDelete("skill"))
+		s.mux.HandleFunc("/api/config/prompts", s.handleSkillUpload("prompt"))
+		s.mux.HandleFunc("/api/config/prompts/delete", s.handleSkillDelete("prompt"))
+		if s.deps.Installs != nil {
+			s.mux.HandleFunc("/api/runner-install", s.handleRunnerInstall)
+			s.mux.HandleFunc("/api/runner-install/", s.handleRunnerInstallGet)
+		}
 	}
 	if s.deps.BrowserWS != nil {
 		s.mux.Handle("/ws", s.deps.BrowserWS)
@@ -433,7 +450,11 @@ func (s *Server) handleServerInfo(w http.ResponseWriter, r *http.Request) {
 // handleImportRunner imports one runner's local ~/.pi/agent providers. The UI has
 // no import button; this endpoint is the documented alternative (README).
 //
-//	POST /api/config/import-runner?runnerId=alpha
+//	POST /api/config/import-runner?runnerId=alpha[&scope=global]
+//
+// scope defaults to "runner" (that runner's scope, the historical behaviour);
+// "global" writes the shared layer so Settings can edit the provider and every
+// runner receives it. An unknown scope is 400 and an unknown runner is 404.
 func (s *Server) handleImportRunner(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -442,6 +463,11 @@ func (s *Server) handleImportRunner(w http.ResponseWriter, r *http.Request) {
 	runnerID := strings.TrimSpace(r.URL.Query().Get("runnerId"))
 	if runnerID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "runnerId is required"})
+		return
+	}
+	scope, err := importScope(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	known := false
@@ -455,12 +481,42 @@ func (s *Server) handleImportRunner(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "runner offline"})
 		return
 	}
-	summary, err := s.deps.Config.ImportFromRunner(r.Context(), runnerID)
+	summary, err := s.deps.Config.ImportFromRunner(r.Context(), runnerID, scope)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, summary)
+}
+
+// importScope normalizes the import scope: empty means "runner".
+func importScope(r *http.Request) (string, error) {
+	switch scope := strings.TrimSpace(r.URL.Query().Get("scope")); scope {
+	case "":
+		return "runner", nil
+	case "global", "runner":
+		return scope, nil
+	default:
+		return "", fmt.Errorf("scope must be global or runner")
+	}
+}
+
+// handleConfigRunners reports each known runner's name, mode and model count
+// (docs/next/model-onboarding.md decision 1: the install wizard's Models step
+// polls this).
+//
+//	GET /api/config/runners → {runners:[{runnerId, name, connected, mode,
+//	                                modelCount, lastAppliedVersion}]}
+func (s *Server) handleConfigRunners(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	statuses := s.deps.Config.RunnerModelStatuses()
+	if statuses == nil {
+		statuses = []RunnerModelStatus{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runners": statuses})
 }
 
 // handleConfigStatus reports the doc version and per-runner applied state

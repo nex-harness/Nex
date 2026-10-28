@@ -27,6 +27,8 @@ import {
 import type {
   IPlatformService,
   RemoteTarget,
+  RunnerImportSummary,
+  RunnerModelStatus,
   ServerRemoteInfo,
   SSHInstallStatus,
   SSHInstallTarget,
@@ -236,9 +238,10 @@ function createWebPlatform(mcpSyncService: WebMcpSyncService): IPlatformService 
         headers: { "content-type": "application/json" },
         body: JSON.stringify(target),
       });
-      const payload = (await response.json().catch(() => null)) as
-        | { installId?: string; error?: string }
-        | null;
+      const payload = (await response.json().catch(() => null)) as {
+        installId?: string;
+        error?: string;
+      } | null;
       if (!response.ok || !payload?.installId) {
         throw new Error(payload?.error ?? `install request failed (${response.status})`);
       }
@@ -253,6 +256,32 @@ function createWebPlatform(mcpSyncService: WebMcpSyncService): IPlatformService 
         | null;
       if (!response.ok || !payload) {
         throw new Error(`install status request failed (${response.status})`);
+      }
+      return payload;
+    },
+    // 模型引导（docs/next/model-onboarding.md）：只读 runner 状态 + 一次性导入，
+    // 会话 cookie 与 runner-install 相同；UI 不直接 fetch。
+    listRunnerModelStatus: async () => {
+      const response = await fetch("/api/config/runners", { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as {
+        runners?: RunnerModelStatus[];
+        error?: string;
+      } | null;
+      if (!response.ok || !payload) {
+        throw new Error(payload?.error ?? `runner status request failed (${response.status})`);
+      }
+      return Array.isArray(payload.runners) ? payload.runners : [];
+    },
+    importRunnerModels: async (runnerId, scope) => {
+      const params = new URLSearchParams({ runnerId, scope });
+      const response = await fetch(`/api/config/import-runner?${params.toString()}`, {
+        method: "POST",
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | (RunnerImportSummary & { error?: string })
+        | null;
+      if (!response.ok || !payload) {
+        throw new Error(payload?.error ?? `import request failed (${response.status})`);
       }
       return payload;
     },
