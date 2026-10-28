@@ -1,6 +1,8 @@
 package installer
 
 import (
+	"encoding/base64"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -64,22 +66,6 @@ func TestParsePlatform(t *testing.T) {
 		}
 		if platform.bundlePlatform() != testCase.bundle {
 			t.Fatalf("bundle(%q) = %s, want %s", testCase.uname, platform.bundlePlatform(), testCase.bundle)
-		}
-	}
-}
-
-func TestNodeMajorAtLeast24(t *testing.T) {
-	cases := map[string]bool{
-		"v24.0.0":  true,
-		"v26.12.1": true,
-		"v18.0.0":  false,
-		"v4.9.1":   false,
-		"missing":  false,
-		"":         false,
-	}
-	for version, want := range cases {
-		if got := nodeMajorAtLeast24(version); got != want {
-			t.Fatalf("nodeMajorAtLeast24(%q) = %v, want %v", version, got, want)
 		}
 	}
 }
@@ -155,15 +141,15 @@ func TestWriteRemoteFileCommandPOSIX(t *testing.T) {
 }
 
 func TestStartCommandIncludesLingerFallback(t *testing.T) {
-	command := buildStartCommand(targetPlatform{GOOS: "linux", GOArch: "x64", NodeCmd: "node"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "/home/u")
+	command := buildStartCommand(targetPlatform{GOOS: "linux", GOArch: "x64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "/home/u")
 	for _, fragment := range []string{
 		"systemctl --user restart nex-runner.service",
 		"enable-linger 'u'",
 		// Container fallback: nohup (not setsid) with a runner.log tail.
 		"nohup", "setsid",
 		"/home/u/.nex-next-runner/runner.log",
-		// Absolute paths only (SFTP/units cannot use ~).
-		"cd /home/u/.nex-next-runner",
+		// Absolute paths + the private bundled node (no system node needed).
+		"/home/u/.nex-next-runner/node/node",
 	} {
 		if !strings.Contains(command, fragment) {
 			t.Fatalf("linux start command missing %q: %s", fragment, command)
@@ -173,15 +159,41 @@ func TestStartCommandIncludesLingerFallback(t *testing.T) {
 
 func TestStartCommandDarwinUsesLaunchAgent(t *testing.T) {
 	command := buildStartCommand(targetPlatform{GOOS: "darwin", GOArch: "arm64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "/Users/u")
-	if !strings.Contains(command, "/Users/u/Library/LaunchAgents/cn.nex.runner.plist") || !strings.Contains(command, "launchctl load") {
+	if !strings.Contains(command, "/Users/u/Library/LaunchAgents/cn.nex.runner.plist") || !strings.Contains(command, "launchctl load") || !strings.Contains(command, "/Users/u/.nex-next-runner/node/node") {
 		t.Fatalf("darwin start command should write + load the LaunchAgent: %s", command)
 	}
 }
 
 func TestStartCommandWindowsUsesScheduledTask(t *testing.T) {
 	command := buildStartCommand(targetPlatform{GOOS: "win32", GOArch: "x64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "C:/Users/u")
-	if !strings.Contains(command, "schtasks") || !strings.Contains(command, "onlogon") || !strings.Contains(command, "C:/Users/u/.nex-next-runner") {
-		t.Fatalf("windows start command should use schtasks onlogon: %s", command)
+	for _, fragment := range []string{
+		"schtasks /create /f /tn NexRunner",
+		"onlogon",
+		"schtasks /run /tn NexRunner",
+		"start-runner.cmd",
+	} {
+		if !strings.Contains(command, fragment) {
+			t.Fatalf("windows start command missing %q: %s", fragment, command)
+		}
+	}
+	// The wrapper is base64-written; decode and verify it sources the env
+	// file and starts the bundled node.
+	match := regexp.MustCompile(`FromBase64String\('([A-Za-z0-9+/=]+)'\)`).FindStringSubmatch(command)
+	if match == nil {
+		t.Fatalf("windows start command has no base64 wrapper blob: %s", command)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(match[1])
+	if err != nil {
+		t.Fatalf("decoding wrapper blob: %v", err)
+	}
+	for _, fragment := range []string{
+		`cd /d "C:\Users\u\.nex-next-runner"`,
+		`type env`,
+		`C:\Users\u\.nex-next-runner\node\node.exe" runner.mjs`,
+	} {
+		if !strings.Contains(string(decoded), fragment) {
+			t.Fatalf("wrapper missing %q: %s", fragment, string(decoded))
+		}
 	}
 }
 

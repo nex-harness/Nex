@@ -5,10 +5,10 @@ package installer
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"path"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -29,41 +29,17 @@ const remoteDirName = ".nex-next-runner"
 type targetPlatform struct {
 	GOOS     string // linux | darwin | win32
 	GOArch   string // x64 | arm64
-	NodeOK   bool
-	NodeCmd  string
 	ShellBin string // sh/bash on posix, powershell on windows
 }
 
-var versionPattern = regexp.MustCompile(`v(\d+)\.(\d+)`)
-
-// detect probes the target: OS, arch, and a usable Node ≥ 24 (decision 4:
-// detect, not deploy).
+// detect probes the target: OS and arch. Node.js is NOT required — the
+// bundle ships a private Node distribution (decision 4).
 func detect(c *sshClient) (targetPlatform, error) {
 	out, err := c.run(`uname -s -m 2>/dev/null || ver`, nil)
 	if err != nil {
 		return targetPlatform{}, fmt.Errorf("detecting platform: %w", err)
 	}
-	platform := parsePlatform(out)
-	// Node probe: `node --version`; nvm 管理的机器可能需要 login shell 才能找到
-	// node。两种探测命中都记录 `node`（exec 上下文已由调用方的 supervisor 单元
-	// 保证是 login shell 或 env PATH 已包含 node）。
-	probes := []string{`node --version 2>/dev/null || echo missing`, `bash -lc 'node --version' 2>/dev/null || echo missing`}
-	if platform.ShellBin == "powershell" {
-		probes = []string{`node --version 2>$null; if (-not $?) { 'missing' }`}
-	}
-	for _, probe := range probes {
-		out, err = c.run(probe, nil)
-		if err != nil {
-			continue
-		}
-		version := strings.TrimSpace(out)
-		if version != "missing" && version != "" && versionPattern.MatchString(version) {
-			platform.NodeOK = nodeMajorAtLeast24(version)
-			platform.NodeCmd = "node"
-			break
-		}
-	}
-	return platform, nil
+	return parsePlatform(out), nil
 }
 
 func parsePlatform(uname string) targetPlatform {
@@ -89,18 +65,6 @@ func parsePlatform(uname string) targetPlatform {
 		platform.GOArch = "x64"
 	}
 	return platform
-}
-
-func nodeMajorAtLeast24(version string) bool {
-	match := versionPattern.FindStringSubmatch(version)
-	if match == nil {
-		return false
-	}
-	var major int
-	if _, err := fmt.Sscanf(match[1], "%d", &major); err != nil {
-		return false
-	}
-	return major >= 24
 }
 
 // bundlePlatform maps the detected target to the bundle directory name
@@ -157,27 +121,43 @@ func (s *Session) install(req installRequest, bundles Bundles, waitForRunner fun
 		return err
 	}
 	s.Log(LogInfo, "target: %s %s (bundle %s)", platform.GOOS, platform.GOArch, platform.bundlePlatform())
-	if !platform.NodeOK {
-		s.Log(LogError, "Node.js >= 24 is required on the target (found: %s); install Node and retry", platform.NodeCmd)
-		return fmt.Errorf("node >= 24 not found on %s", target)
-	}
 
-	// Layout + env (decision 5): idempotent mkdir; env chmod 600.
-	s.Log(LogInfo, "preparing ~/.nex-next-runner layout")
-	// SFTP does not expand `~`: resolve the absolute home path first (the
-	// remote shell does).
-	homeOut, err := client.run(`sh -c 'printf %s "$HOME"'`, nil)
-	if err != nil {
-		return fmt.Errorf("resolving home: %w", err)
+	// Layout + env (decision 5): idempotent mkdir; env chmod 600 (posix).
+	s.Log(LogInfo, "preparing install layout")
+	// SFTP does not expand `~`: resolve the absolute home path first. POSIX
+	// via $HOME; Windows cmd via %USERPROFILE% (the SFTP root needs forward
+	// slashes, so the home is normalized to C:/Users/x form).
+	var home string
+	if platform.GOOS == "win32" {
+		homeOut, err := client.run(`echo %USERPROFILE%`, nil)
+		if err != nil {
+			return fmt.Errorf("resolving home: %w", err)
+		}
+		home = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(homeOut, "\r", ""), "\n", ""))
+		home = strings.ReplaceAll(home, `\`, "/")
+	} else {
+		homeOut, err := client.run(`sh -c 'printf %s "$HOME"'`, nil)
+		if err != nil {
+			return fmt.Errorf("resolving home: %w", err)
+		}
+		home = strings.TrimSpace(homeOut)
 	}
-	home := strings.TrimSpace(homeOut)
 	if home == "" {
 		return fmt.Errorf("remote home directory is empty")
 	}
 	remoteBase := home + "/" + remoteDirName
 	remoteEnvFile := remoteBase + "/env"
-	if _, err := client.run(fmt.Sprintf("mkdir -p %s/bundles %s/lib", remoteBase, remoteBase), nil); err != nil {
-		return fmt.Errorf("mkdir: %w", err)
+	if platform.GOOS == "win32" {
+		// cmd mkdir is idempotent-failing; per-dir mkdir keeps going.
+		for _, dir := range []string{"", "/lib", "/node", "/bundles"} {
+			if _, err := client.run(fmt.Sprintf(`mkdir "%s%s" 2>nul & echo OK`, remoteBase, dir), nil); err != nil {
+				return fmt.Errorf("mkdir: %w", err)
+			}
+		}
+	} else {
+		if _, err := client.run(fmt.Sprintf("mkdir -p %s/bundles %s/lib %s/node", remoteBase, remoteBase, remoteBase), nil); err != nil {
+			return fmt.Errorf("mkdir: %w", err)
+		}
 	}
 	name := req.Name
 	if name == "" {
@@ -187,9 +167,14 @@ func (s *Session) install(req installRequest, bundles Bundles, waitForRunner fun
 	// user has not chosen a directory yet, so the home directory itself is the
 	// initial workspace (the machine picker can browse it; narrower roots can
 	// be added by editing the env file — dynamic workspace discovery is
-	// follow-up work).
+	// follow-up work). The runner resolves paths itself; keep the OS-native
+	// separator in the env value.
+	workspacePath := home
+	if platform.GOOS == "win32" {
+		workspacePath = strings.ReplaceAll(home, "/", `\`)
+	}
 	envScript := fmt.Sprintf("NEX_SERVER_URL=%s\nNEX_RUNNER_TOKEN=%s\nNEX_RUNNER_ID=%s\nNEX_RUNNER_NAME=%s\nNEX_RUNNER_WORKSPACES=%s\n",
-		req.ServerURL, req.RunnerTok, req.RunnerID, name, home)
+		req.ServerURL, req.RunnerTok, req.RunnerID, name, workspacePath)
 	if _, err := client.run(writeRemoteFileCommand(remoteEnvFile, envScript, platform), nil); err != nil {
 		return fmt.Errorf("writing env: %w", err)
 	}
@@ -199,6 +184,23 @@ func (s *Session) install(req installRequest, bundles Bundles, waitForRunner fun
 		}
 	}
 	s.Log(LogInfo, "env written (runner id %s)", req.RunnerID)
+
+	// Stop a previous installation before uploading: Windows locks running
+	// executables (SFTP over node.exe fails with SSH_FX_FAILURE), and posix
+	// restarts are cleaner from a stopped state.
+	s.Log(LogInfo, "stopping any previous runner")
+	if platform.GOOS == "win32" {
+		// End the scheduled task, then kill by image name: the runner is the
+		// only node.exe a fresh install box runs (WQL path filtering is
+		// quoting-fragile through the cmd+ssh layers).
+		if _, err := client.run(`schtasks /end /tn NexRunner 2>nul & taskkill /f /im node.exe 2>nul & echo OK`, nil); err != nil {
+			s.Log(LogWarn, "stop previous runner warning: %v", err)
+		}
+	} else {
+		if _, err := client.run(fmt.Sprintf("systemctl --user stop nex-runner.service 2>/dev/null; pkill -f '%s/runner.mjs' 2>/dev/null; true", remoteBase), nil); err != nil {
+			s.Log(LogWarn, "stop previous runner warning: %v", err)
+		}
+	}
 
 	// Upload the bundle (decision 3). `lib/ptyHostAssets.mjs` is the runtime
 	// extractor loaded by pty-host via --import; it unpacks the tarball next
@@ -220,12 +222,39 @@ func (s *Session) install(req installRequest, bundles Bundles, waitForRunner fun
 	}
 	s.Log(LogInfo, "bundle uploaded")
 
+	// Private Node (decision 4): the bundle ships the official Node
+	// distribution, so the target needs no Node.js installed. All later
+	// commands (npm install, the runner, the pty host) run through it.
+	s.Log(LogInfo, "uploading bundled Node.js (~100MB, first install only)")
+	if err := client.uploadDir(bundleDir+"/node", remoteBase+"/node"); err != nil {
+		s.Log(LogError, "node upload failed: %v", err)
+		return err
+	}
+	if platform.GOOS != "win32" {
+		if _, err := client.run(fmt.Sprintf("chmod +x %s/node/node", remoteBase), nil); err != nil {
+			return fmt.Errorf("chmod node: %w", err)
+		}
+	}
+	s.Log(LogInfo, "bundled Node installed")
+	nodeBinary := remoteBase + "/node/node"
+	npmCli := remoteBase + "/node/node_modules/npm/bin/npm-cli.js"
+	if platform.GOOS == "win32" {
+		nodeBinary = remoteBase + `/node/node.exe`
+		npmCli = remoteBase + `/node/node_modules/npm/bin/npm-cli.js`
+	}
+
 	// node_modules: runner.mjs keeps @earendil-works/* external with a pinned
-	// dist/package.json; `npm install --omit=dev` fetches them on the target.
+	// dist/package.json; `npm install --omit=dev` fetches them on the target
+	// with the bundled Node/npm.
 	// --ignore-scripts: node-pty's install script would node-gyp rebuild (the
 	// bundle ships the prebuild instead; targets may lack make/g++).
-	s.Log(LogInfo, "installing dependencies (npm install)")
-	npmCommand := fmt.Sprintf("cd %s && npm install --omit=dev --no-audit --no-fund --ignore-scripts", remoteBase)
+	s.Log(LogInfo, "installing dependencies (npm install via bundled Node)")
+	var npmCommand string
+	if platform.GOOS == "win32" {
+		npmCommand = fmt.Sprintf(`cd /d "%s" && "%s" "%s" install --omit=dev --no-audit --no-fund --ignore-scripts`, strings.ReplaceAll(remoteBase, "/", `\`), strings.ReplaceAll(nodeBinary, "/", `\`), strings.ReplaceAll(npmCli, "/", `\`))
+	} else {
+		npmCommand = fmt.Sprintf("cd %s && %s %s install --omit=dev --no-audit --no-fund --ignore-scripts", remoteBase, nodeBinary, npmCli)
+	}
 	if _, err := client.runWithOutput(npmCommand, s); err != nil {
 		s.Log(LogError, "npm install failed: %v", err)
 		return err
@@ -236,9 +265,15 @@ func (s *Session) install(req installRequest, bundles Bundles, waitForRunner fun
 	// (the runtime loader lib/ptyHostAssets.mjs does this on first start; doing
 	// it here too makes the very first start deterministic).
 	s.Log(LogInfo, "placing node-pty prebuild assets")
-	extract := fmt.Sprintf("cd %s && tar -xzf node-pty-assets.tar.gz -C node_modules/node-pty/prebuilds/%s 2>/dev/null || (mkdir -p node_modules/node-pty/prebuilds/%s && tar -xzf node-pty-assets.tar.gz -C node_modules/node-pty/prebuilds/%s)", remoteBase, platform.bundlePlatform(), platform.bundlePlatform(), platform.bundlePlatform())
-	if platform.GOOS == "darwin" {
-		extract += " && chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true"
+	var extract string
+	if platform.GOOS == "win32" {
+		winBase := strings.ReplaceAll(remoteBase, "/", `\`)
+		extract = fmt.Sprintf(`cd /d "%s" && tar -xzf node-pty-assets.tar.gz -C node_modules\node-pty\prebuilds\%s`, winBase, platform.bundlePlatform())
+	} else {
+		extract = fmt.Sprintf("cd %s && tar -xzf node-pty-assets.tar.gz -C node_modules/node-pty/prebuilds/%s 2>/dev/null || (mkdir -p node_modules/node-pty/prebuilds/%s && tar -xzf node-pty-assets.tar.gz -C node_modules/node-pty/prebuilds/%s)", remoteBase, platform.bundlePlatform(), platform.bundlePlatform(), platform.bundlePlatform())
+		if platform.GOOS == "darwin" {
+			extract += " && chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true"
+		}
 	}
 	if _, err := client.run(extract, nil); err != nil {
 		s.Log(LogWarn, "pty asset placement warning: %v", err)
@@ -268,8 +303,12 @@ func (s *Session) install(req installRequest, bundles Bundles, waitForRunner fun
 // is single-line sanitized (no quotes/newlines) by validation upstream.
 func writeRemoteFileCommand(remotePath, content string, platform targetPlatform) string {
 	if platform.GOOS == "win32" {
-		// PowerShell here-string; content is validated single-line.
-		return fmt.Sprintf(`powershell -Command "Set-Content -Path '%s' -Value '%s'"`, remotePath, content)
+		// Windows: base64 + PowerShell WriteAllBytes — cmd quoting of
+		// multi-line content is unreliable, and `type env` (the wrapper's
+		// source loop) needs real CRLF lines.
+		b64 := base64.StdEncoding.EncodeToString([]byte(strings.ReplaceAll(content, "\n", "\r\n")))
+		winPath := strings.ReplaceAll(remotePath, "/", `\`)
+		return fmt.Sprintf(`powershell -Command "[IO.File]::WriteAllBytes('%s', [Convert]::FromBase64String('%s'))"`, winPath, b64)
 	}
 	// POSIX: printf %b interprets the \n escapes. %s would write one literal
 	// line — the env file could not be sourced line-by-line and unit files
@@ -280,18 +319,33 @@ func writeRemoteFileCommand(remotePath, content string, platform targetPlatform)
 
 // buildStartCommand assembles the platform supervisor command (decision 6).
 // `home` is the target's absolute home path (SFTP/unit files cannot use `~`).
+// All commands run through the bundled private Node (decision 4), not any
+// system Node.
 func buildStartCommand(platform targetPlatform, req installRequest, home string) string {
-	nodeCmd := platform.NodeCmd
 	base := home + "/.nex-next-runner"
-	runLine := fmt.Sprintf("cd %s && set -a && . ./env && set +a && exec %s runner.mjs", base, nodeCmd)
+	nodeBinary := base + "/node/node"
+	if platform.GOOS == "win32" {
+		nodeBinary = base + "/node/node.exe"
+		winBase := strings.ReplaceAll(base, "/", `\`)
+		// Windows: a wrapper .cmd reads the env file into the process env
+		// (cmd cannot source a file inline), then starts the bundled node.
+		// schtasks runs it at logon; a /run fires it immediately.
+		wrapper := fmt.Sprintf("@echo off\r\ncd /d \"%s\"\r\nfor /f \"usebackq delims=\" %%%%i in (`type env`) do set %%%%i\r\n\"%s\" runner.mjs\r\n", winBase, strings.ReplaceAll(nodeBinary, "/", `\`))
+		writeWrapper := fmt.Sprintf(`powershell -Command "Set-Content -Path '%s/start-runner.cmd' -Value ([IO.File]::ReadAllText('%s/start-runner.cmd')) -NoNewline"`, winBase, winBase)
+		// Simpler: write the wrapper via powershell here-string (the content
+		// has CR LF and % escapes; write it as a base64-decoded blob instead
+		// of fighting cmd quoting).
+		wrapperB64 := base64.StdEncoding.EncodeToString([]byte(wrapper))
+		writeWrapper = fmt.Sprintf(`powershell -Command "[IO.File]::WriteAllBytes('%s/start-runner.cmd', [Convert]::FromBase64String('%s'))"`, winBase, wrapperB64)
+		return fmt.Sprintf(`%s && (schtasks /delete /f /tn NexRunner 2>nul & schtasks /create /f /tn NexRunner /tr "%s/start-runner.cmd" /sc onlogon && schtasks /run /tn NexRunner)`, writeWrapper, winBase)
+	}
+	runLine := fmt.Sprintf("cd %s && set -a && . ./env && set +a && exec %s runner.mjs", base, nodeBinary)
 	switch platform.GOOS {
 	case "darwin":
 		// LaunchAgent: load-once, restarts on login. The plist is written
 		// by the installer; the command only needs to (re)load it.
 		return fmt.Sprintf("%s && (launchctl unload %s/Library/LaunchAgents/cn.nex.runner.plist 2>/dev/null || true) && launchctl load %s/Library/LaunchAgents/cn.nex.runner.plist",
-			writeLaunchdPlist(platform, home), home, home)
-	case "win32":
-		return fmt.Sprintf(`schtasks /create /f /tn NexRunner /tr "%s %s runner.mjs" /sc onlogon`, nodeCmd, base)
+			writeLaunchdPlist(platform, home, nodeBinary), home, home)
 	default:
 		// Linux：优先 systemd user unit（需要 XDG_RUNTIME_DIR，非交互 SSH
 		// 没有它，这里显式导出）；linger 通过 sudo -n 尽力开启。任何失败都
@@ -300,7 +354,7 @@ func buildStartCommand(platform targetPlatform, req installRequest, home string)
 		// 时后台进程会随会话管道一起死掉。整条命令以 `true` 收尾：启动是
 		// 尽力而为，真正的验收是后面的 wait-for-hello。
 		return fmt.Sprintf("%s && { export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}; (systemctl --user daemon-reload && systemctl --user enable nex-runner.service && systemctl --user restart nex-runner.service) || (sudo -n loginctl enable-linger %s 2>/dev/null && systemctl --user daemon-reload && systemctl --user enable nex-runner.service && systemctl --user restart nex-runner.service) || (setsid nohup sh -c '%s' <%s/null >%s/runner.log 2>&1 &); } ; true",
-			writeSystemdUnit(base), sanitizeShellArg(req.Target.Username), runLine, base, base)
+			writeSystemdUnit(base, nodeBinary), sanitizeShellArg(req.Target.Username), runLine, base, base)
 	}
 }
 
@@ -309,17 +363,17 @@ func buildStartCommand(platform targetPlatform, req installRequest, home string)
 // rejects the unit with "Assignment outside of section"). The unit body
 // contains single quotes (ExecStart's shell command); they are escaped as
 // '\'' so the printf argument's own single-quoting stays intact.
-func writeSystemdUnit(base string) string {
-	unit := fmt.Sprintf("[Unit]\nDescription=Nex agent runner\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart=/bin/sh -c 'cd %s && set -a && . ./env && set +a && exec node runner.mjs'\nRestart=always\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n", base)
+func writeSystemdUnit(base, nodeBinary string) string {
+	unit := fmt.Sprintf("[Unit]\nDescription=Nex agent runner\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart=/bin/sh -c 'cd %s && set -a && . ./env && set +a && exec %s runner.mjs'\nRestart=always\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n", base, nodeBinary)
 	shellSafe := sanitizeShellArg(unit)
 	return fmt.Sprintf("mkdir -p ${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user && printf '%%b' %s > ${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/nex-runner.service", shellSafe)
 }
 
 // writeLaunchdPlist emits the LaunchAgent write command (printf %b + the
 // sanitizeShellArg quoting, same reasons as writeSystemdUnit).
-func writeLaunchdPlist(platform targetPlatform, home string) string {
+func writeLaunchdPlist(platform targetPlatform, home, nodeBinary string) string {
 	base := home + "/.nex-next-runner"
-	plist := fmt.Sprintf("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n<key>Label</key><string>cn.nex.runner</string>\n<key>ProgramArguments</key>\n<array>\n<string>/bin/sh</string>\n<string>-c</string>\n<string>cd %s && set -a && . ./env && set +a && exec node runner.mjs</string>\n</array>\n<key>RunAtLoad</key><true/>\n<key>KeepAlive</key><true/>\n</dict>\n</plist>\n", base)
+	plist := fmt.Sprintf("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n<key>Label</key><string>cn.nex.runner</string>\n<key>ProgramArguments</key>\n<array>\n<string>/bin/sh</string>\n<string>-c</string>\n<string>cd %s && set -a && . ./env && set +a && exec %s runner.mjs</string>\n</array>\n<key>RunAtLoad</key><true/>\n<key>KeepAlive</key><true/>\n</dict>\n</plist>\n", base, nodeBinary)
 	shellSafe := sanitizeShellArg(plist)
 	return fmt.Sprintf("mkdir -p %s/Library/LaunchAgents && printf '%%b' %s > %s/Library/LaunchAgents/cn.nex.runner.plist", home, shellSafe, home)
 }

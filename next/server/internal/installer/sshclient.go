@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -174,4 +175,70 @@ func (c *sshClient) upload(localPath, remotePath string) error {
 		return fmt.Errorf("sftp write %s: %w", remotePath, err)
 	}
 	return remoteFile.Close()
+}
+
+// uploadDir copies one local directory tree to the remote path via SFTP,
+// creating parent directories as needed. Used for the bundled private Node
+// distribution (docs/next/runner-install.md decision 4: the bundle carries
+// Node, so targets need no Node.js installed).
+func (c *sshClient) uploadDir(localDir, remoteDir string) error {
+	sftpClient, err := sftp.NewClient(c.client)
+	if err != nil {
+		return fmt.Errorf("sftp client: %w", err)
+	}
+	defer sftpClient.Close()
+
+	var walk func(dir string) error
+	walk = func(dir string) error {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", dir, err)
+		}
+		for _, entry := range entries {
+			local := filepath.Join(dir, entry.Name())
+			remote := filepath.ToSlash(filepath.Join(dir, entry.Name()))
+			// Recompute the remote path relative to the local root: replace
+			// the local prefix with the remote root on every path.
+			rel, err := filepath.Rel(localDir, local)
+			if err != nil {
+				return err
+			}
+			remote = remoteDir + "/" + filepath.ToSlash(rel)
+			if entry.IsDir() {
+				if err := sftpClient.MkdirAll(remote); err != nil {
+					return fmt.Errorf("sftp mkdir %s: %w", remote, err)
+				}
+				if err := walk(local); err != nil {
+					return err
+				}
+				continue
+			}
+			// Skip links; the Node distribution has none that matter.
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+			if !info.Mode().IsRegular() {
+				continue
+			}
+			content, err := os.ReadFile(local)
+			if err != nil {
+				return fmt.Errorf("reading %s: %w", local, err)
+			}
+			remoteFile, err := sftpClient.Create(remote)
+			if err != nil {
+				return fmt.Errorf("sftp create %s: %w", remote, err)
+			}
+			if _, err := remoteFile.Write(content); err != nil {
+				remoteFile.Close()
+				return fmt.Errorf("sftp write %s: %w", remote, err)
+			}
+			remoteFile.Close()
+		}
+		return nil
+	}
+	if err := sftpClient.MkdirAll(remoteDir); err != nil {
+		return fmt.Errorf("sftp mkdir %s: %w", remoteDir, err)
+	}
+	return walk(localDir)
 }

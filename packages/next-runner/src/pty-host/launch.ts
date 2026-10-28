@@ -9,7 +9,7 @@
 
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 export interface PtyHostLaunchSpec {
   /** 传给 process.execPath 的绝对入口路径。 */
@@ -40,12 +40,16 @@ export function resolvePtyHostLaunchSpec(
   const bundledEntry = join(here, "pty-host.mjs");
   if (existsSync(bundledEntry)) {
     const loader = join(here, "lib", "ptyHostAssets.mjs");
+    // Windows：`--import C:\...` 会被 ESM loader 当成 `c:` 协议拒绝
+    // （ERR_UNSUPPORTED_ESM_URL_SCHEME）。--import 只接受模块说明符，
+    // 绝对路径必须转成 file:// URL；posix 两种形式都合法，统一转换。
+    const loaderArg = existsSync(loader) ? pathToFileURL(loader).href : null;
     return {
       entry: bundledEntry,
       kind: "bundle",
       // 子进程启动时先安装 node-pty 原生资产（prebuild 拷贝 + spawn-helper chmod），
       // 再执行入口模块；这样第一次 spawn 前 pty.node 已经就位。
-      args: existsSync(loader) ? ["--import", loader] : [],
+      args: loaderArg ? ["--import", loaderArg] : [],
       cwd: process.cwd(),
     };
   }
