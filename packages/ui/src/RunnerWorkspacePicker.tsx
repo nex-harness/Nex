@@ -1,5 +1,5 @@
-import type { ServerWorkspaceOption } from "@nex/shared";
-import { FolderOpen, Laptop, Monitor, Server } from "lucide-react";
+import type { RunnerUpdateTriggerResult, ServerWorkspaceOption } from "@nex/shared";
+import { FolderOpen, Laptop, Loader2, Monitor, Server } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -9,7 +9,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.js";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
+import { useRunnerUpdateAction } from "@/hooks/useRunnerUpdateAction.js";
+import { resolveRunnerChooseFolderState } from "@/lib/runnerCapabilities.js";
 import {
   groupRunnerWorkspaceOptions,
   resolveRunnerWorkspaceTitle,
@@ -62,6 +65,8 @@ export function RunnerWorkspacePicker({
   onBrowseDirectory,
   onInstallRunner,
   onChooseFolder,
+  onUpdateRunner,
+  onReloadWorkspaces,
 }: {
   open: boolean;
   workspaces: readonly ServerWorkspaceOption[];
@@ -76,9 +81,20 @@ export function RunnerWorkspacePicker({
    * 提供时每个有 runnerId 的机器分组显示「Choose folder…」。
    */
   onChooseFolder?: (runnerId: string) => void;
+  /**
+   * 手动触发 runner 自更新（docs/next/runner-update.md 决策 5）。
+   * 提供时，能力不足的机器在禁用的「Choose folder…」旁显示 Update。
+   */
+  onUpdateRunner?: (runnerId: string) => Promise<RunnerUpdateTriggerResult>;
+  /** 更新触发后延迟重读目录，让重连后的能力位生效。 */
+  onReloadWorkspaces?: () => Promise<unknown>;
 }) {
   const { intl } = useNexIntl();
   const groups = groupRunnerWorkspaceOptions(workspaces);
+  const { updatingRunnerId, triggerUpdate } = useRunnerUpdateAction({
+    updateRunner: onUpdateRunner,
+    reload: onReloadWorkspaces,
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -110,21 +126,30 @@ export function RunnerWorkspacePicker({
             const osLabel = resolveRunnerOsLabel(group.runnerOs, intl);
             // 「Choose folder…」是机器级动作：旧 server 的分组没有 runnerId，
             // 无法构造 `runner:<id>:~`，因此不显示，保持原列表行为。
-            const canChooseFolder = Boolean(onChooseFolder && group.runnerId);
+            // 新 server 会带 runnerCapabilities：旧 runner 没有 `runner-workspaces`
+            // 时置灰，避免它回 `Unknown method runner-workspaces.add`。
+            const chooseFolderState = resolveRunnerChooseFolderState({
+              runnerId: group.runnerId,
+              capabilities: group.runnerCapabilities,
+              canChooseFolder: Boolean(onChooseFolder),
+              canUpdate: Boolean(onUpdateRunner),
+            });
+            const machineName =
+              group.runnerName || intl.formatMessage({ id: "runnerWorkspacePicker.localMachine" });
+            const updating = updatingRunnerId === group.runnerId;
             return (
               <section key={group.key} className="flex min-w-0 flex-col gap-1">
                 <div className="flex min-w-0 items-center gap-2 px-2 pt-1 pb-0.5">
                   <RunnerOsIcon os={group.runnerOs} />
                   <span className="min-w-0 flex-1 truncate text-ui-sm font-medium text-foreground-subtle">
-                    {group.runnerName ||
-                      intl.formatMessage({ id: "runnerWorkspacePicker.localMachine" })}
+                    {machineName}
                   </span>
                   {osLabel ? (
                     <Badge variant="outline" className="shrink-0">
                       {osLabel}
                     </Badge>
                   ) : null}
-                  {canChooseFolder ? (
+                  {chooseFolderState.kind === "enabled" ? (
                     <Button
                       type="button"
                       variant="ghost"
@@ -134,6 +159,48 @@ export function RunnerWorkspacePicker({
                       onClick={() => onChooseFolder?.(group.runnerId as string)}
                     >
                       {intl.formatMessage({ id: "runnerWorkspacePicker.chooseFolder" })}
+                    </Button>
+                  ) : null}
+                  {chooseFolderState.kind === "disabled" ? (
+                    <Tooltip>
+                      {/* 禁用按钮不派发指针事件，tooltip 触发器必须包在可聚焦的外层。 */}
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex shrink-0" tabIndex={0}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled
+                            className="h-7 shrink-0 px-2 text-ui-sm text-foreground-subtlest"
+                            data-testid={`runner-workspace-choose-folder-${group.runnerId}`}
+                          >
+                            {intl.formatMessage({ id: "runnerWorkspacePicker.chooseFolder" })}
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {intl.formatMessage({
+                          id: "runnerWorkspacePicker.chooseFolderNeedsUpdate",
+                        })}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
+                  {chooseFolderState.kind === "disabled" && chooseFolderState.showUpdate ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 shrink-0 px-2 text-ui-sm"
+                      data-testid={`runner-workspace-update-${group.runnerId}`}
+                      disabled={updating}
+                      onClick={() => {
+                        if (group.runnerId) {
+                          void triggerUpdate(group.runnerId, machineName);
+                        }
+                      }}
+                    >
+                      {updating ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
+                      {intl.formatMessage({ id: "runnerWorkspacePicker.updateRunner" })}
                     </Button>
                   ) : null}
                 </div>

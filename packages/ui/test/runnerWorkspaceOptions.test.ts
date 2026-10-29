@@ -70,6 +70,32 @@ test("groups carry the runnerId needed for the machine-scope choose-folder actio
   assert.equal(localOnly[0]!.runnerId, undefined);
 });
 
+test("groups carry runner capabilities from server-info", () => {
+  // docs/next/runner-update.md 决策 3：能力决定「Choose folder…」是否可用。
+  const groups = groupRunnerWorkspaceOptions([
+    {
+      path: "/srv/app",
+      runnerId: "alpha",
+      runnerName: "mac-studio",
+      runnerCapabilities: ["runner-workspaces", "self-update"],
+    },
+    { path: "/srv/web", runnerId: "alpha", runnerName: "mac-studio" },
+    { path: "/srv/old", runnerId: "beta", runnerName: "old-box" },
+  ]);
+  assert.deepEqual(groups[0]!.runnerCapabilities, ["runner-workspaces", "self-update"]);
+  // 旧 runner 没有 capabilities：保持 undefined，不能补成空数组冒充“已上报”。
+  assert.equal(groups[1]!.runnerCapabilities, undefined);
+});
+
+test("a group with capabilities keeps them even when a later entry omits them", () => {
+  const groups = groupRunnerWorkspaceOptions([
+    { path: "/srv/app", runnerId: "alpha", runnerCapabilities: ["runner-workspaces"] },
+    { path: "/srv/web", runnerId: "alpha" },
+  ]);
+  assert.equal(groups.length, 1);
+  assert.deepEqual(groups[0]!.runnerCapabilities, ["runner-workspaces"]);
+});
+
 test("missing runner name falls back to runner id and single-runner entries group together", () => {
   const groups = groupRunnerWorkspaceOptions([
     { path: "/w", runnerId: "runner_abc" },

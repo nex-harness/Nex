@@ -51,9 +51,9 @@ func TestDefaultPort(t *testing.T) {
 
 func TestParsePlatform(t *testing.T) {
 	cases := []struct {
-		uname       string
-		goos, arch  string
-		bundle      string
+		uname      string
+		goos, arch string
+		bundle     string
 	}{
 		{"Linux arm64 aarch64\n", "linux", "arm64", "linux-arm64"},
 		{"Darwin arm64\n", "darwin", "arm64", "darwin-arm64"},
@@ -143,7 +143,7 @@ func TestWriteRemoteFileCommandPOSIX(t *testing.T) {
 }
 
 func TestStartCommandIncludesLingerFallback(t *testing.T) {
-	command := buildStartCommand(targetPlatform{GOOS: "linux", GOArch: "x64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "/home/u")
+	command := buildStartCommand(targetPlatform{GOOS: "linux", GOArch: "x64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "/home/u", supervisorSystemd)
 	for _, fragment := range []string{
 		"systemctl --user restart nex-runner.service",
 		"enable-linger 'u'",
@@ -159,15 +159,31 @@ func TestStartCommandIncludesLingerFallback(t *testing.T) {
 	}
 }
 
+// The setsid fallback has no supervisor, so it must loop on exit code 75 and
+// only on 75 (docs/next/runner-update.md decision 5): a crash must not restart.
+func TestStartCommandSetsidLoopRestartsOnlyOn75(t *testing.T) {
+	command := buildStartCommand(targetPlatform{GOOS: "linux", GOArch: "x64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "/home/u", supervisorLoop)
+	for _, fragment := range []string{
+		"while :; do",
+		"[ $? -eq 75 ] || break",
+		"done",
+		"setsid nohup sh -c",
+	} {
+		if !strings.Contains(command, fragment) {
+			t.Fatalf("setsid loop missing %q: %s", fragment, command)
+		}
+	}
+}
+
 func TestStartCommandDarwinUsesLaunchAgent(t *testing.T) {
-	command := buildStartCommand(targetPlatform{GOOS: "darwin", GOArch: "arm64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "/Users/u")
+	command := buildStartCommand(targetPlatform{GOOS: "darwin", GOArch: "arm64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "/Users/u", supervisorLaunchd)
 	if !strings.Contains(command, "/Users/u/Library/LaunchAgents/cn.nex.runner.plist") || !strings.Contains(command, "launchctl load") || !strings.Contains(command, "/Users/u/.nex-next-runner/node/node") {
 		t.Fatalf("darwin start command should write + load the LaunchAgent: %s", command)
 	}
 }
 
 func TestStartCommandWindowsUsesScheduledTask(t *testing.T) {
-	command := buildStartCommand(targetPlatform{GOOS: "win32", GOArch: "x64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "C:/Users/u")
+	command := buildStartCommand(targetPlatform{GOOS: "win32", GOArch: "x64"}, installRequest{Target: SSHTarget{Username: "u", Host: "h", Password: "p"}}, "C:/Users/u", supervisorLoop)
 	for _, fragment := range []string{
 		"schtasks /create /f /tn NexRunner",
 		"onlogon",
@@ -179,7 +195,7 @@ func TestStartCommandWindowsUsesScheduledTask(t *testing.T) {
 		}
 	}
 	// The wrapper is base64-written; decode and verify it sources the env
-	// file and starts the bundled node.
+	// file, starts the bundled node and loops on exit code 75 only.
 	match := regexp.MustCompile(`FromBase64String\('([A-Za-z0-9+/=]+)'\)`).FindStringSubmatch(command)
 	if match == nil {
 		t.Fatalf("windows start command has no base64 wrapper blob: %s", command)
@@ -192,9 +208,55 @@ func TestStartCommandWindowsUsesScheduledTask(t *testing.T) {
 		`cd /d "C:\Users\u\.nex-next-runner"`,
 		`type env`,
 		`C:\Users\u\.nex-next-runner\node\node.exe" runner.mjs`,
+		":start",
+		"if %errorlevel%==75 goto start",
+		"exit /b %errorlevel%",
 	} {
 		if !strings.Contains(string(decoded), fragment) {
 			t.Fatalf("wrapper missing %q: %s", fragment, string(decoded))
+		}
+	}
+}
+
+// The env file tells the runner which process owns the restart after exit 75.
+func TestEnvFileCarriesSupervisor(t *testing.T) {
+	env := buildEnvFile(installRequest{
+		ServerURL: "wss://example/runner",
+		RunnerTok: "tok",
+		RunnerID:  "runner_1",
+	}, "box", "/home/u", supervisorSystemd)
+	for _, fragment := range []string{
+		"NEX_SERVER_URL=wss://example/runner",
+		"NEX_RUNNER_TOKEN=tok",
+		"NEX_RUNNER_ID=runner_1",
+		"NEX_RUNNER_NAME=box",
+		"NEX_RUNNER_WORKSPACES=/home/u",
+		"NEX_RUNNER_SUPERVISOR=systemd",
+	} {
+		if !strings.Contains(env, fragment) {
+			t.Fatalf("env missing %q: %s", fragment, env)
+		}
+	}
+	if !strings.HasSuffix(env, "\n") {
+		t.Fatalf("env must end with a newline: %q", env)
+	}
+}
+
+func TestSupervisorNamePerPlatform(t *testing.T) {
+	cases := []struct {
+		platform targetPlatform
+		systemd  bool
+		want     string
+	}{
+		{targetPlatform{GOOS: "linux"}, true, supervisorSystemd},
+		{targetPlatform{GOOS: "linux"}, false, supervisorLoop},
+		{targetPlatform{GOOS: "darwin"}, true, supervisorLaunchd},
+		{targetPlatform{GOOS: "darwin"}, false, supervisorLaunchd},
+		{targetPlatform{GOOS: "win32"}, true, supervisorLoop},
+	}
+	for _, testCase := range cases {
+		if got := supervisorName(testCase.platform, testCase.systemd); got != testCase.want {
+			t.Fatalf("supervisorName(%s, systemd=%v) = %q, want %q", testCase.platform.GOOS, testCase.systemd, got, testCase.want)
 		}
 	}
 }

@@ -22,6 +22,12 @@ export interface RunnerWorkspacePickerGroup {
   runnerId?: string;
   /** 机器操作系统；未知时为 undefined，UI 不显示 os 徽标。 */
   runnerOs?: string;
+  /**
+   * 机器自报能力（docs/next/runner-update.md 决策 2/3）。
+   *
+   * 缺失 = 旧 runner 没有任何可选能力；“Choose folder…”据此置灰。
+   */
+  runnerCapabilities?: string[];
   workspaces: ServerWorkspaceOption[];
 }
 
@@ -47,6 +53,11 @@ export function groupRunnerWorkspaceOptions(
       if (!existing.runnerOs && workspace.runnerOs?.trim()) {
         existing.runnerOs = workspace.runnerOs.trim();
       }
+      // 同一 runner 的所有 workspace 来自同一次 hello，能力应一致；取首个有值项，
+      // 避免个别旧条目缺少字段时把整组能力覆盖成 undefined。
+      if (!existing.runnerCapabilities && workspace.runnerCapabilities) {
+        existing.runnerCapabilities = [...workspace.runnerCapabilities];
+      }
       continue;
     }
     groups.set(key, {
@@ -54,6 +65,9 @@ export function groupRunnerWorkspaceOptions(
       runnerName,
       ...(runnerId ? { runnerId } : {}),
       ...(workspace.runnerOs?.trim() ? { runnerOs: workspace.runnerOs.trim() } : {}),
+      ...(workspace.runnerCapabilities
+        ? { runnerCapabilities: [...workspace.runnerCapabilities] }
+        : {}),
       workspaces: [workspace],
     });
   }

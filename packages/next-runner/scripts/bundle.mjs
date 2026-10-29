@@ -34,6 +34,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { BUILD_ID_FILES, computeBuildId } from "./buildId.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(HERE, "..");
@@ -281,6 +282,21 @@ await writeFile(
   "utf8",
 );
 
+// --- buildId ---------------------------------------------------------------
+// 内容派生（docs/next/runner-update.md 决策 1）：三个产物按固定顺序哈希，
+// 相同代码在任何平台得到相同 id，不需要手工 bump 版本号。
+// 运行中的 runner 不读这个文件，而是启动时对自身安装目录里的同样三个文件重算
+// （src/update/buildId.ts），因此 build.json 只供 server 判定“哪个是最新”。
+const buildId = computeBuildId(
+  await Promise.all(BUILD_ID_FILES.map((file) => readFile(resolve(OUT_DIR, file)))),
+);
+const buildStamp = {
+  buildId,
+  version: pkg.version,
+  builtAt: new Date().toISOString(),
+};
+await writeFile(resolve(OUT_DIR, "build.json"), `${JSON.stringify(buildStamp, null, 2)}\n`, "utf8");
+
 const sizeOf = (path) => (existsSync(path) ? readFileSync(path).length : 0);
 process.stdout.write(
   [
@@ -288,5 +304,6 @@ process.stdout.write(
     `bundled ${PTY_HOST_OUT_FILE} (${sizeOf(PTY_HOST_OUT_FILE)} bytes)`,
     `pty assets for ${TARGET_PLATFORM} -> ${PTY_ASSETS_ARCHIVE} (${sizeOf(PTY_ASSETS_ARCHIVE)} bytes): ${ptyAssets.files.join(", ")}`,
     `external packages: ${external.join(", ")}`,
+    `buildId ${buildId} (${TARGET_PLATFORM})`,
   ].join("\n") + "\n",
 );

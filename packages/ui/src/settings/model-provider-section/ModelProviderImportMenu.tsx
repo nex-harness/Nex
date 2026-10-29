@@ -133,7 +133,21 @@ export function ModelProviderImportMenu({ onImported }: { onImported?: () => voi
               onSelect={() => void handleImport(status.runnerId)}
             >
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate">{status.name}</span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate">{status.name}</span>
+                  {/* docs/next/runner-update.md 决策 4：outdated 来自
+                      GET /api/config/runners；旧 server 不返回该字段，不显示提示。 */}
+                  {status.outdated ? (
+                    <span
+                      className="shrink-0 text-ui-xs text-warning"
+                      data-testid={`model-provider-import-item-update-${status.runnerId}`}
+                    >
+                      {intl.formatMessage({
+                        id: "settings.modelProvider.importFromMachine.updateAvailable",
+                      })}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="text-ui-sm text-foreground-subtle">
                   {intl.formatMessage(
                     { id: "settings.modelProvider.importFromMachine.itemMeta" },

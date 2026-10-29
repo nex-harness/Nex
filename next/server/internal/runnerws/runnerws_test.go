@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -204,5 +205,187 @@ func TestWorkspacesFrameUpdatesRegistry(t *testing.T) {
 	workspaces := registry.Workspaces()
 	if len(workspaces) != 1 || workspaces[0].Path != "/new" || workspaces[0].WorkspaceIdentity != "runner:r1:/new" {
 		t.Fatalf("workspaces = %+v", workspaces)
+	}
+}
+
+// fakeUpdates is a scripted UpdateHandler: it returns a fixed target and
+// records every updateStatus frame.
+type fakeUpdates struct {
+	target string
+	mu     sync.Mutex
+	frames []updateStatusCall
+}
+
+type updateStatusCall struct {
+	runnerID, state, buildID, errMessage string
+}
+
+func (f *fakeUpdates) OnRunnerHello(runners.Info) string { return f.target }
+
+func (f *fakeUpdates) UpdateStatus(runnerID, state, buildID, errMessage string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.frames = append(f.frames, updateStatusCall{runnerID, state, buildID, errMessage})
+}
+
+func (f *fakeUpdates) recorded() []updateStatusCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]updateStatusCall(nil), f.frames...)
+}
+
+// newServerWithUpdates serves one runner link with a scripted update handler.
+func newServerWithUpdates(t *testing.T, updates UpdateHandler) (*httptest.Server, *runners.Registry) {
+	t.Helper()
+	registry := runners.NewRegistry(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ServeWithConfig(slog.New(slog.NewTextHandler(io.Discard, nil)), registry, "runner-secret", "9.9.9", nil, updates, w, r)
+	})
+	return httptest.NewServer(handler), registry
+}
+
+// dialAndHello connects and completes the handshake, returning the connection.
+func dialAndHello(t *testing.T, server *httptest.Server, hello string) *websocket.Conn {
+	t.Helper()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	conn, _, err := websocket.Dial(context.Background(), wsURL, &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": []string{"Bearer runner-secret"}},
+	})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := conn.Write(ctx, websocket.MessageText, []byte(hello)); err != nil {
+		t.Fatalf("write hello: %v", err)
+	}
+	if _, _, err := conn.Read(ctx); err != nil {
+		t.Fatalf("read welcome: %v", err)
+	}
+	return conn
+}
+
+// readFrameWithin reads one frame, failing when nothing arrives in time.
+func readFrameWithin(t *testing.T, conn *websocket.Conn, timeout time.Duration) ([]byte, bool) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	_, data, err := conn.Read(ctx)
+	if err != nil {
+		return nil, false
+	}
+	return data, true
+}
+
+// An outdated runner is told to update once per connection, right after the
+// welcome (docs/next/runner-update.md decision 5).
+func TestUpdateFrameSentOncePerConnection(t *testing.T) {
+	updates := &fakeUpdates{target: "new-build"}
+	server, _ := newServerWithUpdates(t, updates)
+	defer server.Close()
+
+	conn := dialAndHello(t, server, `{"t":"hello","runnerId":"r1","buildId":"old-build","capabilities":["self-update"],"workspaces":[{"path":"/w"}]}`)
+	defer func() { _ = conn.CloseNow() }()
+
+	data, ok := readFrameWithin(t, conn, 2*time.Second)
+	if !ok {
+		t.Fatal("no update frame after hello")
+	}
+	if string(data) != `{"buildId":"new-build","t":"update"}` {
+		t.Fatalf("update frame = %s", data)
+	}
+
+	// A second hello-level decision must not repeat the frame: nothing else is
+	// pending on this connection.
+	if data, ok := readFrameWithin(t, conn, 300*time.Millisecond); ok {
+		t.Fatalf("unexpected extra frame: %s", data)
+	}
+}
+
+// The handler decides; a nil target (up to date, legacy, no capability, dev)
+// sends nothing.
+func TestNoUpdateFrameWhenHandlerDeclines(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		target  string
+		handler UpdateHandler
+	}{
+		{"declined", "", &fakeUpdates{}},
+		{"nil handler", "", nil},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			server, _ := newServerWithUpdates(t, testCase.handler)
+			defer server.Close()
+			conn := dialAndHello(t, server, `{"t":"hello","runnerId":"r1","buildId":"old-build","capabilities":["self-update"],"workspaces":[{"path":"/w"}]}`)
+			defer func() { _ = conn.CloseNow() }()
+			if data, ok := readFrameWithin(t, conn, 300*time.Millisecond); ok {
+				t.Fatalf("unexpected frame: %s", data)
+			}
+		})
+	}
+}
+
+// updateStatus frames are forwarded to the handler with the runner id.
+func TestUpdateStatusFramesTracked(t *testing.T) {
+	updates := &fakeUpdates{}
+	server, _ := newServerWithUpdates(t, updates)
+	defer server.Close()
+
+	conn := dialAndHello(t, server, `{"t":"hello","runnerId":"r1","buildId":"old-build","workspaces":[{"path":"/w"}]}`)
+	defer func() { _ = conn.CloseNow() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := conn.Write(ctx, websocket.MessageText,
+		[]byte(`{"t":"updateStatus","state":"downloading","buildId":"new-build"}`)); err != nil {
+		t.Fatalf("write updateStatus: %v", err)
+	}
+	if err := conn.Write(ctx, websocket.MessageText,
+		[]byte(`{"t":"updateStatus","state":"failed","buildId":"new-build","error":"dependencies changed; reinstall required"}`)); err != nil {
+		t.Fatalf("write updateStatus: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(updates.recorded()) == 2 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	frames := updates.recorded()
+	if len(frames) != 2 {
+		t.Fatalf("frames = %+v, want two", frames)
+	}
+	if frames[0].runnerID != "r1" || frames[0].state != "downloading" || frames[0].buildID != "new-build" {
+		t.Fatalf("first frame = %+v", frames[0])
+	}
+	if frames[1].state != "failed" || frames[1].errMessage != "dependencies changed; reinstall required" {
+		t.Fatalf("second frame = %+v", frames[1])
+	}
+}
+
+// The hello carries buildId/capabilities into the registry so server-info and
+// /api/config/runners can expose them.
+func TestHelloStoresBuildAndCapabilities(t *testing.T) {
+	server, registry := newServerWithUpdates(t, nil)
+	defer server.Close()
+
+	conn := dialAndHello(t, server, `{"t":"hello","runnerId":"r1","name":"box","os":"linux","arch":"x64","buildId":"build-1","capabilities":["self-update"," runner-workspaces ","self-update"],"workspaces":[{"path":"/w"}]}`)
+	defer func() { _ = conn.CloseNow() }()
+
+	info, ok := registry.RunnerInfo("r1")
+	if !ok {
+		t.Fatal("runner not registered")
+	}
+	if info.BuildID != "build-1" {
+		t.Fatalf("BuildID = %q", info.BuildID)
+	}
+	// Trimmed and de-duplicated, order preserved.
+	if len(info.Capabilities) != 2 || info.Capabilities[0] != "self-update" || info.Capabilities[1] != "runner-workspaces" {
+		t.Fatalf("Capabilities = %+v", info.Capabilities)
+	}
+	workspaces := registry.Workspaces()
+	if len(workspaces) != 1 || workspaces[0].RunnerBuildID != "build-1" || len(workspaces[0].RunnerCapabilities) != 2 {
+		t.Fatalf("workspace info = %+v", workspaces)
 	}
 }

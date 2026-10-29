@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -54,6 +55,23 @@ type helloFrame struct {
 	// (docs/next/config-mcp-skills.md decision 4). Optional; 0 means "never
 	// applied" and triggers an immediate push.
 	LastAppliedVersion uint64 `json:"lastAppliedVersion,omitempty"`
+	// BuildID and Capabilities identify the runner build and its optional
+	// features (docs/next/runner-update.md decision 2). Both are absent on a
+	// legacy runner.
+	BuildID      string   `json:"buildId,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty"`
+}
+
+// UpdateHandler is the server-side self-update decision surface
+// (docs/next/runner-update.md decisions 4-5). It owns "what is latest" and the
+// per-runner update state; the link only transports frames.
+type UpdateHandler interface {
+	// OnRunnerHello decides whether a just-connected runner must update. It
+	// returns the target buildId, or "" when the runner is current, has no
+	// self-update capability, or no bundle is staged for its platform.
+	OnRunnerHello(info runners.Info) string
+	// UpdateStatus records one `updateStatus` frame.
+	UpdateStatus(runnerID, state, buildID, errorMessage string)
 }
 
 // ConfigHandler receives runner acknowledgements and connect events. The
@@ -90,6 +108,7 @@ type Conn struct {
 	logger  *slog.Logger
 	reg     *runners.Registry
 	config  ConfigHandler
+	updates UpdateHandler
 	ws      *websocket.Conn
 	version string
 
@@ -100,6 +119,10 @@ type Conn struct {
 	listens map[string]func(json.RawMessage)
 	closed  bool
 	info    runners.Info
+	// updateSent marks that this connection already carried one automatic
+	// `update` frame (docs/next/runner-update.md decision 5: at most one per
+	// connection, so a runner that keeps failing cannot loop).
+	updateSent bool
 
 	done chan struct{}
 	// doneOnce guards closing done; shutdownOnce guards the pending-call drain.
@@ -117,13 +140,15 @@ var sequence atomic.Uint64
 // Serve accepts /runner requests, validates the bearer token, performs the
 // hello/welcome handshake and runs the link until the peer disconnects.
 func Serve(logger *slog.Logger, reg *runners.Registry, runnerToken, serverVersion string, w http.ResponseWriter, r *http.Request) {
-	ServeWithConfig(logger, reg, runnerToken, serverVersion, nil, w, r)
+	ServeWithConfig(logger, reg, runnerToken, serverVersion, nil, nil, w, r)
 }
 
 // ServeWithConfig is Serve plus the server-owned config push (docs/next/
 // config-mcp-skills.md decision 4). config may be nil, which disables the push
-// (the client then keeps its local fallback config).
-func ServeWithConfig(logger *slog.Logger, reg *runners.Registry, runnerToken, serverVersion string, config ConfigHandler, w http.ResponseWriter, r *http.Request) {
+// (the client then keeps its local fallback config). updates may be nil, which
+// disables the automatic self-update frame (docs/next/runner-update.md
+// decision 5).
+func ServeWithConfig(logger *slog.Logger, reg *runners.Registry, runnerToken, serverVersion string, config ConfigHandler, updates UpdateHandler, w http.ResponseWriter, r *http.Request) {
 	if !auth.TokensEqual(runnerToken, bearerToken(r)) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -151,6 +176,7 @@ func ServeWithConfig(logger *slog.Logger, reg *runners.Registry, runnerToken, se
 		logger:  logger.With("component", "runner-link"),
 		reg:     reg,
 		config:  config,
+		updates: updates,
 		ws:      ws,
 		version: serverVersion,
 		pending: make(map[string]*pendingCall),
@@ -172,7 +198,13 @@ func ServeWithConfig(logger *slog.Logger, reg *runners.Registry, runnerToken, se
 	conn.shutdown()
 	reg.Unregister(conn.info.RunnerID, conn)
 	if config != nil {
-		config.RunnerDisconnected(conn.info.RunnerID)
+		// 修复：旧连接退出时原先无条件调用 RunnerDisconnected。自更新会以
+		// exit 75 重启并立刻重连，新连接的 OnLinkReady 可能先于旧连接清理执行；
+		// 此时无条件删除会抹掉新连接的 push 入口，导致重连后该 runner 从
+		// /api/config/runners 消失、配置推送失效。仅当 id 已无存活链路时才通知。
+		if _, live := reg.Runner(conn.info.RunnerID); !live {
+			config.RunnerDisconnected(conn.info.RunnerID)
+		}
 	}
 	if err != nil && !isExpectedClose(err) {
 		conn.logger.Info("runner link closed", "runnerId", conn.info.RunnerID, "error", err)
@@ -228,12 +260,14 @@ func (c *Conn) handshake(ctx context.Context) error {
 	}
 
 	c.info = runners.Info{
-		RunnerID:   hello.RunnerID,
-		Name:       hello.Name,
-		Version:    hello.Version,
-		OS:         hello.OS,
-		Arch:       hello.Arch,
-		Workspaces: hello.Workspaces,
+		RunnerID:     hello.RunnerID,
+		Name:         hello.Name,
+		Version:      hello.Version,
+		OS:           hello.OS,
+		Arch:         hello.Arch,
+		Workspaces:   hello.Workspaces,
+		BuildID:      hello.BuildID,
+		Capabilities: hello.Capabilities,
 	}
 
 	welcome, err := json.Marshal(map[string]any{"t": "welcome", "serverVersion": c.version})
@@ -248,12 +282,62 @@ func (c *Conn) handshake(ctx context.Context) error {
 	// been welcomed. Register closes a displaced duplicate itself.
 	c.reg.Register(c.info, c)
 	c.logger.Info("runner connected", "runnerId", hello.RunnerID, "name", hello.Name,
-		"workspaces", len(hello.Workspaces), "version", hello.Version)
+		"workspaces", len(hello.Workspaces), "version", hello.Version,
+		"buildId", hello.BuildID, "capabilities", len(hello.Capabilities))
 	if c.config != nil {
 		c.config.OnLinkReady(hello.RunnerID, c.pushConfig)
 		c.config.RunnerConnected(hello.RunnerID, hello.LastAppliedVersion)
 	}
+	// The update frame follows the config push (docs/next/runner-update.md
+	// "Event order"): the runner must first have the current desired config, so
+	// the new build starts with the same doc the old one applied.
+	c.maybeSendUpdate()
 	return nil
+}
+
+// maybeSendUpdate sends one automatic `update` frame when this connection's
+// hello is outdated and the runner can self-update. It is idempotent per
+// connection: at most one automatic frame is ever written, so a runner that
+// keeps failing to update cannot be put into a restart loop by the server.
+func (c *Conn) maybeSendUpdate() {
+	if c.updates == nil || c.UpdateSent() {
+		return
+	}
+	target := c.updates.OnRunnerHello(c.info)
+	if target == "" {
+		return
+	}
+	if err := c.SendUpdate(target); err != nil {
+		c.logger.Warn("sending update frame failed", "runnerId", c.info.RunnerID, "error", err)
+		return
+	}
+	c.logger.Info("runner update requested", "runnerId", c.info.RunnerID,
+		"from", c.info.BuildID, "to", target)
+}
+
+// SendUpdate writes one S→R `update` frame (docs/next/runner-update.md
+// decision 5). The runner downloads the bundle, verifies the buildId and
+// restarts; the server only names the target build.
+func (c *Conn) SendUpdate(buildID string) error {
+	buildID = strings.TrimSpace(buildID)
+	if buildID == "" {
+		return errors.New("update buildId is required")
+	}
+	c.mu.Lock()
+	c.updateSent = true
+	c.mu.Unlock()
+	payload, err := json.Marshal(map[string]string{"t": "update", "buildId": buildID})
+	if err != nil {
+		return fmt.Errorf("encoding update frame: %w", err)
+	}
+	return c.write(payload)
+}
+
+// UpdateSent reports whether this connection already carried an update frame.
+func (c *Conn) UpdateSent() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.updateSent
 }
 
 // pushConfig writes one S→R `config` frame. The payload is the JSON body of the
@@ -350,7 +434,10 @@ func (c *Conn) dispatch(data []byte) {
 		ID  string          `json:"id"`
 		OK  *bool           `json:"ok"`
 		Val json.RawMessage `json:"value"`
-		Err *runnerError    `json:"error"`
+		// 修复：error 在 `result` 里是 {message,name} 对象，但在 `updateStatus`
+		// 里是字符串。若按 runnerError 解码，带字符串 error 的 updateStatus 会
+		// 整帧被判为 malformed 丢弃。这里保留原始字节，按帧类型各自解码。
+		Err json.RawMessage `json:"error"`
 	}
 	if err := json.Unmarshal(data, &env); err != nil {
 		c.logger.Warn("dropping malformed runner frame", "error", err)
@@ -371,9 +458,10 @@ func (c *Conn) dispatch(data []byte) {
 			return
 		}
 		remote := &runners.RemoteError{Message: "runner call failed"}
-		if env.Err != nil && env.Err.Message != "" {
-			remote.Message = env.Err.Message
-			remote.Name = env.Err.Name
+		var callErr runnerError
+		if len(env.Err) > 0 && json.Unmarshal(env.Err, &callErr) == nil && callErr.Message != "" {
+			remote.Message = callErr.Message
+			remote.Name = callErr.Name
 		}
 		pending.ch <- callResult{err: remote}
 	case "event":
@@ -410,6 +498,21 @@ func (c *Conn) dispatch(data []byte) {
 		}
 		// c 是该 runner 的当前链路；registry 会再校验一次，忽略过期连接的帧。
 		c.reg.UpdateWorkspaces(c.info.RunnerID, c, frame.Workspaces)
+	case "updateStatus":
+		// 自更新进度（docs/next/runner-update.md 决策 4）：runner 拥有下载、
+		// 校验和重启；server 只记录状态给 UI 读。未知状态由 tracker 丢弃。
+		var frame struct {
+			State   string `json:"state"`
+			BuildID string `json:"buildId"`
+			Error   string `json:"error"`
+		}
+		if err := json.Unmarshal(data, &frame); err != nil {
+			c.logger.Warn("dropping malformed updateStatus", "error", err)
+			return
+		}
+		if c.updates != nil {
+			c.updates.UpdateStatus(c.info.RunnerID, frame.State, frame.BuildID, frame.Error)
+		}
 	case "ping":
 		_ = c.sendControl("pong")
 	case "pong":

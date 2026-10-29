@@ -801,6 +801,18 @@ function RootInner({
     />
   ) : null;
   // 只有实现 listServerWorkspaces 的平台（web）才挂载选择器；desktop 结构保持原样。
+  // 自更新入口（docs/next/runner-update.md 决策 5）同样只在平台实现时存在：
+  // 用 useCallback 保持函数身份稳定，避免选择器内部 hook 每次渲染重建。
+  const platformUpdateRunner = platform.updateRunner;
+  const updateRunner = useCallback(
+    (runnerId: string) => {
+      if (!platformUpdateRunner) {
+        return Promise.reject(new Error("updateRunner is not supported on this platform"));
+      }
+      return platformUpdateRunner.call(platform, runnerId);
+    },
+    [platform, platformUpdateRunner],
+  );
   const runnerWorkspacePickerDialog = platform.listServerWorkspaces ? (
     <ScopedErrorBoundary
       scope="runner-workspace-picker"
@@ -814,6 +826,8 @@ function RootInner({
         onOpenChange={setRunnerWorkspacePickerOpen}
         onBrowseDirectory={handleOpenDirectoryBrowser}
         onChooseFolder={platform.addRunnerWorkspace ? handleChooseRunnerFolder : undefined}
+        onUpdateRunner={platformUpdateRunner ? updateRunner : undefined}
+        onReloadWorkspaces={reloadRunnerWorkspaceDirectory}
         onInstallRunner={
           platform.installRunnerOverSSH
             ? () => {

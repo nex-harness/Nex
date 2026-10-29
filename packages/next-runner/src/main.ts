@@ -8,6 +8,7 @@ import {
 } from "./config.js";
 import { ChannelRegistry } from "./link/registry.js";
 import { RunnerLink } from "./link/client.js";
+import { RUNNER_CAPABILITIES } from "./link/frames.js";
 import { PiEngine } from "./engine/pi/piEngine.js";
 import { AttachmentRegistry } from "./attachments/registry.js";
 import { ConversationPublisher } from "./v4/publisher.js";
@@ -19,12 +20,22 @@ import { registerWorkspaceTools } from "./channels/workspaceTools.js";
 import { registerE2EProvider } from "./extensions/e2eProvider.js";
 import { WorkspaceRoots } from "./workspaces/workspaceRoots.js";
 import { publishWorkspaceFrames } from "./workspaces/workspaceFrames.js";
+import { bundleDir, currentBuildId } from "./update/buildId.js";
+import { rollbackPendingUpdate } from "./update/rollback.js";
+import { SelfUpdater } from "./update/selfUpdate.js";
 
 async function main(): Promise<void> {
   // E2E only: seed the isolated agent dir before pi reads it.
   await seedAgentDirFromEnv(process.env);
   const config = resolveConfig(process.env);
   const logger = createLogger(parseLogLevel(config.logLevel), "runner");
+  // 自更新回滚必须先于一切业务初始化（docs/next/runner-update.md 决策 5）：
+  // 上一次更新后崩溃的进程在这里把 .prev/ 恢复回来，避免带着坏代码继续跑。
+  const installDir = bundleDir();
+  await rollbackPendingUpdate({ installDir, logger: logger.child("update") });
+  // 运行中的 runner 不读 build.json，而是对自己安装目录里的三个产物重算哈希；
+  // 从源码（tsx）启动时文件不存在，报告 "dev" 并禁用自更新。
+  const buildId = await currentBuildId(installDir);
   // No-op outside the E2E stack (marker file absent).
   registerE2EProvider(logger.child("config"));
   const runnerId = await resolveRunnerId(config.dataDir, config.runnerId);
@@ -103,6 +114,10 @@ async function main(): Promise<void> {
       version: config.version,
       os: runnerPlatform,
       arch: runnerArch,
+      // 决策 2：buildId 与 capabilities 让服务端/UI 判断这台机器支持哪些能力、
+      // 是否需要推送更新；旧 runner 没有这两个字段，服务端按 legacy 处理。
+      buildId,
+      capabilities: [...RUNNER_CAPABILITIES],
       // Read at (re)connect time so a folder added while the link was down is
       // reported by the next hello (docs/next/runner-folders.md decision 1).
       workspaces: () => roots.list().map((folder) => ({ path: folder.path, label: folder.label })),
@@ -125,6 +140,27 @@ async function main(): Promise<void> {
         link.sendConfigApplied(result);
       },
     },
+    // 决策 5：拉取式自更新。这两个回调只会在 link.start() 之后触发，
+    // 那时下面的 updater 已完成构造。
+    update: {
+      handle: (targetBuildId) => {
+        void updater.handleUpdate(targetBuildId);
+      },
+      welcomed: () => {
+        // 第一次 welcome 说明新 build 已连上服务端，可以清掉待定标记。
+        void updater.markStartupComplete();
+      },
+    },
+  });
+
+  const updater = new SelfUpdater({
+    installDir,
+    buildId,
+    serverUrl: config.serverUrl,
+    token: config.token,
+    logger: logger.child("update"),
+    sendStatus: (status) => link.sendUpdateStatus(status),
+    stopLink: () => link.stop(),
   });
 
   // Push the full served list after an add/remove (docs/next/runner-folders.md
@@ -149,6 +185,7 @@ async function main(): Promise<void> {
     serverUrl: config.serverUrl,
     workspaces: roots.list().map((folder) => folder.path),
     dataDir: config.dataDir,
+    buildId,
   });
   link.start();
 }

@@ -29,6 +29,7 @@ import type {
   RemoteTarget,
   RunnerImportSummary,
   RunnerModelStatus,
+  RunnerUpdateTriggerResult,
   ServerRemoteInfo,
   SSHInstallStatus,
   SSHInstallTarget,
@@ -225,6 +226,12 @@ function createWebPlatform(mcpSyncService: WebMcpSyncService): IPlatformService 
                     ...(workspace.runnerId ? { runnerId: workspace.runnerId } : {}),
                     ...(workspace.runnerName ? { runnerName: workspace.runnerName } : {}),
                     ...(workspace.runnerOs ? { runnerOs: workspace.runnerOs } : {}),
+                    // 构建身份与能力（docs/next/runner-update.md 决策 2）：必须原样带出，
+                    // 否则选择器无法区分旧 runner 与支持 runner-workspaces 的新 runner。
+                    ...(workspace.runnerBuildId ? { runnerBuildId: workspace.runnerBuildId } : {}),
+                    ...(workspace.runnerCapabilities
+                      ? { runnerCapabilities: [...workspace.runnerCapabilities] }
+                      : {}),
                   },
                 ]
               : [],
@@ -293,6 +300,22 @@ function createWebPlatform(mcpSyncService: WebMcpSyncService): IPlatformService 
         | null;
       if (!response.ok || !payload) {
         throw new Error(payload?.error ?? `import request failed (${response.status})`);
+      }
+      return payload;
+    },
+    // 手动触发 runner 自更新（docs/next/runner-update.md 决策 5）：server 只发
+    // update 帧，runner 自己下载/校验/换文件/重启。409 表示 runner 太旧无法
+    // 自更新，服务端文案要求重装，必须原样抛给 UI 展示。
+    updateRunner: async (runnerId) => {
+      const params = new URLSearchParams({ runnerId });
+      const response = await fetch(`/api/runner-update?${params.toString()}`, {
+        method: "POST",
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | (RunnerUpdateTriggerResult & { error?: string })
+        | null;
+      if (!response.ok || !payload) {
+        throw new Error(payload?.error ?? `runner update request failed (${response.status})`);
       }
       return payload;
     },

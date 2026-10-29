@@ -189,6 +189,8 @@ export type {
   RunnerImportScope,
   RunnerImportSummary,
   RunnerModelStatus,
+  RunnerUpdateState,
+  RunnerUpdateTriggerResult,
   RunnerWorkspaceAddResult,
   ServerWorkspaceOption,
   TaskNotificationPayload,

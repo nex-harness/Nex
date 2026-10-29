@@ -19,6 +19,7 @@
 #   next/dev.sh --e2e=search       # run the ⌘K full-text search E2E (transcript snippets)
 #   next/dev.sh --e2e=onboarding   # run the model onboarding E2E (import a machine's pi config)
 #   next/dev.sh --e2e=folders      # run the runner folders E2E (choose a folder outside the workspaces)
+#   next/dev.sh --e2e=update       # run the runner self-update E2E (bundled runner updates itself)
 #   next/dev.sh --e2e=all          # every suite, settings and mcp last
 #
 # Environment:
@@ -64,6 +65,7 @@ for arg in "$@"; do
     --e2e=search) E2E_MODE="search" ;;
     --e2e=onboarding) E2E_MODE="onboarding" ;;
     --e2e=folders) E2E_MODE="folders" ;;
+    --e2e=update) E2E_MODE="update" ;;
     --e2e=all) E2E_MODE="all" ;;
     -h | --help)
       sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -270,7 +272,18 @@ fi
 log "web:      http://localhost:$WEB_PORT"
 log "browser token: $BROWSER_TOKEN"
 
+# E2E stacks serve runner bundles from a scratch dir (the update suite stages a
+# build there); a developer stack keeps the server's default bundle dir.
+E2E_BUNDLES_ENV=()
+if [[ "$RUN_E2E" -eq 1 ]]; then
+  E2E_BUNDLES_DIR="$DATA_DIR/runner-bundles-e2e"
+  rm -rf "$E2E_BUNDLES_DIR"
+  mkdir -p "$E2E_BUNDLES_DIR"
+  E2E_BUNDLES_ENV=(NEX_RUNNER_BUNDLES_DIR="$E2E_BUNDLES_DIR")
+fi
+
 start_prefixed server env \
+  "${E2E_BUNDLES_ENV[@]}" \
   NEX_SERVER_ADDR="127.0.0.1:$PORT" \
   NEX_DATA_DIR="$SERVER_DATA" \
   NEX_WEB_STATIC_ROOT="$REPO_ROOT/packages/web/dist" \
@@ -382,6 +395,7 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   search_status=0
   onboarding_status=0
   folders_status=0
+  update_status=0
   if [[ "$E2E_MODE" == "acceptance" || "$E2E_MODE" == "all" ]]; then
     (
       cd "$REPO_ROOT"
@@ -582,6 +596,23 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
     folders_status=$?
     log "runner-folders E2E exited with $folders_status"
   fi
+  if [[ "$E2E_MODE" == "update" || "$E2E_MODE" == "all" ]]; then
+    # Runner self-update (docs/next/runner-update.md): a bundled runner "gamma"
+    # under the installer's exit-75 restart loop updates itself from the stack's
+    # bundle dir. It serves its own scratch workspace, so other suites are unaffected.
+    (
+      cd "$REPO_ROOT"
+      NEX_E2E_SERVER_ORIGIN="http://127.0.0.1:$PORT" \
+        NEX_E2E_TOKEN="$BROWSER_TOKEN" \
+        NEX_E2E_RUNNER_TOKEN="$RUNNER_TOKEN" \
+        NEX_E2E_BUNDLES_DIR="$E2E_BUNDLES_DIR" \
+        NEX_E2E_GAMMA_DIR="$DATA_DIR/runner-e2e-gamma" \
+        NEX_E2E_GAMMA_WORKSPACE="$DATA_DIR/runner-e2e-gamma-ws" \
+        node next/e2e/runner-update.mjs
+    )
+    update_status=$?
+    log "runner-update E2E exited with $update_status"
+  fi
   if [[ "$E2E_MODE" == "onboarding" || "$E2E_MODE" == "all" ]]; then
     # Model onboarding (docs/next/model-onboarding.md): Settings → Import from
     # machine → global scope → the imported model chats. Runs last in `all`: a
@@ -641,6 +672,9 @@ if [[ "$RUN_E2E" -eq 1 ]]; then
   fi
   if [[ "$folders_status" -ne 0 ]]; then
     exit "$folders_status"
+  fi
+  if [[ "$update_status" -ne 0 ]]; then
+    exit "$update_status"
   fi
   exit "$onboarding_status"
 fi

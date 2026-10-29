@@ -105,6 +105,53 @@ func generateRunnerID() string {
 	return "runner_" + hex.EncodeToString(raw)
 }
 
+// supervisorSystemd / supervisorLaunchd / supervisorLoop are the values written
+// into NEX_RUNNER_SUPERVISOR (docs/next/runner-update.md decision 5). The runner
+// reads it to decide whether an exit(75) is restarted by an external supervisor
+// or must be handled by spawning a detached copy of itself.
+const (
+	supervisorSystemd = "systemd"
+	supervisorLaunchd = "launchd"
+	supervisorLoop    = "loop"
+)
+
+// supervisorName maps a detected target to the restart owner written into the
+// env file. Linux prefers the systemd user unit and only falls back to the
+// wrapper loop when the target has no systemd (containers).
+func supervisorName(platform targetPlatform, systemdAvailable bool) string {
+	switch platform.GOOS {
+	case "win32":
+		// schtasks runs start-runner.cmd, which owns the loop.
+		return supervisorLoop
+	case "darwin":
+		return supervisorLaunchd
+	default:
+		if systemdAvailable {
+			return supervisorSystemd
+		}
+		return supervisorLoop
+	}
+}
+
+// detectSystemd probes the target for a usable systemd user manager. A
+// non-systemd host (container, WSL without systemd) gets the wrapper loop
+// instead, and must report that in NEX_RUNNER_SUPERVISOR so the runner does not
+// exit 75 expecting an external restart that never comes.
+func detectSystemd(c *sshClient) bool {
+	out, err := c.run(`[ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1 && echo yes || echo no`, nil)
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(out) == "yes"
+}
+
+// buildEnvFile renders the runner env file. Values are controlled (server
+// URL/token/id/name); the name is single-line sanitized upstream.
+func buildEnvFile(req installRequest, name, workspacePath, supervisor string) string {
+	return fmt.Sprintf("NEX_SERVER_URL=%s\nNEX_RUNNER_TOKEN=%s\nNEX_RUNNER_ID=%s\nNEX_RUNNER_NAME=%s\nNEX_RUNNER_WORKSPACES=%s\nNEX_RUNNER_SUPERVISOR=%s\n",
+		req.ServerURL, req.RunnerTok, req.RunnerID, name, workspacePath, supervisor)
+}
+
 // install runs the whole pipeline against one session. Every step logs.
 func (s *Session) install(req installRequest, bundles Bundles, waitForRunner func(runnerID string) bool) error {
 	target := req.Target
@@ -173,8 +220,18 @@ func (s *Session) install(req installRequest, bundles Bundles, waitForRunner fun
 	if platform.GOOS == "win32" {
 		workspacePath = strings.ReplaceAll(home, "/", `\`)
 	}
-	envScript := fmt.Sprintf("NEX_SERVER_URL=%s\nNEX_RUNNER_TOKEN=%s\nNEX_RUNNER_ID=%s\nNEX_RUNNER_NAME=%s\nNEX_RUNNER_WORKSPACES=%s\n",
-		req.ServerURL, req.RunnerTok, req.RunnerID, name, workspacePath)
+	// 重启归属（docs/next/runner-update.md 决策 5）：systemd/launchd 由外部
+	// supervisor 拉起 exit 75；Windows 与 setsid 回退没有 supervisor，改由安装
+	// 脚本里的循环负责。runner 读到该值后才知道要不要自己 spawn 分离副本。
+	systemdAvailable := false
+	if platform.GOOS == "linux" {
+		systemdAvailable = detectSystemd(client)
+		if !systemdAvailable {
+			s.Log(LogWarn, "systemd user manager not detected; using the wrapper loop")
+		}
+	}
+	supervisor := supervisorName(platform, systemdAvailable)
+	envScript := buildEnvFile(req, name, workspacePath, supervisor)
 	if _, err := client.run(writeRemoteFileCommand(remoteEnvFile, envScript, platform), nil); err != nil {
 		return fmt.Errorf("writing env: %w", err)
 	}
@@ -281,8 +338,8 @@ func (s *Session) install(req installRequest, bundles Bundles, waitForRunner fun
 
 	// Supervisor + start (decision 6): rewrite paths absolute (units must not
 	// rely on `~` either).
-	s.Log(LogInfo, "starting runner")
-	startCommand := buildStartCommand(platform, req, home)
+	s.Log(LogInfo, "starting runner (supervisor: %s)", supervisor)
+	startCommand := buildStartCommand(platform, req, home, supervisor)
 	if _, err := client.run(startCommand, nil); err != nil {
 		s.Log(LogError, "start failed: %v", err)
 		return err
@@ -320,8 +377,10 @@ func writeRemoteFileCommand(remotePath, content string, platform targetPlatform)
 // buildStartCommand assembles the platform supervisor command (decision 6).
 // `home` is the target's absolute home path (SFTP/unit files cannot use `~`).
 // All commands run through the bundled private Node (decision 4), not any
-// system Node.
-func buildStartCommand(platform targetPlatform, req installRequest, home string) string {
+// system Node. supervisor selects the restart owner written into the env file:
+// systemd and launchd restart the process themselves, so the wrapper loop only
+// exists for win32 and the setsid fallback.
+func buildStartCommand(platform targetPlatform, req installRequest, home, supervisor string) string {
 	base := home + "/.nex-next-runner"
 	nodeBinary := base + "/node/node"
 	if platform.GOOS == "win32" {
@@ -330,16 +389,17 @@ func buildStartCommand(platform targetPlatform, req installRequest, home string)
 		// Windows: a wrapper .cmd reads the env file into the process env
 		// (cmd cannot source a file inline), then starts the bundled node.
 		// schtasks runs it at logon; a /run fires it immediately.
-		wrapper := fmt.Sprintf("@echo off\r\ncd /d \"%s\"\r\nfor /f \"usebackq delims=\" %%%%i in (`type env`) do set %%%%i\r\n\"%s\" runner.mjs\r\n", winBase, strings.ReplaceAll(nodeBinary, "/", `\`))
-		writeWrapper := fmt.Sprintf(`powershell -Command "Set-Content -Path '%s/start-runner.cmd' -Value ([IO.File]::ReadAllText('%s/start-runner.cmd')) -NoNewline"`, winBase, winBase)
-		// Simpler: write the wrapper via powershell here-string (the content
-		// has CR LF and % escapes; write it as a base64-decoded blob instead
-		// of fighting cmd quoting).
+		//
+		// 循环（docs/next/runner-update.md 决策 5）：self-update 以 exit 75 请求
+		// 重启，包装脚本只对 75 重新拉起，其他退出码（崩溃、人工停止）直接结束，
+		// 否则崩溃会无限重启。
+		wrapper := fmt.Sprintf("@echo off\r\ncd /d \"%s\"\r\nfor /f \"usebackq delims=\" %%%%i in (`type env`) do set %%%%i\r\n:start\r\n\"%s\" runner.mjs\r\nif %%errorlevel%%==75 goto start\r\nexit /b %%errorlevel%%\r\n", winBase, strings.ReplaceAll(nodeBinary, "/", `\`))
+		// The content has CR LF and % escapes; write it as a base64-decoded blob
+		// instead of fighting cmd quoting.
 		wrapperB64 := base64.StdEncoding.EncodeToString([]byte(wrapper))
-		writeWrapper = fmt.Sprintf(`powershell -Command "[IO.File]::WriteAllBytes('%s/start-runner.cmd', [Convert]::FromBase64String('%s'))"`, winBase, wrapperB64)
+		writeWrapper := fmt.Sprintf(`powershell -Command "[IO.File]::WriteAllBytes('%s/start-runner.cmd', [Convert]::FromBase64String('%s'))"`, winBase, wrapperB64)
 		return fmt.Sprintf(`%s && (schtasks /delete /f /tn NexRunner 2>nul & schtasks /create /f /tn NexRunner /tr "%s/start-runner.cmd" /sc onlogon && schtasks /run /tn NexRunner)`, writeWrapper, winBase)
 	}
-	runLine := fmt.Sprintf("cd %s && set -a && . ./env && set +a && exec %s runner.mjs", base, nodeBinary)
 	switch platform.GOOS {
 	case "darwin":
 		// LaunchAgent: load-once, restarts on login. The plist is written
@@ -353,16 +413,22 @@ func buildStartCommand(platform targetPlatform, req installRequest, home string)
 		// 挂 /dev/null、stdout/stderr 全部重定向到文件，否则 SSH 会话关闭
 		// 时后台进程会随会话管道一起死掉。整条命令以 `true` 收尾：启动是
 		// 尽力而为，真正的验收是后面的 wait-for-hello。
+		//
+		// 回退路径的循环（docs/next/runner-update.md 决策 5）：setsid 没有
+		// supervisor，自更新以 exit 75 请求重启，只对 75 重新拉起，其他退出码
+		// 结束循环（崩溃不无限重启）。循环体不能带 exec——exec 会替换掉 shell，
+		// 之后就无法回到循环里；systemd 的 ExecStart 才用 exec。
+		loopLine := fmt.Sprintf("while :; do cd %s && set -a && . ./env && set +a && %s runner.mjs; [ $? -eq 75 ] || break; done", base, nodeBinary)
 		return fmt.Sprintf("%s && { export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}; (systemctl --user daemon-reload && systemctl --user enable nex-runner.service && systemctl --user restart nex-runner.service) || (sudo -n loginctl enable-linger %s 2>/dev/null && systemctl --user daemon-reload && systemctl --user enable nex-runner.service && systemctl --user restart nex-runner.service) || (setsid nohup sh -c '%s' <%s/null >%s/runner.log 2>&1 &); } ; true",
-			writeSystemdUnit(base, nodeBinary), sanitizeShellArg(req.Target.Username), runLine, base, base)
+			writeSystemdUnit(base, nodeBinary), sanitizeShellArg(req.Target.Username), loopLine, base, base)
 	}
 }
 
 // writeSystemdUnit emits the user unit file write command. printf %b
 // interprets the \n escapes (%s would write one literal line and systemd
 // rejects the unit with "Assignment outside of section"). The unit body
-// contains single quotes (ExecStart's shell command); they are escaped as
-// '\'' so the printf argument's own single-quoting stays intact.
+// contains single quotes (ExecStart's shell command); each one is escaped with
+// a backslash so the printf argument's own single-quoting stays intact.
 func writeSystemdUnit(base, nodeBinary string) string {
 	unit := fmt.Sprintf("[Unit]\nDescription=Nex agent runner\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart=/bin/sh -c 'cd %s && set -a && . ./env && set +a && exec %s runner.mjs'\nRestart=always\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n", base, nodeBinary)
 	shellSafe := sanitizeShellArg(unit)

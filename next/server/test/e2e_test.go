@@ -885,6 +885,7 @@ type rawRunnerFrame struct {
 	Channel string `json:"channel"`
 	Method  string `json:"method"`
 	Event   string `json:"event"`
+	BuildID string `json:"buildId"`
 }
 
 // runnerStream reads one runner connection continuously so "no frame arrived"
@@ -2106,4 +2107,246 @@ func TestWorkspacesFrameUpdatesServerInfo(t *testing.T) {
 		row["runnerId"] != runnerID {
 		t.Fatalf("workspace row = %+v", row)
 	}
+}
+
+// newHarnessWithBundles assembles a server with a staged linux-x64 bundle so
+// the self-update surface exists (docs/next/runner-update.md decisions 4-5).
+func newHarnessWithBundles(t *testing.T, buildID string) *harness {
+	t.Helper()
+	dataDir := t.TempDir()
+	bundlesDir := filepath.Join(dataDir, "bundles")
+	dir := filepath.Join(bundlesDir, "linux-x64")
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	files := map[string]string{
+		"runner.mjs":            "// runner " + buildID,
+		"pty-host.mjs":          "// pty " + buildID,
+		"lib/ptyHostAssets.mjs": "// assets " + buildID,
+		"build.json":            `{"buildId":"` + buildID + `","version":"1.0.0","builtAt":"2026-01-01T00:00:00Z"}`,
+		"package.json":          `{"name":"runner","version":"1.0.0"}`,
+	}
+	for name, content := range files {
+		target := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", name, err)
+		}
+		if err := os.WriteFile(target, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	application, err := app.New(app.Options{
+		DataDir:          dataDir,
+		WebRoot:          "/nonexistent",
+		AuthToken:        authToken,
+		RunnerToken:      runnerToken,
+		ServerName:       "e2e",
+		Version:          "1.2.3",
+		RunnerBundlesDir: bundlesDir,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("app.New: %v", err)
+	}
+	server := httptest.NewServer(application.Handler())
+	t.Cleanup(server.Close)
+	return &harness{server: server, app: application}
+}
+
+// runnerHelloWithBuild sends a hello that reports a build id and capabilities.
+func runnerHelloWithBuild(t *testing.T, conn *websocket.Conn, id, buildID string, capabilities []string) {
+	t.Helper()
+	hello, _ := json.Marshal(map[string]any{
+		"t":            "hello",
+		"runnerId":     id,
+		"name":         "update-box",
+		"version":      "0.1.0",
+		"os":           "linux",
+		"arch":         "x64",
+		"buildId":      buildID,
+		"capabilities": capabilities,
+		"workspaces":   []map[string]string{{"path": "/workspace/demo"}},
+	})
+	if err := conn.Write(context.Background(), websocket.MessageText, hello); err != nil {
+		t.Fatalf("writing hello: %v", err)
+	}
+	_, data, err := conn.Read(context.Background())
+	if err != nil {
+		t.Fatalf("reading welcome: %v", err)
+	}
+	var welcome struct {
+		T string `json:"t"`
+	}
+	if err := json.Unmarshal(data, &welcome); err != nil || welcome.T != "welcome" {
+		t.Fatalf("welcome = %s", data)
+	}
+}
+
+// An outdated runner that advertised self-update receives exactly one update
+// frame per connection, and /api/config/runners + server-info expose its state.
+func TestRunnerSelfUpdateFrameAndStatus(t *testing.T) {
+	h := newHarnessWithBundles(t, "new-build")
+	session := h.login(t)
+
+	conn := h.dialRunner(t)
+	// 握手必须先单独读完 welcome 再启动后台读取：coder/websocket 不支持并发
+	// Read，两个 reader 同时读会让帧头解析错乱（rsv bits 报错）。
+	runnerHelloWithBuild(t, conn, runnerID, "old-build", []string{"self-update", "runner-workspaces"})
+	stream := newRunnerStream(t, conn)
+
+	frame := stream.next(t, 5*time.Second)
+	if frame.T != "update" || frame.BuildID != "new-build" {
+		t.Fatalf("first frame = %+v, want update/new-build", frame)
+	}
+	// At most one automatic frame per connection.
+	stream.expectNone(t, 400*time.Millisecond)
+
+	// The runner reports progress; the state shows up in the API.
+	status, _ := json.Marshal(map[string]any{
+		"t":       "updateStatus",
+		"state":   "restarting",
+		"buildId": "new-build",
+	})
+	if err := conn.Write(context.Background(), websocket.MessageText, status); err != nil {
+		t.Fatalf("writing updateStatus: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	var row map[string]any
+	for time.Now().Before(deadline) {
+		request, _ := http.NewRequest(http.MethodGet, h.server.URL+"/api/config/runners", nil)
+		request.Header.Set("Cookie", "nex_session="+session)
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatalf("config runners: %v", err)
+		}
+		var payload struct {
+			Runners []map[string]any `json:"runners"`
+		}
+		_ = json.NewDecoder(response.Body).Decode(&payload)
+		_ = response.Body.Close()
+		if len(payload.Runners) == 1 {
+			row = payload.Runners[0]
+			if row["updateState"] == "restarting" {
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if row == nil {
+		t.Fatal("runner never appeared in /api/config/runners")
+	}
+	for key, want := range map[string]any{
+		"runnerId":      runnerID,
+		"buildId":       "old-build",
+		"latestBuildId": "new-build",
+		"outdated":      true,
+		"updateState":   "restarting",
+	} {
+		if row[key] != want {
+			t.Fatalf("runners[0].%s = %v, want %v", key, row[key], want)
+		}
+	}
+
+	// server-info carries the build + capabilities on the workspace row.
+	request, _ := http.NewRequest(http.MethodGet, h.server.URL+"/api/server-info?token="+authToken, nil)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("server-info: %v", err)
+	}
+	defer response.Body.Close()
+	var info struct {
+		Workspaces []map[string]any `json:"workspaces"`
+	}
+	_ = json.NewDecoder(response.Body).Decode(&info)
+	if len(info.Workspaces) != 1 || info.Workspaces[0]["runnerBuildId"] != "old-build" {
+		t.Fatalf("workspaces = %+v", info.Workspaces)
+	}
+
+	// The bundle endpoint serves the staged bytes to the runner token.
+	bundleRequest, _ := http.NewRequest(http.MethodGet, h.server.URL+"/api/runner-bundle/linux-x64/runner.mjs", nil)
+	bundleRequest.Header.Set("Authorization", "Bearer "+runnerToken)
+	bundleResponse, err := http.DefaultClient.Do(bundleRequest)
+	if err != nil {
+		t.Fatalf("bundle: %v", err)
+	}
+	bundleBody, _ := io.ReadAll(bundleResponse.Body)
+	_ = bundleResponse.Body.Close()
+	if bundleResponse.StatusCode != http.StatusOK || string(bundleBody) != "// runner new-build" {
+		t.Fatalf("bundle = %d %q", bundleResponse.StatusCode, bundleBody)
+	}
+}
+
+// A current runner, or one without the capability, gets no automatic frame.
+func TestRunnerNoUpdateFrameWhenCurrentOrIncapable(t *testing.T) {
+	h := newHarnessWithBundles(t, "new-build")
+
+	current := h.dialRunner(t)
+	runnerHelloWithBuild(t, current, "current-runner", "new-build", []string{"self-update"})
+	newRunnerStream(t, current).expectNone(t, 400*time.Millisecond)
+
+	legacy := h.dialRunner(t)
+	runnerHelloWithBuild(t, legacy, "legacy-runner", "old-build", []string{"runner-workspaces"})
+	newRunnerStream(t, legacy).expectNone(t, 400*time.Millisecond)
+}
+
+// The manual trigger sends the frame to a live outdated runner; a reconnect
+// with the staged build resets the tracker to idle.
+func TestRunnerManualUpdateAndReconnectReset(t *testing.T) {
+	h := newHarnessWithBundles(t, "new-build")
+	session := h.login(t)
+
+	conn := h.dialRunner(t)
+	runnerHelloWithBuild(t, conn, runnerID, "old-build", []string{"self-update"})
+	stream := newRunnerStream(t, conn)
+	if frame := stream.next(t, 5*time.Second); frame.T != "update" {
+		t.Fatalf("first frame = %+v, want update", frame)
+	}
+
+	// A manual send is allowed even though the automatic one already went.
+	request, _ := http.NewRequest(http.MethodPost, h.server.URL+"/api/runner-update?runnerId="+runnerID, nil)
+	request.Header.Set("Cookie", "nex_session="+session)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("runner-update: %v", err)
+	}
+	var payload struct {
+		Sent    bool   `json:"sent"`
+		BuildID string `json:"buildId"`
+	}
+	_ = json.NewDecoder(response.Body).Decode(&payload)
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusOK || !payload.Sent || payload.BuildID != "new-build" {
+		t.Fatalf("manual update = %d %+v", response.StatusCode, payload)
+	}
+	if frame := stream.next(t, 5*time.Second); frame.T != "update" || frame.BuildID != "new-build" {
+		t.Fatalf("manual frame = %+v", frame)
+	}
+
+	// Reconnect with the new build: up to date, tracker reset to idle.
+	reconnected := h.dialRunner(t)
+	runnerHelloWithBuild(t, reconnected, runnerID, "new-build", []string{"self-update"})
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		request, _ := http.NewRequest(http.MethodGet, h.server.URL+"/api/config/runners", nil)
+		request.Header.Set("Cookie", "nex_session="+session)
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatalf("config runners: %v", err)
+		}
+		var list struct {
+			Runners []map[string]any `json:"runners"`
+		}
+		_ = json.NewDecoder(response.Body).Decode(&list)
+		_ = response.Body.Close()
+		if len(list.Runners) == 1 {
+			row := list.Runners[0]
+			if row["buildId"] == "new-build" && row["outdated"] == false && row["updateState"] == "idle" {
+				return
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("/api/config/runners did not settle on the new build with updateState idle")
 }

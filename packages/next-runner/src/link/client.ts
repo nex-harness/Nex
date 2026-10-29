@@ -53,6 +53,15 @@ export interface RunnerLinkOptions {
     /** Version reported in `hello` after a reconnect. */
     lastAppliedVersion: () => number;
   };
+  /**
+   * Self-update hooks (docs/next/runner-update.md decision 5). `handle` runs for each
+   * `{t:"update"}` frame; `welcomed` fires on every `welcome`, which is how a restarted
+   * runner clears `.update-pending` once it reached the server again.
+   */
+  update?: {
+    handle: (buildId: string) => void;
+    welcomed: () => void;
+  };
 }
 
 type LinkState = "idle" | "connecting" | "open" | "closed";
@@ -132,6 +141,15 @@ export class RunnerLink {
   /** Sends the full served folder list after an add/remove (decision 3). */
   sendWorkspaces(workspaces: HelloFrame["workspaces"]): void {
     this.send({ t: "workspaces", workspaces } satisfies ClientFrame);
+  }
+
+  /** Sends one self-update progress frame (docs/next/runner-update.md decision 5). */
+  sendUpdateStatus(status: {
+    state: "downloading" | "restarting" | "failed";
+    buildId: string;
+    error?: string;
+  }): void {
+    this.send({ t: "updateStatus", ...status } satisfies ClientFrame);
   }
 
   private connect(): void {
@@ -234,9 +252,14 @@ export class RunnerLink {
         this.options.logger.info("runner link welcomed", {
           serverVersion: frame.serverVersion ?? "unknown",
         });
+        this.options.update?.welcomed();
         return;
       case "ping":
         this.send({ t: "pong" });
+        return;
+      case "update":
+        // 决策 5：服务端每条连接最多发一次；runner 侧的重复/同版本保护在 SelfUpdater。
+        this.options.update?.handle(frame.buildId);
         return;
       case "call":
         void this.handleCall(frame.id, frame.channel, frame.method, decodeCallArg(frame.arg));

@@ -341,6 +341,19 @@ export interface ServerWorkspaceOption {
   runnerId?: string;
   runnerName?: string;
   runnerOs?: string;
+  /**
+   * runner 自报的构建 id（docs/next/runner-update.md 决策 2）。
+   *
+   * 缺失表示旧 runner / 旧 server：既不知道构建身份，也没有可选能力。
+   */
+  runnerBuildId?: string;
+  /**
+   * runner 在 hello 里声明的能力列表（`runner-workspaces` 等）。
+   *
+   * 缺失 = 旧 runner 没有任何可选能力，UI 据此禁用依赖能力的入口；
+   * 不能把缺失当成“全部支持”，否则旧 runner 会返回 Unknown method。
+   */
+  runnerCapabilities?: string[];
 }
 
 /**
@@ -686,6 +699,17 @@ export interface IPlatformService {
    * `global`：设置页只读写 global 层（spec 决策 3）。仅 Web 平台实现。
    */
   importRunnerModels?(runnerId: string, scope: RunnerImportScope): Promise<RunnerImportSummary>;
+
+  /**
+   * 触发某台 runner 的自更新（docs/next/runner-update.md 决策 5）。
+   *
+   * 转调 `POST /api/runner-update?runnerId=<id>`：server 只负责发送 update 帧，
+   * 下载、校验、换文件和重启都由 runner 自己完成。返回 `sent:false` 表示该机器
+   * 已是最新；runner 太旧无法自更新时抛错（服务端 409 文案要求重装）。
+   *
+   * 仅 Web 平台实现；Desktop 不实现（undefined），UI 据此不显示 Update 入口。
+   */
+  updateRunner?(runnerId: string): Promise<RunnerUpdateTriggerResult>;
 
   /** 读取宿主环境中的原生 MCP 用户目录配置；手机远控通过已连接桌面 host 转发。 */
   loadMcpFromUserDirectory?(
@@ -1112,6 +1136,27 @@ export interface RunnerModelStatus {
   mode: "server" | "fallback" | "unknown";
   modelCount: number;
   lastAppliedVersion: number;
+  /**
+   * 构建与自更新状态（docs/next/runner-update.md 决策 4/5）。
+   *
+   * 旧 server 不返回这些字段，缺失时 UI 不展示更新提示。
+   */
+  buildId?: string;
+  latestBuildId?: string;
+  outdated?: boolean;
+  capabilities?: string[];
+  updateState?: RunnerUpdateState;
+  updateError?: string;
+}
+
+/** runner 自更新阶段；`idle` 之外都是服务端观察到的进行中/失败状态。 */
+export type RunnerUpdateState = "idle" | "downloading" | "restarting" | "failed";
+
+/** `POST /api/runner-update` 的结果；`sent:false` 表示该 runner 已是当前构建。 */
+export interface RunnerUpdateTriggerResult {
+  sent: boolean;
+  buildId?: string;
+  upToDate?: boolean;
 }
 
 /** 导入作用域；UI 只用 `global`，`runner` 保留给 HTTP 端点的兼容默认值。 */

@@ -125,6 +125,9 @@ function startLink(url: string, registry: ChannelRegistry): RunnerLink {
       version: "0.1.0",
       os: "darwin",
       arch: "arm64",
+      // docs/next/runner-update.md decision 2: build identity + capabilities.
+      buildId: "0123456789abcdef",
+      capabilities: ["runner-workspaces", "machine-scope", "search", "self-update"],
       workspaces: [{ path: WORKSPACE, label: "demo" }],
     },
     pingIntervalMs: 60_000,

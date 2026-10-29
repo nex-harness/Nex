@@ -28,6 +28,14 @@ type Info struct {
 	OS         string      `json:"os"`
 	Arch       string      `json:"arch"`
 	Workspaces []Workspace `json:"workspaces"`
+	// BuildID is the content-derived build the runner runs
+	// (docs/next/runner-update.md decision 1). Empty means a legacy runner that
+	// sent no buildId.
+	BuildID string `json:"buildId,omitempty"`
+	// Capabilities are the optional features the runner supports (decision 2):
+	// runner-workspaces, machine-scope, search, self-update. Missing means a
+	// legacy runner with none of them.
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // Link is one live runner connection. It is implemented by the runner
@@ -94,6 +102,11 @@ type WorkspaceInfo struct {
 	RunnerID          string `json:"runnerId"`
 	RunnerName        string `json:"runnerName"`
 	RunnerOS          string `json:"runnerOs"`
+	// RunnerBuildID is the build the runner reported in hello; empty for a
+	// legacy runner (docs/next/runner-update.md decision 2).
+	RunnerBuildID string `json:"runnerBuildId,omitempty"`
+	// RunnerCapabilities gates optional UI features per machine (decision 3).
+	RunnerCapabilities []string `json:"runnerCapabilities,omitempty"`
 }
 
 type runner struct {
@@ -305,6 +318,32 @@ func normalizeWorkspaces(workspaces []Workspace) []Workspace {
 	return accepted
 }
 
+// normalizeCapabilities trims and de-duplicates a hello capability list while
+// keeping the reported order. Capabilities are a set: a repeat must not make
+// the UI see two entries.
+func normalizeCapabilities(capabilities []string) []string {
+	if len(capabilities) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(capabilities))
+	seen := make(map[string]struct{}, len(capabilities))
+	for _, capability := range capabilities {
+		trimmed := strings.TrimSpace(capability)
+		if trimmed == "" {
+			continue
+		}
+		if _, duplicate := seen[trimmed]; duplicate {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // Register adds a runner. The newest connection for a runner id wins and the
 // returned link (if non-nil) has already been closed; it is returned so callers
 // can log the displacement. Closing it before re-issuing listens guarantees the
@@ -338,12 +377,14 @@ func (r *Registry) Register(info Info, link Link) (displaced Link) {
 	r.nextOrder++
 	entry := &runner{
 		info: Info{
-			RunnerID:   info.RunnerID,
-			Name:       info.Name,
-			Version:    info.Version,
-			OS:         info.OS,
-			Arch:       info.Arch,
-			Workspaces: accepted,
+			RunnerID:     info.RunnerID,
+			Name:         info.Name,
+			Version:      info.Version,
+			OS:           info.OS,
+			Arch:         info.Arch,
+			Workspaces:   accepted,
+			BuildID:      strings.TrimSpace(info.BuildID),
+			Capabilities: normalizeCapabilities(info.Capabilities),
 		},
 		link:  link,
 		order: r.nextOrder,
@@ -530,6 +571,7 @@ func (r *Registry) RunnerInfo(id string) (Info, bool) {
 	}
 	info := entry.info
 	info.Workspaces = append([]Workspace(nil), entry.info.Workspaces...)
+	info.Capabilities = append([]string(nil), entry.info.Capabilities...)
 	return info, true
 }
 
@@ -834,11 +876,13 @@ func (r *Registry) Workspaces() []WorkspaceInfo {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	type ordered struct {
-		order      int64
-		runnerID   string
-		runnerName string
-		runnerOS   string
-		workspace  Workspace
+		order        int64
+		runnerID     string
+		runnerName   string
+		runnerOS     string
+		buildID      string
+		capabilities []string
+		workspace    Workspace
 	}
 	var all []ordered
 	for _, entry := range r.runners {
@@ -849,11 +893,13 @@ func (r *Registry) Workspaces() []WorkspaceInfo {
 				continue
 			}
 			all = append(all, ordered{
-				order:      entry.order,
-				runnerID:   entry.info.RunnerID,
-				runnerName: entry.info.Name,
-				runnerOS:   entry.info.OS,
-				workspace:  workspace,
+				order:        entry.order,
+				runnerID:     entry.info.RunnerID,
+				runnerName:   entry.info.Name,
+				runnerOS:     entry.info.OS,
+				buildID:      entry.info.BuildID,
+				capabilities: entry.info.Capabilities,
+				workspace:    workspace,
 			})
 		}
 	}
@@ -866,12 +912,14 @@ func (r *Registry) Workspaces() []WorkspaceInfo {
 	out := make([]WorkspaceInfo, 0, len(all))
 	for _, item := range all {
 		out = append(out, WorkspaceInfo{
-			Path:              item.workspace.Path,
-			Label:             labelFor(item.runnerName, item.runnerID, item.workspace),
-			WorkspaceIdentity: BuildIdentity(item.runnerID, item.workspace.Path),
-			RunnerID:          item.runnerID,
-			RunnerName:        item.runnerName,
-			RunnerOS:          item.runnerOS,
+			Path:               item.workspace.Path,
+			Label:              labelFor(item.runnerName, item.runnerID, item.workspace),
+			WorkspaceIdentity:  BuildIdentity(item.runnerID, item.workspace.Path),
+			RunnerID:           item.runnerID,
+			RunnerName:         item.runnerName,
+			RunnerOS:           item.runnerOS,
+			RunnerBuildID:      item.buildID,
+			RunnerCapabilities: append([]string(nil), item.capabilities...),
 		})
 	}
 	return out

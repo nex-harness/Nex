@@ -11,6 +11,10 @@ export const serverRemoteWorkspaceInfoSchema = z.object({
   runnerId: z.string().trim().min(1).optional(),
   runnerName: z.string().trim().min(1).optional(),
   runnerOs: z.string().trim().min(1).optional(),
+  // docs/next/runner-update.md 决策 2：runner 自报构建身份与能力。
+  // 旧 server/旧 runner 不返回，UI 按“无任何可选能力”处理。
+  runnerBuildId: z.string().trim().min(1).optional(),
+  runnerCapabilities: z.array(z.string().trim().min(1)).optional(),
 });
 
 export const serverRemoteInfoSchema = z.object({

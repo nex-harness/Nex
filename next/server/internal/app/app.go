@@ -19,6 +19,7 @@ import (
 	"github.com/nex-harness/nex/server/internal/installer"
 	"github.com/nex-harness/nex/server/internal/local"
 	"github.com/nex-harness/nex/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/runnerupdate"
 	"github.com/nex-harness/nex/server/internal/runnerws"
 )
 
@@ -58,6 +59,10 @@ type App struct {
 	// Automations owns the server-side automation definitions, schedule and run
 	// history (docs/next/automations-views-search.md §A).
 	Automations *automations.Service
+	// Updates owns "what is latest" per platform and the per-runner update
+	// state (docs/next/runner-update.md decisions 4-5). Always non-nil; with no
+	// bundle dir configured every lookup reports "not known".
+	Updates *runnerupdate.Manager
 
 	// automationsCancel stops the schedule timer's context on Close.
 	automationsCancel context.CancelFunc
@@ -137,9 +142,13 @@ func New(options Options, logger *slog.Logger) (*App, error) {
 	// SSH runner-install channel (docs/next/runner-install.md): enabled only
 	// when the operator set a public runner URL (the installed runner dials
 	// it). The bundles dir defaults next to the server binary.
+	//
+	// 自更新（docs/next/runner-update.md 决策 4）读取同一份 bundle 目录：显式
+	// 配置的 NEX_RUNNER_BUNDLES_DIR 即使没开 SSH 安装也生效；否则沿用安装器
+	// 的默认路径，未配置时更新整体关闭（不读文件、不注册路由）。
+	bundlesDir := options.RunnerBundlesDir
 	var installs *installer.Manager
 	if options.PublicRunnerURL != "" {
-		bundlesDir := options.RunnerBundlesDir
 		if bundlesDir == "" {
 			bundlesDir = "bin/runner-bundles"
 		}
@@ -153,6 +162,7 @@ func New(options Options, logger *slog.Logger) (*App, error) {
 		installs.RunnerToken = options.RunnerToken
 		installs.Bundles = installer.Bundles{Dir: bundlesDir}
 	}
+	updates := runnerupdate.NewManager(bundlesDir)
 
 	application := &App{
 		Options:     options,
@@ -163,6 +173,7 @@ func New(options Options, logger *slog.Logger) (*App, error) {
 		Config:      configManager,
 		Installs:    installs,
 		Automations: automationService,
+		Updates:     updates,
 		serverID:    serverID,
 	}
 	// Start arms the single schedule timer; missed windows are resolved on this
@@ -211,22 +222,24 @@ func (a *App) Handler() http.Handler {
 	})
 
 	runnerHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		runnerws.ServeWithConfig(a.Logger, a.Registry, a.Options.RunnerToken, a.Options.Version, a.Config, w, r)
+		runnerws.ServeWithConfig(a.Logger, a.Registry, a.Options.RunnerToken, a.Options.Version, a.Config, a.Updates, w, r)
 	})
 
 	return httpapi.New(httpapi.Deps{
-		Logger:     a.Logger,
-		Auth:       a.Auth,
-		Registry:   a.Registry,
-		ServerID:   a.serverID,
-		ServerName: a.Options.ServerName,
-		Version:    a.Options.Version,
-		WebRoot:    a.Options.WebRoot,
-		BrowserWS:  browser,
-		RunnerWS:   runnerHandler,
-		Config:     configAdmin{a.Config},
-		Skills:     skillUploader{a.Config},
-		Installs:   a.Installs,
+		Logger:      a.Logger,
+		Auth:        a.Auth,
+		Registry:    a.Registry,
+		ServerID:    a.serverID,
+		ServerName:  a.Options.ServerName,
+		Version:     a.Options.Version,
+		WebRoot:     a.Options.WebRoot,
+		BrowserWS:   browser,
+		RunnerWS:    runnerHandler,
+		Config:      configAdmin{a.Config},
+		Skills:      skillUploader{a.Config},
+		Installs:    a.Installs,
+		RunnerToken: a.Options.RunnerToken,
+		Updates:     a.Updates,
 	}).Handler()
 }
 

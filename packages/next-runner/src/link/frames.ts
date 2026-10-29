@@ -18,6 +18,35 @@ export interface HelloFrame {
   workspaces: Array<{ path: string; label: string }>;
   /** Last config version this runner applied (0 = none); optional for old servers. */
   lastAppliedVersion?: number;
+  /**
+   * Content-derived build id (docs/next/runner-update.md decision 2); `"dev"` when
+   * running from source. The server compares it with the platform bundle's id.
+   */
+  buildId: string;
+  /** Optional features of this build; a legacy runner omits both fields. */
+  capabilities: string[];
+}
+
+/** Capabilities shipped by this batch (docs/next/runner-update.md decision 2). */
+export const RUNNER_CAPABILITIES: readonly string[] = [
+  "runner-workspaces",
+  "machine-scope",
+  "search",
+  "self-update",
+];
+
+/** One `{t:"update", buildId}` trigger from the server (decision 5). */
+export interface UpdateFrame {
+  t: "update";
+  buildId: string;
+}
+
+/** Self-update progress reported back to the server (decision 5). */
+export interface UpdateStatusFrame {
+  t: "updateStatus";
+  state: "downloading" | "restarting" | "failed";
+  buildId: string;
+  error?: string;
 }
 
 export interface WelcomeFrame {
@@ -106,14 +135,16 @@ export type ClientFrame =
   | ResultFrame
   | EventFrame
   | ConfigAppliedFrame
-  | WorkspacesFrame;
+  | WorkspacesFrame
+  | UpdateStatusFrame;
 export type ServerFrame =
   | WelcomeFrame
   | CallFrame
   | ListenFrame
   | UnlistenFrame
   | PingFrame
-  | ConfigFrame;
+  | ConfigFrame
+  | UpdateFrame;
 
 const UNDEF_KEY = "$undef";
 
@@ -163,6 +194,11 @@ export function parseServerFrame(raw: string): ServerFrame | null {
       return parsed as unknown as ServerFrame;
     case "config":
       if (typeof parsed["version"] !== "number") return null;
+      return parsed as unknown as ServerFrame;
+    case "update":
+      // 决策 5：更新触发帧只携带目标 buildId；缺字段视为非法帧，避免把空 id
+      // 当成一次真实更新（会把 runner 重启到未知状态）。
+      if (typeof parsed["buildId"] !== "string" || parsed["buildId"].length === 0) return null;
       return parsed as unknown as ServerFrame;
     default:
       return null;

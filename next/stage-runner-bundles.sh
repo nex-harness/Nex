@@ -29,6 +29,9 @@ for platform in "${PLATFORMS[@]}"; do
   cp "$REPO_ROOT/packages/next-runner/dist/node-pty-assets.tar.gz" "$target/node-pty-assets.tar.gz"
   cp "$REPO_ROOT/packages/next-runner/dist/package.json" "$target/package.json"
   cp "$REPO_ROOT/packages/next-runner/dist/lib/ptyHostAssets.mjs" "$target/lib/ptyHostAssets.mjs"
+  # buildId 标记（docs/next/runner-update.md 决策 1）：server 读它判定“最新 build”，
+  # 并作为 /api/runner-bundle/<platform>/build.json 的内容下发给 runner 自更新。
+  cp "$REPO_ROOT/packages/next-runner/dist/build.json" "$target/build.json"
 
   # Private Node: the official distribution, cached under /tmp.
   case "$platform" in

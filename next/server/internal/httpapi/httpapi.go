@@ -25,6 +25,7 @@ import (
 	"github.com/nex-harness/nex/server/internal/auth"
 	"github.com/nex-harness/nex/server/internal/installer"
 	"github.com/nex-harness/nex/server/internal/runners"
+	"github.com/nex-harness/nex/server/internal/runnerupdate"
 )
 
 // maxRequestBody bounds login bodies.
@@ -74,6 +75,12 @@ type Deps struct {
 	// Installs is the optional SSH runner-install surface
 	// (docs/next/runner-install.md). Nil disables the install routes.
 	Installs *installer.Manager
+	// RunnerToken authenticates the runner bundle download endpoint
+	// (docs/next/runner-update.md decision 5). Empty disables that route.
+	RunnerToken string
+	// Updates is the optional self-update surface. Nil disables the bundle
+	// download and the manual update routes.
+	Updates *runnerupdate.Manager
 }
 
 // SkillUploader stores skill/prompt bundles from the HTTP upload helpers.
@@ -88,6 +95,10 @@ type SkillUploader interface {
 // RunnerModelStatus is one row of GET /api/config/runners
 // (docs/next/model-onboarding.md "API"). It is a plain data copy so the HTTP
 // layer does not depend on internal/local.
+//
+// The build/update fields (docs/next/runner-update.md decision 4) are filled in
+// by the HTTP layer from the registry hello and the runnerupdate manager, so
+// internal/local stays unaware of the update feature.
 type RunnerModelStatus struct {
 	RunnerID           string `json:"runnerId"`
 	Name               string `json:"name"`
@@ -95,6 +106,19 @@ type RunnerModelStatus struct {
 	Mode               string `json:"mode"`
 	ModelCount         int    `json:"modelCount"`
 	LastAppliedVersion uint64 `json:"lastAppliedVersion"`
+	// BuildID is the build the runner reported in hello ("" for a legacy
+	// runner or one that is offline).
+	BuildID string `json:"buildId"`
+	// LatestBuildID is the build staged for the runner's platform.
+	LatestBuildID string `json:"latestBuildId"`
+	// Outdated is true when both ids are known and differ.
+	Outdated bool `json:"outdated"`
+	// Capabilities are the runner's advertised optional features.
+	Capabilities []string `json:"capabilities"`
+	// UpdateState is idle | downloading | restarting | failed.
+	UpdateState string `json:"updateState"`
+	// UpdateError carries the runner's failure text for updateState=failed.
+	UpdateError string `json:"updateError,omitempty"`
 }
 
 // ConfigAdmin is the server-side config surface the HTTP layer exposes.
@@ -147,6 +171,15 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("/api/config/runners", s.handleConfigRunners)
 		s.mux.HandleFunc("/api/config/status", s.handleConfigStatus)
 	}
+	// Self-update (docs/next/runner-update.md decision 5): the bundle download
+	// authenticates with the runner token, the manual trigger with the browser
+	// session. Both need a configured bundle dir — without one there is nothing
+	// to serve and nothing to send, so the routes stay hidden like the install
+	// routes.
+	if s.deps.Updates != nil && s.deps.Updates.Enabled() {
+		s.mux.HandleFunc("/api/runner-bundle/", s.handleRunnerBundle)
+		s.mux.HandleFunc("/api/runner-update", s.handleRunnerUpdate)
+	}
 	if s.deps.Skills != nil {
 		s.mux.HandleFunc("/api/config/skills", s.handleSkillUpload("skill"))
 		s.mux.HandleFunc("/api/config/skills/delete", s.handleSkillDelete("skill"))
@@ -173,7 +206,19 @@ func isTokenProtectedPath(pathname string) bool {
 	if isAuthRoute(pathname) {
 		return false
 	}
+	if isRunnerTokenRoute(pathname) {
+		// 修复/约束：runner 下载 bundle 只带 runner token，没有浏览器 session。
+		// 若仍走浏览器鉴权，runner 会拿到 401；这里改为由 handler 自己做
+		// 常量时间的 runner token 比较（docs/next/runner-update.md Security）。
+		return false
+	}
 	return pathname == "/ws" || strings.HasPrefix(pathname, "/ws/") || strings.HasPrefix(pathname, "/api/")
+}
+
+// isRunnerTokenRoute reports the paths authenticated by the runner bearer
+// token rather than by a browser session.
+func isRunnerTokenRoute(pathname string) bool {
+	return pathname == "/api/runner-bundle" || strings.HasPrefix(pathname, "/api/runner-bundle/")
 }
 
 func isAuthRoute(pathname string) bool {
@@ -182,6 +227,12 @@ func isAuthRoute(pathname string) bool {
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Runner-token routes carry no browser session and must not mint one:
+		// the handler compares the runner bearer token in constant time.
+		if isRunnerTokenRoute(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if !s.deps.Auth.Enabled() {
 			next.ServeHTTP(w, r)
 			return
@@ -501,12 +552,15 @@ func importScope(r *http.Request) (string, error) {
 	}
 }
 
-// handleConfigRunners reports each known runner's name, mode and model count
-// (docs/next/model-onboarding.md decision 1: the install wizard's Models step
-// polls this).
+// handleConfigRunners reports each known runner's name, mode, model count and
+// self-update state (docs/next/model-onboarding.md decision 1: the install
+// wizard's Models step polls this; docs/next/runner-update.md decision 4 adds
+// the build/update fields).
 //
 //	GET /api/config/runners → {runners:[{runnerId, name, connected, mode,
-//	                                modelCount, lastAppliedVersion}]}
+//	                                modelCount, lastAppliedVersion,
+//	                                buildId, latestBuildId, outdated,
+//	                                capabilities, updateState, updateError}]}
 func (s *Server) handleConfigRunners(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -516,7 +570,187 @@ func (s *Server) handleConfigRunners(w http.ResponseWriter, r *http.Request) {
 	if statuses == nil {
 		statuses = []RunnerModelStatus{}
 	}
+	// Build/update facts come from the registry hello + the staged bundles. The
+	// local manager does not know either, so they are composed here rather than
+	// threaded through the config package.
+	for index := range statuses {
+		status := &statuses[index]
+		if status.Capabilities == nil {
+			status.Capabilities = []string{}
+		}
+		status.UpdateState = runnerupdate.StateIdle
+		info, live := s.deps.Registry.RunnerInfo(status.RunnerID)
+		if !live {
+			// An offline runner has no hello this process; recorded facts do not
+			// carry a build id, so the row stays "unknown build, idle".
+			continue
+		}
+		status.BuildID = info.BuildID
+		status.Capabilities = append([]string{}, info.Capabilities...)
+		if s.deps.Updates != nil {
+			if latest, ok := s.deps.Updates.Latest(info); ok {
+				status.LatestBuildID = latest
+			}
+			status.Outdated = s.deps.Updates.Outdated(info)
+			update := s.deps.Updates.Status(status.RunnerID)
+			if update.State != "" {
+				status.UpdateState = update.State
+			}
+			status.UpdateError = update.Error
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"runners": statuses})
+}
+
+// bundleFiles is the fixed allow-list of downloadable bundle members
+// (docs/next/runner-update.md decision 5). The request path never reaches the
+// filesystem except through this map, so no traversal is expressible.
+var bundleFiles = map[string]string{
+	"runner.mjs":            "text/javascript; charset=utf-8",
+	"pty-host.mjs":          "text/javascript; charset=utf-8",
+	"lib/ptyHostAssets.mjs": "text/javascript; charset=utf-8",
+	"build.json":            "application/json; charset=utf-8",
+	"package.json":          "application/json; charset=utf-8",
+}
+
+// handleRunnerBundle serves one allow-listed file from the bundle directory of
+// the runner's own platform:
+//
+//	GET /api/runner-bundle/<platform>/<file>   (Authorization: Bearer <runner token>)
+//
+// The runner token is the link token (docs/next/runner-update.md Security): no
+// browser credential can fetch runner code. Unknown platforms, unknown files and
+// a missing bundle dir are 404 so the endpoint reveals nothing about the host.
+func (s *Server) handleRunnerBundle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	// 常量时间比较，与 runnerws 的 Bearer 校验一致；空 token 永远拒绝。
+	if s.deps.RunnerToken == "" || !auth.TokensEqual(s.deps.RunnerToken, bearerToken(r)) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+		return
+	}
+	if s.deps.Updates == nil || !s.deps.Updates.Enabled() {
+		http.NotFound(w, r)
+		return
+	}
+	rest := strings.TrimPrefix(r.URL.Path, "/api/runner-bundle/")
+	// PathUnescape: Go's mux already decoded the path, but a client may send an
+	// encoded separator; unescaping once more then rejecting ".." keeps the
+	// allow-list the only way in.
+	rest = strings.Trim(rest, "/")
+	parts := strings.SplitN(rest, "/", 2)
+	if len(parts) != 2 {
+		http.NotFound(w, r)
+		return
+	}
+	platform, file := parts[0], parts[1]
+	if !runnerupdate.KnownPlatform(platform) {
+		http.NotFound(w, r)
+		return
+	}
+	contentType, allowed := bundleFiles[file]
+	if !allowed {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Build the path from fixed parts only: platform and file both come from
+	// allow-lists above.
+	bundleDir := filepath.Join(s.deps.Updates.Bundles.Dir, platform)
+	target := filepath.Join(bundleDir, filepath.FromSlash(file))
+	if !isInsideDirectory(bundleDir, target) {
+		http.NotFound(w, r)
+		return
+	}
+	info, err := os.Stat(target)
+	if err != nil || info.IsDir() {
+		http.NotFound(w, r)
+		return
+	}
+	handle, err := os.Open(target)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer func() { _ = handle.Close() }()
+
+	w.Header().Set("Content-Type", contentType)
+	// Bundle content is content-addressed by buildId; a runner always wants the
+	// bytes it just asked for, never a stale proxy copy.
+	w.Header().Set("Cache-Control", "no-store")
+	http.ServeContent(w, r, filepath.Base(file), info.ModTime(), handle)
+}
+
+// bearerToken returns the runner bearer credential.
+func bearerToken(r *http.Request) string {
+	const prefix = "Bearer "
+	header := r.Header.Get("Authorization")
+	if len(header) > len(prefix) && strings.EqualFold(header[:len(prefix)], prefix) {
+		return header[len(prefix):]
+	}
+	return ""
+}
+
+// handleRunnerUpdate sends the manual self-update frame
+// (docs/next/runner-update.md decision 5):
+//
+//	POST /api/runner-update?runnerId=<id>
+//
+// 404 unknown/offline runner, 409 when the runner is too old to self-update,
+// 200 {sent:false, upToDate:true} when it already runs the staged build, and
+// 200 {sent:true, buildId} otherwise. A manual send is allowed even when the
+// connection already carried an automatic one.
+func (s *Server) handleRunnerUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	runnerID := strings.TrimSpace(r.URL.Query().Get("runnerId"))
+	if runnerID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "runnerId is required"})
+		return
+	}
+	info, live := s.deps.Registry.RunnerInfo(runnerID)
+	if !live {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "runner offline"})
+		return
+	}
+	if !runnerupdate.CanSelfUpdate(info) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "runner too old to self-update; reinstall"})
+		return
+	}
+	latest, known := s.deps.Updates.Latest(info)
+	if !known {
+		// 该平台没有 build.json：server 无法证明存在更新的构建，按"已是最新"
+		// 返回，与 /api/config/runners 里 outdated=false 保持一致，不发帧。
+		writeJSON(w, http.StatusOK, map[string]any{"sent": false, "upToDate": true})
+		return
+	}
+	// 空 buildId 是"未知旧构建"，仍可手动更新；其余按 Outdated 判定。dev 构建
+	// 永远不是比较目标，因此视为已是最新。
+	if strings.TrimSpace(info.BuildID) != "" && !s.deps.Updates.Outdated(info) {
+		writeJSON(w, http.StatusOK, map[string]any{"sent": false, "upToDate": true})
+		return
+	}
+	link, ok := s.deps.Registry.Runner(runnerID)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "runner offline"})
+		return
+	}
+	sender, ok := link.(interface{ SendUpdate(string) error })
+	if !ok {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "runner link cannot receive updates"})
+		return
+	}
+	if err := sender.SendUpdate(latest); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	s.deps.Logger.Info("manual runner update requested", "runnerId", runnerID,
+		"from", info.BuildID, "to", latest)
+	writeJSON(w, http.StatusOK, map[string]any{"sent": true, "buildId": latest})
 }
 
 // handleConfigStatus reports the doc version and per-runner applied state
