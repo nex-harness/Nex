@@ -1,19 +1,37 @@
 #!/usr/bin/env bash
-# 把已构建好的 SEA 二进制和 web/dist 放进 dist-docker/，供 Dockerfile 使用。
-# 前置：packages/server 下已执行 `node scripts/build-sea.mjs --target <target>`，且已构建 @nex/web。
-# 用法：scripts/stage-docker-context.sh [linux-x64|linux-arm64]（默认 linux-x64）
+# 把 server-cli 的 staging 产物和 web/dist 放进 dist-docker/，供 Dockerfile 使用。
 #
-# 2.0 基线说明：packages/server/scripts/build-sea.mjs 尚未迁移（它随旧 fork 的 SEA 发行改造引入），
-# 因此当前分支上没有 SEA 产物，第一步的缺失检查会直接失败，不会生成半成品上下文。
+# 2.0 的发行形态是 packages/nex-server-cli 的 `stage`：
+#   <release>/bin/nex                 launcher（定位发行根后跑 runtime/node）
+#   <release>/runtime/node            随包 Node
+#   <release>/runtime/server-cli.js   带 supervisor 的 CLI 入口
+#   <release>/runtime/server-core.js  HTTP + WS 服务
+#   <release>/runtime/nex.cjs         Agent bundle
+#   <release>/runtime/packages/       官方插件与 bundled skills
+#   <release>/runtime/node_modules/   产物扫描出的生产依赖闭包
+#   <release>/manifest.json           版本、target、组件与哈希
+#
+# 用法：scripts/stage-docker-context.sh [linux-x64|linux-arm64]（默认 linux-x64）
+# 前置：NEX_SERVER_TARGET=<target> pnpm --filter @nex/server-cli stage，且已构建 @nex/web。
 set -euo pipefail
 target="${1:-linux-x64}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
-binary="$root/packages/server/dist/sea/nex-server-$target"
+release="$root/packages/nex-server-cli/dist-release/nex-server-$target"
 web="$root/packages/web/dist"
-[[ -f "$binary" ]] || { echo "missing $binary (run build-sea.mjs --target $target)" >&2; exit 1; }
-[[ -f "$web/index.html" ]] || { echo "missing $web/index.html (run pnpm --filter @nex/web build)" >&2; exit 1; }
+
+[[ -d "$release" ]] || {
+  echo "missing $release (run: NEX_SERVER_TARGET=$target pnpm --filter @nex/server-cli stage)" >&2
+  exit 1
+}
+[[ -f "$release/manifest.json" ]] || { echo "missing $release/manifest.json" >&2; exit 1; }
+[[ -f "$web/index.html" ]] || {
+  echo "missing $web/index.html (run pnpm --filter @nex/web build)" >&2
+  exit 1
+}
+
 rm -rf "$root/dist-docker"
 mkdir -p "$root/dist-docker"
-cp "$binary" "$root/dist-docker/nex-server"
+cp -R "$release" "$root/dist-docker/nex-server"
 cp -rL "$web" "$root/dist-docker/web"
-echo "staged $target -> $root/dist-docker"
+echo "staged server-cli $target -> $root/dist-docker"
+du -sh "$root/dist-docker/nex-server" "$root/dist-docker/web"

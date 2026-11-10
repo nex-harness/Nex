@@ -66,10 +66,10 @@ jobs:
           pnpm -r --filter "@nex/cli..." build
           pnpm --filter @nex/web build
 
-      # 阻塞项：packages/server/scripts/build-sea.mjs 尚未在 2.0 基线提供。
-      - name: Build SEA binary (linux-x64)
-        working-directory: packages/server
-        run: node scripts/build-sea.mjs --target linux-x64
+      # 2.0 的发行形态是 server-cli staging 产物（不是单文件 SEA）。
+      # staging 只能构建当前平台，因此本 job 必须跑在 linux-x64 runner 上。
+      - name: Stage server-cli release (linux-x64)
+        run: pnpm --filter @nex/server-cli stage
 
       - name: Stage Docker context
         run: scripts/stage-docker-context.sh linux-x64

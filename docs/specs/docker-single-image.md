@@ -1,78 +1,82 @@
 # Docker：单镜像 nex-server
 
-## 现状与问题
-
-旧 fork 的 `Dockerfile` 产出两个镜像：
-
-- `server`：把整个 builder 阶段的 `/app` 拷进 `node:24-bookworm-slim`，镜像约 4.3 GB。其中根 `node_modules`（含 devDependencies、构建工具、已被打进 `web/dist` 的前端库）约 2.3 GB，另有源码、`tsbuildinfo`、`apps/nex-cli` 等。
-- `web`：nginx 托管 `packages/web/dist`，并把 `/api`、`/ws` 反代到 server。
-
-但 server 本身已经能托管 Web UI（`NEX_WEB_STATIC_ROOT`，SPA fallback），nginx 容器不再提供独有能力。
-
 ## 产品规则
 
-- 只发布一个镜像 `ghcr.io/nex-harness/nex-server`，进程监听容器内 3030，同时提供 API、WebSocket 与 Web UI。**废弃 `nex-web` 镜像和 nginx 配置**；不再有 8080 端口。
-- 镜像内容 = SEA 二进制 `nex-server` + 与之同一次构建的 `web/dist` + 运行时依赖（`git`、`openssh-client`、`ca-certificates`、`curl`）。不再包含 monorepo 源码和 `node_modules`。
-- **镜像不负责编译。** `Dockerfile` 只装配已构建好的产物：构建上下文只有 `dist-docker/`（`Dockerfile.dockerignore` 放行的唯一目录），由 `scripts/stage-docker-context.sh <target>` 从 `packages/server/dist/sea/nex-server-<target>` 与 `packages/web/dist` 复制而来。SEA 的构建步骤沿用 `release-server.yaml`（同样的 Node 24.14.0、typecheck、agent bundle、web build、`build-sea.mjs`），`docker.yaml` 在 `docker build` 之前执行同样的步骤。这样 Docker 构建只剩两层 COPY，不重复构建、不依赖镜像内再次下载依赖。
-- 架构：`docker.yaml` 只发布 `linux/amd64`（`--target linux-x64`）。`stage-docker-context.sh linux-arm64` 与 `docker build --platform linux/arm64` 可在本机使用，但 arm64 的 runtime 层需要 QEMU 才能执行 `apt-get`，CI 不在本期范围。
-- 容器行为：以 root 运行；`/data` 保存全部状态（`NEX_DATA_BASE_DIR`），`/workspace` 是默认工作区；`PORT=3030`、`NEX_SERVER_HOST=0.0.0.0`；访问令牌由 `NEX_SERVER_AUTH_TOKEN` 提供，首次通过 `/?token=<token>` 写入 HttpOnly cookie（2.0 基线的 Web 登录页是 OAuth 登录，不接受手工输入该令牌）。
-- 健康检查用 `curl` 访问 `/`（SPA `index.html`，静态路径不受令牌保护，恒定 200），不再依赖运行时里的 Node。
-- `docker-compose.yml` 只剩一个服务，端口映射 `3030:3030`。**这是对旧 compose 用户的破坏性变更**：访问地址由 `:8080` 变为 `:3030`，不再有 `web` 服务；需要 TLS/域名的部署自行在前面放反向代理，并转发 `/ws`（带 `Upgrade`）与 `/api`。
+- 只发布一个镜像 `ghcr.io/nex-harness/nex-server`，容器对外 3030 同时提供 API、WebSocket 与 Web UI。
+- 镜像内容 = `packages/nex-server-cli` 的 staging 发行目录（`bin/nex` + 随包 Node +
+  `server-core.js` + `nex.cjs` + 生产依赖闭包 + 官方插件）+ 同一次构建的 `web/dist`。
+  不含 monorepo 源码与 devDependencies。
+- **镜像不负责编译。** `Dockerfile` 只装配产物；构建上下文只有 `dist-docker/`
+  （`Dockerfile.dockerignore` 放行 `dist-docker` 与 `docker` 两个目录），由
+  `scripts/stage-docker-context.sh <target>` 从
+  `packages/nex-server-cli/dist-release/nex-server-<target>` 与 `packages/web/dist` 复制。
 
-## 2.0 基线差异与阻塞项
+## 为什么镜像里有一个 nginx
 
-以下内容随旧 fork 的 SEA 发行改造引入，**尚未迁移到 2.0 基线**，是本期 Docker/CI 迁移的硬前置：
+`server-core` 只接受回环监听：`packages/nex-server-cli/src/server-core/http.ts` 对
+非回环 host 直接 fail-closed，因为 R2 的 Core 面向"本机 / SSH 隧道"入口，鉴权靠
+`run/ingress-token` 而不是网络位置。它也不托管 Web UI——上游 R2 架构里 UI 由调用方
+（桌面窗口、远控宿主）提供。
 
-| 缺失项                                       | 用途                                      |
-| -------------------------------------------- | ----------------------------------------- |
-| `packages/server/scripts/build-sea.mjs`      | 生成 `dist/sea/nex-server-<target>`       |
-| `packages/server/scripts/sea-pty-assets.mjs` | SEA 内嵌 node-pty 资源                    |
-| `packages/server/src/seaEntry.ts`            | 单二进制双角色入口（HTTP / agent）        |
-| `packages/server/build-http-bundle.ts`       | SEA 预打包 CJS 入口                       |
-| `packages/server/packaging/`                 | `install.sh`、systemd unit、launchd plist |
+因此容器分工是：
 
-在这些文件补齐之前：
+```
+浏览器 ──:3030──▶ nginx ──静态资源──▶ /app/web
+                    └──/api,/ws──▶ 127.0.0.1:<random>（server-core，注入 Bearer）
+```
 
-- `docker.yaml` 的 "Build SEA binary" / "Stage Docker context" 必定失败；
-- `release-server.yaml` 的 "Build SEA binary" / "Package one-step install tarball" 必定失败；
-- `scripts/stage-docker-context.sh` 因缺少二进制直接报错退出。
+- 端口与 token 由 core 启动后写入 `<NEX_DATA_BASE_DIR>/run/{status.json,ingress-token}`；
+  `docker/entrypoint.sh` 等就绪后用 `envsubst` 渲染 `docker/nginx.conf` 并启动 nginx。
+- 浏览器从不接触 ingress token；对外访问控制应放在本容器之前（反代 + TLS + 登录层）。
 
-另外，2.0 基线没有旧 fork 的 `/api/auth/session` 端点：配置 `NEX_SERVER_AUTH_TOKEN` 后 `/api/*` 一律要求鉴权（`packages/server/src/http.ts` 的 `isTokenProtectedPath`），因此健康检查改用不受保护的 `/`。
+## 容器行为
 
-### 与 `packages/nex-server-cli` 的关系
+- 以 root 运行；`/data` 保存全部状态（`NEX_DATA_BASE_DIR`），`/workspace` 是默认工作区。
+- 对外端口 `NEX_SERVER_PORT`（默认 3030）；core 端口由 supervisor 动态分配。
+- 健康检查走 `/`（nginx 直接返回 SPA `index.html`，不经过需要 token 的 core）。
+- `docker-compose.yml` 单服务，映射 `3030:3030`；需要 TLS/域名时在前面放反向代理并转发
+  `/ws`（带 `Upgrade`）与 `/api`。
 
-2.0 基线另有 `packages/nex-server-cli`（R2 独立 Server CLI，`pnpm --filter @nex/server-cli stage`，输出 `packages/nex-server-cli/dist-release/nex-server-<target>/`）。它自带 Node runtime 与 `bin/nex` 启动器，不是单二进制，形态与上面的 SEA 镜像不同。若要改用它作为镜像内容，需要另行确认运行入口、静态资源托管（当前 `server-core/http.ts` 不提供 `NEX_WEB_STATIC_ROOT`）和公开健康端点，属于新的设计决策，不在本次迁移内。
+## 构建与发布
+
+- staging 只能构建**当前平台**（`currentServerTarget()`），不能交叉编译。因此
+  `docker.yaml` 与 `release-server.yaml` 的每个 target 必须有同架构 runner。
+- `docker.yaml`：`pnpm --filter @nex/server-cli stage` → `scripts/stage-docker-context.sh linux-x64`
+  → `docker build`。
+- `release-server.yaml`：同样 staging，把 `<release>/` 加 `web/` 打成 tar.gz 上传。
 
 ## 接口与所有者
 
 | 项                     | 所有者                                                                  |
 | ---------------------- | ----------------------------------------------------------------------- |
 | 镜像内容               | `Dockerfile`（唯一）；产物准备由 `scripts/stage-docker-context.sh` 负责 |
-| 镜像 tag 规则、推送    | `.github/workflows/docker.yaml`（只推 `nex-server`）                    |
-| Web 静态资源托管、鉴权 | `packages/server/src/http.ts`、`packages/server/src/entry-http.ts`      |
-| 本地编排               | `docker-compose.yml`                                                    |
+| 镜像 tag 规则、推送    | `.github/workflows/docker.yaml`                                         |
+| Web 静态资源托管       | `docker/nginx.conf`（容器内 nginx）                                     |
+| API / WebSocket 与鉴权 | `packages/nex-server-cli/src/server-core/{http,ingressToken}.ts`        |
+| 本地编排               | `docker-compose.yml`、`docker/entrypoint.sh`                            |
 
 ```text
-CI / 本机：pnpm install → typecheck → agent bundle → web build → build-sea --target linux-x64
-        │ packages/server/dist/sea/nex-server-linux-x64     │ packages/web/dist
-        └──────────── scripts/stage-docker-context.sh ───────┘
-                              ▼  dist-docker/{nex-server, web/}
-Dockerfile: debian:bookworm-slim + git/ssh/curl
-  /usr/local/bin/nex-server   /app/web   ← NEX_WEB_STATIC_ROOT
+CI / 本机：pnpm install → typecheck → agent bundle → web build → server-cli stage
+        │ packages/nex-server-cli/dist-release/nex-server-linux-x64 │ packages/web/dist
+        └──────────────── scripts/stage-docker-context.sh ──────────┘
+                     ▼  dist-docker/{nex-server/, web/}
+Dockerfile: node:22-bookworm-slim + git/ssh/nginx/gettext
+  /opt/nex/bin/nex   /app/web   nginx:3030 → 127.0.0.1:<core port>
 ```
 
 ## 失败语义与限制
 
-- 没有先准备 `dist-docker/` 时 `docker build` 直接失败（`COPY` 找不到文件）；`stage-docker-context.sh` 在缺少二进制或 `index.html` 时报错退出，不生成半成品。
-- 构建机无法下载 Node 24.14.0 官方二进制时 SEA 构建失败，不回退到其它版本。
-- 去掉 nginx 后没有 gzip：静态资源以未压缩形式返回。本期不改 server 的静态处理，作为已知损失记录。
+- 没有先准备 `dist-docker/` 时 `docker build` 直接失败（`COPY` 找不到文件）；
+  `stage-docker-context.sh` 在缺少 release 目录或 `index.html` 时报错退出，不生成半成品。
+- core 未在 90s 内写出 `status.json` 端口时，entrypoint 杀掉 core 并以非零码退出。
+- 镜像内 nginx 是新引入的一层；静态资源压缩、缓存头由 nginx 默认行为决定。
 
 ## 验收
 
-1. 在 Linux amd64 上 `docker build` 成功，镜像体积显著低于 4.3 GB，并记录实际大小。
-2. 容器启动后：`GET /` 返回 Web 页面；未登录访问 `/api/*` 为 401；带 `NEX_SERVER_AUTH_TOKEN` 的 Bearer 或 `?token=` 可访问 `/api/server-info`；WebSocket `/ws` 可连通。
-3. 容器重启（数据卷保留）后，已登录会话仍然有效；健康检查变为 `healthy`。
-4. 容器内 `git`、`ssh` 可用；二进制在 `debian:bookworm-slim` 上能启动（共享库齐全）。
-5. `docker-compose.yml` 只剩一个服务，`docker compose config` 通过；`docker.yaml` 不再引用 `nex-web`。
-6. `pnpm typecheck`、`pnpm lint`、`pnpm architecture:check --changed` 通过。
-7. 未验证项如实说明（例如 arm64 交叉构建若未实测）。
+1. 在 Linux amd64 上 `docker build` 成功，记录镜像与 tar.gz 实际大小。
+2. 容器启动后：`GET /` 返回 Web 页面；`/api/*` 与 `/ws` 经 nginx 注入 token 后可访问。
+3. 容器重启（数据卷保留）后会话仍可恢复，健康检查变为 `healthy`。
+4. 容器内 `git`、`ssh` 可用。
+5. `docker compose config` 通过。
+6. `pnpm typecheck`、`pnpm lint` 通过。
+7. 未验证项如实说明（本机为 macOS，未实测 linux 镜像构建与 arm64 交叉）。

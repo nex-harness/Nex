@@ -100,19 +100,19 @@ jobs:
           fi
           echo "shortsha=${shortsha}" >> "$GITHUB_OUTPUT"
 
-      # 阻塞项：packages/server/scripts/build-sea.mjs 尚未在 2.0 基线提供。
-      - name: Build SEA binary (${{ matrix.target }})
-        working-directory: packages/server
-        run: node scripts/build-sea.mjs --target ${{ matrix.target }}
+      # 2.0 的发行形态是 server-cli staging 产物（bin/nex + runtime/ + manifest.json）。
+      # staging 只能构建当前平台，因此每个 matrix.target 必须有对应的 runner 架构。
+      - name: Stage server-cli release (${{ matrix.target }})
+        run: pnpm --filter @nex/server-cli stage
 
       - name: Package one-step install tarball
-        working-directory: packages/server/dist/sea
+        working-directory: packages/nex-server-cli/dist-release
         run: |
-          mkdir -p bundle/packaging bundle/web
-          cp nex-server-${{ matrix.target }} bundle/
-          cp -r ../../packaging/. bundle/packaging/
-          # Matching web build (index.html + hashed assets), served by the
-          # server process itself via NEX_WEB_STATIC_ROOT.
+          mkdir -p bundle
+          cp -R nex-server-${{ matrix.target }}/. bundle/
+          # Matching web build: the shipped layout does not bundle UI assets,
+          # so tarball consumers serve web/dist through their own front proxy.
+          mkdir -p bundle/web
           cp -r ../../../web/dist/. bundle/web/
           tar -czf nex-server-${{ matrix.target }}-${{ steps.meta.outputs.label }}.tar.gz -C bundle .
 
@@ -120,7 +120,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nex-server-${{ matrix.target }}-${{ steps.meta.outputs.label }}
-          path: packages/server/dist/sea/nex-server-${{ matrix.target }}-${{ steps.meta.outputs.label }}.tar.gz
+          path: packages/nex-server-cli/dist-release/nex-server-${{ matrix.target }}-${{ steps.meta.outputs.label }}.tar.gz
           retention-days: 7
 
   release:

@@ -1,11 +1,14 @@
-# Nex server（单容器：API、WebSocket 与 Web UI 都由同一进程提供）。
-# 启动前必须设置 NEX_SERVER_AUTH_TOKEN（访问令牌）：
-#   NEX_SERVER_AUTH_TOKEN=$(openssl rand -hex 32) docker compose up -d --build
+# Nex server（单容器：nginx 提供 Web UI，server-core 在容器内提供 API 与 WebSocket）。
 #
-# 令牌通过 URL 查询参数首次带入，由 server 写入 HttpOnly cookie 后沿用：
-#   http://<host>:3030/?token=<NEX_SERVER_AUTH_TOKEN>
-# 2.0 基线的 Web 登录页是 OAuth 登录，不接受手工输入该令牌；不带 token 访问时
-# /api/* 与 /ws 一律 401。需要 TLS/域名时在前面放反向代理，并转发 /ws（带 Upgrade）与 /api。
+# 构建前先在 Linux 主机（或匹配架构的 runner）上准备产物：
+#   pnpm --filter @nex/web build
+#   pnpm --filter @nex/server-cli stage
+#   scripts/stage-docker-context.sh linux-x64
+#   docker compose up -d --build
+#
+# 鉴权：server-core 每次启动生成一个 ingress token，写到 /data/run/ingress-token，
+# 由 nginx 在反代 /api 与 /ws 时注入 Authorization。浏览器不接触该 token。
+# 对外访问控制应放在本容器之前（反向代理 + TLS + 自己的登录层）。
 services:
   server:
     build:
@@ -14,8 +17,9 @@ services:
     ports:
       - "3030:3030"
     environment:
-      # 不设 token 则接口无鉴权，仅适合纯内网调试。
-      NEX_SERVER_AUTH_TOKEN: ${NEX_SERVER_AUTH_TOKEN:?请设置 NEX_SERVER_AUTH_TOKEN}
+      NEX_ENV: production
+      NEX_DATA_BASE_DIR: /data
+      NEX_SERVER_PORT: "3030"
     volumes:
       - nex-data:/data # 会话/设置/凭据等全部状态
       - nex-workspace:/workspace # server 侧默认工作区
