@@ -1,4 +1,4 @@
-import type { ConversationTelemetryFact } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationTelemetryFact } from "@nex/shared/nex-protocol-v4";
 export const remoteTurnExample = {
   version: 1,
   eventId: "start",

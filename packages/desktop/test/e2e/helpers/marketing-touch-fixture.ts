@@ -257,7 +257,7 @@ export async function createMarketingTouchFixture() {
       if (
         path.startsWith("/api/v1/marketing/") ||
         path.startsWith("/marketing-assets/") ||
-        path.startsWith("/api/v1/zcode-plan/billing/")
+        path.startsWith("/api/v1/nex-plan/billing/")
       ) {
         requests.push(path);
         requestDetails.push({
@@ -268,7 +268,7 @@ export async function createMarketingTouchFixture() {
           headers: {
             deviceMid: req.headers["x-device-mid"],
             language: req.headers["x-client-language"],
-            appVersion: req.headers["x-zcode-app-version"],
+            appVersion: req.headers["x-nex-app-version"],
             authenticated: Boolean(req.headers.authorization),
           },
         });
@@ -353,7 +353,7 @@ export async function createMarketingTouchFixture() {
                                 {
                                   text: { ...text(""), format: "" },
                                   action: {
-                                    type: "claim_zcode_plan",
+                                    type: "claim_nex_plan",
                                     args: { plan_id: "weekend-plan-e2e" },
                                   },
                                 },
@@ -381,7 +381,7 @@ export async function createMarketingTouchFixture() {
         json(snapshot);
         return true;
       }
-      if (path === "/api/v1/zcode-plan/billing/claim") {
+      if (path === "/api/v1/nex-plan/billing/claim") {
         const requestGeneration = generation;
         if (held) await new Promise<void>((done) => waiters.push(done));
         if (requestGeneration !== generation) {

@@ -1,5 +1,5 @@
-import type { Event } from "@zcode/rpc";
-import { ServiceChannels } from "@zcode/shared";
+import type { Event } from "@nex/rpc";
+import { ServiceChannels } from "@nex/shared";
 import { createServiceDescriptor } from "../descriptors.js";
 
 /**

@@ -1,4 +1,4 @@
-import type { IPlatformService, SaveFileResult } from "@zcode/shared";
+import type { IPlatformService, SaveFileResult } from "@nex/shared";
 import { getPathLeaf } from "@/lib/path.js";
 
 export const MAX_FILE_COPY_BYTES = 50 * 1024 * 1024;

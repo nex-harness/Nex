@@ -1,10 +1,10 @@
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { NexTaskMeta } from "@nex/shared";
 import { formatTaskChangedFileLabel } from "@/lib/taskChangeSummary.js";
 
 type TaskFindScope = "conversation" | "changes";
 
 interface TaskFindEntry {
-  task: ZCodeTaskMeta;
+  task: NexTaskMeta;
   searchText: string;
 }
 
@@ -19,7 +19,7 @@ function normalizeTaskFindText(value: string): string {
   return value.trim().toLocaleLowerCase();
 }
 
-function getTaskChangeSearchText(task: ZCodeTaskMeta): string {
+function getTaskChangeSearchText(task: NexTaskMeta): string {
   const summary = task.changeSummary;
   if (!summary || summary.files.length === 0) {
     return "";
@@ -31,7 +31,7 @@ function getTaskChangeSearchText(task: ZCodeTaskMeta): string {
 }
 
 export function createTaskFindEntries(
-  tasks: readonly ZCodeTaskMeta[],
+  tasks: readonly NexTaskMeta[],
   scope: TaskFindScope,
 ): TaskFindEntry[] {
   return tasks.map((task) => ({

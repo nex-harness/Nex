@@ -1,5 +1,5 @@
 import { nativeTheme, type BrowserWindow, type Point } from "electron";
-import { PlatformChannels } from "@zcode/shared";
+import { PlatformChannels } from "@nex/shared";
 import {
   resolveDesktopZoomFactorForLevel,
   resolveDesktopZoomLevelFromFactor,

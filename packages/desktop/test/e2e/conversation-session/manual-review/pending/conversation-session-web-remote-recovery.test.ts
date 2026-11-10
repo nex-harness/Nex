@@ -1,14 +1,14 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import type { ProjectTree, VirtualProject } from "@zcode/services";
+import type { ProjectTree, VirtualProject } from "@nex/services";
 import {
   buildRemoteHostWorkspaceIdentity,
   parseWebRemoteControlAppPayload,
   ServiceChannels,
   type WebRemoteControlAppPayload,
-} from "@zcode/shared";
-import { TID_V4_COMPOSER_INPUT, TID_V4_COMPOSER_SEND, TID_V4_STOP } from "@zcode/shared/test-ids";
+} from "@nex/shared";
+import { TID_V4_COMPOSER_INPUT, TID_V4_COMPOSER_SEND, TID_V4_STOP } from "@nex/shared/test-ids";
 import { clearAppData, DEFAULT_WORKSPACE } from "#e2e/helpers/desktop-app";
 import { releaseControlledReplay } from "#e2e/helpers/controlled-replay";
 import { resolveE2ERuntimePath } from "#e2e/helpers/e2e-runtime-paths";
@@ -58,11 +58,11 @@ async function readDesktopWorkspacePaths(): Promise<string[]> {
   return browser.execute(() => {
     const state = (
       window as Window & {
-        __zcodeTabStoreE2E?: {
+        __nexTabStoreE2E?: {
           getState(): { tabs: Array<{ workspacePath?: string }> };
         };
       }
-    ).__zcodeTabStoreE2E?.getState();
+    ).__nexTabStoreE2E?.getState();
     if (!state) throw new Error("MRO04 desktop tab store missing");
     return state.tabs.flatMap((tab) => (tab.workspacePath ? [tab.workspacePath] : []));
   });
@@ -72,9 +72,9 @@ async function readWebWorkspace(page: Page): Promise<string | null> {
   return page.evaluate(() => {
     const state = (
       window as Window & {
-        __zcodeTabStoreE2E?: { getState(): { activeWorkspacePath: string | null } };
+        __nexTabStoreE2E?: { getState(): { activeWorkspacePath: string | null } };
       }
-    ).__zcodeTabStoreE2E?.getState();
+    ).__nexTabStoreE2E?.getState();
     return state?.activeWorkspacePath ?? null;
   });
 }
@@ -147,8 +147,8 @@ describe(`${CASE}: 失效通知补发与长后台恢复原项目任务`, () => {
       : "真实后台46秒后回前台15秒内显示原task完成内容";
     it(`MRO04-${width}: ${title}`, async function () {
       this.timeout(5 * 60_000);
-      const artifacts = process.env.ZCODE_E2E_ARTIFACT_DIR;
-      if (!artifacts || !process.env.ZCODE_E2E_HOME_DIR)
+      const artifacts = process.env.NEX_E2E_ARTIFACT_DIR;
+      if (!artifacts || !process.env.NEX_E2E_HOME_DIR)
         throw new Error("MRO04 requires isolated Electron runner");
       const target = await prepareMobileOnlyProject(String(width));
       const { workspacePath, pairingUrl } = target;
@@ -177,7 +177,7 @@ describe(`${CASE}: 失效通知补发与长后台恢复原项目任务`, () => {
             const frame = JSON.parse(String(message)) as { payload?: unknown };
             const payload = parseWebRemoteControlAppPayload(frame.payload);
             if (
-              payload?.zcode_type === "workspace-bridge-open" &&
+              payload?.nex_type === "workspace-bridge-open" &&
               (evidence.hiddenAt || evidence.faultStartedAt)
             )
               evidence.recoveryOpens.push({
@@ -190,19 +190,19 @@ describe(`${CASE}: 失效通知补发与长后台恢复原项目任务`, () => {
           server.onMessage((message) => {
             const frame = JSON.parse(String(message)) as { payload?: unknown };
             const payload = parseWebRemoteControlAppPayload(frame.payload);
-            if (payload?.zcode_type === "workspace-bridge-ready")
+            if (payload?.nex_type === "workspace-bridge-ready")
               currentBridgeSessionId = payload.bridgeSessionId;
             if (
               loseInvalidation &&
               evidence.faultStartedAt &&
-              payload?.zcode_type === "rpc-frame" &&
+              payload?.nex_type === "rpc-frame" &&
               payload.bridgeSessionId === evidence.blockedBridgeSessionId
             ) {
               evidence.droppedRawFrames += 1;
               return;
             }
             const observedInvalidation =
-              payload?.zcode_type === "bridge-degraded" &&
+              payload?.nex_type === "bridge-degraded" &&
               Boolean(evidence.hiddenAt || evidence.faultStartedAt);
             if (observedInvalidation) {
               evidence.invalidations += 1;
@@ -221,7 +221,7 @@ describe(`${CASE}: 失效通知补发与长后台恢复原项目任务`, () => {
             }
             if (
               loseInvalidation &&
-              payload?.zcode_type === "workspace-bridge-ready" &&
+              payload?.nex_type === "workspace-bridge-ready" &&
               evidence.faultStartedAt &&
               staleInvalidation &&
               !staleReplayed
@@ -332,8 +332,8 @@ describe(`${CASE}: 失效通知补发与长后台恢复原项目任务`, () => {
   }
   it("MRO04-06: 运行中短后台持续收帧，回前台复用原socket与bridge完成原task", async function () {
     this.timeout(4 * 60_000);
-    const artifacts = process.env.ZCODE_E2E_ARTIFACT_DIR;
-    if (!artifacts || !process.env.ZCODE_E2E_HOME_DIR)
+    const artifacts = process.env.NEX_E2E_ARTIFACT_DIR;
+    if (!artifacts || !process.env.NEX_E2E_HOME_DIR)
       throw new Error("MRO04 requires isolated Electron runner");
     const marker = "MRO04-short-390";
     const fixtureId = "mro04-mobile-short-390";
@@ -367,18 +367,18 @@ describe(`${CASE}: 失效通知补发与长后台恢复原项目任务`, () => {
         route.onMessage((message) => {
           const frame = JSON.parse(String(message)) as { payload?: unknown };
           const payload = parseWebRemoteControlAppPayload(frame.payload);
-          if (evidence.hiddenAt && payload?.zcode_type === "workspace-bridge-open")
+          if (evidence.hiddenAt && payload?.nex_type === "workspace-bridge-open")
             evidence.bridgeOpensAfterHide += 1;
-          if (hidden && payload?.zcode_type === "rpc-frame-ack") evidence.hiddenUplinkAcks += 1;
-          if (hidden && payload?.zcode_type === "rpc-frame") evidence.hiddenUplinkFrames += 1;
+          if (hidden && payload?.nex_type === "rpc-frame-ack") evidence.hiddenUplinkAcks += 1;
+          if (hidden && payload?.nex_type === "rpc-frame") evidence.hiddenUplinkFrames += 1;
           server.send(message);
         });
         server.onMessage((message) => {
           const frame = JSON.parse(String(message)) as { payload?: unknown };
           const payload = parseWebRemoteControlAppPayload(frame.payload);
-          if (payload?.zcode_type === "workspace-bridge-ready")
+          if (payload?.nex_type === "workspace-bridge-ready")
             evidence.bridgeAtEnd = payload.bridgeSessionId;
-          if (hidden && payload?.zcode_type === "rpc-frame") evidence.hiddenDownlinkRawFrames += 1;
+          if (hidden && payload?.nex_type === "rpc-frame") evidence.hiddenDownlinkRawFrames += 1;
           route.send(message);
         });
       });
@@ -443,8 +443,8 @@ describe(`${CASE}: 失效通知补发与长后台恢复原项目任务`, () => {
   });
   it("MRO04-07: 后台多个在途ACK各收到INTERNAL，回前台先探测原socket，桌面离开期间不进失败页", async function () {
     this.timeout(4 * 60_000);
-    const artifacts = process.env.ZCODE_E2E_ARTIFACT_DIR;
-    if (!artifacts || !process.env.ZCODE_E2E_HOME_DIR)
+    const artifacts = process.env.NEX_E2E_ARTIFACT_DIR;
+    if (!artifacts || !process.env.NEX_E2E_HOME_DIR)
       throw new Error("MRO04 requires isolated Electron runner");
     const marker = "MRO04-internal-390";
     const fixtureId = "mro04-mobile-internal-390";
@@ -505,7 +505,7 @@ describe(`${CASE}: 失效通知补发与长后台恢复原项目任务`, () => {
             evidence.probesAfterShow.push({ socket, at: Date.now() });
           if (mode !== "normal" && frame.type === "data") {
             evidence.interceptedData += 1;
-            if (parseWebRemoteControlAppPayload(frame.payload)?.zcode_type === "rpc-frame-ack")
+            if (parseWebRemoteControlAppPayload(frame.payload)?.nex_type === "rpc-frame-ack")
               evidence.interceptedAcks += 1;
             dataInFlight += 1;
             setTimeout(() => {
@@ -631,8 +631,8 @@ describe(`${CASE}: 失效通知补发与长后台恢复原项目任务`, () => {
     for (const scenario of ["offline", "deleted-task", "removed-host"] as const) {
       it(`MRO04-cold-${width}-${scenario}: 首次加载和刷新使用可用workspace`, async function () {
         this.timeout(3 * 60_000);
-        const artifacts = process.env.ZCODE_E2E_ARTIFACT_DIR;
-        if (!artifacts || !process.env.ZCODE_E2E_HOME_DIR)
+        const artifacts = process.env.NEX_E2E_ARTIFACT_DIR;
+        if (!artifacts || !process.env.NEX_E2E_HOME_DIR)
           throw new Error("MRO04 cold start requires isolated Electron runner");
         await prepareSSHConnectionPage(CASE);
         await startDraftFromProject(DEFAULT_WORKSPACE);
@@ -647,7 +647,7 @@ describe(`${CASE}: 失效通知补发与长后台恢复原项目任务`, () => {
         const evidence = {
           bootstraps: 0,
           opens: [] as Array<
-            Extract<WebRemoteControlAppPayload, { zcode_type: "workspace-bridge-open" }>
+            Extract<WebRemoteControlAppPayload, { nex_type: "workspace-bridge-open" }>
           >,
           ready: [] as string[],
           viewUpdates: [] as string[],
@@ -666,19 +666,19 @@ describe(`${CASE}: 失效通知补发与长后台恢复原项目任务`, () => {
             route.onMessage((message) => {
               const frame = JSON.parse(String(message)) as { payload?: unknown };
               const payload = parseWebRemoteControlAppPayload(frame.payload);
-              if (payload?.zcode_type === "workspace-bridge-open") evidence.opens.push(payload);
-              if (payload?.zcode_type === "mobile-view-state-update")
+              if (payload?.nex_type === "workspace-bridge-open") evidence.opens.push(payload);
+              if (payload?.nex_type === "mobile-view-state-update")
                 evidence.viewUpdates.push(payload.viewState.activeWorkspaceKey ?? "");
               server.send(message);
             });
             server.onMessage((message) => {
               const frame = JSON.parse(String(message)) as { payload?: unknown };
               const payload = parseWebRemoteControlAppPayload(frame.payload);
-              if (payload?.zcode_type === "workspace-bridge-ready")
+              if (payload?.nex_type === "workspace-bridge-ready")
                 evidence.ready.push(payload.bridge.workspaceKey);
-              if (payload?.zcode_type === "workspace-bridge-error")
+              if (payload?.nex_type === "workspace-bridge-error")
                 evidence.errors.push(payload.error);
-              if (payload?.zcode_type === "bootstrap-response") {
+              if (payload?.nex_type === "bootstrap-response") {
                 evidence.bootstraps += 1;
                 route.send(
                   JSON.stringify({

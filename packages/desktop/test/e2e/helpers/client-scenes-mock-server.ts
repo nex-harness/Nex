@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { createServer, type ServerResponse } from "node:http";
-import type { ClientScenesResponse } from "@zcode/services";
+import type { ClientScenesResponse } from "@nex/services";
 
 /** 只给需要验证真实模板网格的 case 注入 Client Scenes，避免布局断言依赖远端目录。 */
 export const CLIENT_SCENES_AUTOMATIONS_HOME_SPEC = "off-peak-automations-home-layout.test.ts";
@@ -10,7 +10,7 @@ export const AUTOMATIONS_HOME_CLIENT_SCENES_FIXTURE = {
   msg: "",
   data: [
     {
-      namespace: "zcode",
+      namespace: "nex",
       scene: "off-peak-task",
       options: {
         prompts: {
@@ -53,7 +53,7 @@ export const AUTOMATIONS_HOME_CLIENT_SCENES_FIXTURE = {
       },
     },
     {
-      namespace: "zcode",
+      namespace: "nex",
       scene: "scheduled-task",
       options: {
         prompts: {
@@ -152,16 +152,16 @@ export function applyClientScenesMockEnv(
   environment: Record<string, string | undefined>,
   baseUrl: string,
 ): void {
-  environment.ZCODE_BASE_URL = baseUrl;
-  environment.ZCODE_TEST_BASE_URL = baseUrl;
-  environment.ZCODE_ENDPOINT_ORIGIN = baseUrl;
+  environment.NEX_BASE_URL = baseUrl;
+  environment.NEX_TEST_BASE_URL = baseUrl;
+  environment.NEX_ENDPOINT_ORIGIN = baseUrl;
 }
 
 export function clearClientScenesMockEnv(
   environment: Record<string, string | undefined>,
   baseUrl: string,
 ): void {
-  for (const key of ["ZCODE_BASE_URL", "ZCODE_TEST_BASE_URL", "ZCODE_ENDPOINT_ORIGIN"] as const) {
+  for (const key of ["NEX_BASE_URL", "NEX_TEST_BASE_URL", "NEX_ENDPOINT_ORIGIN"] as const) {
     if (environment[key] === baseUrl) {
       delete environment[key];
     }
@@ -192,7 +192,7 @@ export async function startClientScenesMockServer(): Promise<ClientScenesMockSer
       return;
     }
 
-    if (request.method === "GET" && url.pathname === "/api/v1/zcode-plan/billing/balance") {
+    if (request.method === "GET" && url.pathname === "/api/v1/nex-plan/billing/balance") {
       writeJson(response, { code: 0, data: { balances: [], plans: [] }, msg: "", success: true });
       return;
     }

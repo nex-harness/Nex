@@ -18,7 +18,7 @@ describe("Coding Plan upgrade E2E mock server", () => {
       const response = await fetch(`${server.baseUrl}/${lang}/rewards?embedded=app`);
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toContain("text/html");
-      expect(await response.text()).toContain("zcode-rewards-context");
+      expect(await response.text()).toContain("nex-rewards-context");
     }
   });
   it("holds the query snapshot captured before a cancellation", async () => {
@@ -107,7 +107,7 @@ describe("Coding Plan upgrade E2E mock server", () => {
     server = await startCodingPlanUpgradeMockServer("manual-claim-experience", {
       marketingTouch: true,
     });
-    const pending = fetch(`${server.baseUrl}/api/v1/zcode-plan/billing/claim`, { method: "POST" });
+    const pending = fetch(`${server.baseUrl}/api/v1/nex-plan/billing/claim`, { method: "POST" });
     await fetch(`${server.baseUrl}/__e2e/marketing/release`, { method: "POST" });
     expect((await pending).ok).toBe(true);
   });
@@ -155,7 +155,7 @@ describe("Coding Plan upgrade E2E mock server", () => {
       {
         headers: {
           "X-Client-Language": "zh-CN",
-          "X-ZCode-App-Version": "fixture",
+          "X-Nex-App-Version": "fixture",
           Authorization: "Bearer must-not-be-recorded",
         },
       },
@@ -263,20 +263,20 @@ describe("Coding Plan upgrade E2E mock server", () => {
 
   it("expires Start without revoking Coding Plan and resets the expiry between workers", async () => {
     server = await startCodingPlanUpgradeMockServer("manual-claim-experience");
-    await fetch(`${server.baseUrl}/api/v1/zcode-plan/billing/claim`, { method: "POST" });
+    await fetch(`${server.baseUrl}/api/v1/nex-plan/billing/claim`, { method: "POST" });
     const expired = await fetch(`${server.baseUrl}/__e2e/coding-plan/start-expired`, {
       method: "POST",
     });
     expect(expired.ok).toBe(true);
     const balance = await (
-      await fetch(`${server.baseUrl}/api/v1/zcode-plan/billing/balance`)
+      await fetch(`${server.baseUrl}/api/v1/nex-plan/billing/balance`)
     ).json();
     expect(balance.data).toMatchObject({ plans: [], balances: [] });
     const subscriptions = await (await fetch(`${server.baseUrl}/api/biz/subscription/list`)).json();
     expect(subscriptions.data).toHaveLength(1);
     await resetCodingPlanUpgradeMockServer(server.baseUrl, "manual-claim-experience");
     const restored = await (
-      await fetch(`${server.baseUrl}/api/v1/zcode-plan/billing/balance`)
+      await fetch(`${server.baseUrl}/api/v1/nex-plan/billing/balance`)
     ).json();
     expect(restored.data.plans.length).toBeGreaterThan(0);
   });
@@ -346,7 +346,7 @@ describe("Coding Plan upgrade E2E mock server", () => {
   it("keeps the old Start Plan bucket until the scheduled claim bucket becomes ready", async () => {
     server = await startCodingPlanUpgradeMockServer("manual-claim-experience");
 
-    await fetchJson(`${server.baseUrl}/api/v1/zcode-plan/billing/claim`, {
+    await fetchJson(`${server.baseUrl}/api/v1/nex-plan/billing/claim`, {
       method: "POST",
     });
     const pendingBalance = await fetchJson<{
@@ -359,11 +359,11 @@ describe("Coding Plan upgrade E2E mock server", () => {
           status?: string;
         }>;
       };
-    }>(`${server.baseUrl}/api/v1/zcode-plan/billing/balance?app_version=e2e`);
+    }>(`${server.baseUrl}/api/v1/nex-plan/billing/balance?app_version=e2e`);
 
     expect(pendingBalance.code).toBe(0);
     expect(pendingBalance.data.plans).toEqual([
-      expect.objectContaining({ plan_id: "zcode-v3-start-plan", status: "active" }),
+      expect.objectContaining({ plan_id: "nex-v3-start-plan", status: "active" }),
       expect.objectContaining({
         plan_id: "weekend-plan-e2e",
         status: "active",
@@ -387,7 +387,7 @@ describe("Coding Plan upgrade E2E mock server", () => {
     });
     const refreshedBalance = await fetchJson<{
       data: { balances: Array<{ capabilities?: string[]; entitlement_id?: string }> };
-    }>(`${server.baseUrl}/api/v1/zcode-plan/billing/balance?app_version=e2e`);
+    }>(`${server.baseUrl}/api/v1/nex-plan/billing/balance?app_version=e2e`);
     expect(refreshedBalance.data.balances).toEqual([
       expect.objectContaining({ entitlement_id: "start-glm-turbo-e2e" }),
       expect.objectContaining({
@@ -419,11 +419,11 @@ describe("Coding Plan upgrade E2E mock server", () => {
   it("reopens the manual claim preview for the next polling window", async () => {
     server = await startCodingPlanUpgradeMockServer("manual-claim-experience");
 
-    await fetchJson(`${server.baseUrl}/api/v1/zcode-plan/billing/claim`, {
+    await fetchJson(`${server.baseUrl}/api/v1/nex-plan/billing/claim`, {
       method: "POST",
     });
     const claimedPreview = await fetchJson<{ data: { plans: unknown[] } }>(
-      `${server.baseUrl}/api/v1/zcode-plan/billing/preview`,
+      `${server.baseUrl}/api/v1/nex-plan/billing/preview`,
     );
     expect(claimedPreview.data.plans).toEqual([]);
 
@@ -432,7 +432,7 @@ describe("Coding Plan upgrade E2E mock server", () => {
     });
     const nextWindowPreview = await fetchJson<{
       data: { plans: Array<{ plan_id?: string }> };
-    }>(`${server.baseUrl}/api/v1/zcode-plan/billing/preview`);
+    }>(`${server.baseUrl}/api/v1/nex-plan/billing/preview`);
     expect(nextWindowPreview.data.plans).toEqual([
       expect.objectContaining({ plan_id: "weekend-plan-e2e" }),
     ]);

@@ -8,7 +8,7 @@ import {
   TID_SETTINGS_SECTION_NAV,
   TID_SETTINGS_BACK_BUTTON,
   testId,
-} from "@zcode/shared/test-ids";
+} from "@nex/shared/test-ids";
 import {
   clearAppData,
   DEFAULT_WORKSPACE,
@@ -27,7 +27,7 @@ import {
 
 const marker = "E2E_REMOTE_ACCESSIBILITY";
 const artifact = resolve(
-  process.env.ZCODE_E2E_ARTIFACT_DIR ?? ".e2e-artifacts/remote-accessibility",
+  process.env.NEX_E2E_ARTIFACT_DIR ?? ".e2e-artifacts/remote-accessibility",
 );
 const dialog = '[data-testid="ssh-dialog"]';
 
@@ -192,7 +192,7 @@ describe(`${marker}: 远程键盘与视觉矩阵`, () => {
     await prepareSSHConnectionPage(marker);
     await prepareV4ConversationE2E({ skipProvider: true });
     await browser.execute(() => {
-      localStorage.setItem("zcode:workspace-shell:sidebar-width-px", "264");
+      localStorage.setItem("nex:workspace-shell:sidebar-width-px", "264");
       (
         window as Window & {
           __testActions?: { setLocale(value: "zh-CN"): void };

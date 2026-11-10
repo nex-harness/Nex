@@ -286,7 +286,7 @@ app
             { ...scope, resourceUri: "ui://showcase/dashboard.html" },
             "sampling",
           );
-          await env.evalPage(legacy, "window.zcode.ready()");
+          await env.evalPage(legacy, "window.nex.ready()");
           await env.evalPage(
             legacy,
             `document.getElementById('refresh').click(); new Promise(resolve => {

@@ -5,7 +5,7 @@ import {
   isPublicStoreMarketplaceId,
   resolvePluginDisplayName,
   sortPluginStoreEntries,
-} from "@zcode/shared";
+} from "@nex/shared";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover.js";
 import {
   Command,
@@ -21,8 +21,8 @@ import { buildPluginMentionMarkdown } from "@/mentions/mentionMarkdown.js";
 import { Button } from "@/components/ui/button.js";
 import { usePluginStoreOrder } from "@/hooks/usePluginStoreOrder.js";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
+import type { ComposerMentionPrefill } from "@/store/nexSessionStoreTypes.js";
 
 import type { WorkspacePluginPreviewProps } from "./contract.js";
 
@@ -56,7 +56,7 @@ export function WorkspacePluginPreview({
   workspaceIdentity,
   remoteSessionId,
 }: WorkspacePluginPreviewProps) {
-  const { intl, locale } = useZCodeIntl();
+  const { intl, locale } = useNexIntl();
   const isOfficeMode = useIsOfficeMode();
   const { order } = usePluginStoreOrder();
   const [open, setOpen] = useState(false);

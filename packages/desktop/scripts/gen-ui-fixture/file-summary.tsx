@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { AssistantTextRow, TurnHeaderRow } from "@zcode/shared/zcode-protocol-v4";
+import type { AssistantTextRow, TurnHeaderRow } from "@nex/shared/nex-protocol-v4";
 import { AssistantPreviewCards } from "@/AssistantPreviewCards.js";
 import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";
 import { ConversationFileSummaryPanel } from "@/v4/ConversationFileSummaryPanel.js";

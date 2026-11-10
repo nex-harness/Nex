@@ -1,4 +1,4 @@
-import type { ProviderSettingsView } from "@zcode/services";
+import type { ProviderSettingsView } from "@nex/services";
 
 export interface ManualClaimPlanStartUsingTarget {
   readonly providerExecutable?: boolean;

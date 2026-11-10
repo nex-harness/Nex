@@ -3,8 +3,8 @@ import type {
   PluginSyncMarketplaceMirrorInspection,
   PluginSyncMarketplaceSourceArchiveExportResult,
   PluginSyncMarketplaceSourceImportResult,
-} from "@zcode/shared";
-import { ServiceChannels } from "@zcode/shared";
+} from "@nex/shared";
+import { ServiceChannels } from "@nex/shared";
 import { createServiceDescriptor } from "../descriptors.js";
 import type { IDataSyncCategoryService } from "../data-sync/contract.js";
 

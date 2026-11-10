@@ -1,11 +1,11 @@
 import { writeFile } from "node:fs/promises";
-import { BufferReader, BufferWriter, deserialize, serialize, VSBuffer } from "@zcode/rpc";
+import { BufferReader, BufferWriter, deserialize, serialize, VSBuffer } from "@nex/rpc";
 import { basename, join } from "node:path";
 import {
   parseWebRemoteControlAppPayload,
   ServiceChannels,
   type WebRemoteControlWorkspaceBridgeReadyPayload,
-} from "@zcode/shared";
+} from "@nex/shared";
 import {
   callHandoffHost,
   installHandoffRpcProbe,
@@ -28,7 +28,7 @@ import {
   TID_SIDE_PANE_TOGGLE,
   TID_TASK_ITEM,
   testId,
-} from "@zcode/shared/test-ids";
+} from "@nex/shared/test-ids";
 import {
   clearAppData,
   DEFAULT_WORKSPACE,
@@ -49,7 +49,7 @@ import {
 
 const CASE = "E2E_MRO04";
 const mobileRows = ".terminal-xterm-shell:visible .xterm-rows";
-const remote = process.env.ZCODE_E2E_MRO04_REMOTE === "1";
+const remote = process.env.NEX_E2E_MRO04_REMOTE === "1";
 
 async function desktopText(sidePane = false) {
   return browser.execute(
@@ -222,7 +222,7 @@ describe("MRO04: 手机远控终端与桌面隔离", () => {
   let mobilePage: Page | undefined;
   let tunnel: ReplayTunnel | undefined;
   const evidence: Record<string, unknown> = {};
-  const artifacts = process.env.ZCODE_E2E_ARTIFACT_DIR;
+  const artifacts = process.env.NEX_E2E_ARTIFACT_DIR;
 
   after(async () => {
     if (artifacts) {
@@ -288,14 +288,14 @@ describe("MRO04: 手机远控终端与桌面隔离", () => {
       if (!taskId) throw new Error(`${CASE}: remote persisted task required`);
     }
     const pairingUrl = await obtainUnreadPairingUrl(
-      new URL(process.env.ZCODE_WEB_REMOTE_CONTROL_URL!).origin,
+      new URL(process.env.NEX_WEB_REMOTE_CONTROL_URL!).origin,
     );
     webBrowser = await chromium.launch({
-      ...(process.env.ZCODE_E2E_MOBILE_BROWSER_EXECUTABLE
-        ? { executablePath: process.env.ZCODE_E2E_MOBILE_BROWSER_EXECUTABLE }
+      ...(process.env.NEX_E2E_MOBILE_BROWSER_EXECUTABLE
+        ? { executablePath: process.env.NEX_E2E_MOBILE_BROWSER_EXECUTABLE }
         : { channel: "chrome" }),
       headless: true,
-      args: process.env.ZCODE_E2E_BROWSER_NO_PROXY === "1" ? ["--no-proxy-server"] : [],
+      args: process.env.NEX_E2E_BROWSER_NO_PROXY === "1" ? ["--no-proxy-server"] : [],
     });
     const context = await webBrowser.newContext({
       recordVideo: { dir: artifacts, size: { width: 390, height: 844 } },
@@ -340,7 +340,7 @@ describe("MRO04: 手机远控终端与桌面隔离", () => {
       server.onMessage((message) => {
         const frame = JSON.parse(String(message)) as { payload?: unknown };
         const payload = parseWebRemoteControlAppPayload(frame.payload);
-        if (payload?.zcode_type === "workspace-bridge-ready") {
+        if (payload?.nex_type === "workspace-bridge-ready") {
           bridges.push(payload);
           // 只注入当前 bridge 的失效通知；重建、Host attachment 与 PTY 全走真实路径。
           invalidateBridge = () =>
@@ -348,7 +348,7 @@ describe("MRO04: 手机远控终端与桌面隔离", () => {
               JSON.stringify({
                 ...frame,
                 payload: {
-                  zcode_type: "bridge-degraded",
+                  nex_type: "bridge-degraded",
                   bridgeSessionId: payload.bridgeSessionId,
                   bridgeGeneration: payload.bridgeGeneration,
                   recoveryId: payload.recoveryId,
@@ -522,8 +522,8 @@ describe("MRO04: 手机远控终端与桌面隔离", () => {
       route.onMessage((message) => {
         const frame = JSON.parse(String(message)) as { payload?: Record<string, unknown> };
         if (
-          frame.payload?.zcode_type === "bootstrap-request" ||
-          frame.payload?.zcode_type === "workspace-bridge-open"
+          frame.payload?.nex_type === "bootstrap-request" ||
+          frame.payload?.nex_type === "workspace-bridge-open"
         ) {
           delete frame.payload.terminalClientSessionId;
           server.send(JSON.stringify(frame));

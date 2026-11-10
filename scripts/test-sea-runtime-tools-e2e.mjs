@@ -23,11 +23,11 @@ import {
 import {
   hostTarget,
   outputBinaryName,
-} from "../apps/zcode-cli/packages/cli/scripts/sea-targets.mjs";
+} from "../apps/nex-cli/packages/cli/scripts/sea-targets.mjs";
 import { resolveSpawnRuntimeOptions } from "./spawn-command.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const cliWorkspace = join(repoRoot, "apps", "zcode-cli");
+const cliWorkspace = join(repoRoot, "apps", "nex-cli");
 const cliPackageRoot = join(cliWorkspace, "packages", "cli");
 
 function execute(command, args, { cwd = repoRoot, env = process.env, stdio = "inherit" } = {}) {
@@ -70,10 +70,10 @@ function runtimeToolFixtures(releasePlan) {
       binaryName,
       envVar:
         toolId === "bfs"
-          ? "ZCODE_BFS_BINARY"
+          ? "NEX_BFS_BINARY"
           : toolId === "ugrep"
-            ? "ZCODE_UGREP_BINARY"
-            : "ZCODE_RG_BINARY",
+            ? "NEX_UGREP_BINARY"
+            : "NEX_RG_BINARY",
       id: toolId,
       sha256: sha256(sourcePath),
       sourcePath,
@@ -101,14 +101,14 @@ function main() {
     "--dir",
     cliWorkspace,
     "--filter",
-    "@zcode/cli",
+    "@nex/cli",
     "sea",
     "--",
     "--target",
     target,
   ]);
 
-  const e2eRoot = mkdtempSync(join(tmpdir(), "zcode-sea-runtime-tools-e2e-"));
+  const e2eRoot = mkdtempSync(join(tmpdir(), "nex-sea-runtime-tools-e2e-"));
   try {
     const isolatedBinary = join(e2eRoot, basename(outputBinaryName(target)));
     copyFileSync(join(cliPackageRoot, "dist", outputBinaryName(target)), isolatedBinary);
@@ -117,11 +117,11 @@ function main() {
     const storageRoot = join(e2eRoot, "storage");
     const seaEnv = {
       ...process.env,
-      ZCODE_STORAGE_DIR: storageRoot,
+      NEX_STORAGE_DIR: storageRoot,
     };
-    delete seaEnv.ZCODE_BFS_BINARY;
-    delete seaEnv.ZCODE_RG_BINARY;
-    delete seaEnv.ZCODE_UGREP_BINARY;
+    delete seaEnv.NEX_BFS_BINARY;
+    delete seaEnv.NEX_RG_BINARY;
+    delete seaEnv.NEX_UGREP_BINARY;
 
     execute(isolatedBinary, ["--version"], {
       cwd: e2eRoot,

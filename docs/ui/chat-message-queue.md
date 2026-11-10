@@ -64,6 +64,6 @@ restore request 必须幂等。目标已被消费或被另一端删除时，`del
 
 ## 当前入口
 
-- Schema：`packages/shared/src/zcode-protocol-v4/command.ts`、`snapshot.ts`
-- CLI handlers：`apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4/commands/handlers/queue.ts`
+- Schema：`packages/shared/src/nex-protocol-v4/command.ts`、`snapshot.ts`
+- CLI handlers：`apps/nex-cli/packages/bootstrap/src/nex-protocol-v4/commands/handlers/queue.ts`
 - UI：`packages/ui/src/v4/SessionPane.tsx`

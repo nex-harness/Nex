@@ -1,5 +1,5 @@
-import type { CodingPlanRegularTpsRequest } from "@zcode/shared";
-import type { IUsageStatsService } from "@zcode/services";
+import type { CodingPlanRegularTpsRequest } from "@nex/shared";
+import type { IUsageStatsService } from "@nex/services";
 
 export interface HighspeedTimingMetricsForSavedTime {
   outputTokens: number;

@@ -1,5 +1,5 @@
-import { encodeCustomModelValue } from "@zcode/shared";
-import { TID_SETTINGS_BACK_BUTTON } from "@zcode/shared/test-ids";
+import { encodeCustomModelValue } from "@nex/shared";
+import { TID_SETTINGS_BACK_BUTTON } from "@nex/shared/test-ids";
 import {
   DEFAULT_WORKSPACE,
   clearAppData,

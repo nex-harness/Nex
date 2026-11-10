@@ -2,8 +2,8 @@ import type {
   ConversationRow,
   ConversationRowsPartition,
   ToolCallRow,
-} from "@zcode/shared/zcode-protocol-v4";
-import type { OfficialMcpToolErrorCode } from "@zcode/shared";
+} from "@nex/shared/nex-protocol-v4";
+import type { OfficialMcpToolErrorCode } from "@nex/shared";
 import { memoizeByRows } from "@/v4/conversationProjectionStore.js";
 
 /**

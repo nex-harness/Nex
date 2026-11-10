@@ -1,11 +1,11 @@
-import type { ProjectTask as ZCodeTaskMeta } from "@/project-sidebar/contract.js";
+import type { ProjectTask as NexTaskMeta } from "@/project-sidebar/contract.js";
 import { memo } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import type { UniqueIdentifier } from "@dnd-kit/core";
 
 import { MessageCirclePlus } from "lucide-react";
 import { cn } from "@/components/lib/utils.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { GroupedTaskRow } from "@/project-sidebar/grouped/task-row.js";
 import type { TaskGroupMenuItem } from "@/project-sidebar/grouped/shared.js";
 
@@ -16,7 +16,7 @@ export function EmptyGroupDropZone({
   groupId: string;
   onCreateTask: () => void;
 }) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const droppable = useDroppable({
     id: `group-empty-drop:${groupId}`,
     data: {
@@ -69,7 +69,7 @@ function GroupedTaskItemComponent({
   dragOverlay,
   tooltipsDisabled,
 }: {
-  task: ZCodeTaskMeta;
+  task: NexTaskMeta;
   groupId?: string;
   groups: TaskGroupMenuItem[];
   remoteSessionId?: string;
@@ -77,13 +77,13 @@ function GroupedTaskItemComponent({
   isMobileActive: boolean;
   workspaceLabel: string;
   onSelectTask: (workspacePath: string, taskId: string, workspaceIdentity?: string) => void;
-  onCloseTask: (task: ZCodeTaskMeta) => void;
-  onOpenFileTree?: (task: ZCodeTaskMeta) => void;
-  onMoveTaskToGroup: (task: ZCodeTaskMeta, groupId: string | null) => void;
-  onMoveTaskToTop: (task: ZCodeTaskMeta) => void;
-  onStartRenameTask: (task: ZCodeTaskMeta) => void;
-  onArchiveTask: (task: ZCodeTaskMeta) => void;
-  onMarkTaskAsUnread: (task: ZCodeTaskMeta) => void;
+  onCloseTask: (task: NexTaskMeta) => void;
+  onOpenFileTree?: (task: NexTaskMeta) => void;
+  onMoveTaskToGroup: (task: NexTaskMeta, groupId: string | null) => void;
+  onMoveTaskToTop: (task: NexTaskMeta) => void;
+  onStartRenameTask: (task: NexTaskMeta) => void;
+  onArchiveTask: (task: NexTaskMeta) => void;
+  onMarkTaskAsUnread: (task: NexTaskMeta) => void;
   dragId?: UniqueIdentifier;
   dragging?: boolean;
   dragOverlay?: boolean;

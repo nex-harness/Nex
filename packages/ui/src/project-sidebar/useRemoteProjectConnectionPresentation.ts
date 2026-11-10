@@ -1,8 +1,8 @@
 import { toast } from "@/components/ui/toast.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { formatRemoteConnectionError } from "@/lib/remoteConnectionPresentation.js";
 import { getRemoteConnectionFailureCode } from "@/lib/remoteWorkspaceServiceError.js";
-import { resolveWorkspaceKey } from "@zcode/shared";
+import { resolveWorkspaceKey } from "@nex/shared";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 import { useRemoteWorkspaceSessionStore } from "@/store/remoteWorkspaceSessionStore.js";
@@ -19,7 +19,7 @@ export function useRemoteProjectConnectionPresentation(scope: {
   workspacePath: string;
   workspaceIdentity?: string;
 }) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const workspaceKey = resolveWorkspaceKey(scope);
   const tab = useTabStore((state) =>
     state.tabs.find(

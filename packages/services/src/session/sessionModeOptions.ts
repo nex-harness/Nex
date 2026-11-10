@@ -1,6 +1,6 @@
-import type { ZCodeConfigOption, ZCodeProvider, ZCodeTaskMode } from "@zcode/shared";
+import type { NexConfigOption, NexProvider, NexTaskMode } from "@nex/shared";
 
-const CANONICAL_SESSION_MODES = new Set<ZCodeTaskMode>([
+const CANONICAL_SESSION_MODES = new Set<NexTaskMode>([
   "default",
   "yolo",
   "guarded",
@@ -23,21 +23,21 @@ function readTrimmedString(value: unknown): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function getModeConfigOption(options: readonly ZCodeConfigOption[]): ZCodeConfigOption | undefined {
+function getModeConfigOption(options: readonly NexConfigOption[]): NexConfigOption | undefined {
   return options.find((option) => option.category === "mode" && option.type === "select");
 }
 
 function normalizePersistedSessionMode(
   modeId: string | null | undefined,
-  _provider?: ZCodeProvider,
-): ZCodeTaskMode | undefined {
+  _provider?: NexProvider,
+): NexTaskMode | undefined {
   const trimmedModeId = readTrimmedString(modeId);
   if (!trimmedModeId) {
     return undefined;
   }
 
-  if (CANONICAL_SESSION_MODES.has(trimmedModeId as ZCodeTaskMode)) {
-    return trimmedModeId as ZCodeTaskMode;
+  if (CANONICAL_SESSION_MODES.has(trimmedModeId as NexTaskMode)) {
+    return trimmedModeId as NexTaskMode;
   }
 
   switch (trimmedModeId) {
@@ -69,9 +69,9 @@ function normalizePersistedSessionMode(
 }
 
 export function resolveProviderModeIdFromConfigOptions(params: {
-  configOptions: readonly ZCodeConfigOption[];
+  configOptions: readonly NexConfigOption[];
   modeId: string | null | undefined;
-  provider?: ZCodeProvider;
+  provider?: NexProvider;
 }): string | undefined {
   const requestedMode = readTrimmedString(params.modeId);
   if (!requestedMode) {

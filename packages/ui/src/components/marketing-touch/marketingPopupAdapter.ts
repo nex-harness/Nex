@@ -1,5 +1,5 @@
 import { additionalRequestModalSelectors } from "@/request-security-edition/errors.js";
-import { isStartPlanModelProviderId, type MarketingPopup } from "@zcode/shared";
+import { isStartPlanModelProviderId, type MarketingPopup } from "@nex/shared";
 import type {
   CloudContentDialogPayload,
   CloudDialogHero,

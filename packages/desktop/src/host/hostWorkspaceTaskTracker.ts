@@ -1,4 +1,4 @@
-import { resolveWorkspaceKey } from "@zcode/shared";
+import { resolveWorkspaceKey } from "@nex/shared";
 
 export interface HostWorkspaceTaskContext {
   workspacePath: string;

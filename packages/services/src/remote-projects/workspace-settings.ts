@@ -5,7 +5,7 @@ import {
   remoteHostIdFromWorkspaceIdentity,
   type AppSettings,
   type PersistedWorkspaceSessionEntry,
-} from "@zcode/shared";
+} from "@nex/shared";
 import type { VirtualProject } from "#src/project-storage/contract.js";
 import type { RemoteProjectDirectory, RemoteProjectHost } from "#src/remote-projects/contract.js";
 

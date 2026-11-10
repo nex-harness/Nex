@@ -1,4 +1,4 @@
-import { TID_AUTOMATION_CREATE_MANUALLY, TID_AUTOMATION_CREATE_MENU } from "@zcode/shared/test-ids";
+import { TID_AUTOMATION_CREATE_MANUALLY, TID_AUTOMATION_CREATE_MENU } from "@nex/shared/test-ids";
 import type { ReactNode } from "react";
 import {
   DropdownMenu,
@@ -6,7 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { AutomationSwitchToggle } from "@/settings/AutomationSwitchToggle.js";
 import {
   AutomationChevronDownIcon,
@@ -87,7 +87,7 @@ export function AutomationKeepAwakeNotice({
   checked: boolean;
   onChange: (value: boolean) => void;
 }) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   // 桌面断点曾清空提示栏的垂直内边距，导致实际样式偏离 12px 规格。
   return (
     <div
@@ -121,7 +121,7 @@ export function AutomationCreateDropdown({
   onViaChat: () => void;
   onManually: () => void;
 }) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   return (
     <DropdownMenu>
       <div className="inline-flex h-7 items-center overflow-hidden rounded-lg">

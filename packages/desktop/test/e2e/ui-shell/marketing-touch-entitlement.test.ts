@@ -1,4 +1,4 @@
-import { BUILTIN_MODEL_PROVIDER_IDS, encodeCustomModelValue } from "@zcode/shared";
+import { BUILTIN_MODEL_PROVIDER_IDS, encodeCustomModelValue } from "@nex/shared";
 import {
   TID_CHAT_MODEL_SELECT_GROUP,
   TID_CHAT_MODEL_SELECT_ITEM,
@@ -12,7 +12,7 @@ import {
   TID_SUBAGENT_ROW,
   TID_TASK_SETTINGS_BUTTON,
   testId,
-} from "@zcode/shared/test-ids";
+} from "@nex/shared/test-ids";
 import {
   clearAppData,
   waitForDefaultWorkspaceReady,
@@ -39,7 +39,7 @@ describe("Marketing Touch 领取后的权益与模型连接", () => {
       body: JSON.stringify({ popup: true }),
     });
     await fetch(base + "/__e2e/marketing/release", { method: "POST" });
-    await fetch(base + "/api/v1/zcode-plan/billing/claim", {
+    await fetch(base + "/api/v1/nex-plan/billing/claim", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ plan_id: "weekend-plan-e2e" }),
@@ -59,20 +59,20 @@ describe("Marketing Touch 领取后的权益与模型连接", () => {
     expect((await readSettings()).providerFamilyConnectionSelections?.bigmodel).toEqual({
       kind: "start-plan",
     });
-    await waitForPlanRefreshAction("ZCode Weekend Build", true);
-    await waitForPlanRefreshAction("ZCode V3 Start Plan", false);
+    await waitForPlanRefreshAction("Nex Weekend Build", true);
+    await waitForPlanRefreshAction("Nex V3 Start Plan", false);
     const balanceRequestCountBeforeRefresh = countMockRequestsEndingWith(
       await readMockRequests(),
-      "/api/v1/zcode-plan/billing/balance",
+      "/api/v1/nex-plan/billing/balance",
     );
     await markManualClaimBucketReady();
-    await clickPlanRefreshAction("ZCode Weekend Build");
-    await waitForPlanRefreshAction("ZCode Weekend Build", false, "GLM-5.3-Flash");
+    await clickPlanRefreshAction("Nex Weekend Build");
+    await waitForPlanRefreshAction("Nex Weekend Build", false, "GLM-5.3-Flash");
     await browser.waitUntil(
       async () =>
         countMockRequestsEndingWith(
           await readMockRequests(),
-          "/api/v1/zcode-plan/billing/balance",
+          "/api/v1/nex-plan/billing/balance",
         ) > balanceRequestCountBeforeRefresh,
       {
         timeout: 30_000,
@@ -104,7 +104,7 @@ describe("Marketing Touch 领取后的权益与模型连接", () => {
   });
 });
 
-const MANUAL_CLAIM_MOCK_BASE_URL_ENV = "ZCODE_CODING_PLAN_UPGRADE_MOCK_BASE_URL";
+const MANUAL_CLAIM_MOCK_BASE_URL_ENV = "NEX_CODING_PLAN_UPGRADE_MOCK_BASE_URL";
 const BIGMODEL_FAMILY_GROUP_TEST_ID = testId(
   TID_CHAT_MODEL_SELECT_GROUP,
   `registry-provider:${BUILTIN_MODEL_PROVIDER_IDS.bigmodelStartPlan}`,

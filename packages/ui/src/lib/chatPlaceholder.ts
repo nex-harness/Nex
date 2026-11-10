@@ -1,4 +1,4 @@
-import type { ZCodeTaskRuntimeStatus } from "@zcode/shared";
+import type { NexTaskRuntimeStatus } from "@nex/shared";
 
 type ChatPlaceholderMessageKey =
   | "chat.placeholder.newTask"
@@ -24,7 +24,7 @@ export function resolveChatPlaceholderKey(options: {
 
 export function shouldDeferChatPlaceholder(options: {
   hasBoundTask: boolean;
-  taskStatus: ZCodeTaskRuntimeStatus;
+  taskStatus: NexTaskRuntimeStatus;
 }): boolean {
   const { hasBoundTask, taskStatus } = options;
 

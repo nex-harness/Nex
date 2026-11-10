@@ -18,8 +18,8 @@ import type {
   MigrateLegacyCommonMcpResult,
   SaveCliMcpToUserDirectoryRequest,
 } from "./mcp.js";
-import type { ZCodeProvider } from "./zcode-task-types-core.js";
-import type { SessionWorkflowActivity } from "./zcode-protocol-v4/sessions-index-workflow-activity.js";
+import type { NexProvider } from "./nex-task-types-core.js";
+import type { SessionWorkflowActivity } from "./nex-protocol-v4/sessions-index-workflow-activity.js";
 import type { WebRemoteControlRpcTransportPayload } from "./web-remote-control-rpc-transport.js";
 import type { WebRemoteControlMobileLogAppPayload } from "#src/web-remote-relay/index.js";
 import type { WorkspacePurpose } from "./workspacePurpose.js";
@@ -146,7 +146,7 @@ export function resolveWebRemoteControlRoutePathFromBaseUrl(baseUrl: string): st
   let pathname = "/";
 
   try {
-    pathname = new URL(rawBaseUrl, "https://zcode.invalid").pathname;
+    pathname = new URL(rawBaseUrl, "https://nex.invalid").pathname;
   } catch {
     pathname = rawBaseUrl.startsWith("/") ? rawBaseUrl : `/${rawBaseUrl}`;
   }
@@ -409,37 +409,37 @@ export type WebRemoteControlExternalWorkspaceBridge =
 
 export interface WebRemoteControlBootstrapRequestPayload {
   terminalClientSessionId?: string;
-  zcode_type: "bootstrap-request";
+  nex_type: "bootstrap-request";
   requestId: string;
 }
 
 export interface WebRemoteControlBootstrapResponsePayload {
-  zcode_type: "bootstrap-response";
+  nex_type: "bootstrap-response";
   requestId: string;
   success: true;
   result: WebRemoteControlWindowBootstrapResult;
 }
 
 export interface WebRemoteControlWorkspaceListRequestPayload {
-  zcode_type: "workspace-list-request";
+  nex_type: "workspace-list-request";
   requestId: string;
 }
 
 export interface WebRemoteControlWorkspaceListResponsePayload {
-  zcode_type: "workspace-list-response";
+  nex_type: "workspace-list-response";
   requestId: string;
   success: true;
   result: WebRemoteControlWorkspaceListResult;
 }
 
 export interface WebRemoteControlWorkspaceListUpdatedPayload {
-  zcode_type: "workspace-list-updated";
+  nex_type: "workspace-list-updated";
   result: WebRemoteControlWorkspaceListResult;
 }
 
 export interface WebRemoteControlWorkspaceBridgeOpenPayload {
   terminalClientSessionId?: string;
-  zcode_type: "workspace-bridge-open";
+  nex_type: "workspace-bridge-open";
   requestId: string;
   bridgeSessionId: string;
   bridgeGeneration?: number;
@@ -453,7 +453,7 @@ export interface WebRemoteControlWorkspaceBridgeOpenPayload {
 }
 
 export interface WebRemoteControlWorkspaceBridgeReadyPayload {
-  zcode_type: "workspace-bridge-ready";
+  nex_type: "workspace-bridge-ready";
   requestId: string;
   bridgeSessionId: string;
   bridgeGeneration?: number;
@@ -462,7 +462,7 @@ export interface WebRemoteControlWorkspaceBridgeReadyPayload {
 }
 
 export interface WebRemoteControlWorkspaceBridgeErrorPayload {
-  zcode_type: "workspace-bridge-error";
+  nex_type: "workspace-bridge-error";
   requestId: string;
   bridgeSessionId?: string;
   bridgeGeneration?: number;
@@ -472,20 +472,20 @@ export interface WebRemoteControlWorkspaceBridgeErrorPayload {
 }
 
 export interface WebRemoteControlWorkspaceReconnectRequestPayload {
-  zcode_type: "workspace-reconnect-request";
+  nex_type: "workspace-reconnect-request";
   requestId: string;
   workspaceKey: string;
 }
 
 export type WebRemoteControlWorkspaceReconnectResponsePayload =
   | {
-      zcode_type: "workspace-reconnect-response";
+      nex_type: "workspace-reconnect-response";
       requestId: string;
       workspaceKey: string;
       success: true;
     }
   | {
-      zcode_type: "workspace-reconnect-response";
+      nex_type: "workspace-reconnect-response";
       requestId: string;
       workspaceKey: string;
       success: false;
@@ -493,7 +493,7 @@ export type WebRemoteControlWorkspaceReconnectResponsePayload =
     };
 
 export interface WebRemoteControlMobileViewStatePayload {
-  zcode_type: "mobile-view-state-update";
+  nex_type: "mobile-view-state-update";
   viewState: WebRemoteControlMobileViewState;
   deviceInfo?: WebRemoteControlMobileDeviceInfo;
 }
@@ -505,7 +505,7 @@ export interface WebRemoteControlMobileTaskView {
 }
 
 export interface WebRemoteControlMobileTaskViewUpdatePayload {
-  zcode_type: "mobile-task-view-update";
+  nex_type: "mobile-task-view-update";
   epoch: string;
   seq: number;
   bridgeSessionId: string;
@@ -514,13 +514,13 @@ export interface WebRemoteControlMobileTaskViewUpdatePayload {
 }
 
 export interface WebRemoteControlMobileTaskViewRequestPayload {
-  zcode_type: "mobile-task-view-request";
+  nex_type: "mobile-task-view-request";
   epoch: string;
 }
 
 export type WebRemoteControlPlatformRequestPayload = {
   [K in WebRemoteControlPlatformMethod]: {
-    zcode_type: "platform-request";
+    nex_type: "platform-request";
     requestId: string;
     method: K;
     args?: WebRemoteControlPlatformMethodArgsMap[K];
@@ -530,7 +530,7 @@ export type WebRemoteControlPlatformRequestPayload = {
 export type WebRemoteControlPlatformResponsePayload =
   | {
       [K in WebRemoteControlPlatformMethod]: {
-        zcode_type: "platform-response";
+        nex_type: "platform-response";
         requestId: string;
         method: K;
         success: true;
@@ -538,7 +538,7 @@ export type WebRemoteControlPlatformResponsePayload =
       };
     }[WebRemoteControlPlatformMethod]
   | {
-      zcode_type: "platform-response";
+      nex_type: "platform-response";
       requestId: string;
       method: WebRemoteControlPlatformMethod;
       success: false;
@@ -547,7 +547,7 @@ export type WebRemoteControlPlatformResponsePayload =
 
 /** @deprecated 仅供 legacy adapter 单测/迁移使用；production parser 自 04D-3 起拒绝。 */
 export interface WebRemoteControlRpcFramePayload {
-  zcode_type: "rpc-frame";
+  nex_type: "rpc-frame";
   bridgeSessionId: string;
   bridgeGeneration?: number;
   recoveryId?: string;
@@ -556,7 +556,7 @@ export interface WebRemoteControlRpcFramePayload {
 }
 
 export interface WebRemoteControlBridgeDegradedPayload {
-  zcode_type: "bridge-degraded";
+  nex_type: "bridge-degraded";
   bridgeSessionId: string;
   bridgeGeneration?: number;
   recoveryId?: string;
@@ -573,7 +573,7 @@ export interface WebRemoteControlBridgeDegradedPayload {
 }
 
 export interface WebRemoteControlAppErrorPayload {
-  zcode_type: "app-error";
+  nex_type: "app-error";
   requestId?: string;
   bridgeSessionId?: string;
   reason: WebRemoteControlFailureReason;
@@ -590,7 +590,7 @@ export type WebRemoteControlMobileDiagnosticEvent =
   | "failure";
 
 export interface WebRemoteControlMobileDiagnosticPayload {
-  zcode_type: "mobile-diagnostic";
+  nex_type: "mobile-diagnostic";
   event: WebRemoteControlMobileDiagnosticEvent;
   timestamp: number;
   state?: string;
@@ -609,7 +609,7 @@ export interface WebRemoteControlMobileDiagnosticPayload {
 
 export type WebRemoteControlAppPayload =
   | {
-      zcode_type: "telemetry-report";
+      nex_type: "telemetry-report";
       event: MobileSessionCreateTelemetry | MobilePluginDiscoveryTelemetry;
     }
   | WebRemoteControlBootstrapRequestPayload
@@ -674,7 +674,7 @@ export interface WebRemoteControlTaskTarget {
   workspaceKind: "local" | "remote";
   createdAt: number;
   updatedAt: number;
-  provider?: ZCodeProvider;
+  provider?: NexProvider;
   unreadAt?: number;
 }
 

@@ -8,8 +8,8 @@ import {
   type DataSyncImportResultItem,
   type DataSyncListItem,
   type SubagentDataSyncPayload,
-} from "@zcode/shared";
-import { migrateSubagentStateFile, migrateUserSubagentMarkdown } from "@zcode/shared/node";
+} from "@nex/shared";
+import { migrateSubagentStateFile, migrateUserSubagentMarkdown } from "@nex/shared/node";
 import { pathExists, updateJsonObjectFile, writeFileAtomically } from "#src/fs/atomicFileUtils.js";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { checkRemoteSyncDirectoriesWriteAccess } from "#src/remote-sync/remoteSyncWriteAccess.js";

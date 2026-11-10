@@ -70,7 +70,7 @@ describe("PLM-LC-003 全部更新失败继续候选 E2E", () => {
     const original = join(fixture.marketplaceRoot, "plugins", failedName);
     const managed = join(
       homeDir,
-      ".zcode",
+      ".nex",
       "cli",
       "plugins",
       "marketplaces",
@@ -87,7 +87,7 @@ describe("PLM-LC-003 全部更新失败继续候选 E2E", () => {
     await browser.waitUntil(
       async () =>
         browser.execute(() => {
-          const toast = document.querySelector("#zcode-toast-host");
+          const toast = document.querySelector("#nex-toast-host");
           return /Updated 1, failed 1:|已更新 1 个，1 个失败：/.test(toast?.textContent ?? "");
         }),
       { timeout: 60000, timeoutMsg: "Missing partial-success toast" },
@@ -100,8 +100,8 @@ describe("PLM-LC-003 全部更新失败继续候选 E2E", () => {
       "2.0.0",
     );
     const toastEvidence = await browser.execute(() => ({
-      text: document.querySelector("#zcode-toast-host")?.textContent,
-      warning: Boolean(document.querySelector("#zcode-toast-host .text-warning")),
+      text: document.querySelector("#nex-toast-host")?.textContent,
+      warning: Boolean(document.querySelector("#nex-toast-host .text-warning")),
     }));
     expect(toastEvidence.text).toMatch(
       failedId === PLUGIN_LIFECYCLE_EXTRA_ID

@@ -8,7 +8,7 @@
  * 条目只会**追加**（journal 只追加），所以四种折叠都可以按到达顺序单遍完成。
  */
 
-import { readWorkflowArtifactField } from "@zcode/shared/zcode-protocol-v4";
+import { readWorkflowArtifactField } from "@nex/shared/nex-protocol-v4";
 import {
   artifactFieldLabel,
   chartSeriesFields,

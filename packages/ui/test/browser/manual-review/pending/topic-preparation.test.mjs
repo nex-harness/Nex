@@ -56,7 +56,7 @@ after(async () => {
   await server?.close();
 });
 
-const artifacts = join(tmpdir(), "zcode-topic-preparation");
+const artifacts = join(tmpdir(), "nex-topic-preparation");
 for (const width of [390, 1200]) {
   for (const locale of ["en-US", "zh-CN"]) {
     for (const theme of ["light", "dark"]) {

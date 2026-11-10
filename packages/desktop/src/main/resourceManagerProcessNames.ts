@@ -1,7 +1,7 @@
 import { BrowserWindow } from "electron";
 import type { WebContents } from "electron";
 import { basename } from "node:path";
-import { formatZCodeRendererProcessName } from "@zcode/shared";
+import { formatNexRendererProcessName } from "@nex/shared";
 
 /** 资源管理器里非 BrowserWindow 自带 renderer（WebContentsView / DevTools / webview）的显示名 */
 
@@ -51,14 +51,14 @@ export function buildAuxiliaryRendererName(contents: WebContents): string {
 
   // 把 Electron 已知的 WebContents 元信息编码进名称里，排查 PID 时能直接看出类型和归属线索。
   if (url?.startsWith("devtools://")) {
-    return formatZCodeRendererProcessName(
+    return formatNexRendererProcessName(
       `devtools-${contentsId}-${hostTitle ?? ownerLabel ?? "unknown"}`,
     );
   }
 
   if (type === "window") {
-    return formatZCodeRendererProcessName(title ?? `window-${contentsId}`);
+    return formatNexRendererProcessName(title ?? `window-${contentsId}`);
   }
 
-  return formatZCodeRendererProcessName(`${type}-${contentsId}-${pageLabel}`);
+  return formatNexRendererProcessName(`${type}-${contentsId}-${pageLabel}`);
 }

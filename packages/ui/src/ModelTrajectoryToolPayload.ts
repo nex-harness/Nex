@@ -1,18 +1,18 @@
-import type { ZCodeModelTrajectoryMessage } from "@zcode/services";
+import type { NexModelTrajectoryMessage } from "@nex/services";
 
-export function trajectoryToolOutputs(message: ZCodeModelTrajectoryMessage): string[] {
+export function trajectoryToolOutputs(message: NexModelTrajectoryMessage): string[] {
   return message.parts.flatMap((part) =>
     part.kind === "tool-result" ? [formatTrajectoryToolPayload(part.output)] : [],
   );
 }
 
-export function trajectoryToolCallInputs(message: ZCodeModelTrajectoryMessage): string[] {
+export function trajectoryToolCallInputs(message: NexModelTrajectoryMessage): string[] {
   return message.parts.flatMap((part) =>
     part.kind === "tool-call" ? [formatTrajectoryToolPayload(part.input)] : [],
   );
 }
 
-export function trajectoryToolHasError(message: ZCodeModelTrajectoryMessage): boolean {
+export function trajectoryToolHasError(message: NexModelTrajectoryMessage): boolean {
   return message.parts.some(
     (part) =>
       (part.kind === "tool-result" && isErrorTextObject(part.output)) ||
@@ -20,7 +20,7 @@ export function trajectoryToolHasError(message: ZCodeModelTrajectoryMessage): bo
   );
 }
 
-export function trajectoryToolMetadata(message: ZCodeModelTrajectoryMessage): {
+export function trajectoryToolMetadata(message: NexModelTrajectoryMessage): {
   names: string;
   ids: string;
 } {

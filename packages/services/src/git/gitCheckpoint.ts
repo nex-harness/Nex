@@ -6,8 +6,8 @@ import type {
   GitCheckpointRestoreQuery,
   GitCheckpointRestoreResult,
   GitRepositoryRequest,
-} from "@zcode/shared";
-import { ServiceChannels } from "@zcode/shared";
+} from "@nex/shared";
+import { ServiceChannels } from "@nex/shared";
 import { createServiceDescriptor } from "../descriptors.js";
 
 export interface IGitCheckpointService {

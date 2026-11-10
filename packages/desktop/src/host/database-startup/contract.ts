@@ -3,7 +3,7 @@ import {
   databaseStartupErrorCodeSchema,
   databaseMigrationFactsSchema,
   databaseStartupErrorDetailsSchema,
-} from "@zcode/shared";
+} from "@nex/shared";
 
 export const tasksStorageWorkerDataSchema = z.object({ path: z.string().min(1) }).strict();
 export const workerMessageSchema = z.discriminatedUnion("type", [

@@ -1,5 +1,5 @@
-import type { WindowHostAttachmentScope } from "@zcode/shared";
-import type { ZCodeAgentV4ClientMode } from "@zcode/services";
+import type { WindowHostAttachmentScope } from "@nex/shared";
+import type { NexAgentV4ClientMode } from "@nex/services";
 
 export interface WindowHostAttachmentPort {
   once(event: "close", listener: () => void): unknown;
@@ -18,7 +18,7 @@ export interface WindowHostResolvedAttachmentScope<TServices, TCapabilities = ne
 export interface WindowHostExposeAttachmentParams<TServices, TPort, TCapabilities = never> {
   requestId: string;
   attachmentId: string;
-  clientMode: ZCodeAgentV4ClientMode;
+  clientMode: NexAgentV4ClientMode;
   terminalOwnerId?: string;
   scope: WindowHostAttachmentScope;
   services: TServices;
@@ -58,7 +58,7 @@ export function createWindowHostAttachmentRegistry<
   function attach(params: {
     requestId: string;
     attachmentId: string;
-    clientMode: ZCodeAgentV4ClientMode;
+    clientMode: NexAgentV4ClientMode;
     terminalOwnerId?: string;
     scope: WindowHostAttachmentScope;
     port: TPort;

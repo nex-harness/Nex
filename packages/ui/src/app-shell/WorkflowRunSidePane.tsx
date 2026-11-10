@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import type {
   WorkflowRunArtifactSummary,
   WorkflowRunPendingQuestion,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@nex/shared/nex-protocol-v4";
 import { buildWorkflowTimeline } from "@/components/workflow-timeline/timeline-model.js";
 import { workflowSubagentModelCardLabel } from "@/components/workflow-timeline/subagent-model-label.js";
 import { workflowSummaryParts } from "@/components/workflow-timeline/timeline-summary.js";
@@ -27,7 +27,7 @@ import {
   type WorkflowRunActionRejection,
 } from "@/app-shell/workflowRunActionRejection.js";
 import { useWorkflowSubagentModelProviderName } from "@/hooks/useWorkflowSubagentModelProviderName.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import type {
   OpenScopedWorkflowActorSessionSideTabRequest,
   OpenScopedWorkflowArtifactSideTabRequest,
@@ -78,7 +78,7 @@ const WorkflowRunContent = memo(function WorkflowRunContent({
   /** 脊线上的脚本行 → 脚本 transcript tab，落到那一站。 */
   onOpenWorkflowWorkspace?: (request: OpenScopedWorkflowWorkspaceSideTabRequest) => void;
 }) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const { layer, sendCommand } = useV4Conversation();
   const [lease, setLease] = useState<SessionLease | null>(null);
 

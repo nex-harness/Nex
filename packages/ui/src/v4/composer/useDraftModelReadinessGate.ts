@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { isZCodeAgentProvider, ZCODE_AGENT_PROVIDER, type ZCodeProvider } from "@zcode/shared";
-import type { IModelSelectionService, ModelSelectionView } from "@zcode/services";
+import { isNexAgentProvider, NEX_AGENT_PROVIDER, type NexProvider } from "@nex/shared";
+import type { IModelSelectionService, ModelSelectionView } from "@nex/services";
 import {
   buildModelConfigMissingUiError,
   type ModelConfigMissingUiError,
@@ -42,14 +42,14 @@ export function resolveModelSelectionReadinessStatus(
 export function useDraftModelReadinessGate(params: {
   workspacePath: string;
   workspaceIdentity?: string;
-  provider?: ZCodeProvider;
+  provider?: NexProvider;
   sessionId: string | null;
   modelSelectionService: Pick<IModelSelectionService, "getView" | "onDidChange">;
 }): DraftModelReadinessGate {
   const { workspacePath, workspaceIdentity, provider, sessionId, modelSelectionService } = params;
   const workspaceKey = workspaceIdentity?.trim() || workspacePath;
-  const displayProvider = provider ?? ZCODE_AGENT_PROVIDER;
-  const enabled = sessionId === null && isZCodeAgentProvider(displayProvider);
+  const displayProvider = provider ?? NEX_AGENT_PROVIDER;
+  const enabled = sessionId === null && isNexAgentProvider(displayProvider);
   const gateKey = `${workspaceKey}\u0000${displayProvider}`;
   const scope = useMemo(() => ({ gateKey }), [enabled, gateKey, modelSelectionService]);
   const [state, setState] = useState<DraftModelReadinessState>(() => ({

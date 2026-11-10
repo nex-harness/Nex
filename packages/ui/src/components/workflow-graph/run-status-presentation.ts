@@ -1,4 +1,4 @@
-import type { WorkflowRunState } from "@zcode/shared/zcode-protocol-v4";
+import type { WorkflowRunState } from "@nex/shared/nex-protocol-v4";
 import type { StepRunStatus } from "@/components/workflow-graph/types.js";
 
 /**

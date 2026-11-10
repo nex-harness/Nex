@@ -2,13 +2,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
 import { usePlatform } from "@/hooks/usePlatform.js";
-import { RENDERER_ZCODE_ENDPOINT_URLS } from "@/lib/rendererZCodeEndpoint.js";
+import { RENDERER_NEX_ENDPOINT_URLS } from "@/lib/rendererNexEndpoint.js";
 import { logger } from "@/logger.js";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import { EmbeddedWebsiteHeader } from "@/components/EmbeddedWebsiteHeader.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { useZCodeStoreWithDefault } from "@/store/StoreProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
+import { useNexStoreWithDefault } from "@/store/StoreProvider.js";
 import { normalizeThemePreference, resolveTheme } from "@/useTheme.js";
 import type { CodingPlanProviderId } from "@/settings/model-provider-section/constants.js";
 import type { CodingPlanFunnelContext } from "@/lib/codingPlanFunnelTelemetry.js";
@@ -31,9 +31,9 @@ import {
 import {
   CodingPlanWebviewChannels,
   type CodingPlanPurchaseCompletePayload,
-  ZCODE_ENV,
-  ZCODE_VERSION,
-} from "@zcode/shared";
+  NEX_ENV,
+  NEX_VERSION,
+} from "@nex/shared";
 
 interface CodingPlanEmbeddedWebviewDialogProps {
   credentialService: {
@@ -49,8 +49,8 @@ interface CodingPlanEmbeddedWebviewDialogProps {
   /**
    * 官网页购买成功后的回调。
    *
-   * 官网页通过 preload 注入的 window.zcodeBridge.notifyPurchaseComplete({ provider })
-   * 发送 zcode:coding-plan-purchase-complete 频道消息，本组件在 webview 的
+   * 官网页通过 preload 注入的 window.nexBridge.notifyPurchaseComplete({ provider })
+   * 发送 nex:coding-plan-purchase-complete 频道消息，本组件在 webview 的
    * ipc-message 事件里识别该频道并触发此回调（经 onPurchaseCompleteRef 防 stale closure）。
    * 上层（CodingPlanUpgradeDialog）在此回调里刷新 entitlements/providers 并关闭 webview。
    */
@@ -60,7 +60,7 @@ interface CodingPlanEmbeddedWebviewDialogProps {
 interface CodingPlanWebviewImportMetaEnv {
   DEV?: boolean;
   VITE_CODING_PLAN_WEBVIEW_ORIGIN?: string;
-  VITE_ZCODE_E2E_STORE_BRIDGE?: string;
+  VITE_NEX_E2E_STORE_BRIDGE?: string;
 }
 
 interface CodingPlanWebviewNavigationState {
@@ -85,10 +85,10 @@ export function CodingPlanEmbeddedWebviewDialog({
   onPurchaseComplete,
   onOpenResult,
 }: CodingPlanEmbeddedWebviewDialogProps) {
-  const { intl, locale } = useZCodeIntl();
+  const { intl, locale } = useNexIntl();
   const platform = usePlatform();
-  const theme = useZCodeStoreWithDefault((state) => state.theme, "zai-dark");
-  const userId = useZCodeStoreWithDefault((state) => state.user?.id ?? null, null);
+  const theme = useNexStoreWithDefault((state) => state.theme, "zai-dark");
+  const userId = useNexStoreWithDefault((state) => state.user?.id ?? null, null);
   const webviewRef = useRef<ElectronWebviewTag | null>(null);
   const onOpenResultRef = useRef(onOpenResult);
   onOpenResultRef.current = onOpenResult;
@@ -126,10 +126,10 @@ export function CodingPlanEmbeddedWebviewDialog({
     const env = readCodingPlanWebviewImportMetaEnv();
     const origin = resolveCodingPlanEmbeddedOrigin({
       dev: env.DEV === true,
-      endpointOrigin: RENDERER_ZCODE_ENDPOINT_URLS.origin,
-      e2eStoreBridgeEnabled: env.VITE_ZCODE_E2E_STORE_BRIDGE === "1",
+      endpointOrigin: RENDERER_NEX_ENDPOINT_URLS.origin,
+      e2eStoreBridgeEnabled: env.VITE_NEX_E2E_STORE_BRIDGE === "1",
       overrideOrigin: env.VITE_CODING_PLAN_WEBVIEW_ORIGIN,
-      zcodeEnv: ZCODE_ENV,
+      nexEnv: NEX_ENV,
     });
     // URL 带 ?lang= hint 让官网首屏就有正确语言，避免注入前的英文闪烁。
     // 同步带 ?theme= hint，避免官网 SSR 默认 dark 在 App 浅色主题下首帧闪烁。
@@ -162,7 +162,7 @@ export function CodingPlanEmbeddedWebviewDialog({
         const currentUrl = typeof webview.getURL === "function" ? webview.getURL() : "";
         if (
           !isTrustedCodingPlanEmbeddedWebviewUrl(currentUrl, {
-            e2eStoreBridgeEnabled: env.VITE_ZCODE_E2E_STORE_BRIDGE === "1",
+            e2eStoreBridgeEnabled: env.VITE_NEX_E2E_STORE_BRIDGE === "1",
           })
         ) {
           // dom-ready 会在后续主 frame 导航时再次触发，初始 src 可信不代表
@@ -181,19 +181,19 @@ export function CodingPlanEmbeddedWebviewDialog({
           provider === "zai"
             ? {
                 zaiAccessToken: values[0],
-                zcodeJwtToken: values[1],
+                nexJwtToken: values[1],
               }
             : {
                 bigmodelAccessToken: values[0],
-                // BigModel OAuth callback 同样会落盘 zcode JWT；官网用它在
-                // zcode-plan 域查 billing/balance 判定 Start Plan 状态。
-                zcodeJwtToken: values[1],
+                // BigModel OAuth callback 同样会落盘 nex JWT；官网用它在
+                // nex-plan 域查 billing/balance 判定 Start Plan 状态。
+                nexJwtToken: values[1],
               };
         const reportContext = buildCodingPlanEmbeddedReportContext({
           funnelContext,
           deviceMid,
           userId,
-          appVersion: ZCODE_VERSION,
+          appVersion: NEX_VERSION,
         });
         const script = createCodingPlanAuthInjectionScript({
           provider,
@@ -353,8 +353,8 @@ export function CodingPlanEmbeddedWebviewDialog({
         setLoadError(event.details.reason);
         onOpenResultRef.current?.(false);
       };
-      // ipc-message: 官网页通过 preload 的 window.zcodeBridge.notifyPurchaseComplete
-      // 发回购买完成信号（zcode:coding-plan-purchase-complete）。
+      // ipc-message: 官网页通过 preload 的 window.nexBridge.notifyPurchaseComplete
+      // 发回购买完成信号（nex:coding-plan-purchase-complete）。
       // 参照 useEmbeddedBrowserWheelChain.ts 的 ipc-message handler 模式。
       const handleIpcMessage = (event: ElectronWebviewIpcMessageEvent) => {
         if (event.channel !== CodingPlanWebviewChannels.PurchaseComplete) {
@@ -506,7 +506,7 @@ export function CodingPlanEmbeddedWebviewDialog({
           <webview
             ref={handleWebviewRef}
             allowpopups={"" as unknown as boolean}
-            partition="persist:zcode-coding-plan"
+            partition="persist:nex-coding-plan"
             src={webviewUrl}
             className={cn(
               "min-h-0 flex-1 bg-background [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",

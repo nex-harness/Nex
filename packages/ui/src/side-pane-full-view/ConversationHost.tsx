@@ -39,7 +39,7 @@ import {
   TID_SIDE_PANE_FULL_VIEW_MINIMIZE,
   TID_SIDE_PANE_FULL_VIEW_RUNNING,
   TID_V4_COMPOSER_INPUT,
-} from "@zcode/shared/test-ids";
+} from "@nex/shared/test-ids";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -49,7 +49,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import {
   clampFloatingPosition,
   dismissFloatingAnswerBubble,
@@ -119,7 +119,7 @@ export function SidePaneFullViewConversationHost({
   onOpenConversation: () => void;
   children: ReactNode;
 }) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const isFloating = mode === "floating";
   const isMinimized = isFloating && floating === "minimized";

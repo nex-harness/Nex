@@ -1,7 +1,7 @@
-import type { IRemoteBackend } from "@zcode/server/remote/backend.js";
-import { buildRemoteArtifactDownloadCommand } from "@zcode/server/remote/remoteAssetInstaller.js";
-import { detectRemoteAssetTools } from "@zcode/server/remote/remoteAssetPreflight.js";
-import type { ServerReleaseAsset } from "@zcode/server/source-server/transportAdapter.js";
+import type { IRemoteBackend } from "@nex/server/remote/backend.js";
+import { buildRemoteArtifactDownloadCommand } from "@nex/server/remote/remoteAssetInstaller.js";
+import { detectRemoteAssetTools } from "@nex/server/remote/remoteAssetPreflight.js";
+import type { ServerReleaseAsset } from "@nex/server/source-server/transportAdapter.js";
 
 export async function buildSourceServerReleaseDownloadCommand(options: {
   backend: IRemoteBackend;

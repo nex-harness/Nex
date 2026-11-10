@@ -13,7 +13,7 @@
 
 ## 数据与边界
 
-`GET /api/v1/zcode-plan/billing/balance` 的 `balances[]` 已真实返回 bucket_id、user_plan_id、period_start、period_end、expires_at。Service 在现有 UsageQuotaLimit 上增补可选字段；时间统一转换为毫秒。period 文案类型从所属 plans[].entitlements[] 按 user_plan_id（旧数据缺失时 plan_id）及 entitlement_id 关联。
+`GET /api/v1/nex-plan/billing/balance` 的 `balances[]` 已真实返回 bucket_id、user_plan_id、period_start、period_end、expires_at。Service 在现有 UsageQuotaLimit 上增补可选字段；时间统一转换为毫秒。period 文案类型从所属 plans[].entitlements[] 按 user_plan_id（旧数据缺失时 plan_id）及 entitlement_id 关联。
 
 只读模型用量桶；已知到期或尚未生效的桶排除。有效性以 snapshot.serverTime（缺失时 generatedAt）为基准，与服务端快照一致，不猜测设备日期。字段缺失或非有限数字不得误判为 0；缺少 bucket_id/有效周期的旧快照不触发低额度一次提醒，但可依据明确的剩余值判断耗尽。周期结束和桶到期含义独立，不能再用 expires_at 替代周期身份。
 

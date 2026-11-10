@@ -1,4 +1,4 @@
-import type { WebRemoteControlMobileDeviceInfo } from "@zcode/shared";
+import type { WebRemoteControlMobileDeviceInfo } from "@nex/shared";
 
 interface NavigatorLike {
   userAgent?: string;

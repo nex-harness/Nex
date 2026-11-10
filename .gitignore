@@ -1,6 +1,6 @@
 node_modules/
 dist/
-# zcode-server-cli 发行包 staging 输出（spec §7.1），本地组装产物不入库。
+# nex-server-cli 发行包 staging 输出（spec §7.1），本地组装产物不入库。
 dist-release/
 # Bugfix: macOS CI 按架构隔离 electron-builder 输出目录，这些仍是构建产物。
 packages/desktop/dist-*/
@@ -37,7 +37,7 @@ coverage/
 z-work/
 openclaw/
 .run-logs/
-# 旧开发目录：开发版运行时已改名为 .zcode-runtime，老机器上残留的目录仍需忽略，避免误提交 Electron.app 副本。
+# 旧开发目录：开发版运行时已改名为 .nex-runtime，老机器上残留的目录仍需忽略，避免误提交 Electron.app 副本。
 .codex-runtime/
 .worktrees/
 packages/stream-animate/dist-server/
@@ -74,4 +74,4 @@ packages/desktop/resources/macos-window-bounds/
 # Python 字节码（docker/plugin-eval/summarize.py 在主机上跑会生成）。
 __pycache__/
 *.pyc
-.zcode-runtime
+.nex-runtime

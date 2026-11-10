@@ -2,7 +2,7 @@ import type { IProjectService, ProjectTask, ProjectTree } from "#src/project/con
 import type {
   PendingInteractionSummary,
   WindowHostControllerTaskRow,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@nex/shared/nex-protocol-v4";
 
 /**
  * 手机项目树的实时待处理交互叠加。

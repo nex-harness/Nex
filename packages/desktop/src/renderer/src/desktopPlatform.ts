@@ -1,10 +1,10 @@
-import { recordArmsCustomEventForE2E } from "@zcode/ui";
+import { recordArmsCustomEventForE2E } from "@nex/ui";
 import {
   DesktopCommandIds,
   buildLocalMediaPreviewUrl,
   unwrapRemoteWorkspaceBindResult,
   type IPlatformService,
-} from "@zcode/shared";
+} from "@nex/shared";
 
 import { desktopBrowserPlatformBridge } from "./desktopBrowserPlatformBridge.js";
 import { createDesktopPluginSandboxPlatform } from "./plugin-sandbox/desktopPluginSandboxPlatform.js";
@@ -18,204 +18,204 @@ export function createDesktopPlatform(options: {
     pluginSandbox: createDesktopPluginSandboxPlatform(),
     createLocalMediaPreviewUrl: buildLocalMediaPreviewUrl,
     isLocalDevelopmentRuntime: options.isLocalDevelopmentRuntime,
-    selectDirectory: () => window.zcode.selectDirectory(),
-    selectDirectories: () => window.zcode.selectDirectories(),
-    selectFile: () => window.zcode.selectFile(),
-    selectFiles: () => window.zcode.selectFiles?.() ?? Promise.resolve([]),
-    createTempTextAttachment: (payload) => window.zcode.createTempTextAttachment(payload),
+    selectDirectory: () => window.nex.selectDirectory(),
+    selectDirectories: () => window.nex.selectDirectories(),
+    selectFile: () => window.nex.selectFile(),
+    selectFiles: () => window.nex.selectFiles?.() ?? Promise.resolve([]),
+    createTempTextAttachment: (payload) => window.nex.createTempTextAttachment(payload),
     materializeWorkflowArtifactFile: (payload) =>
-      window.zcode.materializeWorkflowArtifactFile(payload),
-    onRemoteConnectionLog: (handler) => window.zcode.onRemoteConnectionLog(handler),
-    onRemoteSessionClosed: (handler) => window.zcode.onRemoteSessionClosed(handler),
+      window.nex.materializeWorkflowArtifactFile(payload),
+    onRemoteConnectionLog: (handler) => window.nex.onRemoteConnectionLog(handler),
+    onRemoteSessionClosed: (handler) => window.nex.onRemoteSessionClosed(handler),
     // Source 自动重连会替换 logical session；统一由 preload bridge 转发换代事件。
     onRemoteSessionReconnected: (handler) =>
-      window.zcode.onRemoteSessionReconnected?.(handler) ?? (() => {}),
+      window.nex.onRemoteSessionReconnected?.(handler) ?? (() => {}),
     activateOrSetWorkspace: (path) =>
-      window.zcode.activateOrSetWorkspace?.(path) ?? Promise.resolve({ activated: false }),
+      window.nex.activateOrSetWorkspace?.(path) ?? Promise.resolve({ activated: false }),
     connectRemote: (remoteOptions, requestId, context) =>
-      window.zcode.connectRemote(remoteOptions, requestId, context),
+      window.nex.connectRemote(remoteOptions, requestId, context),
     requestSourceSettingsAttachment: (sourceServerId) =>
-      window.zcode.requestSourceSettingsAttachment?.(sourceServerId) ??
+      window.nex.requestSourceSettingsAttachment?.(sourceServerId) ??
       Promise.reject(new Error("Source settings attachment bridge unavailable")),
     cancelPendingRemoteConnection: (requestId) =>
-      window.zcode.cancelPendingRemoteConnection?.(requestId) ?? Promise.resolve(),
+      window.nex.cancelPendingRemoteConnection?.(requestId) ?? Promise.resolve(),
     bindRemoteWorkspaceSessionContext: async (context) => {
-      if (!window.zcode.bindRemoteWorkspaceSessionContext) {
+      if (!window.nex.bindRemoteWorkspaceSessionContext) {
         throw new Error("Desktop bindRemoteWorkspaceSessionContext bridge unavailable");
       }
       // preload 返回结构化结果，在页面一侧还原错误才能保留 code/retryable。
       return unwrapRemoteWorkspaceBindResult(
-        await window.zcode.bindRemoteWorkspaceSessionContext(context),
+        await window.nex.bindRemoteWorkspaceSessionContext(context),
       );
     },
-    startWebRemoteControl: (context) => window.zcode.startWebRemoteControl(context),
-    stopWebRemoteControl: () => window.zcode.stopWebRemoteControl(),
-    getWebRemoteControlStatus: () => window.zcode.getWebRemoteControlStatus(),
+    startWebRemoteControl: (context) => window.nex.startWebRemoteControl(context),
+    stopWebRemoteControl: () => window.nex.stopWebRemoteControl(),
+    getWebRemoteControlStatus: () => window.nex.getWebRemoteControlStatus(),
     onWebRemoteControlStatusChanged: (handler) =>
-      window.zcode.onWebRemoteControlStatusChanged?.(handler) ?? (() => {}),
-    disposeRemoteSession: (sessionId) => window.zcode.disposeRemoteSession(sessionId),
-    isDockerAvailable: () => window.zcode.isDockerAvailable(),
-    listWSLDistros: () => window.zcode.listWSLDistros(),
-    listDockerContainers: () => window.zcode.listDockerContainers(),
-    listSSHConfigAliases: () => window.zcode.listSSHConfigAliases(),
-    loadMcpFromUserDirectory: (payload) => window.zcode.loadMcpFromUserDirectory(payload),
-    saveMcpToUserDirectory: (payload) => window.zcode.saveMcpToUserDirectory(payload),
-    migrateLegacyCommonMcp: (payload) => window.zcode.migrateLegacyCommonMcp(payload),
-    openExternal: (url) => window.zcode.openExternal(url),
-    openFeedback: () => window.zcode.executeDesktopCommand(DesktopCommandIds.OpenFeedback),
-    openCommunity: () => window.zcode.executeDesktopCommand(DesktopCommandIds.OpenCommunity),
-    canOpenCommunity: (locale) => window.zcode.canOpenCommunity(locale),
-    openInFileManager: (path) => window.zcode.openInFileManager(path),
-    openExternalFile: (path) => window.zcode.openExternalFile(path),
-    openCuaPermissionOnboarding: window.zcode.openCuaPermissionOnboarding
+      window.nex.onWebRemoteControlStatusChanged?.(handler) ?? (() => {}),
+    disposeRemoteSession: (sessionId) => window.nex.disposeRemoteSession(sessionId),
+    isDockerAvailable: () => window.nex.isDockerAvailable(),
+    listWSLDistros: () => window.nex.listWSLDistros(),
+    listDockerContainers: () => window.nex.listDockerContainers(),
+    listSSHConfigAliases: () => window.nex.listSSHConfigAliases(),
+    loadMcpFromUserDirectory: (payload) => window.nex.loadMcpFromUserDirectory(payload),
+    saveMcpToUserDirectory: (payload) => window.nex.saveMcpToUserDirectory(payload),
+    migrateLegacyCommonMcp: (payload) => window.nex.migrateLegacyCommonMcp(payload),
+    openExternal: (url) => window.nex.openExternal(url),
+    openFeedback: () => window.nex.executeDesktopCommand(DesktopCommandIds.OpenFeedback),
+    openCommunity: () => window.nex.executeDesktopCommand(DesktopCommandIds.OpenCommunity),
+    canOpenCommunity: (locale) => window.nex.canOpenCommunity(locale),
+    openInFileManager: (path) => window.nex.openInFileManager(path),
+    openExternalFile: (path) => window.nex.openExternalFile(path),
+    openCuaPermissionOnboarding: window.nex.openCuaPermissionOnboarding
       ? (permissionOptions) =>
-          window.zcode.openCuaPermissionOnboarding?.(permissionOptions) ??
+          window.nex.openCuaPermissionOnboarding?.(permissionOptions) ??
           Promise.resolve({ success: false, error: "not_supported" })
       : undefined,
-    prepareCuaHelperPermissionDrag: window.zcode.prepareCuaHelperPermissionDrag
+    prepareCuaHelperPermissionDrag: window.nex.prepareCuaHelperPermissionDrag
       ? () =>
-          window.zcode.prepareCuaHelperPermissionDrag?.() ??
+          window.nex.prepareCuaHelperPermissionDrag?.() ??
           Promise.resolve({ success: false, error: "not_supported" })
       : undefined,
-    startCuaHelperPermissionDrag: window.zcode.startCuaHelperPermissionDrag
-      ? () => window.zcode.startCuaHelperPermissionDrag?.()
+    startCuaHelperPermissionDrag: window.nex.startCuaHelperPermissionDrag
+      ? () => window.nex.startCuaHelperPermissionDrag?.()
       : undefined,
     notifyWebRemoteControlAuthStateChanged: (change) =>
-      window.zcode.notifyWebRemoteControlAuthStateChanged(change),
-    registerOAuthState: (payload) => window.zcode.registerOAuthState(payload),
-    onOAuthCallback: (callback) => window.zcode.onOAuthCallback(callback),
-    onPaymentCallback: (callback) => window.zcode.onPaymentCallback(callback),
-    onShareImport: (callback) => window.zcode.onShareImport?.(callback) ?? (() => {}),
-    notifyRendererReady: () => window.zcode.notifyRendererReady(),
-    syncTelemetryContext: (context) => window.zcode.syncTelemetryContext(context),
-    reportTelemetryEvent: (payload) => window.zcode.reportTelemetryEvent(payload),
+      window.nex.notifyWebRemoteControlAuthStateChanged(change),
+    registerOAuthState: (payload) => window.nex.registerOAuthState(payload),
+    onOAuthCallback: (callback) => window.nex.onOAuthCallback(callback),
+    onPaymentCallback: (callback) => window.nex.onPaymentCallback(callback),
+    onShareImport: (callback) => window.nex.onShareImport?.(callback) ?? (() => {}),
+    notifyRendererReady: () => window.nex.notifyRendererReady(),
+    syncTelemetryContext: (context) => window.nex.syncTelemetryContext(context),
+    reportTelemetryEvent: (payload) => window.nex.reportTelemetryEvent(payload),
     reportArmsCustomEvent: (payload) => {
       recordArmsCustomEventForE2E(payload);
-      return window.zcode.reportArmsCustomEvent(payload);
+      return window.nex.reportArmsCustomEvent(payload);
     },
-    getRendererActionTraceConfig: window.zcode.getRendererActionTraceConfig
-      ? () => window.zcode.getRendererActionTraceConfig!()
+    getRendererActionTraceConfig: window.nex.getRendererActionTraceConfig
+      ? () => window.nex.getRendererActionTraceConfig!()
       : undefined,
-    onRendererActionTraceConfigChanged: window.zcode.onRendererActionTraceConfigChanged
-      ? (callback) => window.zcode.onRendererActionTraceConfigChanged!(callback)
+    onRendererActionTraceConfigChanged: window.nex.onRendererActionTraceConfigChanged
+      ? (callback) => window.nex.onRendererActionTraceConfigChanged!(callback)
       : undefined,
-    reportLocalTtftBatch: (batch) => window.zcode.reportLocalTtftBatch(batch),
-    reportRendererActionTraceBatch: window.zcode.reportRendererActionTraceBatch
-      ? (batch) => window.zcode.reportRendererActionTraceBatch!(batch)
+    reportLocalTtftBatch: (batch) => window.nex.reportLocalTtftBatch(batch),
+    reportRendererActionTraceBatch: window.nex.reportRendererActionTraceBatch
+      ? (batch) => window.nex.reportRendererActionTraceBatch!(batch)
       : undefined,
-    reportRendererHeapSample: window.zcode.reportRendererHeapSample
-      ? (sample) => window.zcode.reportRendererHeapSample!(sample)
+    reportRendererHeapSample: window.nex.reportRendererHeapSample
+      ? (sample) => window.nex.reportRendererHeapSample!(sample)
       : undefined,
-    showTaskNotification: (payload) => window.zcode.showTaskNotification(payload),
-    syncWindowTabs: (paths) => window.zcode.syncWindowTabs(paths),
+    showTaskNotification: (payload) => window.nex.showTaskNotification(payload),
+    syncWindowTabs: (paths) => window.nex.syncWindowTabs(paths),
     syncWebRemoteControlWorkspaces: (workspaces) =>
-      window.zcode.syncWebRemoteControlWorkspaces?.(workspaces),
+      window.nex.syncWebRemoteControlWorkspaces?.(workspaces),
     onWebRemoteControlReconnectWorkspace: (handler) =>
-      window.zcode.onWebRemoteControlReconnectWorkspace?.(handler) ?? (() => {}),
+      window.nex.onWebRemoteControlReconnectWorkspace?.(handler) ?? (() => {}),
     onWebRemoteControlRendererAction: (handler) =>
-      window.zcode.onWebRemoteControlRendererAction?.(handler) ?? (() => {}),
-    syncWindowUnreadCount: (count) => window.zcode.syncWindowUnreadCount(count),
-    syncActiveTaskSession: (sessionId) => window.zcode.syncActiveTaskSession(sessionId),
-    syncAppSettings: (patch) => window.zcode.syncAppSettings?.(patch),
+      window.nex.onWebRemoteControlRendererAction?.(handler) ?? (() => {}),
+    syncWindowUnreadCount: (count) => window.nex.syncWindowUnreadCount(count),
+    syncActiveTaskSession: (sessionId) => window.nex.syncActiveTaskSession(sessionId),
+    syncAppSettings: (patch) => window.nex.syncAppSettings?.(patch),
     // 桥缺失（旧 preload 升级窗口）时按 supported 兜底，与 Windows 现状一致，设置开关可用。
     getCloseToTrayCapability: () =>
-      window.zcode.getCloseToTrayCapability?.() ??
+      window.nex.getCloseToTrayCapability?.() ??
       Promise.resolve({ supported: true, gnomeLikeWithoutTray: false }),
-    setShortcutRecordingActive: (active) => window.zcode.setShortcutRecordingActive?.(active),
-    onFocusTab: (handler) => window.zcode.onFocusTab(handler),
-    onNewTab: (handler) => window.zcode.onNewTab(handler),
+    setShortcutRecordingActive: (active) => window.nex.setShortcutRecordingActive?.(active),
+    onFocusTab: (handler) => window.nex.onFocusTab(handler),
+    onNewTab: (handler) => window.nex.onNewTab(handler),
     onCloseActiveContextRequest: (handler) =>
-      window.zcode.onCloseActiveContextRequest?.(handler) ?? (() => {}),
-    onOpenBrowserUrl: (handler) => window.zcode.onOpenBrowserUrl?.(handler) ?? (() => {}),
+      window.nex.onCloseActiveContextRequest?.(handler) ?? (() => {}),
+    onOpenBrowserUrl: (handler) => window.nex.onOpenBrowserUrl?.(handler) ?? (() => {}),
     onEmbeddedBrowserPermissionPrompt: (handler) =>
-      window.zcode.onEmbeddedBrowserPermissionPrompt?.(handler) ?? (() => {}),
+      window.nex.onEmbeddedBrowserPermissionPrompt?.(handler) ?? (() => {}),
     resolveEmbeddedBrowserPermissionPrompt: (request) =>
-      window.zcode.resolveEmbeddedBrowserPermissionPrompt?.(request),
+      window.nex.resolveEmbeddedBrowserPermissionPrompt?.(request),
     getEmbeddedBrowserSitePermissions: () =>
-      window.zcode.getEmbeddedBrowserSitePermissions?.() ?? Promise.resolve({}),
+      window.nex.getEmbeddedBrowserSitePermissions?.() ?? Promise.resolve({}),
     setEmbeddedBrowserSitePermission: (request) =>
-      window.zcode.setEmbeddedBrowserSitePermission?.(request) ?? Promise.resolve({}),
+      window.nex.setEmbeddedBrowserSitePermission?.(request) ?? Promise.resolve({}),
     clearEmbeddedBrowserSitePermissions: () =>
-      window.zcode.clearEmbeddedBrowserSitePermissions?.() ?? Promise.resolve({}),
+      window.nex.clearEmbeddedBrowserSitePermissions?.() ?? Promise.resolve({}),
     resetEmbeddedBrowserSitePermission: (request) =>
-      window.zcode.resetEmbeddedBrowserSitePermission?.(request) ?? Promise.resolve({}),
+      window.nex.resetEmbeddedBrowserSitePermission?.(request) ?? Promise.resolve({}),
     onBrowserViewScreenshotSurfacePrepare: (handler) =>
-      window.zcode.onBrowserViewScreenshotSurfacePrepare?.(handler) ?? (() => {}),
+      window.nex.onBrowserViewScreenshotSurfacePrepare?.(handler) ?? (() => {}),
     onBrowserViewScreenshotSurfaceRelease: (handler) =>
-      window.zcode.onBrowserViewScreenshotSurfaceRelease?.(handler) ?? (() => {}),
+      window.nex.onBrowserViewScreenshotSurfaceRelease?.(handler) ?? (() => {}),
     browserViewScreenshotSurfaceReady: (payload) =>
-      window.zcode.browserViewScreenshotSurfaceReady?.(payload),
+      window.nex.browserViewScreenshotSurfaceReady?.(payload),
     ...desktopBrowserPlatformBridge,
-    onNewTask: (handler) => window.zcode.onNewTask(handler),
+    onNewTask: (handler) => window.nex.onNewTask(handler),
     onOpenWorkspace: (handler) => {
       // 开发态或升级后的旧窗口可能仍运行未暴露 onOpenWorkspace 的 preload，
       // renderer 直接调用会在启动时崩溃。这里和 activateOrSetWorkspace 一样做兼容兜底，
       // 缺少该 bridge 时只禁用原生菜单回调，不影响应用继续打开。
-      return window.zcode.onOpenWorkspace?.(handler) ?? (() => {});
+      return window.nex.onOpenWorkspace?.(handler) ?? (() => {});
     },
-    onOpenWorkspacePath: (handler) => window.zcode.onOpenWorkspacePath?.(handler) ?? (() => {}),
-    onOpenFeedbackDialog: (handler) => window.zcode.onOpenFeedbackDialog?.(handler) ?? (() => {}),
-    onOpenTicketsPanel: (handler) => window.zcode.onOpenTicketsPanel?.(handler) ?? (() => {}),
-    onWindowFullscreenChanged: (handler) => window.zcode.onWindowFullscreenChanged(handler),
-    getDesktopWindowChromeState: window.zcode.getDesktopWindowChromeState
-      ? () => window.zcode.getDesktopWindowChromeState!()
+    onOpenWorkspacePath: (handler) => window.nex.onOpenWorkspacePath?.(handler) ?? (() => {}),
+    onOpenFeedbackDialog: (handler) => window.nex.onOpenFeedbackDialog?.(handler) ?? (() => {}),
+    onOpenTicketsPanel: (handler) => window.nex.onOpenTicketsPanel?.(handler) ?? (() => {}),
+    onWindowFullscreenChanged: (handler) => window.nex.onWindowFullscreenChanged(handler),
+    getDesktopWindowChromeState: window.nex.getDesktopWindowChromeState
+      ? () => window.nex.getDesktopWindowChromeState!()
       : undefined,
-    onDesktopWindowChromeStateChanged: window.zcode.onDesktopWindowChromeStateChanged
-      ? (handler) => window.zcode.onDesktopWindowChromeStateChanged!(handler)
+    onDesktopWindowChromeStateChanged: window.nex.onDesktopWindowChromeStateChanged
+      ? (handler) => window.nex.onDesktopWindowChromeStateChanged!(handler)
       : undefined,
-    getWindowControlsOverlayMetrics: () => window.zcode.getWindowControlsOverlayMetrics?.() ?? null,
+    getWindowControlsOverlayMetrics: () => window.nex.getWindowControlsOverlayMetrics?.() ?? null,
     onWindowControlsOverlayChanged: (handler) =>
-      window.zcode.onWindowControlsOverlayChanged?.(handler) ?? (() => {}),
+      window.nex.onWindowControlsOverlayChanged?.(handler) ?? (() => {}),
     getDesktopZoomLevel: () =>
-      window.zcode.getDesktopZoomLevel?.() ?? Promise.resolve({ zoomLevel: 0 }),
+      window.nex.getDesktopZoomLevel?.() ?? Promise.resolve({ zoomLevel: 0 }),
     onDesktopZoomLevelChanged: (handler) =>
-      window.zcode.onDesktopZoomLevelChanged?.(handler) ?? (() => {}),
-    onTaskNotificationClick: (handler) => window.zcode.onTaskNotificationClick(handler),
-    exportLogs: () => window.zcode.exportLogs(),
+      window.nex.onDesktopZoomLevelChanged?.(handler) ?? (() => {}),
+    onTaskNotificationClick: (handler) => window.nex.onTaskNotificationClick(handler),
+    exportLogs: () => window.nex.exportLogs(),
     captureWindowScreenshot: () =>
-      window.zcode.captureWindowScreenshot?.() ?? Promise.resolve(null),
-    onUpdateReady: (callback) => window.zcode.onUpdateReady(callback),
-    onUpdateCheckResult: (callback) => window.zcode.onUpdateCheckResult(callback),
-    onUpdateStateChanged: (callback) => window.zcode.onUpdateStateChanged?.(callback) ?? (() => {}),
+      window.nex.captureWindowScreenshot?.() ?? Promise.resolve(null),
+    onUpdateReady: (callback) => window.nex.onUpdateReady(callback),
+    onUpdateCheckResult: (callback) => window.nex.onUpdateCheckResult(callback),
+    onUpdateStateChanged: (callback) => window.nex.onUpdateStateChanged?.(callback) ?? (() => {}),
     getUpdateState: () =>
-      window.zcode.getUpdateState?.() ?? Promise.resolve({ kind: "idle", enabled: true }),
-    downloadUpdate: () => window.zcode.downloadUpdate?.() ?? Promise.resolve(),
-    cancelUpdateDownload: () => window.zcode.cancelUpdateDownload?.() ?? Promise.resolve(),
-    openUpdateStatusWindow: () => window.zcode.openUpdateStatusWindow?.() ?? Promise.resolve(),
+      window.nex.getUpdateState?.() ?? Promise.resolve({ kind: "idle", enabled: true }),
+    downloadUpdate: () => window.nex.downloadUpdate?.() ?? Promise.resolve(),
+    cancelUpdateDownload: () => window.nex.cancelUpdateDownload?.() ?? Promise.resolve(),
+    openUpdateStatusWindow: () => window.nex.openUpdateStatusWindow?.() ?? Promise.resolve(),
     getAutoUpdatePreferences: () =>
-      window.zcode.getAutoUpdatePreferences?.() ??
+      window.nex.getAutoUpdatePreferences?.() ??
       Promise.resolve({ autoDownloadAndInstallUpdates: false }),
     setAutoDownloadAndInstallUpdates: (enabled) =>
-      window.zcode.setAutoDownloadAndInstallUpdates?.(enabled) ?? Promise.resolve(),
+      window.nex.setAutoDownloadAndInstallUpdates?.(enabled) ?? Promise.resolve(),
     getDesktopSessionActivity: () =>
-      window.zcode.getDesktopSessionActivity?.() ??
+      window.nex.getDesktopSessionActivity?.() ??
       Promise.resolve({ runningAgentSessionCount: 0 }),
-    getZCodeStdioTapDevState: () =>
-      window.zcode.getZCodeStdioTapDevState?.() ??
+    getNexStdioTapDevState: () =>
+      window.nex.getNexStdioTapDevState?.() ??
       Promise.resolve({ enabled: false, visible: false, logDir: "", statePath: "" }),
-    onSettingsChanged: (callback) => window.zcode.onSettingsChanged?.(callback) ?? (() => {}),
+    onSettingsChanged: (callback) => window.nex.onSettingsChanged?.(callback) ?? (() => {}),
     onApplicationLocaleChanged: (callback) =>
-      window.zcode.onApplicationLocaleChanged?.(callback) ?? (() => {}),
-    onPostUpdateReleaseNotes: (callback) => window.zcode.onPostUpdateReleaseNotes(callback),
+      window.nex.onApplicationLocaleChanged?.(callback) ?? (() => {}),
+    onPostUpdateReleaseNotes: (callback) => window.nex.onPostUpdateReleaseNotes(callback),
     acknowledgePostUpdateReleaseNotes: (version) =>
-      window.zcode.acknowledgePostUpdateReleaseNotes(version),
-    skipUpdateVersion: (version) => window.zcode.skipUpdateVersion?.(version) ?? Promise.resolve(),
-    quitAndInstallUpdate: () => window.zcode.quitAndInstallUpdate(),
-    getInstalledEditors: (filePath) => window.zcode.getInstalledEditors(filePath),
-    getFileApplications: (target) => window.zcode.getFileApplications(target),
+      window.nex.acknowledgePostUpdateReleaseNotes(version),
+    skipUpdateVersion: (version) => window.nex.skipUpdateVersion?.(version) ?? Promise.resolve(),
+    quitAndInstallUpdate: () => window.nex.quitAndInstallUpdate(),
+    getInstalledEditors: (filePath) => window.nex.getInstalledEditors(filePath),
+    getFileApplications: (target) => window.nex.getFileApplications(target),
     openFileWithApplication: (applicationId, target) =>
-      window.zcode.openFileWithApplication(applicationId, target),
+      window.nex.openFileWithApplication(applicationId, target),
     getApplicationIcon: (bundleId) =>
-      window.zcode.getApplicationIcon?.(bundleId) ?? Promise.resolve(null),
+      window.nex.getApplicationIcon?.(bundleId) ?? Promise.resolve(null),
     openInEditor: (editorId, path, editorOptions) =>
-      window.zcode.openInEditor(editorId, path, editorOptions),
-    executeDesktopCommand: (command) => window.zcode.executeDesktopCommand(command),
-    setApplicationLocale: (locale) => window.zcode.setApplicationLocale(locale),
+      window.nex.openInEditor(editorId, path, editorOptions),
+    executeDesktopCommand: (command) => window.nex.executeDesktopCommand(command),
+    setApplicationLocale: (locale) => window.nex.setApplicationLocale(locale),
     getSystemLocale: () =>
-      window.zcode.getSystemLocale?.() ??
+      window.nex.getSystemLocale?.() ??
       Promise.resolve(navigator.language.toLowerCase().startsWith("zh") ? "zh-CN" : "en-US"),
-    setTitleBarTheme: (theme) => window.zcode.setTitleBarTheme(theme),
+    setTitleBarTheme: (theme) => window.nex.setTitleBarTheme(theme),
     getDeviceId: () =>
-      (window as Window & { __ZCODE_DEVICE_ID__?: string }).__ZCODE_DEVICE_ID__ ?? "",
+      (window as Window & { __NEX_DEVICE_ID__?: string }).__NEX_DEVICE_ID__ ?? "",
   };
 }

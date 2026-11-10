@@ -1,8 +1,8 @@
-import { ServiceChannels } from "@zcode/shared";
+import { ServiceChannels } from "@nex/shared";
 import { createServiceDescriptor } from "../descriptors.js";
 import type {
-  ZCodeConfigOption,
-  ZCodeProvider,
+  NexConfigOption,
+  NexProvider,
   BotConfig,
   BotContextState,
   BotInboundMessage,
@@ -12,9 +12,9 @@ import type {
   BotServiceStatus,
   BotWorkspaceRef,
   BotsConfigFile,
-  ZCodeAutomationBotDeliveryTarget,
-} from "@zcode/shared";
-import type { ZCodeAgentAppRuntimePreferences } from "../zcode-agent/zcodeAgent.js";
+  NexAutomationBotDeliveryTarget,
+} from "@nex/shared";
+import type { NexAgentAppRuntimePreferences } from "../nex-agent/nexAgent.js";
 
 export interface BotCreateBindCodeParams {
   botId?: string;
@@ -47,13 +47,13 @@ export interface BotListWorkspaceRefsParams {
 export interface BotUserConfigOptionsParams {
   workspacePath: string;
   workspaceIdentity?: string;
-  provider: ZCodeProvider;
+  provider: NexProvider;
 }
 
 export interface BotAutomationRunWatchParams {
   /** 与该次 sendPrompt.traceId 一致，避免排队期间污染其他轮次。 */
   runId?: string;
-  target: ZCodeAutomationBotDeliveryTarget;
+  target: NexAutomationBotDeliveryTarget;
   taskId: string;
   workspacePath: string;
   workspaceIdentity?: string;
@@ -128,22 +128,22 @@ export type BotFeishuRegistrationPollResult =
 
 export interface IBotsService {
   replyToChannel?(
-    params: import("@zcode/shared").ChannelReplyHostRequest,
-  ): Promise<import("@zcode/shared").ChannelReplyResult>;
+    params: import("@nex/shared").ChannelReplyHostRequest,
+  ): Promise<import("@nex/shared").ChannelReplyResult>;
   validateTopicResource?(
     params: import("#src/bots/topicResource.js").TopicResourceRequest,
   ): Promise<void>;
   readTopicResource?(
     params: import("#src/bots/topicResource.js").TopicResourceRequest,
-  ): Promise<import("@zcode/shared").ZCodePromptAttachment>;
+  ): Promise<import("@nex/shared").NexPromptAttachment>;
   /**
    * 将 App 全局交互偏好同步给 Bot 已持有的远端 runtime；不得为此建立新的远端连接。
    */
-  syncAppRuntimePreferences(preferences: ZCodeAgentAppRuntimePreferences): Promise<void>;
+  syncAppRuntimePreferences(preferences: NexAgentAppRuntimePreferences): Promise<void>;
   getStatus(): Promise<BotServiceStatus>;
   getConfig(): Promise<BotsConfigFile>;
   listWorkspaceRefs(params?: BotListWorkspaceRefsParams): Promise<BotWorkspaceRef[]>;
-  getUserConfigOptions(params: BotUserConfigOptionsParams): Promise<ZCodeConfigOption[]>;
+  getUserConfigOptions(params: BotUserConfigOptionsParams): Promise<NexConfigOption[]>;
   beginFeishuRegistration(
     params?: BotFeishuRegistrationBeginParams,
   ): Promise<BotFeishuRegistrationBeginResult>;
@@ -193,13 +193,13 @@ export interface IBotsService {
     deliveryId: string;
     threadId?: string;
     received: boolean;
-  }): Promise<import("@zcode/shared").BotGroupDelivery>;
+  }): Promise<import("@nex/shared").BotGroupDelivery>;
   resendGroupResult?(params: {
     botId: string;
     chatId: string;
     deliveryId: string;
     threadId?: string;
-  }): Promise<import("@zcode/shared").BotGroupDelivery>;
+  }): Promise<import("@nex/shared").BotGroupDelivery>;
   retryPrivateDelivery?(params: { botId: string; deliveryId: string }): Promise<void>;
   resetBotState(contextKey: string): Promise<void>;
   /** 在 automation prompt 派发前订阅终态，并把结果回推到创建它的 Bot 会话。 */
@@ -218,7 +218,7 @@ export const IBotsService = createServiceDescriptor<IBotsService>(ServiceChannel
 export interface BotRemoteWorkspaceResolution {
   workspacePath: string;
   workspaceIdentity: string;
-  target: import("@zcode/shared").RemoteTarget;
+  target: import("@nex/shared").RemoteTarget;
   /** 只有当前窗口存在在线 logical session 才有值，用于 attachment 换代隔离。 */
   runtimeKey?: string;
 }

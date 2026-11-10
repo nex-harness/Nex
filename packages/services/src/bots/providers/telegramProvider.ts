@@ -5,7 +5,7 @@ import type {
   BotInboundMessage,
   BotOutboundMessage,
   SelectionPrompt,
-} from "@zcode/shared";
+} from "@nex/shared";
 import { BOT_MENU_COMMAND_ORDER } from "../commandOrder.js";
 import type { BotProviderAdapter } from "./types.js";
 import { fetchBotProvider, fetchBotProviderJson } from "#src/bots/providers/providerRequest.js";

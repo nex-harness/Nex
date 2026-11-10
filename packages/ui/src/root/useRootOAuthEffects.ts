@@ -5,14 +5,14 @@ import type {
   OAuthProviderId,
   OAuthSessionCallbackResult,
   UserInfo,
-} from "@zcode/shared";
+} from "@nex/shared";
 import {
   resolveProviderFamilyDomainFromOAuthProvider,
-  ZCODE_JWT_INVALID_BROADCAST_CHANNEL,
-} from "@zcode/shared";
-import type { IServiceAccessor } from "@zcode/services";
+  NEX_JWT_INVALID_BROADCAST_CHANNEL,
+} from "@nex/shared";
+import type { IServiceAccessor } from "@nex/services";
 import { useAlertDialog } from "@/hooks/useAlertDialog.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { reportAppTelemetryEvent, resolveProviderTelemetryLabel } from "@/lib/appTelemetry.js";
 import { logger } from "@/logger.js";
 import { setProviderFamilyDomain } from "@/lib/providerFamilyDomainSettings.js";
@@ -134,7 +134,7 @@ export function useRootOAuthEffects({
 }) {
   useAccountConnectionLossNotification(services, accountIntentKey, refreshAppSettings);
   const requestAlert = useAlertDialog();
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const oauthLoginSucceededRef = useRef(false);
   const oauthLoginSuccessInFlightRef = useRef(false);
   const oauthLoginSuccessOwnerRef = useRef<"polling" | "deep-link" | null>(null);
@@ -219,7 +219,7 @@ export function useRootOAuthEffects({
     let disposed = false;
     let promptPending = false;
     const disposable = services.broadcastService.onMessage((message) => {
-      if (message.channel !== ZCODE_JWT_INVALID_BROADCAST_CHANNEL || disposed || promptPending) {
+      if (message.channel !== NEX_JWT_INVALID_BROADCAST_CHANNEL || disposed || promptPending) {
         return;
       }
       promptPending = true;

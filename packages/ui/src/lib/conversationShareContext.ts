@@ -1,5 +1,5 @@
 const SHARE_CONTEXT_BLOCK_PATTERN =
-  /(?:\n\n)?# zcode-share-context:\n```zcode-share-context\n([\s\S]*?)\n```\s*$/u;
+  /(?:\n\n)?# nex-share-context:\n```nex-share-context\n([\s\S]*?)\n```\s*$/u;
 
 export interface ConversationShareContextReference {
   contextId: string;

@@ -10,7 +10,7 @@ import type {
   StorageCleanResult,
   StorageManagementBridge,
   StorageUsageSnapshot,
-} from "@zcode/shared";
+} from "@nex/shared";
 import { logger } from "@/logger.js";
 
 export const STORAGE_SCAN_BLUR_CANCEL_MS = 60_000;

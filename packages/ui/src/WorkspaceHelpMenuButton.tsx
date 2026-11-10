@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { DesktopCommandIds } from "@zcode/shared";
+import { DesktopCommandIds } from "@nex/shared";
 import {
   TID_WORKSPACE_HELP_MENU_RESOURCE_MANAGER,
   TID_WORKSPACE_HELP_MENU_TRIGGER,
-} from "@zcode/shared/test-ids";
+} from "@nex/shared/test-ids";
 import {
   ActivityIcon,
   BookOpenIcon,
@@ -32,7 +32,7 @@ import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { useDesktopUpdateMenu } from "@/hooks/useDesktopUpdateMenu.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useVulnerabilityReportUrl } from "@/hooks/useVulnerabilityReportUrl.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { createHelpMenuActionHandlers } from "@/lib/helpMenuActions.js";
 import { toast } from "@/components/ui/toast.js";
 
@@ -47,7 +47,7 @@ export function WorkspaceHelpMenuButton({
    */
   isDesktop?: boolean;
 }) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const platform = usePlatform();
   const [open, setOpen] = useState(false);
   const { url: vulnerabilityReportUrl, loading: vulnerabilityReportLoading } =

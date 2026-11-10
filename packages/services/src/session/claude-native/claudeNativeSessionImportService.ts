@@ -1,7 +1,7 @@
 import { access, rm } from "node:fs/promises";
 import { constants } from "node:fs";
 import { normalize, resolve } from "node:path";
-import type { ZCodeImportSessionsResult, ZCodeTaskMeta } from "@zcode/shared";
+import type { NexImportSessionsResult, NexTaskMeta } from "@nex/shared";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { buildImportedClaudeTaskFile } from "#src/session/claude-native/buildImportedClaudeTaskFile.js";
 import type { ClaudeNativeImportedSessionSource } from "#src/session/claude-native/claudeNativeImportedSessionTypes.js";
@@ -44,13 +44,13 @@ export async function importClaudeNativeSessions(params: {
   workspacePath?: string;
   workspaceIdentity?: string;
   sessionIds: string[];
-  createImportedSession: (source: ClaudeNativeImportedSessionSource) => Promise<ZCodeTaskMeta>;
-  onTaskImported: (meta: ZCodeTaskMeta) => void;
-}): Promise<ZCodeImportSessionsResult> {
+  createImportedSession: (source: ClaudeNativeImportedSessionSource) => Promise<NexTaskMeta>;
+  onTaskImported: (meta: NexTaskMeta) => void;
+}): Promise<NexImportSessionsResult> {
   const normalizedSessionIds = [
     ...new Set(params.sessionIds.map((item) => item.trim()).filter(Boolean)),
   ];
-  const result: ZCodeImportSessionsResult = {
+  const result: NexImportSessionsResult = {
     imported: [],
     skipped: [],
     failed: [],

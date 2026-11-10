@@ -4,8 +4,8 @@ import {
   TID_V4_BACKGROUND_WORK_CANCEL,
   TID_V4_BACKGROUND_WORK_ITEM,
   testId,
-} from "@zcode/shared/test-ids";
-import type { BackgroundWorkSummary } from "@zcode/shared/zcode-protocol-v4";
+} from "@nex/shared/test-ids";
+import type { BackgroundWorkSummary } from "@nex/shared/nex-protocol-v4";
 import { runUserAction } from "@/lib/userActionTelemetry.js";
 
 export interface ConversationBackgroundWorksProps {

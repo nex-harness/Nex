@@ -11,7 +11,7 @@ import type {
 } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import { GripHorizontal, LoaderIcon } from "lucide-react";
-import { TID_APP_HEADER } from "@zcode/shared/test-ids";
+import { TID_APP_HEADER } from "@nex/shared/test-ids";
 // 保活：workspace tab 真正关闭时，按 workspaceKey 回收 side pane terminal 的常驻 PTY/xterm。
 // 对称下侧 Terminal.tsx 的 openWorkspaceKeys 回收。
 import { sidePaneTerminalSessionRegistry } from "@/terminal/sidePaneTerminalSessionRegistry.js";
@@ -92,7 +92,7 @@ import { Button } from "@/components/ui/button.js";
 import { ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable.js";
 import { toast } from "@/components/ui/toast.js";
 import { getGitDirtyFileCount } from "@/git-branch-switcher/display.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { getPathLeaf, toFileUrl } from "@/lib/path.js";
 import { shouldOpenAssistantHtmlInBrowser } from "@/lib/assistantPreviewCards.js";
@@ -117,18 +117,18 @@ import {
 import type { WorkspaceShellLayoutProps } from "@/app-shell/types.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 import { useTabStore, useTabStoreApi } from "@/store/TabStoreProvider.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
-import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
+import { useNexSessionStore } from "@/store/nexSessionStore.js";
+import type { ComposerMentionPrefill } from "@/store/nexSessionStoreTypes.js";
 
 const WEB_REMOTE_CONTROL_MOBILE_QUERY = "(max-width: 767px)";
 const WEB_REMOTE_CONTROL_COLLAPSE_ONCE_SESSION_KEY =
-  "zcode:web-remote-control:collapse-navigation-once";
+  "nex:web-remote-control:collapse-navigation-once";
 const WEB_REMOTE_CONTROL_VIEWPORT_HEIGHT_FALLBACK_PX = 800;
 const WEB_REMOTE_CONTROL_DRAG_CLICK_THRESHOLD_PX = 4;
 const WORKSPACE_SIDEBAR_DEFAULT_WIDTH_PX = 264;
 const WORKSPACE_SIDEBAR_MIN_WIDTH_PX = 264;
 const WORKSPACE_SIDEBAR_MAX_WIDTH_RATIO = 0.5;
-const WORKSPACE_SIDEBAR_WIDTH_STORAGE_KEY = "zcode:workspace-shell:sidebar-width-px";
+const WORKSPACE_SIDEBAR_WIDTH_STORAGE_KEY = "nex:workspace-shell:sidebar-width-px";
 const LEGACY_WORKSPACE_SHELL_LAYOUT_STORAGE_KEY =
   "react-resizable-panels:workspace-shell-layout:sidebar:content";
 const WORKSPACE_SIDEBAR_RESIZE_KEYBOARD_STEP_PX = 16;
@@ -320,7 +320,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
   isDesktop,
   isMacDesktop,
   isWindowsDesktop,
-  workspaceShellZCodeState,
+  workspaceShellNexState,
   theme,
   isMacFullscreen,
   desktopWindowChromeState,
@@ -433,7 +433,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
   setGitSelectedSourceId,
   taskFindDialogProps,
 }: WorkspaceShellLayoutProps) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const isOfficeMode = useIsOfficeMode();
   const baseServices = useBaseWorkspaceServices();
   const tabStoreApi = useTabStoreApi();
@@ -448,7 +448,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
           return;
         // 切工作区不会触发原工作区的 startDraft；在导航提交时取消请求，避免返回后误开新草稿。
         if (!previous.activeWorkspacePath) return;
-        const store = useZCodeSessionStore.getState();
+        const store = useNexSessionStore.getState();
         const identity = previous.activeWorkspaceIdentity ?? undefined;
         const request = store.getWorkspaceState(
           previous.activeWorkspacePath,
@@ -543,7 +543,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
   usePaneSessionPersistence({
     workspaceKey,
     activeSessionId: activeTaskId,
-    draftFocusVersion: workspaceShellZCodeState.draftFocusVersion,
+    draftFocusVersion: workspaceShellNexState.draftFocusVersion,
     enabled: !isWebRemoteControlShell,
     restoreOnStartup: Boolean(isDesktop && restorePaneSession),
     selectSession: (sessionId) => handleSelectTask(workspaceAbsPath, sessionId, workspaceIdentity),
@@ -562,7 +562,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
     const animations = new Map<HTMLElement, Animation>();
     const setVisible = (element: HTMLElement, visible: boolean) => {
       if (element.hasAttribute("data-scrollbar-active") === visible) return;
-      const current = getComputedStyle(element).getPropertyValue("--zcode-scrollbar-thumb");
+      const current = getComputedStyle(element).getPropertyValue("--nex-scrollbar-thumb");
       animations.get(element)?.cancel();
       element.toggleAttribute("data-scrollbar-active", visible);
       const target = visible
@@ -570,7 +570,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
         : "transparent";
       if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         const animation = element.animate(
-          [{ "--zcode-scrollbar-thumb": current }, { "--zcode-scrollbar-thumb": target }],
+          [{ "--nex-scrollbar-thumb": current }, { "--nex-scrollbar-thumb": target }],
           { duration: 200, easing: "ease" },
         );
         animations.set(element, animation);
@@ -1423,7 +1423,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
   const handleOpenDraftPluginUi = useCallback(
     (request: DraftPluginUiOpenRequest) => {
       if (!isDesktop || workspaceReadOnlyReason || workspaceRemoteSessionId) return;
-      const store = useZCodeSessionStore.getState();
+      const store = useNexSessionStore.getState();
       const draft = store.getWorkspaceState(workspaceAbsPath, workspaceIdentity);
       useWorkbenchGroupStore.getState().deactivateActiveGroup();
       usePaneLayoutStore.getState().resetToPrimaryPane();
@@ -1714,8 +1714,8 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
     (
       targetWorkspacePath: string,
       targetWorkspaceIdentity?: string,
-      targetWorkspacePurpose?: import("@zcode/shared").WorkspacePurpose,
-      createSource?: import("@zcode/shared").SessionCreateSource,
+      targetWorkspacePurpose?: import("@nex/shared").WorkspacePurpose,
+      createSource?: import("@nex/shared").SessionCreateSource,
     ) => {
       showChatMainView();
       handleStartDraftInWorkspace(
@@ -1776,7 +1776,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
   ]);
   const handleSelectComposerPlugin = useCallback(
     (mention: ComposerMentionPrefill) => {
-      useZCodeSessionStore
+      useNexSessionStore
         .getState()
         .requestComposerTextInsert(
           workspaceAbsPath,
@@ -2305,7 +2305,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                 providerWorkspaceConfigPath={providerConfigFile.path}
                 providerWorkspaceConfigExists={providerConfigFile.exists}
                 providerWorkspaceConfigLoading={providerConfigFile.loading}
-                workspaceHeaderState={workspaceShellZCodeState}
+                workspaceHeaderState={workspaceShellNexState}
                 gitSummary={gitState.summary}
                 gitDirtyFileCount={gitDirtyFileCount}
                 isMacDesktop={isMacDesktop}
@@ -2714,7 +2714,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                             providerWorkspaceConfigPath={providerConfigFile.path}
                             providerWorkspaceConfigExists={providerConfigFile.exists}
                             providerWorkspaceConfigLoading={providerConfigFile.loading}
-                            workspaceHeaderState={workspaceShellZCodeState}
+                            workspaceHeaderState={workspaceShellNexState}
                             gitSummary={gitState.summary}
                             gitDirtyFileCount={gitDirtyFileCount}
                             isMacDesktop={isMacDesktop}
@@ -3038,7 +3038,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
   );
   return (
     <DesktopWindowFrame
-      title={`ZCode / ${getPathLeaf(workspaceAbsPath)}`}
+      title={`Nex / ${getPathLeaf(workspaceAbsPath)}`}
       showHeader
       isDesktop={isDesktop}
       isMacDesktop={isMacDesktop}

@@ -2,8 +2,8 @@ import {
   ConversationTelemetryEngine,
   type TelemetryPlatform,
   type ConversationTelemetryObservation,
-} from "@zcode/shared/conversation-telemetry";
-export * from "@zcode/shared/conversation-telemetry";
+} from "@nex/shared/conversation-telemetry";
+export * from "@nex/shared/conversation-telemetry";
 import { reportAppTelemetryEvent } from "@/lib/appTelemetry.js";
 import {
   reportChatErrorBannerTelemetry,
@@ -27,7 +27,7 @@ import {
   reportUiToolCallDetail,
   reportUiTurnBreakdown,
 } from "@/lib/uiPerfArmsTelemetry.js";
-import type { ZCodeUiError } from "@/lib/zcodeUiError.js";
+import type { NexUiError } from "@/lib/nexUiError.js";
 
 const observers = {
   reportSendFunnelInputFocus: (args: readonly unknown[]) =>
@@ -81,7 +81,7 @@ export class ConversationTelemetrySupervisor extends ConversationTelemetryEngine
     surface?: ChatErrorBannerSurface;
     errorKey?: string | null;
     displayMessage: string;
-    error: ZCodeUiError;
+    error: NexUiError;
   }): void {
     if (this.uiDisposed) return;
     void reportChatErrorBannerTelemetry(this.uiPlatform, {

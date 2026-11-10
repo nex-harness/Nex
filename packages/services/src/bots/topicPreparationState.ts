@@ -1,4 +1,4 @@
-import type { BotInboundMessage } from "@zcode/shared";
+import type { BotInboundMessage } from "@nex/shared";
 
 export type TopicPreparationStatus = "preparing" | "waitingStop" | "failed";
 

@@ -3,8 +3,8 @@ import {
   type CancellationToken,
   type IChannelServer,
   type IServerChannel,
-} from "@zcode/rpc";
-import { ServiceChannels } from "@zcode/shared";
+} from "@nex/rpc";
+import { ServiceChannels } from "@nex/shared";
 import {
   conversationTopicFrameSchema,
   encodeTopicWireFrames,
@@ -19,7 +19,7 @@ import {
   type TopicWireFrameCandidate,
   workspaceConfigTopic,
   workspaceConfigTopicFrameSchema,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@nex/shared/nex-protocol-v4";
 import { createServiceLogger } from "../logger/serviceLogger.js";
 
 const log = createServiceLogger("source-server-workspace-identity");

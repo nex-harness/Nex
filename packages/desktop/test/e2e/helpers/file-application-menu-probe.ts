@@ -2,7 +2,7 @@ import {
   PlatformChannels,
   type FileApplicationInfo,
   type FileApplicationTarget,
-} from "@zcode/shared";
+} from "@nex/shared";
 
 type Handler = (...args: unknown[]) => unknown;
 declare global {

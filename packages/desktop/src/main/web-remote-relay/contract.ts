@@ -1,5 +1,5 @@
-import type { AppSettings, WebRemoteControlAppPayload } from "@zcode/shared";
-import type { WebRemoteControlRelayV2Meta } from "@zcode/shared/web-remote-relay";
+import type { AppSettings, WebRemoteControlAppPayload } from "@nex/shared";
+import type { WebRemoteControlRelayV2Meta } from "@nex/shared/web-remote-relay";
 
 export type WebRemoteControlRegisteredDevice = NonNullable<
   AppSettings["webRemoteControlRelayV2Device"]

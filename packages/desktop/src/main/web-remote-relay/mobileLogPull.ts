@@ -16,7 +16,7 @@ import {
   type WebRemoteControlMobileLogLevel,
   type WebRemoteControlMobileLogPullRequestPayload,
   type WebRemoteControlMobileLogPullResponsePayload,
-} from "@zcode/shared";
+} from "@nex/shared";
 
 const gunzipAsync = promisify(gunzip);
 
@@ -229,7 +229,7 @@ export function createMobileLogPullCoordinator(options: MobileLogPullCoordinator
           owner: input.owner,
           requestId,
           baseRequest: {
-            zcode_type: "mobile-log-pull-request",
+            nex_type: "mobile-log-pull-request",
             requestId,
             ...(query.sinceTs !== undefined ? { sinceTs: query.sinceTs } : {}),
             ...(query.untilTs !== undefined ? { untilTs: query.untilTs } : {}),

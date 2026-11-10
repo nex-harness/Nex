@@ -4,9 +4,9 @@
 
 **Goal:** 修正窗口级 WSL Host Pool 把 `sendPrompt` ACK 误当作运行结束的问题，并让 workspace 释放同步回收 Host 侧的 task 元数据和动态事件订阅。
 
-**Architecture:** `IZCodeTaskService` 暴露由 `ZCodeTaskIndexSyncer.onSessionReadyEvent` 驱动的 task-ready 动态事件；Host 以 workspace/task 为唯一 active-run 真相源，在 ready 或启动失败时结束计数，Host 总数由该 tracker 聚合。workspace runtime 释放成功后，Host 同步删除该 workspace 的 task meta、ready 监听和动态事件订阅，重新 attach 时可重新建立订阅。
+**Architecture:** `INexTaskService` 暴露由 `NexTaskIndexSyncer.onSessionReadyEvent` 驱动的 task-ready 动态事件；Host 以 workspace/task 为唯一 active-run 真相源，在 ready 或启动失败时结束计数，Host 总数由该 tracker 聚合。workspace runtime 释放成功后，Host 同步删除该 workspace 的 task meta、ready 监听和动态事件订阅，重新 attach 时可重新建立订阅。
 
-**Tech Stack:** TypeScript、Vitest、Electron UtilityProcess、`@zcode/rpc` dynamic event、ZCode task index syncer。
+**Tech Stack:** TypeScript、Vitest、Electron UtilityProcess、`@nex/rpc` dynamic event、Nex task index syncer。
 
 ## Global Constraints
 
@@ -21,13 +21,13 @@
 ### Task 1: 暴露 task ready 权威事件
 
 **Files:**
-- Modify: `packages/services/src/session/zcodeTaskService.ts`
-- Modify: `packages/services/src/zcode-agent/zcodeTaskServiceAdapter.ts`
-- Test: `packages/services/test/zcodeLegacyTaskCompatTaskIndex.test.ts`
+- Modify: `packages/services/src/session/nexTaskService.ts`
+- Modify: `packages/services/src/nex-agent/nexTaskServiceAdapter.ts`
+- Test: `packages/services/test/nexLegacyTaskCompatTaskIndex.test.ts`
 
 **Interfaces:**
-- Consumes: `ZCodeTaskIndexSyncer.onSessionReadyEvent`，事件原因是 `prompt_completed | prompt_failed`。
-- Produces: `ZCodeTaskReadyOutcome` 和 `IZCodeTaskService.onDynamicTaskReady(taskId): Event<ZCodeTaskReadyOutcome>`。
+- Consumes: `NexTaskIndexSyncer.onSessionReadyEvent`，事件原因是 `prompt_completed | prompt_failed`。
+- Produces: `NexTaskReadyOutcome` 和 `INexTaskService.onDynamicTaskReady(taskId): Event<NexTaskReadyOutcome>`。
 
 - [x] **Step 1: 写失败测试**
 
@@ -35,19 +35,19 @@
 
 - [x] **Step 2: 验证测试先失败**
 
-  Run: `pnpm vitest run packages/services/test/zcodeLegacyTaskCompatTaskIndex.test.ts`
+  Run: `pnpm vitest run packages/services/test/nexLegacyTaskCompatTaskIndex.test.ts`
 
   Expected: FAIL，提示 `onDynamicTaskReady` 不存在。
 
 - [x] **Step 3: 实现最小接口和 adapter 映射**
 
   ```ts
-  export interface ZCodeTaskReadyOutcome {
+  export interface NexTaskReadyOutcome {
     taskId: string;
     reason: "prompt_completed" | "prompt_failed";
   }
 
-  onDynamicTaskReady(taskId: string): Event<ZCodeTaskReadyOutcome> {
+  onDynamicTaskReady(taskId: string): Event<NexTaskReadyOutcome> {
     return Event.filter(
       Event.map(taskIndexSyncer.onSessionReadyEvent, (event) => ({
         taskId: event.target.taskId,
@@ -60,7 +60,7 @@
 
 - [x] **Step 4: 验证服务测试通过**
 
-  Run: `pnpm vitest run packages/services/test/zcodeLegacyTaskCompatTaskIndex.test.ts`
+  Run: `pnpm vitest run packages/services/test/nexLegacyTaskCompatTaskIndex.test.ts`
 
   Expected: PASS。
 
@@ -132,7 +132,7 @@
   Run:
 
   ```powershell
-  pnpm vitest run packages/desktop/test/hostWorkspaceTaskTracker.test.ts packages/desktop/test/hostRemoteWorkspaceProxyState.test.ts packages/services/test/zcodeLegacyTaskCompatTaskIndex.test.ts
+  pnpm vitest run packages/desktop/test/hostWorkspaceTaskTracker.test.ts packages/desktop/test/hostRemoteWorkspaceProxyState.test.ts packages/services/test/nexLegacyTaskCompatTaskIndex.test.ts
   pnpm typecheck
   pnpm lint
   ```
@@ -142,6 +142,6 @@
 - [x] **Step 5: 提交**
 
   ```powershell
-  git add docs/superpowers/plans/2026-07-20-wsl-active-run-lifecycle-review-fix.md packages/services/src/session/zcodeTaskService.ts packages/services/src/zcode-agent/zcodeTaskServiceAdapter.ts packages/services/test/zcodeLegacyTaskCompatTaskIndex.test.ts packages/desktop/src/host/hostWorkspaceTaskTracker.ts packages/desktop/src/host/hostRemoteWorkspaceProxyState.ts packages/desktop/src/host/index.ts packages/desktop/test/hostWorkspaceTaskTracker.test.ts packages/desktop/test/hostRemoteWorkspaceProxyState.test.ts
+  git add docs/superpowers/plans/2026-07-20-wsl-active-run-lifecycle-review-fix.md packages/services/src/session/nexTaskService.ts packages/services/src/nex-agent/nexTaskServiceAdapter.ts packages/services/test/nexLegacyTaskCompatTaskIndex.test.ts packages/desktop/src/host/hostWorkspaceTaskTracker.ts packages/desktop/src/host/hostRemoteWorkspaceProxyState.ts packages/desktop/src/host/index.ts packages/desktop/test/hostWorkspaceTaskTracker.test.ts packages/desktop/test/hostRemoteWorkspaceProxyState.test.ts
   git commit -m "fix(remote): track WSL active runs until ready"
   ```

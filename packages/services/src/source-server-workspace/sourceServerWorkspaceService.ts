@@ -3,7 +3,7 @@ import {
   sourceServerResolveWorkspaceResultSchema,
   sourceServerMigrationPathActionSchema,
   sourceServerMigrationReportSchema,
-} from "@zcode/shared";
+} from "@nex/shared";
 import { SourceServerWorkspaceAliasRepo } from "../session/sourceServerWorkspaceAliasRepo.js";
 import type { ISourceServerWorkspaceService } from "./sourceServerWorkspace.js";
 

@@ -1,4 +1,4 @@
-import { modelSelectionSchema, type ModelSelection } from "@zcode/shared";
+import { modelSelectionSchema, type ModelSelection } from "@nex/shared";
 
 export function normalizeSubagentModelSelection(
   selection: ModelSelection | undefined,

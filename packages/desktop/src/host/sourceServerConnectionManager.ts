@@ -2,10 +2,10 @@ import {
   sourceServerRunningTasksSchema,
   type SourceServerRunningTask,
   type SourceServerRunningTasksResult,
-} from "@zcode/shared";
+} from "@nex/shared";
 /* eslint-disable max-lines -- Source 连接状态机、重试、更新和单连接归并必须共享同一代际状态。 */
 import { SourceServerOperationLogs } from "./sourceServerOperationLogs.js";
-import { Emitter, type Event } from "@zcode/rpc";
+import { Emitter, type Event } from "@nex/rpc";
 import type {
   ConnectionProfile,
   RemoteTarget,
@@ -13,20 +13,20 @@ import type {
   CompatibilityManifest,
   SourceServerArtifactPolicy,
   SourceServerConnectionStateSnapshot,
-} from "@zcode/shared";
+} from "@nex/shared";
 import {
   SOURCE_SERVER_INSTALL_REQUIRED_ERROR_CODE,
   SOURCE_SERVER_IDENTITY_CHANGE_PENDING_ERROR_CODE,
   SOURCE_SERVER_UPGRADE_REQUIRED_ERROR_CODE,
   REMOTE_RECOVERY_BUDGET_EXHAUSTED_ERROR_CODE,
-  ZCODE_COMPATIBILITY_MANIFEST,
+  NEX_COMPATIBILITY_MANIFEST,
   compareCompatibilityVersions,
   evaluateSourceServerCompatibility,
-  isPublicZCodeErrorCode,
+  isPublicNexErrorCode,
   normalizeRemoteConnectionError,
   stripRemoteTargetSecrets,
-} from "@zcode/shared";
-import type { IServiceAccessor } from "@zcode/services";
+} from "@nex/shared";
+import type { IServiceAccessor } from "@nex/services";
 import {
   createSourceServerTransportAdapter,
   readServerCommandResult,
@@ -35,7 +35,7 @@ import {
   type SourceServerIngressInfo,
   type SourceServerTransportAdapter,
   type TransportContext,
-} from "@zcode/server/source-server";
+} from "@nex/server/source-server";
 import {
   connectServerRemoteOverDuplex,
   type ServerRemoteConnection,
@@ -47,7 +47,7 @@ import { isSourceServerAutomaticRecoveryTerminalState } from "./sourceServerReco
 export type {
   SourceServerConnectionState,
   SourceServerConnectionStateSnapshot,
-} from "@zcode/shared";
+} from "@nex/shared";
 
 export interface ManagedSourceServerConnection {
   /** 本次调用复用物理连接时的实际脱敏目标；不写入在线 owner。 */
@@ -103,7 +103,7 @@ export class SourceServerUpgradeRequiredError extends Error {
         ? `Source Server ${currentVersion} release archive differs from the current development build and must be updated`
         : upgradeTarget === "server"
           ? `Source Server ${currentVersion} must be upgraded to at least ${minimumVersion}`
-          : `ZCode Desktop ${currentVersion} must be upgraded to at least ${minimumVersion}`,
+          : `Nex Desktop ${currentVersion} must be upgraded to at least ${minimumVersion}`,
     );
     this.name = "SourceServerUpgradeRequiredError";
   }
@@ -254,7 +254,7 @@ function describeLifecycleOperationFailure(
   const normalized = normalizeRemoteConnectionError(error);
   return {
     error: normalized.message,
-    ...(isPublicZCodeErrorCode(normalized.code) ? { errorCode: normalized.code } : {}),
+    ...(isPublicNexErrorCode(normalized.code) ? { errorCode: normalized.code } : {}),
     retryable: normalized.retryable ?? true,
   };
 }
@@ -404,7 +404,7 @@ export class SourceServerConnectionManager {
       options.createAdapter ?? ((kind) => createSourceServerTransportAdapter(kind));
     this.connectServer = options.connectServer ?? connectServerRemoteOverDuplex;
     this.now = options.now ?? Date.now;
-    this.compatibilityManifest = options.compatibilityManifest ?? ZCODE_COMPATIBILITY_MANIFEST;
+    this.compatibilityManifest = options.compatibilityManifest ?? NEX_COMPATIBILITY_MANIFEST;
   }
 
   public async connect(
@@ -653,7 +653,7 @@ export class SourceServerConnectionManager {
     try {
       context.signal?.throwIfAborted();
       const adapter = this.getAdapter(options.profile.transport);
-      // Bug 原因：已握手分支曾改走远端 `zcode update`，但正常安装链没有配置远端 release
+      // Bug 原因：已握手分支曾改走远端 `nex update`，但正常安装链没有配置远端 release
       // manifest URL，生产更新必然失败。所有 Profile 都由 Desktop 解析同一 archive 并经 Adapter 应用。
       const probe = await adapter.probe(options.target, context);
       context.signal?.throwIfAborted();
@@ -1527,7 +1527,7 @@ export class SourceServerConnectionManager {
       )
         throw error;
       const normalized = normalizeRemoteConnectionError(error);
-      const errorCode = isPublicZCodeErrorCode(normalized.code) ? normalized.code : undefined;
+      const errorCode = isPublicNexErrorCode(normalized.code) ? normalized.code : undefined;
       const retryable =
         error && typeof error === "object" && "retryable" in error
           ? (error as { retryable?: unknown }).retryable
@@ -1732,7 +1732,7 @@ export class SourceServerConnectionManager {
     const errorCode =
       normalized?.code &&
       normalized.code !== "remote-connection-unknown" &&
-      isPublicZCodeErrorCode(normalized.code)
+      isPublicNexErrorCode(normalized.code)
         ? normalized.code
         : REMOTE_RECOVERY_BUDGET_EXHAUSTED_ERROR_CODE;
     for (const profileId of this.profileIdsForSource(sourceServerId, input.profile.profileId)) {
@@ -1792,7 +1792,7 @@ export class SourceServerConnectionManager {
         sourceServerId,
         ...this.compatibilityByProfileId.get(input.profile.profileId),
         error: normalized.message,
-        ...(isPublicZCodeErrorCode(normalized.code) ? { errorCode: normalized.code } : {}),
+        ...(isPublicNexErrorCode(normalized.code) ? { errorCode: normalized.code } : {}),
         retryable: false,
       });
     }
@@ -1805,7 +1805,7 @@ export class SourceServerConnectionManager {
           state: "offline",
           sourceServerId,
           error: normalized.message,
-          ...(isPublicZCodeErrorCode(normalized.code) ? { errorCode: normalized.code } : {}),
+          ...(isPublicNexErrorCode(normalized.code) ? { errorCode: normalized.code } : {}),
           retryable: false,
         });
       }

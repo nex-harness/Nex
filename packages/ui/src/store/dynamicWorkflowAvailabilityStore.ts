@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import type { DynamicWorkflowClientConfig } from "@zcode/shared";
-import type { ICodingPlanSubscriptionService } from "@zcode/services";
+import type { DynamicWorkflowClientConfig } from "@nex/shared";
+import type { ICodingPlanSubscriptionService } from "@nex/services";
 import { logger } from "@/logger.js";
 
 // ============================================================

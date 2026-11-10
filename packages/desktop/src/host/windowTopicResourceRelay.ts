@@ -1,16 +1,16 @@
-import { IZCodeAgentService, type IBotsService, type ServiceCollection } from "@zcode/services";
-import { createTopicResourceRelayChannel } from "@zcode/services/node";
-import type { WindowHostAttachmentScope, ZCodeTopicResourceRelayRequest } from "@zcode/shared";
+import { INexAgentService, type IBotsService, type ServiceCollection } from "@nex/services";
+import { createTopicResourceRelayChannel } from "@nex/services/node";
+import type { WindowHostAttachmentScope, NexTopicResourceRelayRequest } from "@nex/shared";
 
 /** 反向请求必须属于发起它的物理连接，并仍绑定当前 logical session，不能只比较文件路径。 */
 export function createWindowTopicResourceRelay(deps: {
-  getPeerAgentService(): IZCodeAgentService | undefined;
+  getPeerAgentService(): INexAgentService | undefined;
   resolveServices(scope: WindowHostAttachmentScope): ServiceCollection;
   getBots(): IBotsService | undefined;
 }) {
   const resolve = (
     request: Pick<
-      ZCodeTopicResourceRelayRequest,
+      NexTopicResourceRelayRequest,
       "remoteSessionId" | "workspaceIdentity" | "workspacePath"
     >,
   ) => {
@@ -24,7 +24,7 @@ export function createWindowTopicResourceRelay(deps: {
           workspaceIdentity: request.workspaceIdentity,
           workspacePath: request.workspacePath,
         })
-        .get(IZCodeAgentService) !== peer
+        .get(INexAgentService) !== peer
     )
       throw new Error("Topic resource source connection mismatch");
     const bots = deps.getBots();

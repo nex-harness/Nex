@@ -1,6 +1,6 @@
 import { ToolPresentation } from "@/ToolCallBlocks/ToolPresentation.js";
 import { useMemo, type ComponentType } from "react";
-import type { ToolCallDisplay, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
+import type { ToolCallDisplay, ToolCallRow } from "@nex/shared/nex-protocol-v4";
 import type { Theme } from "@/useTheme.js";
 import type { ToolCallBlockRenderContext } from "@/ToolCallBlocks/fileSummaryTypes.js";
 import { CreateWorkflowToolCallBlock } from "@/ToolCallBlocks/renderers/create-workflow.js";
@@ -10,7 +10,7 @@ import { EvalWorkflowSnippetToolCallBlock } from "@/ToolCallBlocks/renderers/eva
 import { ListSavedWorkflowsPresentation } from "@/ToolCallBlocks/renderers/list-saved-workflows-presentation.js";
 import { ResumeWorkflowRunToolCallBlock } from "@/ToolCallBlocks/renderers/resume-workflow-run.js";
 import { toolCallRowToLegacyNode } from "@/v4/toolCallRowAdapter.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 
 const RENDERERS: Partial<
   Record<ToolCallDisplay["kind"], ComponentType<ToolCallBlockRenderContext>>
@@ -28,7 +28,7 @@ export function hasConversationShareWorkflowDisplay(row: ToolCallRow): boolean {
 }
 
 export function ConversationShareWorkflow({ row, theme }: { row: ToolCallRow; theme: Theme }) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const context = useMemo<ToolCallBlockRenderContext>(
     () => ({
       nestedToolRenderer: ToolPresentation,

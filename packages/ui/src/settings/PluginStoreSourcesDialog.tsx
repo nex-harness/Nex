@@ -1,9 +1,9 @@
 import { AlertTriangle, Loader2, RefreshCw, Trash2 } from "lucide-react";
-import type { ZCodePluginMarketplaceSummary } from "@zcode/shared";
-import { CLAUDE_OFFICIAL_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
+import type { NexPluginMarketplaceSummary } from "@nex/shared";
+import { CLAUDE_OFFICIAL_PLUGIN_MARKETPLACE_ID } from "@nex/shared";
 import { Button } from "@/components/ui/button.js";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { resolveMarketplaceDisplayName } from "@/settings/pluginSourceLabel.js";
 import {
   isPublicStoreMarketplaceId,
@@ -12,7 +12,7 @@ import {
 import { DEFAULT_MARKETPLACE_ID } from "@/settings/recommendedPlugins.js";
 
 // 官方市场不可移除：移除后启动时会被重新补种，只会造成「删了又回来」的困惑。
-function isRemovableMarketplace(marketplace: ZCodePluginMarketplaceSummary): boolean {
+function isRemovableMarketplace(marketplace: NexPluginMarketplaceSummary): boolean {
   if (isPublicStoreMarketplaceId(marketplace.id)) return false;
   if (marketplace.id === DEFAULT_MARKETPLACE_ID) return false;
   return true;
@@ -21,9 +21,9 @@ function isRemovableMarketplace(marketplace: ZCodePluginMarketplaceSummary): boo
 export function PluginStoreSourceRefreshFailure({
   failure,
 }: {
-  failure: NonNullable<ZCodePluginMarketplaceSummary["refreshFailure"]>;
+  failure: NonNullable<NexPluginMarketplaceSummary["refreshFailure"]>;
 }) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   return (
     <div
       className="mt-1 flex min-w-0 items-start gap-1 text-ui-base text-destructive"
@@ -52,12 +52,12 @@ export function PluginStoreSourcesDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  marketplaces: ZCodePluginMarketplaceSummary[];
+  marketplaces: NexPluginMarketplaceSummary[];
   onUpdateMarketplace: (marketplace: string) => void;
   onRemoveMarketplace: (marketplace: string) => void;
   activeOperations: ReadonlyArray<{ id: string }>;
 }) {
-  const { intl, locale } = useZCodeIntl();
+  const { intl, locale } = useNexIntl();
   const claudeCodePlugins = intl.formatMessage({
     id: "settings.plugins.marketplace.claudeCodePlugins",
   });

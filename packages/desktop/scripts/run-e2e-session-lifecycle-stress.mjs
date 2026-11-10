@@ -12,7 +12,7 @@ const desktopDir = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 function readIterations(args, env) {
   const arg = args.find((item) => item.startsWith("--iterations="));
-  const raw = arg?.slice("--iterations=".length) ?? env.ZCODE_E2E_SESSION_STRESS_ITERATIONS;
+  const raw = arg?.slice("--iterations=".length) ?? env.NEX_E2E_SESSION_STRESS_ITERATIONS;
   if (raw === undefined || raw.trim() === "") {
     return DEFAULT_ITERATIONS;
   }
@@ -67,9 +67,9 @@ try {
       env: {
         ...process.env,
         PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false",
-        ZCODE_E2E_ARTIFACT_DIR: artifactDir,
-        ZCODE_E2E_HOME_DIR: homeDir,
-        ZCODE_E2E_RUN_ID: runId,
+        NEX_E2E_ARTIFACT_DIR: artifactDir,
+        NEX_E2E_HOME_DIR: homeDir,
+        NEX_E2E_RUN_ID: runId,
       },
       stdio: "inherit",
     },

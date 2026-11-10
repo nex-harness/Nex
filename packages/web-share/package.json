@@ -1,5 +1,5 @@
 {
-  "name": "@zcode/web-share",
+  "name": "@nex/web-share",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,8 +8,8 @@
     "lint": "oxlint"
   },
   "dependencies": {
-    "@zcode/share-ui": "workspace:*",
-    "@zcode/shared": "workspace:*",
+    "@nex/share-ui": "workspace:*",
+    "@nex/shared": "workspace:*",
     "lucide-react": "^1.17.0",
     "react": "19.2.7",
     "react-dom": "19.2.7"

@@ -24,20 +24,20 @@ import type {
   Locale,
   UsageEntitlementSnapshot,
   UserInfo,
-  ZCodeInteractionBehavior,
-} from "@zcode/shared";
-import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
+  NexInteractionBehavior,
+} from "@nex/shared";
+import { BUILTIN_MODEL_PROVIDER_IDS } from "@nex/shared";
 import {
   TID_SETTINGS_BACK_BUTTON,
   TID_SETTINGS_PAGE,
   TID_SETTINGS_SECTION_NAV,
   TID_SETTINGS_USAGE_TAB,
   testId,
-} from "@zcode/shared/test-ids";
+} from "@nex/shared/test-ids";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";
 import { DesktopWindowFrame } from "@/DesktopWindowFrame.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { logger } from "@/logger.js";
 import { getPathLeaf } from "@/lib/path.js";
@@ -100,7 +100,7 @@ import {
   SettingsHeaderBreadcrumb,
   type SettingsBreadcrumbItem,
 } from "@/settings/SettingsHeaderBreadcrumb.js";
-import { useZCodeStore } from "@/store/StoreProvider.js";
+import { useNexStore } from "@/store/StoreProvider.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 import type { Theme } from "@/useTheme.js";
@@ -113,7 +113,7 @@ import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { cn } from "@/components/lib/utils.js";
 import { useSelectDirectory } from "@/hooks/usePlatform.js";
 import { ServiceProvider, useServices } from "@/hooks/useServices.js";
-import type { AppToolSearchMode } from "@zcode/shared";
+import type { AppToolSearchMode } from "@nex/shared";
 import { useSettings } from "@/hooks/useSettingService.js";
 import type { CreateTaskRequest, RemoteConnectionOpenPreference } from "@/app-shell/types.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
@@ -169,7 +169,7 @@ function SettingsUsageProviderTabs({
   codingPlanSources: CodingPlanUsageSource[];
   onTabChange: (tab: UsageStatsSectionTab) => void;
 }) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const tabItems = [
     {
       id: "app" as const,
@@ -325,7 +325,7 @@ export function SettingsPage({
   onLogout?: () => void;
   user?: UserInfo | null;
 }) {
-  const { intl, localePreference, setLocalePreference } = useZCodeIntl();
+  const { intl, localePreference, setLocalePreference } = useNexIntl();
   const { settingsSectionGroups, settingsSections } = useMemo(
     () =>
       createSettingsPageConfig({
@@ -416,20 +416,20 @@ export function SettingsPage({
   const [settingsBreadcrumbItems, setSettingsBreadcrumbItems] = useState<
     readonly SettingsBreadcrumbItem[]
   >([]);
-  const interfaceMode = useZCodeStore((state) => state.interfaceMode);
-  const setInterfaceMode = useZCodeStore((state) => state.setInterfaceMode);
-  const theme = useZCodeStore((state) => state.theme);
-  const setTheme = useZCodeStore((state) => state.setTheme);
-  const codePreviewSettings = useZCodeStore((state) => state.codePreviewSettings);
-  const setCodePreviewSettings = useZCodeStore((state) => state.setCodePreviewSettings);
-  const uiFontSizePx = useZCodeStore((state) => state.uiFontSizePx);
-  const setUiFontSizePx = useZCodeStore((state) => state.setUiFontSizePx);
-  const hideProjectDeviceNames = useZCodeStore((state) => state.hideProjectDeviceNames);
-  const setHideProjectDeviceNames = useZCodeStore((state) => state.setHideProjectDeviceNames);
-  const notificationEnabled = useZCodeStore((state) => state.notificationEnabled);
-  const setNotificationEnabled = useZCodeStore((state) => state.setNotificationEnabled);
-  const notificationSoundEnabled = useZCodeStore((state) => state.notificationSoundEnabled);
-  const setNotificationSoundEnabled = useZCodeStore((state) => state.setNotificationSoundEnabled);
+  const interfaceMode = useNexStore((state) => state.interfaceMode);
+  const setInterfaceMode = useNexStore((state) => state.setInterfaceMode);
+  const theme = useNexStore((state) => state.theme);
+  const setTheme = useNexStore((state) => state.setTheme);
+  const codePreviewSettings = useNexStore((state) => state.codePreviewSettings);
+  const setCodePreviewSettings = useNexStore((state) => state.setCodePreviewSettings);
+  const uiFontSizePx = useNexStore((state) => state.uiFontSizePx);
+  const setUiFontSizePx = useNexStore((state) => state.setUiFontSizePx);
+  const hideProjectDeviceNames = useNexStore((state) => state.hideProjectDeviceNames);
+  const setHideProjectDeviceNames = useNexStore((state) => state.setHideProjectDeviceNames);
+  const notificationEnabled = useNexStore((state) => state.notificationEnabled);
+  const setNotificationEnabled = useNexStore((state) => state.setNotificationEnabled);
+  const notificationSoundEnabled = useNexStore((state) => state.notificationSoundEnabled);
+  const setNotificationSoundEnabled = useNexStore((state) => state.setNotificationSoundEnabled);
   const usageProviderSettingsRead = useProviderSettingsView();
   const usageProviderSettingsView =
     usageProviderSettingsRead.state.status === "ready"
@@ -672,10 +672,10 @@ export function SettingsPage({
         : "app",
     );
   }, [selectedUsageCodingPlanSource, usageActiveTab, usageCodingPlanSources]);
-  const setNewUserOnboardingOpen = useZCodeStore((state) => state.setNewUserOnboardingOpen);
+  const setNewUserOnboardingOpen = useNexStore((state) => state.setNewUserOnboardingOpen);
   // 「通用」页「打开引导」打开职业引导；迁移向导只从数据同步页「迁移」进入。
   const openOccupationOnboarding = () => setNewUserOnboardingOpen(true);
-  const requestMigrationDialog = useZCodeStore((state) => state.requestOnboardingDialog);
+  const requestMigrationDialog = useNexStore((state) => state.requestOnboardingDialog);
   const setActiveSettingsSection = useCallback(
     (section: SettingsSectionId, fallbackSection: SettingsSectionId = activeSection) => {
       const resolvedSection = resolveSettingsSection(section, fallbackSection);
@@ -818,8 +818,8 @@ export function SettingsPage({
   const [toolGroupingExploreEnabled, setToolGroupingExploreEnabled] = useState(true);
   const [toolGroupingTerminalEnabled, setToolGroupingTerminalEnabled] = useState(true);
   const [toolGroupingChangesEnabled, setToolGroupingChangesEnabled] = useState(false);
-  const [zcodeInteractionBehavior, setZCodeInteractionBehavior] =
-    useState<ZCodeInteractionBehavior>("queue");
+  const [nexInteractionBehavior, setNexInteractionBehavior] =
+    useState<NexInteractionBehavior>("queue");
   const [defaultHomeDir, setDefaultHomeDir] = useState("");
   const [hostPlatform, setHostPlatform] = useState("");
 
@@ -954,7 +954,7 @@ export function SettingsPage({
     setToolGroupingExploreEnabled(sharedSettings.toolGroupingExploreEnabled ?? true);
     setToolGroupingTerminalEnabled(sharedSettings.toolGroupingTerminalEnabled ?? true);
     setToolGroupingChangesEnabled(sharedSettings.toolGroupingChangesEnabled ?? false);
-    setZCodeInteractionBehavior(sharedSettings.zcodeInteractionBehavior ?? "queue");
+    setNexInteractionBehavior(sharedSettings.nexInteractionBehavior ?? "queue");
     setReceivePreviewUpdates(sharedSettings.receivePreviewUpdates ?? false);
     setAutoDownloadAndInstallUpdates(sharedSettings.autoDownloadAndInstallUpdates ?? false);
   }, [sharedSettings]);
@@ -1395,16 +1395,16 @@ export function SettingsPage({
     },
     [updateSharedSettings],
   );
-  const handleZCodeInteractionBehaviorChange = useCallback(
-    async (behavior: ZCodeInteractionBehavior) => {
+  const handleNexInteractionBehaviorChange = useCallback(
+    async (behavior: NexInteractionBehavior) => {
       await runSettingsActionAsync({
         featureId: "settings.conversation",
         action: "change_interaction_behavior",
         trigger: "select",
-        operation: () => updateSharedSettings({ zcodeInteractionBehavior: behavior }),
+        operation: () => updateSharedSettings({ nexInteractionBehavior: behavior }),
         completed: { resultSource: "shared_settings", valueAfter: behavior },
       });
-      setZCodeInteractionBehavior(behavior);
+      setNexInteractionBehavior(behavior);
     },
     [updateSharedSettings],
   );
@@ -1863,7 +1863,7 @@ export function SettingsPage({
                               toolGroupingExploreEnabled={toolGroupingExploreEnabled}
                               toolGroupingTerminalEnabled={toolGroupingTerminalEnabled}
                               toolGroupingChangesEnabled={toolGroupingChangesEnabled}
-                              zcodeInteractionBehavior={zcodeInteractionBehavior}
+                              nexInteractionBehavior={nexInteractionBehavior}
                               askUserQuestionAutoResolutionEnabled={
                                 askUserQuestionAutoResolutionEnabled
                               }
@@ -1906,8 +1906,8 @@ export function SettingsPage({
                               onToolGroupingChangesEnabledChange={
                                 handleToolGroupingChangesEnabledChange
                               }
-                              onZCodeInteractionBehaviorChange={
-                                handleZCodeInteractionBehaviorChange
+                              onNexInteractionBehaviorChange={
+                                handleNexInteractionBehaviorChange
                               }
                               onAskUserQuestionAutoResolutionEnabledChange={
                                 handleAskUserQuestionAutoResolutionEnabledChange
@@ -2096,7 +2096,7 @@ export function SettingsPage({
                               />
                             </ServiceProvider>
                           ) : activeSection === "personalization" ? (
-                            // 个性化指令编辑的是本机 ~/.zcode/AGENTS.md（Agent 实际读取的文件）。
+                            // 个性化指令编辑的是本机 ~/.nex/AGENTS.md（Agent 实际读取的文件）。
                             // 仅桌面本地入口可编辑：手机远控的 base services 可能归属远程
                             // Source（remoteWorkspaceServiceCollection 注册的是远端 settingService），
                             // 编辑会写错机器；Web 端只显示本地桌面端指引。

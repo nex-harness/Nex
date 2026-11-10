@@ -1,10 +1,10 @@
 import { useState } from "react";
-import type { AppSettings } from "@zcode/shared";
+import type { AppSettings } from "@nex/shared";
 import type {
   IServiceAccessor,
   IProviderSettingsService,
   ProviderSettingsView,
-} from "@zcode/services";
+} from "@nex/services";
 import { ServiceProvider } from "@/hooks/useServices.js";
 import { useProviderSettingsView } from "@/hooks/useProviderSettingsView.js";
 import { useOffPeakEligibility } from "@/hooks/useOffPeakEligibility.js";

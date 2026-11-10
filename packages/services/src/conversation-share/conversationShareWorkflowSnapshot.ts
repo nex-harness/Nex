@@ -7,19 +7,19 @@ import {
   type ShareWorkflowPayload,
   type ShareWorkflowArtifact,
   type ConversationShareCapabilities,
-} from "@zcode/shared";
+} from "@nex/shared";
 import {
   reduceWorkflowRunsState,
   type ConversationRow,
   type ArtifactRow,
   type WorkflowRunsState,
   type ToolCallCreateWorkflowCausalityGraph,
-} from "@zcode/shared/zcode-protocol-v4";
-import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
+} from "@nex/shared/nex-protocol-v4";
+import type { INexAgentService } from "../nex-agent/nexAgent.js";
 import type { PublishTextConversationInput } from "./conversationShare.js";
 
 export type ShareWorkflowReader = Pick<
-  IZCodeAgentService,
+  INexAgentService,
   | "conversationWorkflowRunsV4"
   | "conversationWorkflowRunEventsV4"
   | "conversationWorkflowRunArtifactsV4"

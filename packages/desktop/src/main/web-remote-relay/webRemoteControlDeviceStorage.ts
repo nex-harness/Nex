@@ -1,4 +1,4 @@
-import type { AppSettings } from "@zcode/shared";
+import type { AppSettings } from "@nex/shared";
 
 import type { WebRemoteControlDeviceStorage } from "#src/main/web-remote-relay/contract.js";
 

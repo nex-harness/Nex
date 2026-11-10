@@ -14,13 +14,13 @@ import {
 import {
   WebRemoteControlRelayPayloadSerializer,
   type WebRemoteControlPayloadSendResult,
-} from "@zcode/client";
+} from "@nex/client";
 import {
   WEB_REMOTE_CONTROL_RPC_TRANSPORT_LIMITS,
   parseWebRemoteControlAppPayload,
   type WebRemoteControlAppPayload,
   type WebRemoteControlFailure,
-} from "@zcode/shared";
+} from "@nex/shared";
 import {
   WEB_REMOTE_CONTROL_V2_HEARTBEAT_ACK_TIMEOUT_MS,
   WEB_REMOTE_CONTROL_V2_HEARTBEAT_INTERVAL_MS,
@@ -32,7 +32,7 @@ import {
   getWebRemoteControlHeartbeatJitterMs,
   getWebRemoteControlReconnectJitterMs,
   type WebRemoteControlRelayV2OutgoingMessage,
-} from "@zcode/shared/web-remote-relay";
+} from "@nex/shared/web-remote-relay";
 
 export class WebRemoteControlTerminalTransport {
   private readonly WebSocketCtor: typeof globalThis.WebSocket;
@@ -216,7 +216,7 @@ export class WebRemoteControlTerminalTransport {
       };
     }
     // 挂起期间只确认已收到的可靠帧，避免对端 45 秒期限误判；新的业务发送仍等 paired。
-    const retainedAck = payload.zcode_type === "rpc-frame-ack" && this.canContinueRetainedRpc();
+    const retainedAck = payload.nex_type === "rpc-frame-ack" && this.canContinueRetainedRpc();
     if ((this.state !== "paired" && !retainedAck) || this.staleWaitingCount > 0) {
       return { kind: "unavailable" };
     }
@@ -367,7 +367,7 @@ export class WebRemoteControlTerminalTransport {
     this.emitDiagnostic({ type: "pair-status", pairStatus: status, state: this.state });
     if (webRemoteControlV2PairState(status) === "waiting_terminal") {
       if (this.wasPaired) {
-        // Bugfix: zcode-remote-hub 的 waiting 是合法配对状态，表示当前 device 不在 hub 里，
+        // Bugfix: nex-remote-hub 的 waiting 是合法配对状态，表示当前 device 不在 hub 里，
         // 不是 terminal WS 损坏信号。已配对后降级为 waiting 时保持同一条手机端 WS，
         // 继续轻量查询，避免把桌面端短暂重连放大成手机端反复踢旧连接。
         this.staleWaitingCount = 0;
@@ -623,7 +623,7 @@ export class WebRemoteControlTerminalTransport {
 
   private enterWaitingForDeviceAfterRelayError(message: string): void {
     this.pairedSocket = undefined;
-    // Bugfix: zcode-remote-hub 在已认证连接上转发 data 找不到 device 时只返回 INTERNAL，
+    // Bugfix: nex-remote-hub 在已认证连接上转发 data 找不到 device 时只返回 INTERNAL，
     // 不会关闭当前 terminal WS。这里保持手机端 WS，降级为 waiting 并继续查询配对状态，
     // 避免把“桌面端暂时不在”放大成手机端反复重连。
     this.options.onError(new Error(message));

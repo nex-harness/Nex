@@ -1,4 +1,4 @@
-import { resolveWebRemoteControlRoutePathFromBaseUrl } from "@zcode/shared";
+import { resolveWebRemoteControlRoutePathFromBaseUrl } from "@nex/shared";
 
 interface WebRemoteControlRouteEnv {
   readonly VITE_WEB_REMOTE_CONTROL_ROUTE_PATH?: string;

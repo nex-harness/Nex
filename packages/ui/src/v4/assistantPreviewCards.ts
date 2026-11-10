@@ -1,4 +1,4 @@
-import type { AssistantTextRow } from "@zcode/shared/zcode-protocol-v4";
+import type { AssistantTextRow } from "@nex/shared/nex-protocol-v4";
 import {
   buildAssistantPreviewCards,
   type AssistantPreviewCard,

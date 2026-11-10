@@ -1,7 +1,7 @@
 import "@/styles.css";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
+import { NexIntlProvider } from "@/i18n/IntlProvider.js";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { GetWorkflowRunToolCallBlock } from "@/ToolCallBlocks/renderers/get-workflow-run.js";
 import type { ToolCallBlockRenderContext } from "@/ToolCallBlocks/shared.js";
@@ -174,7 +174,7 @@ function Fixture() {
     },
   } as unknown as ToolCallBlockRenderContext;
   return (
-    <ZCodeIntlProvider initialLocale="en-US">
+    <NexIntlProvider initialLocale="en-US">
       <TooltipProvider>
         {[
           "running",
@@ -190,7 +190,7 @@ function Fixture() {
         ))}
         <GetWorkflowRunToolCallBlock {...context} />
       </TooltipProvider>
-    </ZCodeIntlProvider>
+    </NexIntlProvider>
   );
 }
 createRoot(document.getElementById("root")!).render(<Fixture />);

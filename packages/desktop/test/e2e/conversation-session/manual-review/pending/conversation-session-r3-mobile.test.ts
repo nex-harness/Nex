@@ -5,8 +5,8 @@ import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
-import { parseRemoteWorkspaceIdentity, parseWebRemoteControlAppPayload } from "@zcode/shared";
-import { BufferReader, deserialize, VSBuffer } from "@zcode/rpc";
+import { parseRemoteWorkspaceIdentity, parseWebRemoteControlAppPayload } from "@nex/shared";
+import { BufferReader, deserialize, VSBuffer } from "@nex/rpc";
 import type { Page, WebSocketRoute } from "playwright-core";
 import {
   TID_TASK_ITEM,
@@ -15,7 +15,7 @@ import {
   TID_V4_SESSION_PANE,
   TID_SSH_CONNECT_TRIGGER,
   testId,
-} from "@zcode/shared/test-ids";
+} from "@nex/shared/test-ids";
 import { clearAppData, DEFAULT_WORKSPACE } from "../../../helpers/desktop-app.js";
 import { openWorkspaceDraftFromSidebar } from "#e2e/helpers/workspace-agent-warmup";
 import { disconnectRemoteSource } from "#e2e/helpers/remote-project-actions";
@@ -53,7 +53,7 @@ import {
 } from "../../../helpers/v4-conversation.js";
 
 const CASE_MARKER = "E2E_R3_MOBILE";
-const artifactDir = resolve(process.env.ZCODE_E2E_ARTIFACT_DIR ?? ".e2e-artifacts/r3-mobile");
+const artifactDir = resolve(process.env.NEX_E2E_ARTIFACT_DIR ?? ".e2e-artifacts/r3-mobile");
 // Linux e2e 服务器上没有 macOS 版 Chrome：用 R3_MOBILE_CHROME 指向该机 playwright 下载的
 // chromium（缺省仍回退开发机 macOS 路径），否则本 case 在服务器上直接起不了手机浏览器。
 const CHROME =
@@ -186,14 +186,14 @@ async function installSubmissionBridgeProbe(page: Page) {
       if (
         commandMarker &&
         !accepted &&
-        payload?.zcode_type === "rpc-frame" &&
+        payload?.nex_type === "rpc-frame" &&
         payload.fragmentCount === 1
       ) {
         const reader = new BufferReader(VSBuffer.wrap(Buffer.from(payload.dataBase64, "base64")));
         const header = deserialize(reader) as unknown[];
         if (
           header[0] === 100 &&
-          header[2] === "zcode-agent" &&
+          header[2] === "nex-agent" &&
           header[3] === "sendConversationCommandV4"
         ) {
           const args = deserialize(reader) as Array<{ envelope?: { payload?: { text?: string } } }>;
@@ -206,7 +206,7 @@ async function installSubmissionBridgeProbe(page: Page) {
                   JSON.stringify({
                     type: "data",
                     payload: {
-                      zcode_type: "bridge-degraded",
+                      nex_type: "bridge-degraded",
                       bridgeSessionId: payload.bridgeSessionId,
                       reason: "rpc-transport-fault",
                     },
@@ -222,12 +222,12 @@ async function installSubmissionBridgeProbe(page: Page) {
       // 扣帧期间也扣住其 replay 与后续旧 bridge 数据，避免夹具自己制造缺片或漏放原请求。
       if (
         held &&
-        payload?.zcode_type === "rpc-frame" &&
+        payload?.nex_type === "rpc-frame" &&
         payload.bridgeSessionId === held.bridgeId &&
         payload.messageSeq >= held.sequence
       )
         return;
-      if (armed && !held && payload?.zcode_type === "rpc-frame" && payload.fragmentCount === 1) {
+      if (armed && !held && payload?.nex_type === "rpc-frame" && payload.fragmentCount === 1) {
         const header = deserialize(
           new BufferReader(VSBuffer.wrap(Buffer.from(payload.dataBase64, "base64"))),
         ) as unknown[];
@@ -242,7 +242,7 @@ async function installSubmissionBridgeProbe(page: Page) {
                 JSON.stringify({
                   type: "data",
                   payload: {
-                    zcode_type: "bridge-degraded",
+                    nex_type: "bridge-degraded",
                     bridgeSessionId: payload.bridgeSessionId,
                     reason: "rpc-transport-fault",
                   },
@@ -259,7 +259,7 @@ async function installSubmissionBridgeProbe(page: Page) {
       // MRS06 放行真实提交，只扣该代下行；模型请求是远端接纳的独立证据。
       if (
         accepted &&
-        payload?.zcode_type === "rpc-frame" &&
+        payload?.nex_type === "rpc-frame" &&
         payload.bridgeSessionId === accepted.bridgeId
       ) {
         if (payload.fragmentCount === 1) {
@@ -270,7 +270,7 @@ async function installSubmissionBridgeProbe(page: Page) {
         }
         return;
       }
-      if (payload?.zcode_type === "workspace-bridge-ready") bridgeId = payload.bridgeSessionId;
+      if (payload?.nex_type === "workspace-bridge-ready") bridgeId = payload.bridgeSessionId;
       route.send(message);
     });
   });
@@ -340,8 +340,8 @@ describe(`${CASE_MARKER}: 手机 viewport 经真实 relay 配对，选择 SSH ta
 
   it("R3A-MOB-01/02/03/07 配对成功且 Host/SSH/Agent 数不增；手机断网恢复独立 replay、桌面 continuous 持续；双端交替输入同一 FIFO 无丢失重复；手机无新建远程能力", async function () {
     this.timeout(40 * 60_000);
-    const container = process.env.ZCODE_E2E_SSH_CONTAINER?.trim();
-    if (!container) throw new Error(`${CASE_MARKER}: 缺少 ZCODE_E2E_SSH_CONTAINER`);
+    const container = process.env.NEX_E2E_SSH_CONTAINER?.trim();
+    if (!container) throw new Error(`${CASE_MARKER}: 缺少 NEX_E2E_SSH_CONTAINER`);
     const prepared = await prepareSSHLifecycle(CASE_MARKER, {
       apiType: "anthropic-messages",
       tunnelUsername: "tunnel",
@@ -825,7 +825,7 @@ PY`,
       });
       facts.sourceReconnectFailure = {
         text: (await mobileText(mobile)).slice(0, 3000),
-        historyPage: await mobile.evaluate(() => window.history.state?.zcodeMobilePage ?? null),
+        historyPage: await mobile.evaluate(() => window.history.state?.nexMobilePage ?? null),
       };
       throw error;
     });
@@ -921,7 +921,7 @@ PY`,
       // 核对本项目的持久正文，不能用旧 key 超时误判为产品丢草稿。
       await mobile.waitForFunction(
         ({ text, projectId, hostId }: { text: string; projectId: string; hostId: string }) => {
-          const prefix = "zcode-v4-composer-project-drafts:v1:";
+          const prefix = "nex-v4-composer-project-drafts:v1:";
           return Object.keys(localStorage).some((key) => {
             if (!key.startsWith(prefix)) return false;
             const [client, host, project] = JSON.parse(key.slice(prefix.length));

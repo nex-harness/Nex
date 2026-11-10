@@ -1,6 +1,6 @@
-import { buildRuntimeZCodeApiUrl, resolveZaiBusinessBaseUrl } from "@zcode/shared";
+import { buildRuntimeNexApiUrl, resolveZaiBusinessBaseUrl } from "@nex/shared";
 
-export const ZCODE_CLIENT_SCENES_URL = buildRuntimeZCodeApiUrl(
+export const NEX_CLIENT_SCENES_URL = buildRuntimeNexApiUrl(
   process.env,
   "/api/v1/client/scenes",
 );

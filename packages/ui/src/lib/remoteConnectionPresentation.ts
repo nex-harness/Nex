@@ -17,7 +17,7 @@ import type {
   SourceServerConnectionStateSnapshot,
   SourceServerManagementSnapshot,
   SourceServerRecord,
-} from "@zcode/shared";
+} from "@nex/shared";
 
 export type RemoteConnectionStatus = "online" | "connecting" | "offline" | "pending" | "failed";
 export type AggregatedSourceStatus = RemoteConnectionStatus;

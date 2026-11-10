@@ -3,8 +3,8 @@ import type {
   BotConfig,
   BotServiceStatus,
   BotWorkspaceRef,
-} from "@zcode/shared";
-import { ALL_BOT_WORKSPACES, BOT_BIND_CODE_TTL_MS } from "@zcode/shared";
+} from "@nex/shared";
+import { ALL_BOT_WORKSPACES, BOT_BIND_CODE_TTL_MS } from "@nex/shared";
 import {
   DingDingChannelIcon,
   DiscordChannelIcon,

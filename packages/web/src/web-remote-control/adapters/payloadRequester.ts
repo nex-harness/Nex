@@ -1,4 +1,4 @@
-import type { WebRemoteControlAppPayload, WebRemoteControlFailure } from "@zcode/shared";
+import type { WebRemoteControlAppPayload, WebRemoteControlFailure } from "@nex/shared";
 import { createFailure } from "#src/web-remote-control/adapters/relayMessage.js";
 
 interface WebRemoteControlAppPayloadRequesterOptions {
@@ -114,7 +114,7 @@ export function createWebRemoteControlAppPayloadRequester({
 
     acceptPayload(payload: WebRemoteControlAppPayload): boolean {
       if (
-        (payload.zcode_type === "app-error" || payload.zcode_type === "workspace-bridge-error") &&
+        (payload.nex_type === "app-error" || payload.nex_type === "workspace-bridge-error") &&
         payload.requestId
       ) {
         // Bugfix: remote session 关闭这类异步 bridge error 会带合成 requestId，

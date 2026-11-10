@@ -1,4 +1,4 @@
-import type { ZCodeSlashCommand } from "@zcode/shared";
+import type { NexSlashCommand } from "@nex/shared";
 
 const WHITESPACE_RE = /\s/;
 
@@ -52,9 +52,9 @@ export function extractActiveSlashQuery(textBeforeCursor: string): string | null
 }
 
 export function filterSlashCommands(
-  commands: ZCodeSlashCommand[],
+  commands: NexSlashCommand[],
   query: string | null,
-): ZCodeSlashCommand[] {
+): NexSlashCommand[] {
   if (query === null) {
     return [];
   }
@@ -81,7 +81,7 @@ export function filterSlashCommands(
 
       return { command, score: bestScore };
     })
-    .filter((item): item is { command: ZCodeSlashCommand; score: number } => item !== null)
+    .filter((item): item is { command: NexSlashCommand; score: number } => item !== null)
     .sort((left, right) => {
       if (left.score !== right.score) {
         return left.score - right.score;

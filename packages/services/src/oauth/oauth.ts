@@ -6,9 +6,9 @@ import type {
   OAuthSessionState,
   OAuthStartResponse,
   UserInfo,
-} from "@zcode/shared";
-import { ServiceChannels } from "@zcode/shared";
-import type { Event } from "@zcode/rpc";
+} from "@nex/shared";
+import { ServiceChannels } from "@nex/shared";
+import type { Event } from "@nex/rpc";
 import { createServiceDescriptor } from "../descriptors.js";
 
 /**

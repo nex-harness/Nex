@@ -6,8 +6,8 @@ import type {
 } from "@/project-sidebar/contract.js";
 import { groupTaskRef, projectGroupedNodes } from "@/project-sidebar/grouped-view.js";
 import type {
-  ZCodeGroupedTaskView,
-  ZCodeGroupedTaskViewNode,
+  NexGroupedTaskView,
+  NexGroupedTaskViewNode,
 } from "@/project-sidebar/grouped/types.js";
 import { taskKey } from "@/project-sidebar/grouped/ids.js";
 
@@ -15,9 +15,9 @@ import { taskKey } from "@/project-sidebar/grouped/ids.js";
 export function buildGroupedTaskView(
   tasks: ProjectTask[],
   structure: TaskGroupStructure,
-): ZCodeGroupedTaskView {
-  const nodes: ZCodeGroupedTaskViewNode[] = [];
-  const groups = new Map<string, Extract<ZCodeGroupedTaskViewNode, { type: "group" }>>();
+): NexGroupedTaskView {
+  const nodes: NexGroupedTaskViewNode[] = [];
+  const groups = new Map<string, Extract<NexGroupedTaskViewNode, { type: "group" }>>();
   for (const row of projectGroupedNodes(tasks, structure, new Set())) {
     if (row.type === "group") {
       const node = { type: "group" as const, group: row.group, tasks: [] as ProjectTask[] };
@@ -31,7 +31,7 @@ export function buildGroupedTaskView(
   return { nodes };
 }
 
-function locate(view: ZCodeGroupedTaskView, source: GroupNode) {
+function locate(view: NexGroupedTaskView, source: GroupNode) {
   for (const [index, node] of view.nodes.entries()) {
     if (source.type === "group" && node.type === "group" && node.group.id === source.groupId)
       return { groupId: null, index, siblings: view.nodes };
@@ -50,15 +50,15 @@ function locate(view: ZCodeGroupedTaskView, source: GroupNode) {
   }
   return null;
 }
-const ref = (node: ZCodeGroupedTaskViewNode): GroupNode =>
+const ref = (node: NexGroupedTaskViewNode): GroupNode =>
   node.type === "group"
     ? { type: "group", groupId: node.group.id }
     : { type: "task", task: groupTaskRef(node.task) };
 
 /** 旧版整表 applyOrder 会覆盖不可见成员；恢复交互时只提交被拖动节点和相邻锚点。 */
 export function groupedMoveCommand(
-  origin: ZCodeGroupedTaskView,
-  preview: ZCodeGroupedTaskView,
+  origin: NexGroupedTaskView,
+  preview: NexGroupedTaskView,
   source: GroupNode,
 ): MoveGroupNode | null {
   const before = locate(origin, source),

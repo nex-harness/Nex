@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import type { IServiceAccessor } from "@zcode/services";
+import type { IServiceAccessor } from "@nex/services";
 import { logger } from "@/logger.js";
 import type { TabStoreState } from "@/store/tabStore.js";
 

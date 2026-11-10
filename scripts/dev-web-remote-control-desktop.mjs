@@ -6,15 +6,15 @@ const DEFAULT_WEB_REMOTE_CONTROL_URL = "http://localhost:5173/remote/v4";
 
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const webRemoteControlUrl =
-  process.env.ZCODE_WEB_REMOTE_CONTROL_URL?.trim() || DEFAULT_WEB_REMOTE_CONTROL_URL;
+  process.env.NEX_WEB_REMOTE_CONTROL_URL?.trim() || DEFAULT_WEB_REMOTE_CONTROL_URL;
 
-console.log(`[dev:web-remote-control] desktop ZCODE_WEB_REMOTE_CONTROL_URL=${webRemoteControlUrl}`);
+console.log(`[dev:web-remote-control] desktop NEX_WEB_REMOTE_CONTROL_URL=${webRemoteControlUrl}`);
 
-const child = spawn(pnpmCommand, ["--filter", "@zcode/desktop", "dev:local-cli"], {
+const child = spawn(pnpmCommand, ["--filter", "@nex/desktop", "dev:local-cli"], {
   stdio: "inherit",
   env: {
     ...process.env,
-    ZCODE_WEB_REMOTE_CONTROL_URL: webRemoteControlUrl,
+    NEX_WEB_REMOTE_CONTROL_URL: webRemoteControlUrl,
   },
 });
 

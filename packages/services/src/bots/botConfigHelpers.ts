@@ -5,7 +5,7 @@ import {
   type BotConfig,
   type BotProvider,
   type BotsConfigFile,
-} from "@zcode/shared";
+} from "@nex/shared";
 import { normalizeBotCommandPolicy, normalizeBotCurrentOptions } from "./config.js";
 import { normalizeAllowedWorkspaces } from "./workspaceHelpers.js";
 

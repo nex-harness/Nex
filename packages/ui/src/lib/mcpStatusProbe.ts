@@ -1,4 +1,4 @@
-import type { McpServerConfig, McpTestResult } from "@zcode/shared";
+import type { McpServerConfig, McpTestResult } from "@nex/shared";
 
 const MCP_PROBE_TIMEOUT_MS = 5000;
 

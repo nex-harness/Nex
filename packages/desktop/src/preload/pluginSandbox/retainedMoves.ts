@@ -15,7 +15,7 @@ export function enableSandboxRetainedMoves(): boolean {
         const connect = prototype.connectedCallback,
           disconnect = prototype.disconnectedCallback;
         prototype.connectedMoveCallback = function () {
-          if (this.hasAttribute("data-zcode-retained-sandbox")) return;
+          if (this.hasAttribute("data-nex-retained-sandbox")) return;
           disconnect.call(this);
           connect.call(this);
         };

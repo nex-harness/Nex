@@ -6,19 +6,19 @@ import { archiveTaskKey } from "@/project-sidebar/archive-view.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { resolveRemoteWorkspaceSessionIdForTarget } from "@/hooks/useResolvedRemoteWorkspaceSessionId.js";
 import { useRemoteWorkspaceSessionStore } from "@/store/remoteWorkspaceSessionStore.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useNexSessionStore } from "@/store/nexSessionStore.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 
 export type ArchiveOperation = "unarchive" | "delete";
 export function useArchiveManagement() {
   const directory = useProjectDirectory();
-  const { zcodeTaskService: service, windowControllerService: controller } =
+  const { nexTaskService: service, windowControllerService: controller } =
     useBaseWorkspaceServices();
-  const removeTaskState = useZCodeSessionStore((s) => s.removeTaskState);
+  const removeTaskState = useNexSessionStore((s) => s.removeTaskState);
   const confirm = useConfirmDialog();
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{
     succeeded: number;

@@ -1,4 +1,4 @@
-import { mintBrokerSocketPath } from "@zcode/zcode-cua/broker";
+import { mintBrokerSocketPath } from "@nex/nex-cua/broker";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { resolveWindowsCuaRuntime } from "#src/cua-permission-broker/windowsCuaDevRuntime.js";
 

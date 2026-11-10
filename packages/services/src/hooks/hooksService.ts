@@ -7,7 +7,7 @@ import type {
   HookEvent,
   SettingsDirectoryLocation,
   SettingsDirectorySource,
-} from "@zcode/shared";
+} from "@nex/shared";
 import {
   buildWorkspaceHookBundleSnapshot,
   createWorkspaceHookSourceInput,
@@ -17,22 +17,22 @@ import {
   type WorkspaceHookBundleSnapshotData,
   type WorkspaceHookSourceInput,
   type WorkspaceHooksConfig,
-} from "@zcode/shared/workspace-hook-discovery";
-import { parseWorkspaceHookTrustStoreContent } from "@zcode/shared/workspace-hook-trust-store-file";
+} from "@nex/shared/workspace-hook-discovery";
+import { parseWorkspaceHookTrustStoreContent } from "@nex/shared/workspace-hook-trust-store-file";
 import { createServiceLogger, type ServiceLogger } from "#src/logger/serviceLogger.js";
 import type { IHooksService } from "./hooks.js";
 import { updateJsonObjectFile } from "#src/fs/atomicFileUtils.js";
 import {
   fromLegacyHooksConfig,
   fromProjectSnapshot,
-  fromUserZCodeSource,
+  fromUserNexSource,
   resolveNextRootEnabled,
-  toZCodeHooksEvents,
+  toNexHooksEvents,
   type LegacyHooksConfig,
 } from "./workspaceHookSettingsModel.js";
 
 const SETTINGS_FILE = "settings.json";
-const ZCODE_CONFIG_FILE = "config.json";
+const NEX_CONFIG_FILE = "config.json";
 const HOOK_EVENTS: readonly HookEvent[] = [
   "SessionStart",
   "UserPromptSubmit",
@@ -43,7 +43,7 @@ const HOOK_EVENTS: readonly HookEvent[] = [
   "Stop",
 ];
 
-interface ZCodeConfigFile {
+interface NexConfigFile {
   hooks?: WorkspaceHooksConfig;
   [key: string]: unknown;
 }
@@ -55,8 +55,8 @@ function resolveUserHomeDir(): string {
 
 function getRootDir(source: SettingsDirectorySource, workspacePath?: string): string {
   const baseDir = workspacePath ?? resolveUserHomeDir();
-  if (source === "zcode") {
-    return workspacePath ? join(baseDir, ".zcode") : join(baseDir, ".zcode", "cli");
+  if (source === "nex") {
+    return workspacePath ? join(baseDir, ".nex") : join(baseDir, ".nex", "cli");
   }
   return join(baseDir, source === "agents" ? ".agents" : ".claude");
 }
@@ -64,7 +64,7 @@ function getRootDir(source: SettingsDirectorySource, workspacePath?: string): st
 function getConfigPath(source: SettingsDirectorySource, workspacePath?: string): string {
   return join(
     getRootDir(source, workspacePath),
-    source === "zcode" ? ZCODE_CONFIG_FILE : SETTINGS_FILE,
+    source === "nex" ? NEX_CONFIG_FILE : SETTINGS_FILE,
   );
 }
 
@@ -102,8 +102,8 @@ async function readJsonFile<T>(filePath: string): Promise<T | null> {
   }
 }
 
-async function readUserZCodeSource(): Promise<WorkspaceHookSourceInput | undefined> {
-  const path = getConfigPath("zcode");
+async function readUserNexSource(): Promise<WorkspaceHookSourceInput | undefined> {
+  const path = getConfigPath("nex");
   const config = await readJsonFile<Record<string, unknown>>(path);
   const parsed = workspaceHooksConfigSchema.safeParse(config?.hooks);
   if (!parsed.success) return undefined;
@@ -155,7 +155,7 @@ async function readPersistentWorkspaceHookTrustDigests(
   workspaceIdentity: string,
   logger: ServiceLogger,
 ): Promise<{ digests: Set<string>; corrupt: boolean }> {
-  const userConfig = (await readJsonFile<Record<string, unknown>>(getConfigPath("zcode"))) ?? {};
+  const userConfig = (await readJsonFile<Record<string, unknown>>(getConfigPath("nex"))) ?? {};
   const storage = isRecord(userConfig.storage) ? userConfig.storage : {};
   const configured = typeof storage.dir === "string" ? storage.dir.trim() : "";
   const home = resolveUserHomeDir();
@@ -165,7 +165,7 @@ async function readPersistentWorkspaceHookTrustDigests(
       : isAbsolute(configured)
         ? resolve(configured)
         : resolve(home, configured)
-    : join(home, ".zcode");
+    : join(home, ".nex");
   const trustFilePath = join(storageRoot, "security", "workspace-hook-trust-v1.json");
 
   // 异步读取 + ENOENT 区分：不用 existsSync 预检——同步调用会阻塞服务
@@ -225,14 +225,14 @@ async function loadHooksImpl(
 }> {
   const workspacePath = resolve(params.workspacePath);
   if (params.scope === "user") {
-    const userSource = await readUserZCodeSource();
+    const userSource = await readUserNexSource();
     const runtimeRoot = resolveWorkspaceHookRuntimeRoot([userSource?.hooks]);
     const hooks = [
-      ...fromUserZCodeSource({
+      ...fromUserNexSource({
         source: userSource,
         runtimeRoot,
         workspacePath,
-        location: buildLocation("zcode"),
+        location: buildLocation("nex"),
       }),
       ...(await loadLegacyHooksFromLocation("agents")),
       ...(await loadLegacyHooksFromLocation("claude")),
@@ -242,7 +242,7 @@ async function loadHooksImpl(
   const workspaceIdentity = params.workspaceIdentity?.trim() || workspacePath;
   const [{ sources: projectSources }, userSource] = await Promise.all([
     readWorkspaceHookProjectSources({ workingDirectory: workspacePath }),
-    readUserZCodeSource(),
+    readUserNexSource(),
   ]);
   const runtimeRoot = resolveWorkspaceHookRuntimeRoot([
     userSource?.hooks,
@@ -266,11 +266,11 @@ async function loadHooksImpl(
     }),
     ...(await loadLegacyHooksFromLocation("agents", workspacePath)),
     ...(await loadLegacyHooksFromLocation("claude", workspacePath)),
-    ...fromUserZCodeSource({
+    ...fromUserNexSource({
       source: userSource,
       runtimeRoot,
       workspacePath,
-      location: buildLocation("zcode"),
+      location: buildLocation("nex"),
     }),
     ...(await loadLegacyHooksFromLocation("agents")),
     ...(await loadLegacyHooksFromLocation("claude")),
@@ -288,19 +288,19 @@ async function loadHooksImpl(
  * config.json 里的 MCP、插件等其他配置会被冲掉。
  * 修法：改用 updateJsonObjectFile——文件损坏时报错不写，写前重读，只改 hooks 字段，原子替换。
  */
-async function writeZCodeHooksConfig(
+async function writeNexHooksConfig(
   workspacePath: string | undefined,
   hooks: Hook[],
 ): Promise<void> {
-  await updateJsonObjectFile(getConfigPath("zcode", workspacePath), (current) => {
-    const existingConfig = current as ZCodeConfigFile;
+  await updateJsonObjectFile(getConfigPath("nex", workspacePath), (current) => {
+    const existingConfig = current as NexConfigFile;
     const enabled = resolveNextRootEnabled(existingConfig.hooks?.enabled, hooks);
     return {
       ...existingConfig,
       hooks: {
         ...existingConfig.hooks,
         ...(enabled !== undefined ? { enabled } : {}),
-        events: toZCodeHooksEvents(hooks),
+        events: toNexHooksEvents(hooks),
       },
     };
   });
@@ -312,23 +312,23 @@ async function saveHooksImpl(params: {
   scope?: "all" | "user";
   hooks: Hook[];
 }): Promise<void> {
-  const currentProjectConfigPath = resolve(params.workspacePath, ".zcode", "config.json");
+  const currentProjectConfigPath = resolve(params.workspacePath, ".nex", "config.json");
   const userHooks = params.hooks.filter(
     (hook) =>
       hook.editable !== false &&
-      (!hook.location || (hook.location.source === "zcode" && hook.location.scope === "user")),
+      (!hook.location || (hook.location.source === "nex" && hook.location.scope === "user")),
   );
   const projectHooks = params.hooks.filter(
     (hook) =>
       hook.editable !== false &&
-      hook.location?.source === "zcode" &&
+      hook.location?.source === "nex" &&
       hook.location.scope === "project" &&
       (!hook.configuredState ||
         resolve(hook.configuredState.sourcePath) === currentProjectConfigPath),
   );
-  await writeZCodeHooksConfig(undefined, userHooks);
+  await writeNexHooksConfig(undefined, userHooks);
   if (params.scope !== "user") {
-    await writeZCodeHooksConfig(params.workspacePath, projectHooks);
+    await writeNexHooksConfig(params.workspacePath, projectHooks);
   }
 }
 

@@ -1,14 +1,14 @@
 import { basename, join } from "node:path";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 
-import type { ApiClient, FeedbackDeviceInfo } from "@zcode/shared";
+import type { ApiClient, FeedbackDeviceInfo } from "@nex/shared";
 import {
-  buildRuntimeZCodeApiUrl,
-  ZCODE_BUILD_TIME,
-  ZCODE_COMMIT,
-  ZCODE_VERSION,
-} from "@zcode/shared";
-import { Emitter } from "@zcode/rpc";
+  buildRuntimeNexApiUrl,
+  NEX_BUILD_TIME,
+  NEX_COMMIT,
+  NEX_VERSION,
+} from "@nex/shared";
+import { Emitter } from "@nex/rpc";
 import { arch, platform, release, type as osType } from "node:os";
 
 import type { ICredentialService } from "../credential/credential.js";
@@ -19,7 +19,7 @@ import { cleanupLogArchive, prepareCompactLogArchive } from "./compactLogArchive
 import { getFeedbackAttachmentDir } from "../paths.js";
 import { FeedbackLocalTicketStore } from "#src/feedback/feedbackLocalTicketStore.js";
 
-const ZCODE_JWT_TOKEN_KEY = "zcodejwttoken";
+const NEX_JWT_TOKEN_KEY = "nexjwttoken";
 
 export interface CreateFeedbackServiceOptions {
   credentialService: ICredentialService;
@@ -39,16 +39,16 @@ export interface CreateFeedbackServiceOptions {
 function resolveApiBaseUrl(explicit?: string): string {
   return (
     explicit?.trim() ||
-    process.env.ZCODE_FEEDBACK_API_BASE?.trim() ||
-    buildRuntimeZCodeApiUrl(process.env, "/api/v1")
+    process.env.NEX_FEEDBACK_API_BASE?.trim() ||
+    buildRuntimeNexApiUrl(process.env, "/api/v1")
   );
 }
 
 function buildDeviceSnapshot(): FeedbackDeviceInfo {
   return {
-    appVersion: ZCODE_VERSION,
-    buildCommitId: ZCODE_COMMIT,
-    buildTime: ZCODE_BUILD_TIME,
+    appVersion: NEX_VERSION,
+    buildCommitId: NEX_COMMIT,
+    buildTime: NEX_BUILD_TIME,
     nodeVersion: process.version,
     osType: osType(),
     osPlatform: platform(),
@@ -74,7 +74,7 @@ export function createFeedbackService(options: CreateFeedbackServiceOptions): IF
   }
 
   async function getZcodeJwtToken(): Promise<string | undefined> {
-    return (await options.credentialService.load(ZCODE_JWT_TOKEN_KEY))?.trim() || undefined;
+    return (await options.credentialService.load(NEX_JWT_TOKEN_KEY))?.trim() || undefined;
   }
 
   async function hasZcodeJwtToken(): Promise<boolean> {

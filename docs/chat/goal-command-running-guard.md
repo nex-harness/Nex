@@ -20,4 +20,4 @@
   -> desktop and mobile converge
 ```
 
-当前实现入口：`apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4/commands/handlers/goal-compact.ts`。
+当前实现入口：`apps/nex-cli/packages/bootstrap/src/nex-protocol-v4/commands/handlers/goal-compact.ts`。

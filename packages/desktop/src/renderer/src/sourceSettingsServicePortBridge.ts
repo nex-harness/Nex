@@ -1,6 +1,6 @@
-import { createMessagePortServiceConnection } from "@zcode/client";
-import { InternalChannels } from "@zcode/shared";
-import { registerSourceSettingsServices } from "@zcode/ui";
+import { createMessagePortServiceConnection } from "@nex/client";
+import { InternalChannels } from "@nex/shared";
+import { registerSourceSettingsServices } from "@nex/ui";
 
 export function handleSourceSettingsServicePortMessage(event: MessageEvent): boolean {
   if (

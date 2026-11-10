@@ -2,12 +2,12 @@ import { WebSocket, type RawData } from "ws";
 import {
   WebRemoteControlRelayPayloadSerializer,
   type WebRemoteControlPayloadSendResult,
-} from "@zcode/client";
+} from "@nex/client";
 import {
   WEB_REMOTE_CONTROL_RPC_TRANSPORT_LIMITS,
   parseWebRemoteControlAppPayload,
   type WebRemoteControlAppPayload,
-} from "@zcode/shared";
+} from "@nex/shared";
 import {
   WEB_REMOTE_CONTROL_V2_HEARTBEAT_ACK_TIMEOUT_MS,
   WebRemoteControlV2ConnectionError,
@@ -17,7 +17,7 @@ import {
   parseWebRemoteControlRelayV2IncomingMessage,
   type WebRemoteControlRelayV2IncomingMessage,
   type WebRemoteControlRelayV2OutgoingMessage,
-} from "@zcode/shared/web-remote-relay";
+} from "@nex/shared/web-remote-relay";
 import {
   noteWebRemoteRelayConnectAttempt,
   noteWebRemoteRelayReconnect,
@@ -219,8 +219,8 @@ export class WebRemoteControlDeviceTransport {
       if (
         value &&
         typeof value === "object" &&
-        "zcode_type" in value &&
-        (value.zcode_type === "rpc-frame" || value.zcode_type === "rpc-frame-ack") &&
+        "nex_type" in value &&
+        (value.nex_type === "rpc-frame" || value.nex_type === "rpc-frame-ack") &&
         this.options.onRawTransportPayload?.(value)
       )
         return;

@@ -1,5 +1,5 @@
-import type { EditorInfo, OpenInEditorRemoteTarget } from "@zcode/shared";
-import type { IDisposable } from "@zcode/rpc";
+import type { EditorInfo, OpenInEditorRemoteTarget } from "@nex/shared";
+import type { IDisposable } from "@nex/rpc";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type { WorkspaceFileGitStatus, WorkspaceFileTreeRow } from "@/workspace-file-tree/model.js";
 

@@ -12,7 +12,7 @@ import {
 describe("手机置顶/归档/新建项目 payload", () => {
   it.each([
     {
-      zcode_type: "task-pin-request",
+      nex_type: "task-pin-request",
       requestId: "r1",
       taskId: "t1",
       workspacePath: "/w",
@@ -20,61 +20,61 @@ describe("手机置顶/归档/新建项目 payload", () => {
       pinned: true,
     },
     {
-      zcode_type: "task-pin-response",
+      nex_type: "task-pin-response",
       requestId: "r1",
       taskId: "t1",
       success: true,
       pinned: false,
     },
-    { zcode_type: "task-pin-response", requestId: "r1", taskId: "t1", success: false, error: "x" },
-    { zcode_type: "task-archive-request", requestId: "r2", taskId: "t1", workspacePath: "/w" },
+    { nex_type: "task-pin-response", requestId: "r1", taskId: "t1", success: false, error: "x" },
+    { nex_type: "task-archive-request", requestId: "r2", taskId: "t1", workspacePath: "/w" },
     {
-      zcode_type: "task-archive-request",
+      nex_type: "task-archive-request",
       requestId: "r2",
       taskId: "t1",
       workspacePath: "/w",
       archived: false,
     },
     {
-      zcode_type: "task-archive-response",
+      nex_type: "task-archive-response",
       requestId: "r2",
       taskId: "t1",
       success: true,
       archived: false,
     },
     {
-      zcode_type: "task-archive-response",
+      nex_type: "task-archive-response",
       requestId: "r2",
       taskId: "t1",
       success: true,
       archived: true,
     },
-    { zcode_type: "workspace-create-request", requestId: "r3", name: "demo" },
+    { nex_type: "workspace-create-request", requestId: "r3", name: "demo" },
     {
-      zcode_type: "workspace-create-response",
+      nex_type: "workspace-create-response",
       requestId: "r3",
       success: true,
-      workspacePath: "/Users/u/ZCodeProject/demo",
-      workspaceKey: "/Users/u/ZCodeProject/demo",
+      workspacePath: "/Users/u/NexProject/demo",
+      workspaceKey: "/Users/u/NexProject/demo",
       projectId: "p1",
       hostId: "local",
     },
-    { zcode_type: "workspace-create-response", requestId: "r3", success: false, error: "bad" },
-  ])("解析 $zcode_type", (payload) => {
+    { nex_type: "workspace-create-response", requestId: "r3", success: false, error: "bad" },
+  ])("解析 $nex_type", (payload) => {
     expect(parseWebRemoteControlAppPayload(payload)).toEqual(payload);
   });
 
   it("拒绝缺字段或成功应答带错的 payload", () => {
     expect(
       parseWebRemoteControlAppPayload({
-        zcode_type: "task-pin-request",
+        nex_type: "task-pin-request",
         requestId: "r",
         taskId: "t",
       }),
     ).toBeNull();
     expect(
       parseWebRemoteControlAppPayload({
-        zcode_type: "task-archive-response",
+        nex_type: "task-archive-response",
         requestId: "r",
         taskId: "t",
         success: true,
@@ -114,17 +114,17 @@ describe("normalizeWebRemoteControlWorkspaceName", () => {
 describe("resolveUnrecognizedWebRemoteControlRequest", () => {
   it("只对带 requestId 的 -request 类型回错", () => {
     expect(
-      resolveUnrecognizedWebRemoteControlRequest({ zcode_type: "future-request", requestId: "r" }),
-    ).toEqual({ requestId: "r", zcodeType: "future-request" });
+      resolveUnrecognizedWebRemoteControlRequest({ nex_type: "future-request", requestId: "r" }),
+    ).toEqual({ requestId: "r", nexType: "future-request" });
   });
 
   it.each([
     null,
     "text",
-    { zcode_type: "future-response", requestId: "r" },
-    { zcode_type: "future-request" },
-    { zcode_type: "future-request", requestId: "  " },
-    { zcode_type: 1, requestId: "r" },
+    { nex_type: "future-response", requestId: "r" },
+    { nex_type: "future-request" },
+    { nex_type: "future-request", requestId: "  " },
+    { nex_type: 1, requestId: "r" },
   ])("忽略 %j", (value) => {
     expect(resolveUnrecognizedWebRemoteControlRequest(value)).toBeNull();
   });

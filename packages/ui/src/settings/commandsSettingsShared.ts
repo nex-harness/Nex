@@ -1,25 +1,25 @@
 import {
-  ZCODE_AGENT_PROVIDER,
-  ZCODE_COMMAND_AGENT_SOURCES,
-  type ZCodeProvider,
+  NEX_AGENT_PROVIDER,
+  NEX_COMMAND_AGENT_SOURCES,
+  type NexProvider,
   type CommandAgentSource,
-} from "@zcode/shared";
+} from "@nex/shared";
 
 export const COMMAND_AGENT_SOURCES = [
-  ...ZCODE_COMMAND_AGENT_SOURCES,
+  ...NEX_COMMAND_AGENT_SOURCES,
 ] as const satisfies readonly CommandAgentSource[];
 
 export const COMMAND_AGENT_SOURCE_META: Record<
   CommandAgentSource,
   {
     labelId: string;
-    provider: ZCodeProvider;
+    provider: NexProvider;
     pathHint: string;
   }
 > = {
-  zcodeAgent: {
-    labelId: "settings.commands.source.zcodeAgent",
-    pathHint: "~/.zcode/commands",
-    provider: ZCODE_AGENT_PROVIDER,
+  nexAgent: {
+    labelId: "settings.commands.source.nexAgent",
+    pathHint: "~/.nex/commands",
+    provider: NEX_AGENT_PROVIDER,
   },
 };

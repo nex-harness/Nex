@@ -1,17 +1,17 @@
 import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { useCallback, useRef, useState } from "react";
-import type { IServiceAccessor } from "@zcode/services";
-import type { ZCodeProvider } from "@zcode/shared";
+import type { IServiceAccessor } from "@nex/services";
+import type { NexProvider } from "@nex/shared";
 import { toast } from "@/components/ui/toast.js";
 import {
   buildWorkspaceSessionReloadDraftError,
   shouldDebounceWorkspaceSessionReload,
 } from "@/lib/workspaceSessionReloadPlan.js";
 import { resolveWorkspaceModelConfigSyncScope } from "@/lib/modelConfigSync.js";
-import { prepareWorkspaceWithZCodeSessionService } from "@/hooks/useWorkspacePrepare.js";
+import { prepareWorkspaceWithNexSessionService } from "@/hooks/useWorkspacePrepare.js";
 import { logger } from "@/logger.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useNexSessionStore } from "@/store/nexSessionStore.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 
@@ -42,7 +42,7 @@ export function useWorkspaceSessionReload({
   const lastReloadSessionTriggeredAtRef = useRef<number | null>(null);
 
   const handleReloadSession = useCallback(
-    async (options?: { resumeTaskId?: string | null; provider?: ZCodeProvider | null }) => {
+    async (options?: { resumeTaskId?: string | null; provider?: NexProvider | null }) => {
       if (reloadSessionDisabled || reloadSessionPending) {
         return;
       }
@@ -57,13 +57,13 @@ export function useWorkspaceSessionReload({
       lastReloadSessionTriggeredAtRef.current = now;
       setReloadSessionPending(true);
 
-      const zcodeSessionStore = useZCodeSessionStore.getState();
-      const latestWorkspaceState = zcodeSessionStore.getWorkspaceState(
+      const nexSessionStore = useNexSessionStore.getState();
+      const latestWorkspaceState = nexSessionStore.getWorkspaceState(
         workspaceAbsPath,
         workspaceIdentity,
       );
       const actionScope = resolveWorkspaceModelConfigSyncScope(latestWorkspaceState);
-      const provider: ZCodeProvider = options?.provider ?? actionScope.provider;
+      const provider: NexProvider = options?.provider ?? actionScope.provider;
       const resumeTaskId =
         options?.resumeTaskId?.trim() || latestWorkspaceState.activeTaskId || undefined;
       const shouldPrepareWorkspace = !resumeTaskId;
@@ -71,22 +71,22 @@ export function useWorkspaceSessionReload({
       // Reload session 之前只调用了服务层重建流程，没有同步 workspaceInit 状态到 UI store。
       // 草稿态下后续准备流程会继续读到旧状态，用户会误判本次重建没有生效。
       // 这里显式写入 initializing/ready/failed，保证重建状态和会话流程保持一致。
-      zcodeSessionStore.setWorkspaceInitState(
+      nexSessionStore.setWorkspaceInitState(
         workspaceAbsPath,
         "initializing",
         null,
         workspaceIdentity,
       );
       if (shouldPrepareWorkspace) {
-        zcodeSessionStore.setConfigOptionsStatus(workspaceAbsPath, "loading", workspaceIdentity);
+        nexSessionStore.setConfigOptionsStatus(workspaceAbsPath, "loading", workspaceIdentity);
         // 草稿态点击 reload 后若不清空旧错误，输入区会继续显示上一轮失败提示，
         // 用户会误判本次重建仍失败。这里在新一轮重建开始时先清空草稿错误。
-        zcodeSessionStore.setDraftError(workspaceAbsPath, null, workspaceIdentity);
-        zcodeSessionStore.setTaskState(workspaceAbsPath, "idle", null, workspaceIdentity);
+        nexSessionStore.setDraftError(workspaceAbsPath, null, workspaceIdentity);
+        nexSessionStore.setTaskState(workspaceAbsPath, "idle", null, workspaceIdentity);
       }
 
       try {
-        await services.zcodeTaskService.restartWorkspaceProcess({
+        await services.nexTaskService.restartWorkspaceProcess({
           workspacePath: workspaceAbsPath,
           ...(workspaceIdentity ? { workspaceIdentity } : {}),
           provider,
@@ -94,45 +94,45 @@ export function useWorkspaceSessionReload({
         });
 
         if (shouldPrepareWorkspace) {
-          const prepareResult = await prepareWorkspaceWithZCodeSessionService({
+          const prepareResult = await prepareWorkspaceWithNexSessionService({
             workspacePath: workspaceAbsPath,
             workspaceIdentity,
             provider,
-            zcodeSessionService: services.zcodeSessionService,
+            nexSessionService: services.nexSessionService,
           });
 
-          const latestAfterPrepare = zcodeSessionStore.getWorkspaceState(
+          const latestAfterPrepare = nexSessionStore.getWorkspaceState(
             workspaceAbsPath,
             workspaceIdentity,
           );
           if (latestAfterPrepare.selectedProvider === provider) {
-            const latestAfterResolve = zcodeSessionStore.getWorkspaceState(
+            const latestAfterResolve = nexSessionStore.getWorkspaceState(
               workspaceAbsPath,
               workspaceIdentity,
             );
             if (latestAfterResolve.selectedProvider === provider) {
-              zcodeSessionStore.setConfigOptions(
+              nexSessionStore.setConfigOptions(
                 workspaceAbsPath,
                 prepareResult.configOptions ?? [],
                 workspaceIdentity,
               );
-              zcodeSessionStore.setConfigOptionsStatus(
+              nexSessionStore.setConfigOptionsStatus(
                 workspaceAbsPath,
                 "ready",
                 workspaceIdentity,
               );
-              zcodeSessionStore.setSlashCommands(
+              nexSessionStore.setSlashCommands(
                 workspaceAbsPath,
                 prepareResult.slashCommands ?? [],
                 workspaceIdentity,
               );
-              zcodeSessionStore.setDraftError(workspaceAbsPath, null, workspaceIdentity);
+              nexSessionStore.setDraftError(workspaceAbsPath, null, workspaceIdentity);
             }
           }
         }
 
-        zcodeSessionStore.setWorkspaceInitAttempts(workspaceAbsPath, 0, workspaceIdentity);
-        zcodeSessionStore.setWorkspaceInitState(workspaceAbsPath, "ready", null, workspaceIdentity);
+        nexSessionStore.setWorkspaceInitAttempts(workspaceAbsPath, 0, workspaceIdentity);
+        nexSessionStore.setWorkspaceInitState(workspaceAbsPath, "ready", null, workspaceIdentity);
 
         logger.info(
           `[App] workspace session 重建完成 workspace=${workspaceAbsPath} provider=${provider} resumeTaskId=${resumeTaskId ?? "<none>"}`,
@@ -151,17 +151,17 @@ export function useWorkspaceSessionReload({
             message,
           },
         );
-        zcodeSessionStore.setWorkspaceInitState(
+        nexSessionStore.setWorkspaceInitState(
           workspaceAbsPath,
           "failed",
           message,
           workspaceIdentity,
         );
         if (shouldPrepareWorkspace) {
-          zcodeSessionStore.setConfigOptionsStatus(workspaceAbsPath, "error", workspaceIdentity);
+          nexSessionStore.setConfigOptionsStatus(workspaceAbsPath, "error", workspaceIdentity);
           // 草稿态下 reload 前会先清空旧错误；如果失败后不回填 draftError，
           // 聊天区只剩 toast，用户看不到可重试的详细报错。这里统一回填标准化错误到输入区。
-          zcodeSessionStore.setDraftError(workspaceAbsPath, reloadDraftError, workspaceIdentity);
+          nexSessionStore.setDraftError(workspaceAbsPath, reloadDraftError, workspaceIdentity);
         }
         toast(intl.formatMessage({ id: "appHeader.reloadSessionFailed" }));
       } finally {
@@ -172,8 +172,8 @@ export function useWorkspaceSessionReload({
       intl,
       reloadSessionDisabled,
       reloadSessionPending,
-      services.zcodeTaskService,
-      services.zcodeSessionService,
+      services.nexTaskService,
+      services.nexSessionService,
       workspaceAbsPath,
       workspaceIdentity,
     ],
@@ -197,7 +197,7 @@ export function useSessionRuntimeRestart(
     remoteSessionId ?? undefined,
     workspaceIdentity,
   );
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const key = `${workspaceIdentity || workspacePath}\0${sessionId ?? ""}`;
   const flight = useRef<{ key: string; promise: Promise<boolean> } | null>(null);
@@ -205,7 +205,7 @@ export function useSessionRuntimeRestart(
     if (!sessionId) return Promise.resolve(false);
     if (flight.current?.key === key) return flight.current.promise;
     setPendingKey(key);
-    const request = services.zcodeAgentService
+    const request = services.nexAgentService
       .restartSessionRuntime({
         workspacePath,
         sessionId,
@@ -235,6 +235,6 @@ export function useSessionRuntimeRestart(
       });
     flight.current = { key, promise: request };
     return request;
-  }, [key, services.zcodeAgentService, workspacePath, workspaceIdentity, sessionId, intl]);
+  }, [key, services.nexAgentService, workspacePath, workspaceIdentity, sessionId, intl]);
   return { restart, pending: pendingKey === key };
 }

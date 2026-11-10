@@ -1,5 +1,5 @@
-import { ServiceChannels } from "@zcode/shared";
-import type { McpAppsAppToolCallResult, McpAppsAppToolDescriptor } from "@zcode/shared/mcp-apps";
+import { ServiceChannels } from "@nex/shared";
+import type { McpAppsAppToolCallResult, McpAppsAppToolDescriptor } from "@nex/shared/mcp-apps";
 import { createServiceDescriptor } from "../descriptors.js";
 import type { PluginUiPluginScope } from "./contract.js";
 

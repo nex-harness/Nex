@@ -1,5 +1,5 @@
-import { useZCodeStoreWithDefault } from "@/store/StoreProvider.js";
+import { useNexStoreWithDefault } from "@/store/StoreProvider.js";
 
 export function useIsOfficeMode(): boolean {
-  return useZCodeStoreWithDefault((state) => state.interfaceMode === "office", false);
+  return useNexStoreWithDefault((state) => state.interfaceMode === "office", false);
 }

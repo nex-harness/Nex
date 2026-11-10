@@ -11,7 +11,7 @@ import type {
   SaveCliMcpToUserDirectoryRequest,
   SettingsDirectoryLocation,
   SettingsDirectorySource,
-} from "@zcode/shared";
+} from "@nex/shared";
 import type { IMcpSyncService } from "./mcpSync.js";
 import { createMcpDataSyncMethods } from "../data-sync/node.js";
 import { createServiceLogger } from "../logger/serviceLogger.js";
@@ -37,11 +37,11 @@ export interface UserMcpRecord {
   path: string;
 }
 
-const ZCODE_MCP_DESCRIPTOR: DirectoryMcpDescriptor = {
-  source: "zcode",
-  directorySource: "zcode",
-  userConfigDirSegments: [".zcode", "cli"],
-  workspaceConfigDirSegments: [".zcode"],
+const NEX_MCP_DESCRIPTOR: DirectoryMcpDescriptor = {
+  source: "nex",
+  directorySource: "nex",
+  userConfigDirSegments: [".nex", "cli"],
+  workspaceConfigDirSegments: [".nex"],
   fileName: "config.json",
   configKeyName: "mcp.servers",
 };
@@ -62,7 +62,7 @@ const ENABLED_KEY = "enabled";
 const LEGACY_ENABLE_KEY = "enable";
 const SECRET_CONFIG_FILE_MODE = 0o600;
 const DIRECTORY_MCP_DESCRIPTORS: readonly DirectoryMcpDescriptor[] = [
-  ZCODE_MCP_DESCRIPTOR,
+  NEX_MCP_DESCRIPTOR,
   AGENTS_MCP_DESCRIPTOR,
 ];
 
@@ -125,7 +125,7 @@ function buildUserConfigPath(descriptor: DirectoryMcpDescriptor): string {
 }
 
 export function getUserZcodeMcpConfigPath(): string {
-  return buildUserConfigPath(ZCODE_MCP_DESCRIPTOR);
+  return buildUserConfigPath(NEX_MCP_DESCRIPTOR);
 }
 
 function buildDirectoryMcpLocation(
@@ -153,9 +153,9 @@ function findDescriptorByLocation(location: SettingsDirectoryLocation): Director
 }
 
 export async function collectEffectiveUserMcpRecords(): Promise<UserMcpRecord[]> {
-  const zcodeRecords = await readUserMcpRecordsFromFile(ZCODE_MCP_DESCRIPTOR);
-  if (zcodeRecords.length > 0) {
-    return sortMcpRecords(zcodeRecords);
+  const nexRecords = await readUserMcpRecordsFromFile(NEX_MCP_DESCRIPTOR);
+  if (nexRecords.length > 0) {
+    return sortMcpRecords(nexRecords);
   }
   return sortMcpRecords(await readUserMcpRecordsFromFile(AGENTS_MCP_DESCRIPTOR));
 }
@@ -181,7 +181,7 @@ async function saveMcpToUserDirectory(payload: SaveCliMcpToUserDirectoryRequest)
     const scope: Exclude<McpScope, "common"> = payload.projectPath ? "workspace" : "user";
     const location =
       payload.location ??
-      buildDirectoryMcpLocation(ZCODE_MCP_DESCRIPTOR, scope, payload.projectPath);
+      buildDirectoryMcpLocation(NEX_MCP_DESCRIPTOR, scope, payload.projectPath);
     await writeServerEnabledToFile(
       findDescriptorByLocation(location),
       location,
@@ -194,7 +194,7 @@ async function saveMcpToUserDirectory(payload: SaveCliMcpToUserDirectoryRequest)
 
   const scope: Exclude<McpScope, "common"> = payload.projectPath ? "workspace" : "user";
   const existingServers = await readDirectoryServersFromFile(
-    ZCODE_MCP_DESCRIPTOR,
+    NEX_MCP_DESCRIPTOR,
     scope,
     payload.projectPath,
   );
@@ -211,7 +211,7 @@ async function saveMcpToUserDirectory(payload: SaveCliMcpToUserDirectoryRequest)
     delete nextServers[payload.name];
   }
 
-  await writeZCodeServersToFile(scope, nextServers, payload.projectPath);
+  await writeNexServersToFile(scope, nextServers, payload.projectPath);
 }
 
 function sortMcpRecords(records: UserMcpRecord[]): UserMcpRecord[] {
@@ -222,13 +222,13 @@ async function readDirectoryServersFromPreferredSources(
   scope: Exclude<McpScope, "common">,
   workspacePath?: string,
 ): Promise<NativeMcpServerRecord[]> {
-  const zcodeServers = await readDirectoryServersFromFile(
-    ZCODE_MCP_DESCRIPTOR,
+  const nexServers = await readDirectoryServersFromFile(
+    NEX_MCP_DESCRIPTOR,
     scope,
     workspacePath,
   );
-  if (zcodeServers.length > 0) {
-    return zcodeServers;
+  if (nexServers.length > 0) {
+    return nexServers;
   }
   return readDirectoryServersFromFile(AGENTS_MCP_DESCRIPTOR, scope, workspacePath);
 }
@@ -250,7 +250,7 @@ async function readDirectoryServersFromFile(
   );
   const location = buildDirectoryMcpLocation(descriptor, scope, workspacePath);
   return Object.entries(serverMap).map(([name, config]) => ({
-    source: "zcodeagentmcp",
+    source: "nexagentmcp",
     scope,
     name,
     config: config as McpServerConfig,
@@ -264,14 +264,14 @@ async function readDirectoryServersFromFile(
   }));
 }
 
-async function writeZCodeServersToFile(
+async function writeNexServersToFile(
   scope: Exclude<McpScope, "common">,
   servers: Record<string, Record<string, unknown>>,
   workspacePath?: string,
 ): Promise<void> {
-  const filePath = buildDirectoryConfigPath(ZCODE_MCP_DESCRIPTOR, scope, workspacePath);
+  const filePath = buildDirectoryConfigPath(NEX_MCP_DESCRIPTOR, scope, workspacePath);
   const current = (await readJsonObject(filePath)) ?? {};
-  const next = writeServerMapToJson(current, ZCODE_MCP_DESCRIPTOR.configKeyName, servers);
+  const next = writeServerMapToJson(current, NEX_MCP_DESCRIPTOR.configKeyName, servers);
   await writeTextAtomic(filePath, `${JSON.stringify(next, null, 2)}\n`);
 }
 
@@ -490,7 +490,7 @@ function writeServerMapToJson(
 export function readZcodeServerMap(
   config: Record<string, unknown>,
 ): Record<string, Record<string, unknown>> {
-  return migrateLegacyEnableFlag(readServerMapFromJson(config, ZCODE_MCP_DESCRIPTOR.configKeyName))
+  return migrateLegacyEnableFlag(readServerMapFromJson(config, NEX_MCP_DESCRIPTOR.configKeyName))
     .servers;
 }
 
@@ -498,7 +498,7 @@ export function writeZcodeServerMap(
   config: Record<string, unknown>,
   servers: Record<string, Record<string, unknown>>,
 ): Record<string, unknown> {
-  return writeServerMapToJson(config, ZCODE_MCP_DESCRIPTOR.configKeyName, servers);
+  return writeServerMapToJson(config, NEX_MCP_DESCRIPTOR.configKeyName, servers);
 }
 
 export interface McpPathRewrite {

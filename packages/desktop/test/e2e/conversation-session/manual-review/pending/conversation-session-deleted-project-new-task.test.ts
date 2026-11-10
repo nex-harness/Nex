@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ServiceChannels } from "@zcode/shared";
-import type { ProjectTree } from "@zcode/services";
+import { ServiceChannels } from "@nex/shared";
+import type { ProjectTree } from "@nex/services";
 import { clearAppData } from "#e2e/helpers/desktop-app";
 import {
   prepareV4ConversationE2E,
@@ -20,10 +20,10 @@ import {
 async function navigation() {
   return browser.execute(() => {
     const target = window as Window & {
-      __zcodeTabStoreE2E?: {
+      __nexTabStoreE2E?: {
         getState(): { activeWorkspacePath: string | null; activeWorkspaceIdentity?: string | null };
       };
-      __zcodeSessionStoreE2E?: {
+      __nexSessionStoreE2E?: {
         getState(): {
           getWorkspaceState(
             path: string,
@@ -35,10 +35,10 @@ async function navigation() {
         };
       };
     };
-    const tab = target.__zcodeTabStoreE2E!.getState();
+    const tab = target.__nexTabStoreE2E!.getState();
     const path = tab.activeWorkspacePath!;
     const state = target
-      .__zcodeSessionStoreE2E!.getState()
+      .__nexSessionStoreE2E!.getState()
       .getWorkspaceState(path, tab.activeWorkspaceIdentity ?? undefined);
     return { path, taskId: state.activeTaskId, projectId: state.draftProjectId ?? null };
   });
@@ -92,7 +92,7 @@ describe("PDN01 deleted project new task", () => {
         });
       }
       await writeFile(
-        join(process.env.ZCODE_E2E_ARTIFACT_DIR!, `deleted-project-${entry}-before.json`),
+        join(process.env.NEX_E2E_ARTIFACT_DIR!, `deleted-project-${entry}-before.json`),
         JSON.stringify({ before, projectId, tasks: tree.tasks }, null, 2),
       );
       if (entry === "menu") {
@@ -126,7 +126,7 @@ describe("PDN01 deleted project new task", () => {
       await setV4ComposerText("E2E_DELETED_PROJECT_NEW_DRAFT");
       await waitForV4ComposerText("E2E_DELETED_PROJECT_NEW_DRAFT", "新草稿不能输入");
       await browser.saveScreenshot(
-        join(process.env.ZCODE_E2E_ARTIFACT_DIR!, `deleted-project-${entry}-after.png`),
+        join(process.env.NEX_E2E_ARTIFACT_DIR!, `deleted-project-${entry}-after.png`),
       );
     });
   }

@@ -1,4 +1,4 @@
-import type { IServiceAccessor } from "@zcode/services";
+import type { IServiceAccessor } from "@nex/services";
 
 export const REMOTE_WORKSPACE_RPC_CONTRACT_VERSION = 1 as const;
 
@@ -13,9 +13,9 @@ export const REMOTE_WORKSPACE_RPC_CHANNELS = [
   "onboardingRecordService",
   "credentialService",
   "broadcastService",
-  "zcodeTaskService",
-  "zcodeAgentService",
-  "zcodeSessionService",
+  "nexTaskService",
+  "nexAgentService",
+  "nexSessionService",
   "conversationShareService",
   "botsService",
   "fileWatcherService",

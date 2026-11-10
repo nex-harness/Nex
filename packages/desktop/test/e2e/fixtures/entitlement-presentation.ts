@@ -1,4 +1,4 @@
-import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
+import { BUILTIN_MODEL_PROVIDER_IDS } from "@nex/shared";
 import { buildProviderResponsiveStartBalance } from "./provider-family-responsive.js";
 
 /** 专属展示夹具；不改变其他套餐 E2E 的默认响应。 */
@@ -120,7 +120,7 @@ export function presentationResponse(path: string, state: EntitlementPresentatio
             },
     };
   }
-  if (path === "/api/v1/zcode-plan/billing/balance") {
+  if (path === "/api/v1/nex-plan/billing/balance") {
     const result = buildProviderResponsiveStartBalance("GLM-5.3");
     if (state.start === "none")
       return { ...result, data: { ...result.data, plans: [], balances: [] } };

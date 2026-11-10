@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { ZCodeModelTrajectoryMessage, ZCodeModelTrajectoryRecord } from "@zcode/services";
+import type { NexModelTrajectoryMessage, NexModelTrajectoryRecord } from "@nex/services";
 import {
   trajectoryToolCallInputs,
   trajectoryToolMetadata,
@@ -27,8 +27,8 @@ export interface TrajectorySearchIndex {
 
 export interface TrajectorySearchTimelineItem {
   key: string;
-  record: ZCodeModelTrajectoryRecord;
-  inputMessages: ZCodeModelTrajectoryMessage[];
+  record: NexModelTrajectoryRecord;
+  inputMessages: NexModelTrajectoryMessage[];
 }
 
 interface SearchTarget {
@@ -98,7 +98,7 @@ function messageTargets(
   callKey: string,
   callIndex: number,
   expansionKey: string,
-  message: ZCodeModelTrajectoryMessage,
+  message: NexModelTrajectoryMessage,
 ): SearchTarget[] {
   const metadata = trajectoryToolMetadata(message);
   const content = message.parts.some((part) => part.kind === "tool-result")

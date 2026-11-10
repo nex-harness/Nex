@@ -39,18 +39,18 @@ export async function resolveBuildTimeConfig(
 ) {
   const defaults = await readPrivateDefaults(defaultsPath);
   return {
-    armsRumEndpoint: pickValue(env, defaults, "ZCODE_ARMS_RUM_ENDPOINT"),
-    telemetryReportEndpoint: pickValue(env, defaults, "ZCODE_TELEMETRY_REPORT_ENDPOINT"),
+    armsRumEndpoint: pickValue(env, defaults, "NEX_ARMS_RUM_ENDPOINT"),
+    telemetryReportEndpoint: pickValue(env, defaults, "NEX_TELEMETRY_REPORT_ENDPOINT"),
     autoUpdateEnabled: ENABLED_VALUES.has(
-      pickValue(env, defaults, "ZCODE_AUTO_UPDATE").toLowerCase(),
+      pickValue(env, defaults, "NEX_AUTO_UPDATE").toLowerCase(),
     ),
   };
 }
 
 export function createBuildTimeConfigDefines(config) {
   return {
-    __ZCODE_ARMS_RUM_ENDPOINT__: JSON.stringify(config.armsRumEndpoint),
-    __ZCODE_TELEMETRY_REPORT_ENDPOINT__: JSON.stringify(config.telemetryReportEndpoint),
-    __ZCODE_AUTO_UPDATE_ENABLED__: JSON.stringify(config.autoUpdateEnabled),
+    __NEX_ARMS_RUM_ENDPOINT__: JSON.stringify(config.armsRumEndpoint),
+    __NEX_TELEMETRY_REPORT_ENDPOINT__: JSON.stringify(config.telemetryReportEndpoint),
+    __NEX_AUTO_UPDATE_ENABLED__: JSON.stringify(config.autoUpdateEnabled),
   };
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { IServiceAccessor } from "@zcode/services";
+import type { IServiceAccessor } from "@nex/services";
 import type {
   DataSyncImportItem,
   DataSyncImportResultItem,
@@ -7,7 +7,7 @@ import type {
   DataSyncWorkspaceMapping,
   DeviceSyncResult,
   SourceServerWorkspaceHistoryEntry,
-} from "@zcode/shared";
+} from "@nex/shared";
 import { logger } from "@/logger.js";
 import type {
   DataSyncAfterPushContext,

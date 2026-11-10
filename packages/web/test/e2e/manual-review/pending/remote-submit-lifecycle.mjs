@@ -10,10 +10,10 @@ import {
   RemoteServiceAccess,
   connectViaProtocol,
   createAcknowledgedWebRemoteControlRelayProtocol,
-} from "@zcode/client";
-import { ServiceChannels } from "@zcode/shared";
-import { V4_WIRE_PROTOCOL_VERSION } from "@zcode/shared/zcode-protocol-v4";
-import { TID_V4_COMPOSER_INPUT, TID_V4_COMPOSER_SEND } from "@zcode/shared/test-ids";
+} from "@nex/client";
+import { ServiceChannels } from "@nex/shared";
+import { V4_WIRE_PROTOCOL_VERSION } from "@nex/shared/nex-protocol-v4";
+import { TID_V4_COMPOSER_INPUT, TID_V4_COMPOSER_SEND } from "@nex/shared/test-ids";
 import { createDeviceSwitchDesktopBridge } from "./remote-device-switch.helpers.mjs";
 import { taskSnapshotFrame } from "./remote-task-open.fixture.mjs";
 import { setup, assertEventually } from "./remote-login-v2.helpers.mjs";
@@ -256,7 +256,7 @@ async function scenario({ width, theme, locale, remote }) {
       currentBridge = bridge;
       const frames = new Emitter();
       send(socket, {
-        zcode_type: "workspace-bridge-ready",
+        nex_type: "workspace-bridge-ready",
         requestId: request.requestId,
         bridgeSessionId: bridge.bridgeSessionId,
         bridgeGeneration: bridge.bridgeGeneration,
@@ -267,7 +267,7 @@ async function scenario({ width, theme, locale, remote }) {
         createDeviceSwitchDesktopBridge(socket, bridge, {
           locale,
           theme,
-          events: { [`${ServiceChannels.ZCodeAgent}:onDynamicConversationFrame`]: frames.event },
+          events: { [`${ServiceChannels.NexAgent}:onDynamicConversationFrame`]: frames.event },
           responses: {
             [`${ServiceChannels.OnboardingRecord}:shouldOnboard`]: false,
             [`${ServiceChannels.SettingsSync}:getFirstRunPromptState`]: { handled: true },
@@ -285,8 +285,8 @@ async function scenario({ width, theme, locale, remote }) {
               projectId: project.id,
               workspacePath,
             },
-            [`${ServiceChannels.ZCodeTask}:getTaskMeta`]: task,
-            [`${ServiceChannels.ZCodeAgent}:helloConversationV4`]: {
+            [`${ServiceChannels.NexTask}:getTaskMeta`]: task,
+            [`${ServiceChannels.NexAgent}:helloConversationV4`]: {
               kind: "hello",
               protocolVersion: V4_WIRE_PROTOCOL_VERSION,
               connectionId: bridge.bridgeSessionId,
@@ -301,8 +301,8 @@ async function scenario({ width, theme, locale, remote }) {
                 compression: "none",
               },
             },
-            [`${ServiceChannels.ZCodeAgent}:initializeConversationV4`]: null,
-            [`${ServiceChannels.ZCodeAgent}:subscribeConversationV4`]: () => {
+            [`${ServiceChannels.NexAgent}:initializeConversationV4`]: null,
+            [`${ServiceChannels.NexAgent}:subscribeConversationV4`]: () => {
               const subscriptionId = `sub-${bridge.bridgeSessionId}`;
               snapshots.set(bridge.bridgeSessionId, () => {
                 const frame = taskSnapshotFrame(taskId, subscriptionId);
@@ -318,11 +318,11 @@ async function scenario({ width, theme, locale, remote }) {
               });
               return { ack: { subscriptionId, mode: "snapshot", logEpoch: "e2e" } };
             },
-            [`${ServiceChannels.ZCodeAgent}:unsubscribeConversationV4`]: null,
-            [`${ServiceChannels.ZCodeAgent}:conversationWorkflowRunsV4`]: { runs: [] },
-            [`${ServiceChannels.ZCodeAgent}:conversationPlansV4`]: { plans: [] },
-            [`${ServiceChannels.ZCodeAgent}:queryConversationCommandsV4`]: { results: [] },
-            [`${ServiceChannels.ZCodeAgent}:sendConversationCommandV4`]: ({ envelope }) => {
+            [`${ServiceChannels.NexAgent}:unsubscribeConversationV4`]: null,
+            [`${ServiceChannels.NexAgent}:conversationWorkflowRunsV4`]: { runs: [] },
+            [`${ServiceChannels.NexAgent}:conversationPlansV4`]: { plans: [] },
+            [`${ServiceChannels.NexAgent}:queryConversationCommandsV4`]: { results: [] },
+            [`${ServiceChannels.NexAgent}:sendConversationCommandV4`]: ({ envelope }) => {
               traffic.commands.push(envelope);
               return {
                 commandId: envelope.commandId,
@@ -389,7 +389,7 @@ async function scenario({ width, theme, locale, remote }) {
         socket.send(JSON.stringify({ type: "pair_status_ack", pair_status: "matched" }));
       const p = m.payload;
       if (!p) return;
-      if (p.zcode_type === "rpc-frame" || p.zcode_type === "rpc-frame-ack") {
+      if (p.nex_type === "rpc-frame" || p.nex_type === "rpc-frame-ack") {
         bridges.get(p.bridgeSessionId)?.acceptPayload(p);
         return;
       }
@@ -399,16 +399,16 @@ async function scenario({ width, theme, locale, remote }) {
         workspaces: [workspace],
         initialViewState: { activeWorkspaceKey: workspaceKey, activeTaskId: taskId, updatedAt: 1 },
       };
-      if (p.zcode_type === "bootstrap-request" || p.zcode_type === "workspace-list-request")
+      if (p.nex_type === "bootstrap-request" || p.nex_type === "workspace-list-request")
         send(socket, {
-          zcode_type: p.zcode_type.replace("request", "response"),
+          nex_type: p.nex_type.replace("request", "response"),
           requestId: p.requestId,
           success: true,
           result,
         });
-      if (p.zcode_type === "mobile-view-state-update")
-        send(socket, { zcode_type: "mobile-view-state-updated", requestId: p.requestId });
-      if (p.zcode_type === "workspace-bridge-open") {
+      if (p.nex_type === "mobile-view-state-update")
+        send(socket, { nex_type: "mobile-view-state-updated", requestId: p.requestId });
+      if (p.nex_type === "workspace-bridge-open") {
         traffic.opens.push(p);
         ready(p);
       }
@@ -461,7 +461,7 @@ async function scenario({ width, theme, locale, remote }) {
     await assertEventually(() => Boolean(heldRead));
     const oldBridge = currentBridge;
     send(socketRef, {
-      zcode_type: "bridge-degraded",
+      nex_type: "bridge-degraded",
       bridgeSessionId: oldBridge.bridgeSessionId,
       reason: "rpc-transport-fault",
     });

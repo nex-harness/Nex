@@ -1,9 +1,9 @@
-import type { IPluginManagementService } from "@zcode/services";
+import type { IPluginManagementService } from "@nex/services";
 import {
   remoteHostIdFromWorkspaceIdentity,
   parseRemoteWorkspaceIdentity,
-  type ZCodePluginScope,
-} from "@zcode/shared";
+  type NexPluginScope,
+} from "@nex/shared";
 import { logger } from "@/logger.js";
 import type { PluginManagementState } from "@/store/pluginManagementStore.js";
 
@@ -29,7 +29,7 @@ export interface PluginManagementChange {
   workspacePath: string;
   workspaceIdentity: string | null;
   authorityKey: string | null;
-  scope: ZCodePluginScope;
+  scope: NexPluginScope;
 }
 const changeListeners = new Set<(change: PluginManagementChange) => void | Promise<void>>();
 let revision = 0;
@@ -109,7 +109,7 @@ export async function runWorkspaceOperation(
   pluginService: IPluginManagementService,
   operationId: string,
   operation: (workspace: { workspacePath: string; workspaceIdentity?: string }) => Promise<void>,
-  scope: ZCodePluginScope = "user",
+  scope: NexPluginScope = "user",
 ): Promise<boolean> {
   const { workspacePath, workspaceIdentity, authorityKey, configScope } = get();
   if (!workspacePath) return false;
@@ -175,7 +175,7 @@ interface PluginLoadParams {
   workspacePath: string;
   workspaceIdentity: string | null;
   authorityKey: string | null;
-  configScope: ZCodePluginScope | null;
+  configScope: NexPluginScope | null;
   pluginService: IPluginManagementService;
   fresh?: boolean;
   background?: boolean;

@@ -11,7 +11,7 @@
 1. 移除 Anthropic 官方站点对全部 `claude-*` 开启 MCS 的宽泛声明。按官方明确支持的型号及 API Schema 声明 MCS；不得让 Sonnet 5 被误开启，也不顺带关闭既有原生联网搜索。
 2. 恢复 `claude-opus-4-8` 在 Anthropic Messages 下的模型级 MCS 默认支持，覆盖既定前后缀形式，不要求代理站点另行放行。代理不支持时用户可在 Personal 中关闭；修正当前“未知站点上的 Opus 4.8 必须为 false”的测试。
 3. 以下两项分别写一条站点规则，API 为 `anthropic-messages`、模型不限，均声明 `supportsMidConversationSystem: true` 与 `supportsNativeWebSearch: true`：
-   - `https://zcode.z.ai/api/v1/zcode-plan/anthropic`
+   - `https://zcode.z.ai/api/v1/nex-plan/anthropic`
    - `https://zcode.z.ai/api/v1/off-peak/anthropic`
 4. 对本次涉及的合并 URL 站点规则按 URL 拆开（包括普通 Z.ai / BigModel endpoint）；保留各 URL 的既有独立能力，不因拆规则给某站点增加另一站点的能力。不做无关规则或 Runtime 重构。
 

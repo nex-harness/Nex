@@ -134,12 +134,12 @@ export function projectAssistantCodeComments(
     } else {
       const prefixStart = findAssistantDirectivePrefixStart(
         content,
-        [CODE_COMMENT_DIRECTIVE_NAME, "zcode-file-citation"],
+        [CODE_COMMENT_DIRECTIVE_NAME, "nex-file-citation"],
         protectedRanges,
         {
-          minimumSingleColonPrefixLength: ":zcode".length,
-          singleColonDirectiveNames: ["zcode-file-citation"],
-          tripleColonDirectiveNames: ["zcode-file-citation"],
+          minimumSingleColonPrefixLength: ":nex".length,
+          singleColonDirectiveNames: ["nex-file-citation"],
+          tripleColonDirectiveNames: ["nex-file-citation"],
         },
       );
       if (prefixStart !== null) {

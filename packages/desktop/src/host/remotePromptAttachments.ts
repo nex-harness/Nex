@@ -1,21 +1,21 @@
-import type { IRemoteBackend, RemoteUploadOptions } from "@zcode/server/remote";
-import { quotePosixPathArg } from "@zcode/server/remote/posixShell.js";
-import type { TraceId, ZCodePromptAttachment } from "@zcode/shared";
+import type { IRemoteBackend, RemoteUploadOptions } from "@nex/server/remote";
+import { quotePosixPathArg } from "@nex/server/remote/posixShell.js";
+import type { TraceId, NexPromptAttachment } from "@nex/shared";
 import { randomUUID } from "node:crypto";
 
-export const REMOTE_PROMPT_ATTACHMENT_ROOT = "~/.zcode/tmp/prompt-attachments";
-const REMOTE_PROMPT_ATTACHMENT_RELATIVE_ROOT = ".zcode/tmp/prompt-attachments";
+export const REMOTE_PROMPT_ATTACHMENT_ROOT = "~/.nex/tmp/prompt-attachments";
+const REMOTE_PROMPT_ATTACHMENT_RELATIVE_ROOT = ".nex/tmp/prompt-attachments";
 
 export interface RemotePromptAttachmentMaterializeInput {
   taskId?: string;
   content: string;
   traceId: TraceId | string;
-  attachments?: ZCodePromptAttachment[];
+  attachments?: NexPromptAttachment[];
 }
 
 export interface RemotePromptAttachmentMaterializeResult {
   content: string;
-  attachments?: ZCodePromptAttachment[];
+  attachments?: NexPromptAttachment[];
   uploadedCount: number;
 }
 
@@ -32,7 +32,7 @@ export async function materializeRemotePromptAttachments(
   }
 
   const replacements = new Map<string, string>();
-  const nextAttachments: ZCodePromptAttachment[] = [];
+  const nextAttachments: NexPromptAttachment[] = [];
   let remoteRootPromise: Promise<string> | undefined;
   let uploadedCount = 0;
   let changed = false;
@@ -88,7 +88,7 @@ export async function materializeRemotePromptAttachments(
     nextAttachments.push({
       ...attachment,
       localPath: remotePath,
-    } as ZCodePromptAttachment);
+    } as NexPromptAttachment);
     replacements.set(localPath, remotePath);
     uploadedCount += 1;
     changed = true;
@@ -222,7 +222,7 @@ async function waitForRemoteCommand(
   });
 }
 
-function getAttachmentLocalPath(attachment: ZCodePromptAttachment): string | undefined {
+function getAttachmentLocalPath(attachment: NexPromptAttachment): string | undefined {
   const localPath = attachment.localPath?.trim();
   return localPath ? attachment.localPath : undefined;
 }

@@ -2,15 +2,15 @@ import {
   compareSemverVersions,
   SOURCE_SERVER_LIFECYCLE_CONTROL_MIN_VERSION,
   SOURCE_SERVER_UPDATE_RUNNING_TASKS_ERROR_CODE,
-} from "@zcode/shared";
+} from "@nex/shared";
 import type {
   SourceServerConnectionStateSnapshot,
   SourceServerManagementSnapshot,
   SourceServerRunningTask,
   SourceServerRunningTasksResult,
   SourceServerUpdateTarget,
-} from "@zcode/shared";
-import type { ISourceServerManagementService } from "@zcode/services";
+} from "@nex/shared";
+import type { ISourceServerManagementService } from "@nex/services";
 import type { RemoteConnectionStatus } from "@/lib/remoteConnectionPresentation.js";
 import { logger } from "@/logger.js";
 
@@ -183,8 +183,8 @@ export async function readSourceServerRunningTasksForConfirmation(
 
 /**
  * 停止 / 重启远端服务的危险确认说明（RDLC-01），依次为：中断说明；任务清单（不可用时说明设备未提供，
- * 为空时说明没有运行中的任务）；其他电脑上的 ZCode 可能重新启动远端服务；仅停止且「启动时自动重连」
- * 开启时，下次打开 ZCode 会重新启动远端服务。
+ * 为空时说明没有运行中的任务）；其他电脑上的 Nex 可能重新启动远端服务；仅停止且「启动时自动重连」
+ * 开启时，下次打开 Nex 会重新启动远端服务。
  */
 export function getRemoteServiceLifecycleDescription(input: {
   action: "restart" | "stop";

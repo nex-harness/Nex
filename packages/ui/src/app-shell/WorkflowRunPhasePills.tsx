@@ -1,4 +1,4 @@
-import type { WorkflowRunPendingQuestion, WorkflowRunState } from "@zcode/shared/zcode-protocol-v4";
+import type { WorkflowRunPendingQuestion, WorkflowRunState } from "@nex/shared/nex-protocol-v4";
 import { laneDisplayName } from "@/components/workflow-graph/lane-name.js";
 import { phaseDisplayName } from "@/components/workflow-graph/phase-name.js";
 import type { WorkflowCausalityGraphData } from "@/components/workflow-graph/types.js";

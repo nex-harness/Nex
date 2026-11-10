@@ -18,15 +18,15 @@
 [
   {
     "kind": "local",
-    "workspacePath": "/Users/dev/ZCodeProject/3DAutoSnake"
+    "workspacePath": "/Users/dev/NexProject/3DAutoSnake"
   },
   {
     "kind": "remote",
     "workspacePath": "/home/ubuntu",
-    "workspaceIdentity": "remote:docker:zcode-ssh-container:/home/ubuntu",
+    "workspaceIdentity": "remote:docker:nex-ssh-container:/home/ubuntu",
     "target": {
       "kind": "docker",
-      "container": "zcode-ssh-container"
+      "container": "nex-ssh-container"
     },
     "lastOpenedAt": 1776220448653,
     "lastConnectionStatus": "failed",

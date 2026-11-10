@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { hostname } from "node:os";
-import { resolveServerOsUser } from "@zcode/shared/node";
+import { resolveServerOsUser } from "@nex/shared/node";
 import * as nodePath from "node:path";
 import { basename, extname, resolve } from "node:path";
 import { Hono, type Context } from "hono";
@@ -17,32 +17,32 @@ import {
   ChannelClient,
   LoggingChannelServer,
   type ISocket,
-} from "@zcode/rpc";
-import type { TopicResourcePeers } from "@zcode/services/node";
-import { TOPIC_RESOURCE_RELAY_CHANNEL } from "@zcode/shared";
+} from "@nex/rpc";
+import type { TopicResourcePeers } from "@nex/services/node";
+import { TOPIC_RESOURCE_RELAY_CHANNEL } from "@nex/shared";
 import {
   ServiceCollection,
-  IZCodeAgentService,
-  createZCodeAgentConnectionScope,
+  INexAgentService,
+  createNexAgentConnectionScope,
   IBotsService,
   IProviderProvisioningTargetService,
-} from "@zcode/services";
+} from "@nex/services";
 import {
   botProviders,
   formatLogPrefix,
   serverRemoteInfoOutputSchema,
   SERVER_REMOTE_PROTOCOL_VERSION,
-  ZCODE_RPC_HOST_CAPABILITY_HEADER,
-  ZCODE_COMPATIBILITY_MANIFEST,
-  ZCODE_VERSION,
+  NEX_RPC_HOST_CAPABILITY_HEADER,
+  NEX_COMPATIBILITY_MANIFEST,
+  NEX_VERSION,
   type BotProvider,
   type ServerRemoteInfo,
   type ServerRemoteWorkspaceInfo,
-} from "@zcode/shared";
+} from "@nex/shared";
 import {
   SourceServerWorkspaceIdentityChannelServer,
   type SourceServerWorkspaceIdentityMapper,
-} from "@zcode/services/node";
+} from "@nex/services/node";
 import { createHostCapabilityStore } from "./hostCapability.js";
 
 function wrapWebSocket(ws: WebSocket): ISocket {
@@ -85,7 +85,7 @@ function wrapWebSocket(ws: WebSocket): ISocket {
 }
 
 const log = (...args: unknown[]) =>
-  console.log(formatLogPrefix("zcode-server:http", process.pid), ...args);
+  console.log(formatLogPrefix("nex-server:http", process.pid), ...args);
 
 function setupChannelServer(
   ws: WebSocket,
@@ -102,14 +102,14 @@ function setupChannelServer(
   const server = workspaceIdentityMapper
     ? new SourceServerWorkspaceIdentityChannelServer(loggedServer, workspaceIdentityMapper)
     : loggedServer;
-  const agentService = services.getOptional(IZCodeAgentService);
+  const agentService = services.getOptional(INexAgentService);
   const reverseClient =
     clientMode === "desktop-continuous" && resourcePeers ? new ChannelClient(protocol) : undefined;
   const peer = reverseClient
     ? resourcePeers?.attach(reverseClient.getChannel(TOPIC_RESOURCE_RELAY_CHANNEL))
     : undefined;
   const connectionScope = agentService
-    ? createZCodeAgentConnectionScope(peer ? peer.wrapAgent(agentService) : agentService, {
+    ? createNexAgentConnectionScope(peer ? peer.wrapAgent(agentService) : agentService, {
         connectionId: `server-ws-${randomUUID()}`,
         clientMode,
         role: clientMode === "desktop-continuous" ? "trusted-host-relay" : "terminal-client",
@@ -117,7 +117,7 @@ function setupChannelServer(
     : undefined;
   const overrides = new Map<string, unknown>();
   if (connectionScope) {
-    overrides.set(IZCodeAgentService.channelName, connectionScope.service);
+    overrides.set(INexAgentService.channelName, connectionScope.service);
   }
   // Provisioning 携带跨 Environment 凭据，只允许 Desktop trusted host 使用；普通 Web
   // remote/replayable 客户端即使知道频道名，也不能获得 target 写入接口。
@@ -162,7 +162,7 @@ function readTrimmedEnv(name: string): string | undefined {
 
 export function resolveHttpServerId(options: HttpServerOptions = {}): string {
   return (
-    options.serverId?.trim() || readTrimmedEnv("ZCODE_SERVER_ID") || hostname() || "zcode-server"
+    options.serverId?.trim() || readTrimmedEnv("NEX_SERVER_ID") || hostname() || "nex-server"
   );
 }
 
@@ -170,7 +170,7 @@ function resolveServerWorkspaces(options: HttpServerOptions): ServerRemoteWorksp
   if (options.workspaces) {
     return options.workspaces;
   }
-  const workspacePath = readTrimmedEnv("ZCODE_SERVER_WORKSPACE") || process.cwd();
+  const workspacePath = readTrimmedEnv("NEX_SERVER_WORKSPACE") || process.cwd();
   return [
     {
       path: workspacePath,
@@ -182,14 +182,14 @@ function resolveServerWorkspaces(options: HttpServerOptions): ServerRemoteWorksp
 function createServerInfo(options: HttpServerOptions): ServerRemoteInfo {
   return serverRemoteInfoOutputSchema.parse({
     serverId: resolveHttpServerId(options),
-    ...(options.name?.trim() || readTrimmedEnv("ZCODE_SERVER_NAME")
-      ? { name: options.name?.trim() || readTrimmedEnv("ZCODE_SERVER_NAME") }
+    ...(options.name?.trim() || readTrimmedEnv("NEX_SERVER_NAME")
+      ? { name: options.name?.trim() || readTrimmedEnv("NEX_SERVER_NAME") }
       : {}),
-    version: ZCODE_VERSION,
+    version: NEX_VERSION,
     protocolVersion: SERVER_REMOTE_PROTOCOL_VERSION,
-    authRequired: options.authRequired ?? Boolean(readTrimmedEnv("ZCODE_SERVER_TOKEN")),
+    authRequired: options.authRequired ?? Boolean(readTrimmedEnv("NEX_SERVER_TOKEN")),
     workspaces: resolveServerWorkspaces(options),
-    compatibility: ZCODE_COMPATIBILITY_MANIFEST,
+    compatibility: NEX_COMPATIBILITY_MANIFEST,
     migration: { failedPathCount: options.migrationFailedPathCount ?? 0 },
     identity: { osUser: resolveServerOsUser(), hostname: hostname() },
     capabilities: {
@@ -202,7 +202,7 @@ function createServerInfo(options: HttpServerOptions): ServerRemoteInfo {
   });
 }
 
-const zcodeLiteTokenCookieName = "zcode_lite_token";
+const nexLiteTokenCookieName = "nex_lite_token";
 
 const staticMimeTypes: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
@@ -254,11 +254,11 @@ function hasValidLiteToken(c: Context, token: string): boolean {
   if (url.searchParams.get("token") === token) {
     c.header(
       "Set-Cookie",
-      `${zcodeLiteTokenCookieName}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax`,
+      `${nexLiteTokenCookieName}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax`,
     );
     return true;
   }
-  return parseCookieHeader(c.req.header("cookie")).get(zcodeLiteTokenCookieName) === token;
+  return parseCookieHeader(c.req.header("cookie")).get(nexLiteTokenCookieName) === token;
 }
 
 function isTokenProtectedPath(pathname: string): boolean {
@@ -394,7 +394,7 @@ export function createHttpServer(
     },
   }));
   app.use("/ws/host", async (c, next) => {
-    const capability = c.req.header(ZCODE_RPC_HOST_CAPABILITY_HEADER);
+    const capability = c.req.header(NEX_RPC_HOST_CAPABILITY_HEADER);
     if (!hostCapabilities.consume(capability)) {
       return c.json({ error: "Invalid or expired host capability" }, 401);
     }
@@ -423,7 +423,7 @@ export function createHttpServer(
         rawBody = { payload: rawBodyText };
       }
     }
-    const webhookSecret = c.req.header("x-zcode-bot-secret");
+    const webhookSecret = c.req.header("x-nex-bot-secret");
     const botId = c.req.param("botId");
     const result = await botsService.handleProviderCallbackResponse(provider, {
       ...(typeof rawBody === "object" && rawBody !== null ? rawBody : { payload: rawBody }),

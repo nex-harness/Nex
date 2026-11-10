@@ -1,5 +1,5 @@
-import type { Event } from "@zcode/rpc";
-import { ServiceChannels } from "@zcode/shared";
+import type { Event } from "@nex/rpc";
+import { ServiceChannels } from "@nex/shared";
 import {
   type ModelConfigObject,
   type ModelId,
@@ -15,9 +15,9 @@ import {
   type ProviderSettingsView,
   type ResolveModelConfigInput,
   type SavePersonalModelDraftInput,
-} from "@zcode/provider";
+} from "@nex/provider";
 import { createServiceDescriptor } from "../descriptors.js";
-import type { ModelConnectivityResult } from "@zcode/shared";
+import type { ModelConnectivityResult } from "@nex/shared";
 import { createServiceLogger } from "../logger/serviceLogger.js";
 
 export type {
@@ -25,7 +25,7 @@ export type {
   ModelSelectionView,
   ModelSelectionViewInput,
   ProviderSettingsView,
-} from "@zcode/provider";
+} from "@nex/provider";
 
 export interface IProviderSettingsService {
   readonly onDidChange: Event<ProviderSettingsView>;

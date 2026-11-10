@@ -1,6 +1,6 @@
 import type { TaskChatMessage as ChatMessage } from "@/lib/taskChatMessageTypes.js";
 import { shouldExposeE2EStoreBridge } from "@/lib/e2eStoreBridge.js";
-import type { IBotsService, IZCodeAgentService, IZCodeTaskService } from "@zcode/services";
+import type { IBotsService, INexAgentService, INexTaskService } from "@nex/services";
 import type { TaskListE2EActions } from "@/lib/taskListE2EActions.js";
 import { useEffect } from "react";
 
@@ -19,7 +19,7 @@ export interface TestActions extends TaskListE2EActions {
   /** 受控 E2E 输入走真实 Host Bot 服务与 CLI admission，不伪造队列投影。 */
   sendBotMessage: IBotsService["handleInboundMessage"];
   /** 受控材料夹具走真实任务服务、上传与 CLI 队列，不注入 UI row。 */
-  submitBotGroupInput: NonNullable<IZCodeTaskService["submitBotGroupInput"]>;
+  submitBotGroupInput: NonNullable<INexTaskService["submitBotGroupInput"]>;
   /** 获取当前主题 */
   getTheme: () => string;
   /** 设置主题 */
@@ -32,18 +32,18 @@ export interface TestActions extends TaskListE2EActions {
   setChatMessages: (messages: ChatMessage[]) => void;
   /** 获取当前 mock 消息数量 */
   getChatMessageCount: () => number;
-  /** E2E 通过真实 zcodeAgentService 拉取插件 overview */
-  getPluginsOverview: IZCodeAgentService["getPluginsOverview"];
-  /** E2E 通过真实 zcodeAgentService 添加 marketplace */
-  addPluginMarketplace: IZCodeAgentService["addPluginMarketplace"];
-  /** E2E 通过真实 zcodeAgentService 刷新 marketplace */
-  updatePluginMarketplace: IZCodeAgentService["updatePluginMarketplace"];
-  /** E2E 通过真实 zcodeAgentService 安装 marketplace plugin */
-  installPlugin: IZCodeAgentService["installPlugin"];
-  /** E2E 通过真实 zcodeAgentService 触发插件 discover */
-  listPlugins: IZCodeAgentService["listPlugins"];
-  /** E2E 通过真实 zcodeAgentService 查询 Workspace/Session Plugin catalog */
-  getPluginReferenceCatalog: IZCodeAgentService["getPluginReferenceCatalog"];
+  /** E2E 通过真实 nexAgentService 拉取插件 overview */
+  getPluginsOverview: INexAgentService["getPluginsOverview"];
+  /** E2E 通过真实 nexAgentService 添加 marketplace */
+  addPluginMarketplace: INexAgentService["addPluginMarketplace"];
+  /** E2E 通过真实 nexAgentService 刷新 marketplace */
+  updatePluginMarketplace: INexAgentService["updatePluginMarketplace"];
+  /** E2E 通过真实 nexAgentService 安装 marketplace plugin */
+  installPlugin: INexAgentService["installPlugin"];
+  /** E2E 通过真实 nexAgentService 触发插件 discover */
+  listPlugins: INexAgentService["listPlugins"];
+  /** E2E 通过真实 nexAgentService 查询 Workspace/Session Plugin catalog */
+  getPluginReferenceCatalog: INexAgentService["getPluginReferenceCatalog"];
 }
 
 declare global {

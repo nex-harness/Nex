@@ -1,4 +1,4 @@
-import type { UsageQuotaLimit } from "@zcode/shared";
+import type { UsageQuotaLimit } from "@nex/shared";
 import { StartPlanBalanceCard } from "@/settings/model-provider-section/StartPlanBalanceCard.js";
 
 export function StartPlanQuotaStatusCard({

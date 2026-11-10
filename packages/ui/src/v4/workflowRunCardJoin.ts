@@ -1,9 +1,9 @@
-import { workflowRunStepCounts, type WorkflowRunState } from "@zcode/shared/zcode-protocol-v4";
-import type { ConversationRow, ConversationRowsPartition } from "@zcode/shared/zcode-protocol-v4";
+import { workflowRunStepCounts, type WorkflowRunState } from "@nex/shared/nex-protocol-v4";
+import type { ConversationRow, ConversationRowsPartition } from "@nex/shared/nex-protocol-v4";
 import {
-  ZCODE_WORKFLOWS_FOR_RUN_MAX_CANDIDATES,
-  type ZCodeWorkflowsForRunCandidate,
-} from "@zcode/shared";
+  NEX_WORKFLOWS_FOR_RUN_MAX_CANDIDATES,
+  type NexWorkflowsForRunCandidate,
+} from "@nex/shared";
 import type { WorkflowCausalityGraphData } from "@/components/workflow-graph/types.js";
 import type { WorkflowRunCardSummary } from "@/ToolCallBlocks/shared.js";
 import { readWorkflowHoleTarget } from "@/ToolCallBlocks/renderers/createWorkflowHoleInput.js";
@@ -273,7 +273,7 @@ export function resolveWorkflowRunGraph(
  *
  * 与其他联接同一条纪律：纯函数、一遍行窗口、身份只认入参通道（display 上没有这件事）。
  */
-export type WorkflowSaveCandidate = ZCodeWorkflowsForRunCandidate;
+export type WorkflowSaveCandidate = NexWorkflowsForRunCandidate;
 
 function readWorkflowSaveCandidate(
   row: ConversationRow,
@@ -302,7 +302,7 @@ export function buildWorkflowSaveCandidatesByRunId(
     // 同名重存（改了元数据再存一次）只留一个候选：解析一遍与解析三遍答案相同。
     if (list.some((entry) => entry.name === found.candidate.name)) continue;
     // 协议的候选上界在这里就守住：超出部分留最早的那几个（先存下的那份更可能还在）。
-    if (list.length >= ZCODE_WORKFLOWS_FOR_RUN_MAX_CANDIDATES) continue;
+    if (list.length >= NEX_WORKFLOWS_FOR_RUN_MAX_CANDIDATES) continue;
     list.push(found.candidate);
     byRunId.set(found.runId, list);
   }

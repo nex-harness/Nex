@@ -14,13 +14,13 @@ import { WorkspaceLastActivity } from "@/WorkspaceHeaderSections/WorkspaceLastAc
 import {
   parseRemoteWorkspaceIdentity,
   remoteHostIdFromWorkspaceIdentity,
-  type ZCodeTaskMeta,
-} from "@zcode/shared";
+  type NexTaskMeta,
+} from "@nex/shared";
 import {
   TID_WORKSPACE_MORE_BUTTON,
   TID_WORKSPACE_PATH,
   TID_WORKSPACE_TITLE,
-} from "@zcode/shared/test-ids";
+} from "@nex/shared/test-ids";
 import { useMemo, useRef, useState } from "react";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { cn } from "@/components/lib/utils.js";
@@ -38,7 +38,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import {
   formatRemoteWorkspaceDisplayLabel,
   formatRemoteWorkspaceHeaderHostLabel,
@@ -54,7 +54,7 @@ import type {
   WorkspaceHeaderTitleSectionProps,
 } from "@/WorkspaceHeaderSections/shared.js";
 import { applyTaskQueryCacheMutation } from "@/store/taskQueryCacheStore.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useNexSessionStore } from "@/store/nexSessionStore.js";
 import { TaskRenameDialog } from "@/TaskRenameDialog.js";
 import {
   DataSyncEntryMenuItems,
@@ -108,7 +108,7 @@ export function WorkspaceHeaderTitleSection({
   simplifyForNarrowRemote = false,
   compact = false,
 }: WorkspaceHeaderTitleSectionProps) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
   const confirmDialog = useConfirmDialog();
   const services = useWorkspaceServices(workspaceAbsPath, remoteSessionId, workspaceIdentity);
@@ -118,14 +118,14 @@ export function WorkspaceHeaderTitleSection({
     remoteSessionId,
     workspaceIdentity,
   );
-  const removeTaskState = useZCodeSessionStore((state) => state.removeTaskState);
-  const upsertOptimisticTaskListItem = useZCodeSessionStore(
+  const removeTaskState = useNexSessionStore((state) => state.removeTaskState);
+  const upsertOptimisticTaskListItem = useNexSessionStore(
     (state) => state.upsertOptimisticTaskListItem,
   );
-  const removeOptimisticTaskListItem = useZCodeSessionStore(
+  const removeOptimisticTaskListItem = useNexSessionStore(
     (state) => state.removeOptimisticTaskListItem,
   );
-  const setTaskUnreadIndicator = useZCodeSessionStore((state) => state.setTaskUnreadIndicator);
+  const setTaskUnreadIndicator = useNexSessionStore((state) => state.setTaskUnreadIndicator);
   const [taskMenuOpen, setTaskMenuOpen] = useState(false);
   const [workspaceContextOpen, setWorkspaceContextOpen] = useState(false);
   const [renamingTaskId, setRenamingTaskId] = useState<string | null>(null);
@@ -303,9 +303,9 @@ export function WorkspaceHeaderTitleSection({
   };
 
   const buildHeaderTaskSnapshot = (
-    fallbackTask: ZCodeTaskMeta,
-    overrides?: Partial<ZCodeTaskMeta>,
-  ): ZCodeTaskMeta => {
+    fallbackTask: NexTaskMeta,
+    overrides?: Partial<NexTaskMeta>,
+  ): NexTaskMeta => {
     if (activeTaskMeta) {
       return {
         ...activeTaskMeta,
@@ -333,7 +333,7 @@ export function WorkspaceHeaderTitleSection({
     }
 
     try {
-      const renamedTask = await services.zcodeTaskService.renameTask({
+      const renamedTask = await services.nexTaskService.renameTask({
         taskId: renamingTaskId,
         workspacePath: workspaceAbsPath,
         title: normalizedTitle,
@@ -380,14 +380,14 @@ export function WorkspaceHeaderTitleSection({
     }
 
     handleCancelRenameTask();
-    void services.zcodeTaskService
+    void services.nexTaskService
       .archiveTask({
         taskId: resolvedTaskActionTaskId,
         workspacePath: workspaceAbsPath,
         ...(workspaceIdentity ? { workspaceIdentity } : {}),
       })
       .then((meta) => {
-        // Header 更多菜单不能只依赖 zcodeTaskMetaMerge：归档后只有旧列表状态被更新。
+        // Header 更多菜单不能只依赖 nexTaskMetaMerge：归档后只有旧列表状态被更新。
         // 这里改成和 Sidebar 一样同步清理运行态与 sqlite cache，避免 Header 操作后列表不刷新。
         removeTaskState(workspaceAbsPath, resolvedTaskActionTaskId, workspaceIdentity);
         applyTaskQueryCacheMutation({
@@ -625,7 +625,7 @@ export function WorkspaceHeaderTitleSection({
                       nextState: { pinned: !isPinned, archived: false },
                     });
                   }
-                  void services.zcodeTaskService
+                  void services.nexTaskService
                     .setTaskPinned({
                       taskId: resolvedTaskActionTaskId,
                       workspacePath: workspaceAbsPath,
@@ -665,7 +665,7 @@ export function WorkspaceHeaderTitleSection({
                   if (!resolvedTaskActionTaskId) {
                     return;
                   }
-                  void services.zcodeTaskService
+                  void services.nexTaskService
                     .setTaskUnread({
                       taskId: resolvedTaskActionTaskId,
                       workspacePath: workspaceAbsPath,

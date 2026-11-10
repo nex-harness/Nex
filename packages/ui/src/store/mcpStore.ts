@@ -4,7 +4,7 @@
  */
 import { create } from "zustand";
 import type {
-  ZCodeAgentMcpServer,
+  NexAgentMcpServer,
   CliMcpSource,
   McpConfig,
   McpScope,
@@ -12,11 +12,11 @@ import type {
   McpServerStatus,
   McpSource,
   NativeMcpServerRecord,
-  ZCodeMcpListMode,
-  ZCodeMcpServerStatusSnapshot,
-  ZCodeMcpServer,
-} from "@zcode/shared";
-import { convertToZCodeAgentMcpServer } from "@zcode/shared";
+  NexMcpListMode,
+  NexMcpServerStatusSnapshot,
+  NexMcpServer,
+} from "@nex/shared";
+import { convertToNexAgentMcpServer } from "@nex/shared";
 import { logger } from "@/logger.js";
 import {
   fetchNativeMcpServers,
@@ -27,8 +27,8 @@ import {
   type MigrateLegacyResult,
 } from "@/store/mcpStoreDesktop.js";
 import {
-  importLegacyCommonServersToZCodeAgent,
-  migrateStoredCommonMcpToZCodeAgent,
+  importLegacyCommonServersToNexAgent,
+  migrateStoredCommonMcpToNexAgent,
 } from "@/store/mcpStoreMigration.js";
 import {
   buildServerList,
@@ -56,8 +56,8 @@ interface UpdateServerStatusOptions {
 interface McpStoreState {
   config: McpConfig;
   nativeServers: NativeMcpServerRecord[];
-  servers: ZCodeMcpServer[];
-  statusSnapshots: Record<string, ZCodeMcpServerStatusSnapshot>;
+  servers: NexMcpServer[];
+  statusSnapshots: Record<string, NexMcpServerStatusSnapshot>;
   currentProjectPath: string;
   currentWorkspaceIdentity?: string;
   currentAuthorityKey?: string;
@@ -96,9 +96,9 @@ interface McpStoreState {
     projectPath?: string,
   ) => Promise<void>;
   deleteScopedMcpServer: (source: McpSource, name: string, projectPath?: string) => void;
-  addZCodeAgentMcpServer: (name: string, config: McpServerConfig, projectPath?: string) => void;
-  updateZCodeAgentMcpServer: (name: string, config: McpServerConfig, projectPath?: string) => void;
-  deleteZCodeAgentMcpServer: (name: string, projectPath?: string) => void;
+  addNexAgentMcpServer: (name: string, config: McpServerConfig, projectPath?: string) => void;
+  updateNexAgentMcpServer: (name: string, config: McpServerConfig, projectPath?: string) => void;
+  deleteNexAgentMcpServer: (name: string, projectPath?: string) => void;
   addClaudeCliMcpServer: (name: string, config: McpServerConfig, projectPath?: string) => void;
   updateClaudeCliMcpServer: (name: string, config: McpServerConfig, projectPath?: string) => void;
   deleteClaudeCliMcpServer: (name: string, projectPath?: string) => void;
@@ -118,25 +118,25 @@ interface McpStoreState {
     error?: string,
     options?: UpdateServerStatusOptions,
   ) => void;
-  beginServerStatusListRefresh: (mode?: ZCodeMcpListMode) => number;
+  beginServerStatusListRefresh: (mode?: NexMcpListMode) => number;
   markServerStatusListRefreshFailed: (
     error: string,
     requestEpoch: number,
-    mode?: ZCodeMcpListMode,
+    mode?: NexMcpListMode,
   ) => void;
   mergeServerStatusSnapshots: (
-    statuses: Record<string, ZCodeMcpServerStatusSnapshot>,
+    statuses: Record<string, NexMcpServerStatusSnapshot>,
     requestEpoch: number,
     mode?: "connect" | "status",
   ) => void;
-  getServer: (id: string) => ZCodeMcpServer | undefined;
+  getServer: (id: string) => NexMcpServer | undefined;
   setCurrentProjectPath: (
     path: string,
     workspaceIdentity?: string,
     directoryService?: McpDirectoryService | null,
     authorityKey?: string,
   ) => void;
-  getEnabledMcpServersForZCode: (provider: string) => ZCodeAgentMcpServer[];
+  getEnabledMcpServersForNex: (provider: string) => NexAgentMcpServer[];
   checkAllServerStatus: (
     tester: (config: McpServerConfig) => Promise<{ success: boolean; error?: string }>,
   ) => Promise<void>;
@@ -149,7 +149,7 @@ interface McpStoreState {
 export const useMcpStore = create<McpStoreState>((set, get) => {
   let loadMcpPromise: Promise<boolean> | null = null;
   let loadMcpWorkspaceKey: string | null = null;
-  const statusListEpochs: Record<ZCodeMcpListMode, number> = {
+  const statusListEpochs: Record<NexMcpListMode, number> = {
     connect: 0,
     status: 0,
   };
@@ -281,8 +281,8 @@ export const useMcpStore = create<McpStoreState>((set, get) => {
 
     loadConfig: () => {
       const config = loadPersistedConfig();
-      // MCP 启停状态已经迁移到 ~/.zcode/cli/config.json，不能再读取旧 localStorage，
-      // 否则旧的本地开关会覆盖新的 ZCode Agent 配置来源。
+      // MCP 启停状态已经迁移到 ~/.nex/cli/config.json，不能再读取旧 localStorage，
+      // 否则旧的本地开关会覆盖新的 Nex Agent 配置来源。
       const enabledStates: Record<string, boolean> = {};
       const deletedPreload = new Set<string>(safeReadJson<string[]>(MCP_DELETED_PRELOAD_KEY, []));
       const servers = buildServerList(config, [], enabledStates, deletedPreload, []);
@@ -335,7 +335,7 @@ export const useMcpStore = create<McpStoreState>((set, get) => {
             activeDirectoryService,
           );
           if (!activeDirectoryService) {
-            servers = await migrateStoredCommonMcpToZCodeAgent(
+            servers = await migrateStoredCommonMcpToNexAgent(
               mcpPlatformService,
               servers,
               latestWorkspacePath,
@@ -403,12 +403,12 @@ export const useMcpStore = create<McpStoreState>((set, get) => {
       safeWriteJson(MCP_DELETED_PRELOAD_KEY, Array.from(deletedPreloadMcpServers));
     },
 
-    addMcpServer: (name, config) => get().addZCodeAgentMcpServer(name, config),
-    updateMcpServer: (name, config) => get().updateZCodeAgentMcpServer(name, config),
-    deleteMcpServer: (name) => get().deleteZCodeAgentMcpServer(name),
+    addMcpServer: (name, config) => get().addNexAgentMcpServer(name, config),
+    updateMcpServer: (name, config) => get().updateNexAgentMcpServer(name, config),
+    deleteMcpServer: (name) => get().deleteNexAgentMcpServer(name),
     addScopedMcpServer: async (source, name, config, projectPath) => {
       invalidateStatusListRequests();
-      const targetSource: CliMcpSource = source === "mcp" ? "zcodeagentmcp" : source;
+      const targetSource: CliMcpSource = source === "mcp" ? "nexagentmcp" : source;
       // 设置页保存后会马上触发 agent 侧 mcp/list 重连。
       // 先等配置落盘，再更新本地 store，避免 agent 读到旧 timeoutMs 后展示旧健康状态。
       await persistScopedChange(targetSource, {
@@ -422,7 +422,7 @@ export const useMcpStore = create<McpStoreState>((set, get) => {
     },
     updateScopedMcpServer: async (source, name, config, projectPath) => {
       invalidateStatusListRequests();
-      const targetSource: CliMcpSource = source === "mcp" ? "zcodeagentmcp" : source;
+      const targetSource: CliMcpSource = source === "mcp" ? "nexagentmcp" : source;
       // 修复原因同新增：本地状态变化会驱动健康状态刷新，必须在磁盘配置更新后发生。
       await persistScopedChange(targetSource, {
         action: "upsert",
@@ -435,7 +435,7 @@ export const useMcpStore = create<McpStoreState>((set, get) => {
     },
     deleteScopedMcpServer: (source, name, projectPath) => {
       invalidateStatusListRequests();
-      const targetSource: CliMcpSource = source === "mcp" ? "zcodeagentmcp" : source;
+      const targetSource: CliMcpSource = source === "mcp" ? "nexagentmcp" : source;
       persistScopedChange(targetSource, {
         action: "delete",
         source: targetSource,
@@ -479,12 +479,12 @@ export const useMcpStore = create<McpStoreState>((set, get) => {
       get().updateScopedMcpServer("opencodemcp", name, config, projectPath),
     deleteOpenCodeMcpServer: (name, projectPath) =>
       get().deleteScopedMcpServer("opencodemcp", name, projectPath),
-    addZCodeAgentMcpServer: (name, config, projectPath) =>
-      get().addScopedMcpServer("zcodeagentmcp", name, config, projectPath),
-    updateZCodeAgentMcpServer: (name, config, projectPath) =>
-      get().updateScopedMcpServer("zcodeagentmcp", name, config, projectPath),
-    deleteZCodeAgentMcpServer: (name, projectPath) =>
-      get().deleteScopedMcpServer("zcodeagentmcp", name, projectPath),
+    addNexAgentMcpServer: (name, config, projectPath) =>
+      get().addScopedMcpServer("nexagentmcp", name, config, projectPath),
+    updateNexAgentMcpServer: (name, config, projectPath) =>
+      get().updateScopedMcpServer("nexagentmcp", name, config, projectPath),
+    deleteNexAgentMcpServer: (name, projectPath) =>
+      get().deleteScopedMcpServer("nexagentmcp", name, projectPath),
 
     toggleServer: async (id, enabled) => {
       invalidateStatusListRequests();
@@ -556,7 +556,7 @@ export const useMcpStore = create<McpStoreState>((set, get) => {
         servers: state.servers.map((server) => {
           const enabled = state.enabledStates[server.id] ?? server.enabled;
           if (
-            server.source !== "zcodeagentmcp" ||
+            server.source !== "nexagentmcp" ||
             !enabled ||
             (!server.changed && server.status !== "unknown")
           ) {
@@ -586,7 +586,7 @@ export const useMcpStore = create<McpStoreState>((set, get) => {
         statusSnapshots: {},
         servers: state.servers.map((server) => {
           const enabled = state.enabledStates[server.id] ?? server.enabled;
-          if (server.source !== "zcodeagentmcp" || !enabled || server.status !== "connecting") {
+          if (server.source !== "nexagentmcp" || !enabled || server.status !== "connecting") {
             return server;
           }
           return {
@@ -664,14 +664,14 @@ export const useMcpStore = create<McpStoreState>((set, get) => {
       }
     },
 
-    getEnabledMcpServersForZCode: (_provider) => {
+    getEnabledMcpServersForNex: (_provider) => {
       const { servers, enabledStates, currentProjectPath } = get();
-      const candidates = new Map<string, ZCodeMcpServer>();
+      const candidates = new Map<string, NexMcpServer>();
 
       for (const server of servers) {
         const isEnabled = enabledStates[server.id] ?? server.enabled;
         if (!isEnabled) continue;
-        if (server.source !== "zcodeagentmcp") continue;
+        if (server.source !== "nexagentmcp") continue;
         if (server.scope === "workspace" && server.projectPath !== currentProjectPath) continue;
 
         const existing = candidates.get(server.name);
@@ -680,14 +680,14 @@ export const useMcpStore = create<McpStoreState>((set, get) => {
         }
       }
 
-      const result: ZCodeAgentMcpServer[] = [];
+      const result: NexAgentMcpServer[] = [];
       for (const server of candidates.values()) {
-        const zcodeAgentServer = convertToZCodeAgentMcpServer(
+        const nexAgentServer = convertToNexAgentMcpServer(
           server.name,
           server.config,
           server.scope === "workspace" ? "workspace" : "user",
         );
-        if (zcodeAgentServer) result.push(zcodeAgentServer);
+        if (nexAgentServer) result.push(nexAgentServer);
       }
       return result;
     },
@@ -713,7 +713,7 @@ export const useMcpStore = create<McpStoreState>((set, get) => {
 
     mergePreloadedMcpServers: (preloaded) => {
       const { deletedPreloadMcpServers, nativeServers } = get();
-      const targetSource: CliMcpSource = "zcodeagentmcp";
+      const targetSource: CliMcpSource = "nexagentmcp";
       const nextNativeServers = nativeServers.slice();
       let changed = false;
 
@@ -744,7 +744,7 @@ export const useMcpStore = create<McpStoreState>((set, get) => {
     },
 
     deletePreloadedMcpServer: (source, name) => {
-      const targetSource: CliMcpSource = source === "mcp" ? "zcodeagentmcp" : source;
+      const targetSource: CliMcpSource = source === "mcp" ? "nexagentmcp" : source;
       const key = makeServerId(targetSource, name);
       persistScopedChange(targetSource, { action: "delete", source: targetSource, name });
       set((state) => {
@@ -778,7 +778,7 @@ export const useMcpStore = create<McpStoreState>((set, get) => {
         get().nativeServers.length > 0
           ? get().nativeServers
           : await fetchNativeMcpServers(mcpPlatformService, { workspacePath: latestWorkspacePath });
-      const migration = await importLegacyCommonServersToZCodeAgent(
+      const migration = await importLegacyCommonServersToNexAgent(
         mcpPlatformService,
         result.servers ?? {},
         currentNativeServers,

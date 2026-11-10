@@ -78,7 +78,7 @@ export async function startModelContextBudgetConfigMockServer(
       return;
     }
 
-    if (request.method === "GET" && url.pathname === "/api/v1/zcode-plan/billing/balance") {
+    if (request.method === "GET" && url.pathname === "/api/v1/nex-plan/billing/balance") {
       // 预算 E2E 不验证套餐；返回合法的“无套餐”快照，避免共享 endpoint 产生无关 404。
       sendJson(response, {
         code: 0,

@@ -12,20 +12,20 @@ const { stageThirdPartyNotices } = await import(
 
 // tsup config 可能从不同 cwd 加载，基于配置文件自身目录解析仓库根 package.json。
 const rootPackageJsonPath = resolve(import.meta.dirname, "../../package.json");
-const { version, zcodeCompatibility } = JSON.parse(readFileSync(rootPackageJsonPath, "utf-8")) as {
+const { version, nexCompatibility } = JSON.parse(readFileSync(rootPackageJsonPath, "utf-8")) as {
   version: string;
-  zcodeCompatibility?: { minCompatibleVersion?: string };
+  nexCompatibility?: { minCompatibleVersion?: string };
 };
-const minCompatibleVersion = zcodeCompatibility?.minCompatibleVersion ?? version;
+const minCompatibleVersion = nexCompatibility?.minCompatibleVersion ?? version;
 
-const { environment: zcodeEnv, content: zcodeBuiltinProviderConfigJson } =
+const { environment: nexEnv, content: nexBuiltinProviderConfigJson } =
   await loadBuiltinProviderConfig();
 
 export const SERVER_HTTP_DEFINES = {
-  __ZCODE_VERSION__: JSON.stringify(version),
-  __ZCODE_MIN_COMPATIBLE_VERSION__: JSON.stringify(minCompatibleVersion),
-  __ZCODE_ENV__: JSON.stringify(zcodeEnv),
-  __ZCODE_BUILTIN_PROVIDER_CONFIG_JSON__: JSON.stringify(zcodeBuiltinProviderConfigJson),
+  __NEX_VERSION__: JSON.stringify(version),
+  __NEX_MIN_COMPATIBLE_VERSION__: JSON.stringify(minCompatibleVersion),
+  __NEX_ENV__: JSON.stringify(nexEnv),
+  __NEX_BUILTIN_PROVIDER_CONFIG_JSON__: JSON.stringify(nexBuiltinProviderConfigJson),
 };
 
 function createSharedDefines() {
@@ -71,11 +71,11 @@ export default defineConfig({
   target: "node22",
   // workspace 包的 exports 指向 .ts 源码，node 运行时无法直接加载，需要 bundle 进来
   noExternal: [
-    "@zcode/shared",
-    "@zcode/rpc",
-    "@zcode/services",
-    "@zcode/services/node",
-    "@zcode/client",
+    "@nex/shared",
+    "@nex/rpc",
+    "@nex/services",
+    "@nex/services/node",
+    "@nex/client",
   ],
   // ssh2 / node-pty 含 .node native addon，不能被 esbuild 处理。
   // undici / axios 这类 CJS 依赖被内联进 ESM bundle 后，运行时会走到

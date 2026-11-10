@@ -13,14 +13,14 @@ import {
   computeAutomationNextRunAt,
   isOneShotAutomation,
   OffPeakTaskRepo,
-} from "@zcode/services/node";
+} from "@nex/services/node";
 import {
   resolveWorkspaceKey,
-  type ZCodeAutomation,
-  type ZCodeAutomationTrigger,
-  type ZCodeAutomationRun,
-  type ZCodeOffPeakTask,
-} from "@zcode/shared";
+  type NexAutomation,
+  type NexAutomationTrigger,
+  type NexAutomationRun,
+  type NexOffPeakTask,
+} from "@nex/shared";
 import type { MainToSchedulerMessage, SchedulerToMainMessage } from "./schedulerProtocol.js";
 import { settleManualClaimForDispatchResult } from "./manualClaimRelease.js";
 import { settleOffPeakDispatchResult } from "./offPeakDispatchSettlement.js";
@@ -42,7 +42,7 @@ const { parentPort } = process;
 type InFlight = {
   automationId: string;
   workspaceKey: string;
-  trigger: ZCodeAutomationTrigger;
+  trigger: NexAutomationTrigger;
 };
 
 const repo = new AutomationRepo();
@@ -76,7 +76,7 @@ function log(level: "info" | "warn" | "error", message: string): void {
 }
 
 /** 派发时间戳：优先用 next_run_at（重试期间不变，保证 runId 稳定），退到 retry_at / now。 */
-function resolveScheduledAt(automation: ZCodeAutomation, now: number): number {
+function resolveScheduledAt(automation: NexAutomation, now: number): number {
   return automation.nextRunAt ?? automation.retryAt ?? now;
 }
 
@@ -126,7 +126,7 @@ function requestTick(): void {
   void tick();
 }
 
-async function handleClaimed(automation: ZCodeAutomation, now: number): Promise<void> {
+async function handleClaimed(automation: NexAutomation, now: number): Promise<void> {
   const scheduledAt = resolveScheduledAt(automation, now);
   const runId = buildRunId(automation.automationId, scheduledAt);
   const workspaceKey = resolveWorkspaceKey({
@@ -179,9 +179,9 @@ async function handleClaimed(automation: ZCodeAutomation, now: number): Promise<
 }
 
 function postDispatchRequest(
-  automation: ZCodeAutomation,
+  automation: NexAutomation,
   runId: string,
-  fixedSelection?: ZCodeAutomationRun["modelSelection"],
+  fixedSelection?: NexAutomationRun["modelSelection"],
 ): void {
   const request: SchedulerToMainMessage = {
     type: "cron-dispatch-request",
@@ -203,8 +203,8 @@ function postDispatchRequest(
 }
 
 async function handleClaimedManual(
-  automation: ZCodeAutomation,
-  run: ZCodeAutomationRun,
+  automation: NexAutomation,
+  run: NexAutomationRun,
 ): Promise<void> {
   inFlight.set(run.runId, {
     automationId: automation.automationId,
@@ -240,7 +240,7 @@ async function reportOffPeakActiveCount(): Promise<void> {
  * 认领后派发闲时任务。退避中的任务立即释放认领等下轮（进程内退避表；每轮 claim+release
  * 两次写，任务数小、WAL 下开销可忽略——若退避任务成规模再把退避下沉进 claimDue）。
  */
-async function handleOffPeakClaimed(task: ZCodeOffPeakTask, now: number): Promise<void> {
+async function handleOffPeakClaimed(task: NexOffPeakTask, now: number): Promise<void> {
   const retryAt = offPeakRetryAt.get(task.offPeakTaskId) ?? 0;
   if (retryAt > now) {
     await offPeakRepo.releaseClaim(task.offPeakTaskId, { now });
@@ -285,7 +285,7 @@ async function settleDispatchResult(
   // 从 runId 还原 automationId（context 丢失时兜底，如 scheduler 重启后收到迟到回报）。
   const automationId = context?.automationId ?? msg.runId.split(":")[0]!;
   const workspaceKey = context?.workspaceKey;
-  const trigger: ZCodeAutomationTrigger =
+  const trigger: NexAutomationTrigger =
     context?.trigger ?? (msg.runId.includes(":manual:") ? "manual" : "schedule");
   const settleManualClaim = async (ok: boolean): Promise<void> => {
     await settleManualClaimForDispatchResult({

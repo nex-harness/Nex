@@ -3,24 +3,24 @@ import type {
   IPlatformService,
   WebRemoteControlRendererActionRequest,
   WebRemoteControlRendererActionResult,
-} from "@zcode/shared";
+} from "@nex/shared";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { resolveRemoteWorkspaceSessionIdForTarget } from "@/hooks/useResolvedRemoteWorkspaceSessionId.js";
 import { mutateProjectTask } from "@/project-sidebar/task-mutation.js";
 import type {
   IProjectService,
   IWindowControllerService,
-  IZCodeTaskService,
+  INexTaskService,
 } from "@/project-sidebar/contract.js";
 import { useRemoteWorkspaceSessionStore } from "@/store/remoteWorkspaceSessionStore.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useNexSessionStore } from "@/store/nexSessionStore.js";
 import { logger } from "@/logger.js";
 
 export interface WebRemoteControlRendererActionPorts {
   services: {
-    zcodeTaskService: IZCodeTaskService;
+    nexTaskService: INexTaskService;
     windowControllerService?: IWindowControllerService;
-    /** 只用桌面 scratch workspace 的目录创建能力（~/ZCodeProject/<name>）。 */
+    /** 只用桌面 scratch workspace 的目录创建能力（~/NexProject/<name>）。 */
     fileService: { createScratchWorkspace(params: { name: string }): Promise<{ path: string }> };
     projectService?: IProjectService;
   };
@@ -35,7 +35,7 @@ async function createLocalProject(
   ports: WebRemoteControlRendererActionPorts,
   name: string,
 ): Promise<{ workspacePath: string; projectId?: string; hostId?: string }> {
-  // 目录与校验复用桌面 scratch workspace：~/ZCodeProject/<name>，同名目录幂等复用。
+  // 目录与校验复用桌面 scratch workspace：~/NexProject/<name>，同名目录幂等复用。
   const { path: workspacePath } = await ports.services.fileService.createScratchWorkspace({ name });
   const projectService = ports.services.projectService;
   if (!projectService) return { workspacePath };
@@ -78,7 +78,7 @@ export async function executeWebRemoteControlRendererAction(
     ...(request.workspaceIdentity ? { workspaceIdentity: request.workspaceIdentity } : {}),
   };
   const taskPorts = {
-    service: ports.services.zcodeTaskService,
+    service: ports.services.nexTaskService,
     controller: ports.services.windowControllerService,
   };
   const remoteSessionId = ports.resolveRemoteSessionId(target);
@@ -119,7 +119,7 @@ export function useWebRemoteControlRendererActions(platform: IPlatformService): 
               workspaceIdentity: target.workspaceIdentity,
               state: useRemoteWorkspaceSessionStore.getState(),
             }),
-          removeTaskState: (...args) => useZCodeSessionStore.getState().removeTaskState(...args),
+          removeTaskState: (...args) => useNexSessionStore.getState().removeTaskState(...args),
         });
       } catch (error) {
         logger.warn("[web-remote-control] 手机动作执行失败", { kind: request.kind, error });

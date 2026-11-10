@@ -96,19 +96,19 @@ let electronCommand = electronBinary;
 
 if (process.platform === "darwin" && existsSync(electronBinary)) {
   // macOS 命令行启动的 raw Electron 没有 CFBundleURLTypes，LaunchServices 会把
-  // zcode:// 交给一个没有项目入口的 Electron 默认壳。给本地启动副本补齐产品
+  // nex:// 交给一个没有项目入口的 Electron 默认壳。给本地启动副本补齐产品
   // Info.plist 后，线上 Share 页面无需感知 Dev，仍可把链接投递给已运行的 Dev 实例。
   const electronPackageJsonPath = require.resolve("electron/package.json");
   const electronPackage = JSON.parse(await readFile(electronPackageJsonPath, "utf8"));
   const electronAppPath = resolve(electronBinary, "../../..");
   const devBundle = await prepareDevElectronAppBundle({
     electronAppPath,
-    runtimeRoot: resolve(root, "../../.zcode-runtime/desktop-dev"),
+    runtimeRoot: resolve(root, "../../.nex-runtime/desktop-dev"),
     electronVersion: electronPackage.version,
     arch: process.arch,
   });
   electronCommand = devBundle.executablePath;
-  console.log(`[dev] Prepared macOS ZCode Dev bundle: ${devBundle.appPath}`);
+  console.log(`[dev] Prepared macOS Nex Dev bundle: ${devBundle.appPath}`);
 }
 
 const electron = spawn(electronCommand, ["."], {

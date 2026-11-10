@@ -1,8 +1,8 @@
 import { mkdir } from "node:fs/promises";
-import { ModelConfig, ModelOptionSpecsConfig } from "@zcode/provider";
-import { NodePersonalProviderConfigRepository } from "@zcode/provider-node";
+import { ModelConfig, ModelOptionSpecsConfig } from "@nex/provider";
+import { NodePersonalProviderConfigRepository } from "@nex/provider-node";
 import { join } from "node:path";
-import { encodeCustomModelValue } from "@zcode/shared";
+import { encodeCustomModelValue } from "@nex/shared";
 import {
   TID_CHAT_MODEL_SELECT_ITEM,
   TID_CHAT_MODEL_SELECT_GROUP,
@@ -23,7 +23,7 @@ import {
   TID_SETTINGS_SECTION_NAV,
   TID_TASK_SETTINGS_BUTTON,
   testId,
-} from "@zcode/shared/test-ids";
+} from "@nex/shared/test-ids";
 import {
   DEFAULT_WORKSPACE,
   getE2EAppDataPaths,
@@ -1165,7 +1165,7 @@ describe("设置页 UI polish E2E", () => {
 
   it("MP-UI-05-remote: 远程 workspace 下也不显示配置同步入口", async function () {
     this.timeout(10 * 60_000);
-    if (!process.env.ZCODE_E2E_SSH_HOST?.trim()) {
+    if (!process.env.NEX_E2E_SSH_HOST?.trim()) {
       this.skip();
       return;
     }

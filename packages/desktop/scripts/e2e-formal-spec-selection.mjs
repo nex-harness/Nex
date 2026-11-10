@@ -7,9 +7,9 @@ export const SSH_FORMAL_SPEC_GLOB =
 export const MANUAL_REVIEW_SPEC_GLOB = "./test/e2e/**/manual-review/**/*.test.ts";
 
 const REQUIRED_SSH_E2E_ENV = [
-  "ZCODE_E2E_SSH_HOST",
-  "ZCODE_E2E_SSH_USERNAME",
-  "ZCODE_E2E_SSH_PASSWORD",
+  "NEX_E2E_SSH_HOST",
+  "NEX_E2E_SSH_USERNAME",
+  "NEX_E2E_SSH_PASSWORD",
 ];
 
 export function hasRequiredSshE2EEnvironment(env) {

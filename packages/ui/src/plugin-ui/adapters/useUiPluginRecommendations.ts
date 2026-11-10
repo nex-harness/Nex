@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ClientConfigSnapshot } from "@zcode/shared";
+import type { ClientConfigSnapshot } from "@nex/shared";
 import { useOptionalServices } from "@/hooks/useServices.js";
 import { logger } from "@/logger.js";
 

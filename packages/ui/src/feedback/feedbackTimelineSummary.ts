@@ -1,4 +1,4 @@
-import type { FeedbackTicketEvent, FeedbackTicketStatus } from "@zcode/shared";
+import type { FeedbackTicketEvent, FeedbackTicketStatus } from "@nex/shared";
 import {
   FEEDBACK_STATUS_MESSAGE_IDS,
   formatFeedbackStatusLabel,

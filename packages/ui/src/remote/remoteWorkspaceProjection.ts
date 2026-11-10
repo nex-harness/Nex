@@ -5,7 +5,7 @@ import {
   type SourceServerRecord,
   type SourceServerWorkspaceHistoryEntry,
   type WorkspacePurpose,
-} from "@zcode/shared";
+} from "@nex/shared";
 import {
   buildAggregatedSourceStatusMap,
   type AggregatedSourceStatus,

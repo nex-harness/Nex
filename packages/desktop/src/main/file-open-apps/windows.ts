@@ -170,12 +170,12 @@ public static class NativeFileApps {
   }
 }
 '@
-if ($env:ZCODE_FILE_APP_ACTION -eq 'open') {
-  [NativeFileApps]::Open($env:ZCODE_FILE_APP_PATH, $env:ZCODE_FILE_APP_HANDLER)
+if ($env:NEX_FILE_APP_ACTION -eq 'open') {
+  [NativeFileApps]::Open($env:NEX_FILE_APP_PATH, $env:NEX_FILE_APP_HANDLER)
 } else {
-  $zcodeQuery = [NativeFileApps]::Query($env:ZCODE_FILE_APP_PATH, ($env:ZCODE_FILE_APP_INCLUDE_ICONS -ne '0'))
+  $nexQuery = [NativeFileApps]::Query($env:NEX_FILE_APP_PATH, ($env:NEX_FILE_APP_INCLUDE_ICONS -ne '0'))
   ${WINDOWS_SUITE_ICON_SCRIPT}
-  ConvertTo-Json -InputObject $zcodeQuery -Depth 6 -Compress
+  ConvertTo-Json -InputObject $nexQuery -Depth 6 -Compress
 }
 `
   // 增加原生资源解析后，UTF-16 Base64 接近 Windows 命令行上限；不传输排版缩进和独立注释。

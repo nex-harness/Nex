@@ -1,4 +1,4 @@
-import { TID_TOOL_SUMMARY_TRIGGER } from "@zcode/shared/test-ids";
+import { TID_TOOL_SUMMARY_TRIGGER } from "@nex/shared/test-ids";
 
 export type ConversationToolGroupName = "Explore" | "ExecuteGroup" | "ChangesGroup";
 

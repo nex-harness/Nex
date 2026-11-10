@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { EmbeddedBrowserSitePermissionsSnapshot } from "@zcode/shared";
+import type { EmbeddedBrowserSitePermissionsSnapshot } from "@nex/shared";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { logger } from "@/logger.js";
 

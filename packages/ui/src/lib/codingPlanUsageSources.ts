@@ -4,9 +4,9 @@ import {
   resolveModelProviderFamilySpecByProviderId,
   type ProviderFamilyConnectionSelectionSettings,
   type ProviderFamilyDomain,
-  type ZCodeAccountAccess,
-  type ZCodeProviderAccountAccess,
-} from "@zcode/shared";
+  type NexAccountAccess,
+  type NexProviderAccountAccess,
+} from "@nex/shared";
 import {
   resolveEnterpriseCodingPlanProductFamily,
   type EnterpriseCodingPlanProductDisplay,
@@ -21,7 +21,7 @@ export interface CodingPlanUsageSource {
   id: SidebarUsageCodingPlanSourceId;
   providerId: SidebarUsageCodingPlanProviderId;
   label: string;
-  accountAccess: ZCodeProviderAccountAccess | ZCodeAccountAccess;
+  accountAccess: NexProviderAccountAccess | NexAccountAccess;
 }
 
 export function buildPersonalCodingPlanUsageSource({
@@ -30,7 +30,7 @@ export function buildPersonalCodingPlanUsageSource({
   label,
 }: {
   providerId: SidebarUsageCodingPlanProviderId;
-  accountAccess: ZCodeProviderAccountAccess | ZCodeAccountAccess;
+  accountAccess: NexProviderAccountAccess | NexAccountAccess;
   label?: string | null;
 }): CodingPlanUsageSource {
   const normalizedLabel = label?.trim();
@@ -51,7 +51,7 @@ export type CurrentSidebarCodingPlanUsageSource =
       audience: "individual";
       providerId: SidebarUsageCodingPlanProviderId;
       sourceId: SidebarUsageCodingPlanSourceId;
-      accountAccess: ZCodeProviderAccountAccess | ZCodeAccountAccess;
+      accountAccess: NexProviderAccountAccess | NexAccountAccess;
       teamSource?: never;
     }
   | {
@@ -68,7 +68,7 @@ export function buildCodingPlanUsageSources({
   accountAccesses,
   subscribedTeamProducts,
 }: {
-  accountAccesses: Partial<Record<ProviderFamilyDomain, ZCodeProviderAccountAccess>>;
+  accountAccesses: Partial<Record<ProviderFamilyDomain, NexProviderAccountAccess>>;
   subscribedTeamProducts: EnterpriseCodingPlanProductDisplay[];
 }): CodingPlanUsageSource[] {
   return buildTeamCodingPlanUsageSources(subscribedTeamProducts, accountAccesses);
@@ -76,7 +76,7 @@ export function buildCodingPlanUsageSources({
 
 function buildTeamCodingPlanUsageSources(
   subscribedTeamProducts: EnterpriseCodingPlanProductDisplay[],
-  accountAccesses: Partial<Record<ProviderFamilyDomain, ZCodeProviderAccountAccess>>,
+  accountAccesses: Partial<Record<ProviderFamilyDomain, NexProviderAccountAccess>>,
 ): CodingPlanUsageSource[] {
   const seen = new Set<string>();
   return subscribedTeamProducts.flatMap((product) => {
@@ -154,7 +154,7 @@ export function resolveSidebarCurrentCodingPlanUsageSource({
 }: {
   selections?: ProviderFamilyConnectionSelectionSettings | null;
   selectedProviderId: string | null;
-  accountAccesses: Partial<Record<ProviderFamilyDomain, ZCodeProviderAccountAccess>>;
+  accountAccesses: Partial<Record<ProviderFamilyDomain, NexProviderAccountAccess>>;
   teamSources: CodingPlanUsageSource[];
 }): CurrentSidebarCodingPlanUsageSource | null {
   const family = selectedProviderId

@@ -10,10 +10,10 @@
 export const WEB_REMOTE_CONTROL_RENDERER_ACTION_TIMEOUT_MS = 30_000;
 
 /** 手机新建本地项目的固定根目录（相对用户主目录），与桌面 scratch workspace 一致。 */
-export const WEB_REMOTE_CONTROL_LOCAL_PROJECT_ROOT_DIR = "ZCodeProject";
+export const WEB_REMOTE_CONTROL_LOCAL_PROJECT_ROOT_DIR = "NexProject";
 
 export interface WebRemoteControlWorkspaceCreateRequestPayload {
-  zcode_type: "workspace-create-request";
+  nex_type: "workspace-create-request";
   requestId: string;
   /** 项目目录名：去首尾空白后非空，且不含 `/` 或 `\`。同名目录直接复用。 */
   name: string;
@@ -21,7 +21,7 @@ export interface WebRemoteControlWorkspaceCreateRequestPayload {
 
 export type WebRemoteControlWorkspaceCreateResponsePayload =
   | {
-      zcode_type: "workspace-create-response";
+      nex_type: "workspace-create-response";
       requestId: string;
       success: true;
       workspacePath: string;
@@ -31,14 +31,14 @@ export type WebRemoteControlWorkspaceCreateResponsePayload =
       hostId?: string;
     }
   | {
-      zcode_type: "workspace-create-response";
+      nex_type: "workspace-create-response";
       requestId: string;
       success: false;
       error: string;
     };
 
 export interface WebRemoteControlTaskPinRequestPayload {
-  zcode_type: "task-pin-request";
+  nex_type: "task-pin-request";
   requestId: string;
   taskId: string;
   workspacePath: string;
@@ -48,14 +48,14 @@ export interface WebRemoteControlTaskPinRequestPayload {
 
 export type WebRemoteControlTaskPinResponsePayload =
   | {
-      zcode_type: "task-pin-response";
+      nex_type: "task-pin-response";
       requestId: string;
       taskId: string;
       success: true;
       pinned: boolean;
     }
   | {
-      zcode_type: "task-pin-response";
+      nex_type: "task-pin-response";
       requestId: string;
       taskId: string;
       success: false;
@@ -63,7 +63,7 @@ export type WebRemoteControlTaskPinResponsePayload =
     };
 
 export interface WebRemoteControlTaskArchiveRequestPayload {
-  zcode_type: "task-archive-request";
+  nex_type: "task-archive-request";
   requestId: string;
   taskId: string;
   workspacePath: string;
@@ -74,7 +74,7 @@ export interface WebRemoteControlTaskArchiveRequestPayload {
 
 export type WebRemoteControlTaskArchiveResponsePayload =
   | {
-      zcode_type: "task-archive-response";
+      nex_type: "task-archive-response";
       requestId: string;
       taskId: string;
       success: true;
@@ -82,7 +82,7 @@ export type WebRemoteControlTaskArchiveResponsePayload =
       archived: boolean;
     }
   | {
-      zcode_type: "task-archive-response";
+      nex_type: "task-archive-response";
       requestId: string;
       taskId: string;
       success: false;
@@ -147,17 +147,17 @@ export function normalizeWebRemoteControlWorkspaceName(name: string): string {
 
 /**
  * 不认识的请求型 payload 需要回 app-error，旧/新版本才能互相降级。
- * 只认「字符串 zcode_type + 非空 requestId + 以 -request 结尾」，response/推送/垃圾数据仍静默丢弃，
+ * 只认「字符串 nex_type + 非空 requestId + 以 -request 结尾」，response/推送/垃圾数据仍静默丢弃，
  * 避免两端对未知应答互相回错形成循环。
  */
 export function resolveUnrecognizedWebRemoteControlRequest(
   value: unknown,
-): { requestId: string; zcodeType: string } | null {
+): { requestId: string; nexType: string } | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
-  const zcodeType = record.zcode_type;
+  const nexType = record.nex_type;
   const requestId = record.requestId;
-  if (typeof zcodeType !== "string" || !zcodeType.endsWith("-request")) return null;
+  if (typeof nexType !== "string" || !nexType.endsWith("-request")) return null;
   if (typeof requestId !== "string" || !requestId.trim()) return null;
-  return { requestId, zcodeType };
+  return { requestId, nexType };
 }

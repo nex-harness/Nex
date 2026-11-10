@@ -22,8 +22,8 @@ flowchart LR
   Accessor --> RPC["ProxyChannel / RPC"]
 
   RPC -->|"Desktop Local"| Local["本地 Host Process"]
-  RPC -->|"Desktop Remote"| Remote["远端 zcode-server"]
-  RPC -->|"Web"| Web["WebSocket -> zcode-server"]
+  RPC -->|"Desktop Remote"| Remote["远端 nex-server"]
+  RPC -->|"Web"| Web["WebSocket -> nex-server"]
 
   Local --> GitService["GitService"]
   Remote --> GitService
@@ -229,7 +229,7 @@ Git 服务现在和 `file/system/terminal` 一样走统一 RPC 链路。
 
 `GitEnvironmentProvider` 会按顺序探测：
 
-1. `ZCODE_GIT_BINARY`
+1. `NEX_GIT_BINARY`
 2. `git`
 3. Windows 下的常见 Git 安装路径
 

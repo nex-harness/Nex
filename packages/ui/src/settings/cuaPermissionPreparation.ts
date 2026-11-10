@@ -1,5 +1,5 @@
-import type { CuaPermissionKind } from "@zcode/shared";
-import type { CuaPermissionStatus } from "@zcode/services";
+import type { CuaPermissionKind } from "@nex/shared";
+import type { CuaPermissionStatus } from "@nex/services";
 
 function isActionablePermissionState(state: CuaPermissionStatus["accessibility"]): boolean {
   return state === "denied" || state === "stale";

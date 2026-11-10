@@ -1,12 +1,12 @@
-import { isHighspeedProviderId } from "@zcode/shared";
-import { modelSelectionSchema, type ModelSelection } from "@zcode/shared/model-selection";
-import { submissionModeSchema, type SubmissionMode } from "@zcode/shared/zcode-protocol-v4";
-import type { ModelSelectionView } from "@zcode/services";
+import { isHighspeedProviderId } from "@nex/shared";
+import { modelSelectionSchema, type ModelSelection } from "@nex/shared/model-selection";
+import { submissionModeSchema, type SubmissionMode } from "@nex/shared/nex-protocol-v4";
+import type { ModelSelectionView } from "@nex/services";
 import { logger } from "@/logger.js";
 import { composerScopeKey, type ComposerScope } from "@/v4/composer/composerDraftStore.js";
 
 // 沿用旧 key，读取时兼容只保存 ModelSelection 的历史记录。
-const COMPOSER_RECENT_KEY_PREFIX = "zcode-model-selection-recent-v1";
+const COMPOSER_RECENT_KEY_PREFIX = "nex-model-selection-recent-v1";
 
 interface StorageLike {
   getItem(key: string): string | null;
@@ -73,7 +73,7 @@ function resolveComposerRecentKey(
   workspaceIdentity?: string,
   scope?: ComposerScope,
 ): string {
-  if (scope) return `zcode-composer-recent:v2:${composerScopeKey(scope)}`;
+  if (scope) return `nex-composer-recent:v2:${composerScopeKey(scope)}`;
   const workspaceKey = workspaceIdentity?.trim() || workspacePath;
   return `${COMPOSER_RECENT_KEY_PREFIX}:${workspaceKey}`;
 }

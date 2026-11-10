@@ -1,6 +1,6 @@
-import type { ZCodePersistedMessage, ZCodeTaskPersistStatus } from "@zcode/shared";
+import type { NexPersistedMessage, NexTaskPersistStatus } from "@nex/shared";
 
-/** 导入来源身份：外部原生 CLI（Claude Code），与 agent runtime 的 ZCodeProvider 无关。 */
+/** 导入来源身份：外部原生 CLI（Claude Code），与 agent runtime 的 NexProvider 无关。 */
 export type ClaudeNativeImportSourceProvider = "claude";
 
 export interface ClaudeNativeImportedSessionSource {
@@ -12,7 +12,7 @@ export interface ClaudeNativeImportedSessionSource {
   updatedAt: number;
   title?: string;
   model?: string;
-  status?: ZCodeTaskPersistStatus;
+  status?: NexTaskPersistStatus;
   migrationSource?: "claudeCode";
-  messages: ZCodePersistedMessage[];
+  messages: NexPersistedMessage[];
 }

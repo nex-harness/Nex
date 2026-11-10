@@ -1,17 +1,17 @@
 import { useState } from "react";
 import { Loader2Icon } from "lucide-react";
-import type { ZCodeTaskSnapshotToolFieldRef } from "@zcode/shared";
+import type { NexTaskSnapshotToolFieldRef } from "@nex/shared";
 import { Button } from "@/components/ui/button.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 
 export function ToolSnapshotFieldNotice({
   refs,
   onLoadFullToolCallFields,
 }: {
-  refs: readonly ZCodeTaskSnapshotToolFieldRef[];
+  refs: readonly NexTaskSnapshotToolFieldRef[];
   onLoadFullToolCallFields?: () => Promise<boolean | void> | boolean | void;
 }) {
-  const { intl, locale } = useZCodeIntl();
+  const { intl, locale } = useNexIntl();
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   if (refs.length === 0 || !onLoadFullToolCallFields) {

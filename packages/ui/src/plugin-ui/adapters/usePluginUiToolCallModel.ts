@@ -1,4 +1,4 @@
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { usePluginReferenceIconProjection } from "@/v4/pluginReferenceIconContext.js";
 import {
   buildTaskSidePaneMemoryKey,
@@ -34,7 +34,7 @@ import type {
   McpAppsDisplayMode,
   PluginSandboxHandle,
   PluginUiScopeRef,
-} from "@zcode/shared/mcp-apps";
+} from "@nex/shared/mcp-apps";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { resolvePluginUiLogicalScope } from "../domain/pluginUiLogicalScope.js";
 
@@ -49,7 +49,7 @@ const INLINE_ONLY: readonly McpAppsDisplayMode[] = ["inline"];
 export function usePluginUiToolCallModel(
   context: ToolCallBlockRenderContext,
 ): Omit<PluginUiToolCallViewProps, "fallback"> {
-  const { intl, locale } = useZCodeIntl();
+  const { intl, locale } = useNexIntl();
   const presentation = useMemo(
     () => readPluginUiPresentation(context.toolCallNode.toolCall.raw),
     [context.toolCallNode.toolCall.raw],
@@ -192,7 +192,7 @@ export function usePluginUiToolCallModel(
     toolResult,
     toolCallId: toolCall.toolId,
     toolCancelled: isPluginUiToolCancelled(toolCall),
-    hostVersion: "zcode",
+    hostVersion: "nex",
     // 此处声明宿主入口；controller 在握手后与页面能力取交集。
     availableDisplayModes: onOpenSidePane ? INLINE_AND_FULLSCREEN : INLINE_ONLY,
     onDisplayModeRequest: handleDisplayModeRequest,

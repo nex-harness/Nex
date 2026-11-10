@@ -5,13 +5,13 @@ import {
   isTrustedRewardsUrl,
   REWARDS_PARTITION,
   resolveRewardsOrigin,
-  ZCODE_ENV,
+  NEX_ENV,
   type RewardsContext,
-} from "@zcode/shared";
+} from "@nex/shared";
 import { useServices } from "@/hooks/useServices.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { useZCodeStore } from "@/store/StoreProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
+import { useNexStore } from "@/store/StoreProvider.js";
 import { resolveTheme } from "@/useTheme.js";
 import { logger } from "@/logger.js";
 import { Button } from "@/components/ui/button.js";
@@ -20,9 +20,9 @@ import { EmbeddedWebsiteHeader } from "@/components/EmbeddedWebsiteHeader.js";
 export function RewardsWebview({ onClose }: { onClose: () => void }) {
   const { credentialService, oauthService } = useServices();
   const platform = usePlatform();
-  const { intl, locale } = useZCodeIntl();
-  const themePreference = useZCodeStore((s) => s.theme);
-  const userId = useZCodeStore((s) => s.user?.id ?? null);
+  const { intl, locale } = useNexIntl();
+  const themePreference = useNexStore((s) => s.theme);
+  const userId = useNexStore((s) => s.user?.id ?? null);
   const [systemDark, setSystemDark] = useState(
     () => matchMedia("(prefers-color-scheme: dark)").matches,
   );
@@ -38,12 +38,12 @@ export function RewardsWebview({ onClose }: { onClose: () => void }) {
     ? "zai-dark"
     : "zai-light";
   const env = import.meta.env;
-  const policy = { dev: env.DEV, e2e: env.VITE_ZCODE_E2E_STORE_BRIDGE === "1" };
+  const policy = { dev: env.DEV, e2e: env.VITE_NEX_E2E_STORE_BRIDGE === "1" };
   const [url] = useState(() =>
     buildRewardsUrl(
       resolveRewardsOrigin({
         ...policy,
-        env: ZCODE_ENV,
+        env: NEX_ENV,
         override:
           typeof env.VITE_REWARDS_WEBVIEW_ORIGIN === "string"
             ? env.VITE_REWARDS_WEBVIEW_ORIGIN
@@ -97,7 +97,7 @@ export function RewardsWebview({ onClose }: { onClose: () => void }) {
       const [oauth, jwt] = provider
         ? await Promise.all([
             credentialService.load(`oauth:${provider}:access_token`),
-            credentialService.load("zcodejwttoken"),
+            credentialService.load("nexjwttoken"),
           ])
         : [null, null];
       if (

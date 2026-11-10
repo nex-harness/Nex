@@ -1,10 +1,10 @@
 # Workflow Debugger
 
-Workflow Debugger is a lightweight side-pane tool for inspecting ZCode Agent workflow runs.
+Workflow Debugger is a lightweight side-pane tool for inspecting Nex Agent workflow runs.
 
 ## Scope
 
-The default workflow kind is `expert`, while the ZCode task service/types accept arbitrary non-empty workflow kinds and optional `definitionId` values from newer ZCode agents. The panel is intentionally debugging-oriented and shows:
+The default workflow kind is `expert`, while the Nex task service/types accept arbitrary non-empty workflow kinds and optional `definitionId` values from newer Nex agents. The panel is intentionally debugging-oriented and shows:
 
 - workflow run list for the active workspace
 - selected run snapshot
@@ -13,24 +13,24 @@ The default workflow kind is `expert`, while the ZCode task service/types accept
 - activity to child session mapping
 - recent workflow events
 
-## ZCode Integration
+## Nex Integration
 
-The renderer never reads `~/.zcode/cli/workflows` directly. It calls `IZCodeTaskService`, which currently exposes the shared `IWorkflowService` shape.
+The renderer never reads `~/.nex/cli/workflows` directly. It calls `INexTaskService`, which currently exposes the shared `IWorkflowService` shape.
 
-Current branch status: the UI and shared `ZCodeWorkflow*` types are still present, but the ZCode task service adapter only returns empty workflow data and marks mutating workflow operations unsupported. The intended agent extension methods remain:
+Current branch status: the UI and shared `NexWorkflow*` types are still present, but the Nex task service adapter only returns empty workflow data and marks mutating workflow operations unsupported. The intended agent extension methods remain:
 
-- `zcode.dev/workflow/start`
-- `zcode.dev/workflow/list`
-- `zcode.dev/workflow/get`
-- `zcode.dev/workflow/cancel`
+- `nex.dev/workflow/start`
+- `nex.dev/workflow/list`
+- `nex.dev/workflow/get`
+- `nex.dev/workflow/cancel`
 
 Live updates are delivered through the extension notification:
 
-- `zcode.dev/workflow/event`
+- `nex.dev/workflow/event`
 
-When workflow transport is reconnected, the adapter must map that notification into a workspace event with type `workspace_workflow_event`, preserving `kind`, `nodeId`, and small structured `payload` fields. Preserving these fields is required for incremental scheduler/frontier updates from `zcode-cli`; older clients that dropped them had to reload the full snapshot to understand node movement.
+When workflow transport is reconnected, the adapter must map that notification into a workspace event with type `workspace_workflow_event`, preserving `kind`, `nodeId`, and small structured `payload` fields. Preserving these fields is required for incremental scheduler/frontier updates from `nex-cli`; older clients that dropped them had to reload the full snapshot to understand node movement.
 
-The graph view uses the `snapshot.graph` payload returned by `zcode.dev/workflow/get`.
+The graph view uses the `snapshot.graph` payload returned by `nex.dev/workflow/get`.
 When the response also includes `scheduler`, the graph view prefers that derived server state and falls back to local graph derivation for older agents.
 It derives:
 

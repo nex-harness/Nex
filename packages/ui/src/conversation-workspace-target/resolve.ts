@@ -1,4 +1,4 @@
-import { resolveWorkspaceKey } from "@zcode/shared";
+import { resolveWorkspaceKey } from "@nex/shared";
 import type {
   ConversationWorkspaceTab,
   ConversationWorkspaceTarget,

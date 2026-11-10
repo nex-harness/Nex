@@ -22,22 +22,22 @@ import {
   BUILTIN_MODEL_PROVIDER_IDS,
   getModelProviderFamilySpec,
   resolveModelProviderFamilySpecByProviderId,
-  ZCODE_AGENT_PROVIDER,
+  NEX_AGENT_PROVIDER,
   type ProviderFamilyConnectionSelection,
   type ProviderFamilyConnectionSelectionSettings,
   type ProviderFamilyDomain,
   type UsageEntitlementSnapshot,
-  type ZCodeAccountAccess,
-  type ZCodeProviderAccountAccess,
-  type ZCodeConfigOption,
-  type ZCodeProvider,
-} from "@zcode/shared";
-import { TID_V4_MODEL_CONFIG, TID_V4_COMPOSER_INPUT } from "@zcode/shared/test-ids";
+  type NexAccountAccess,
+  type NexProviderAccountAccess,
+  type NexConfigOption,
+  type NexProvider,
+} from "@nex/shared";
+import { TID_V4_MODEL_CONFIG, TID_V4_COMPOSER_INPUT } from "@nex/shared/test-ids";
 import type {
   SessionConfigState,
   SessionPhase,
   SessionUsageState,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@nex/shared/nex-protocol-v4";
 import { ModelConfigSelect, type ModelSelectGroup } from "@/ModelConfigSelect.js";
 import type { ComposerModelOptions } from "@/chat-input-toolbar/ComposerModelMenu.js";
 import { Button } from "@/components/ui/button.js";
@@ -69,7 +69,7 @@ import {
   setPendingSettingsUsageCodingPlanIntent,
 } from "@/lib/settingsNavigation.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
-import type { ModelSelectionView } from "@zcode/services";
+import type { ModelSelectionView } from "@nex/services";
 import type {
   ModelSelectionState,
   ModelSelectionRefreshResult,
@@ -82,14 +82,14 @@ import {
   composerConnectionKey,
   chooseConnectionModel,
 } from "@/lib/composerPlanGroups.js";
-import { useZCodeStoreWithDefault } from "@/store/StoreProvider.js";
+import { useNexStoreWithDefault } from "@/store/StoreProvider.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import {
   useUsageEntitlement,
   type UsageEntitlementRefreshOptions,
 } from "@/hooks/useUsageEntitlement.js";
-import { useToolbarConfigOptions } from "@/hooks/useZCodeConfig.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useToolbarConfigOptions } from "@/hooks/useNexConfig.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import {
   createCodingPlanFunnelContext,
   resolveCodingPlanEntryPlanState,
@@ -98,7 +98,7 @@ import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
 import { logger } from "@/logger.js";
 import { useCodingPlanUpgradeDialog } from "@/settings/CodingPlanUpgradeDialogProvider.js";
 import { useCodingPlanEntitlements } from "@/settings/model-provider-section/useCodingPlanEntitlements.js";
-import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
+import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/nexCustomModelValue.js";
 import { buildRegistryModelSelectGroups } from "@/lib/modelSelectionGroups.js";
 import {
   buildCodingPlanUsageSources,
@@ -128,7 +128,7 @@ const MODEL_SELECTION_LOADING_STATE: ModelSelectionState = { status: "loading" }
 function noop(): void {}
 
 function HighspeedCountdown({ expiresAt }: { expiresAt: number }) {
-  const { intl, locale } = useZCodeIntl();
+  const { intl, locale } = useNexIntl();
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -279,7 +279,7 @@ function resolveContextTeamUsageSourceFromEntitlementSnapshot({
   accountAccess,
   snapshot,
 }: {
-  accountAccess?: ZCodeProviderAccountAccess | ZCodeAccountAccess | null;
+  accountAccess?: NexProviderAccountAccess | NexAccountAccess | null;
   snapshot?: UsageEntitlementSnapshot | null;
 }): CodingPlanUsageSource | null {
   if (snapshot?.context?.scope !== "team") {
@@ -336,7 +336,7 @@ function resolveContextTeamUsageSourceFromEntitlementSnapshot({
 }
 
 function resolveContextCodingPlanUsageSource(params: {
-  accountAccess?: ZCodeProviderAccountAccess | ZCodeAccountAccess | null;
+  accountAccess?: NexProviderAccountAccess | NexAccountAccess | null;
   cachedTeamSources?: readonly CodingPlanUsageSource[];
   entitlementSnapshot?: UsageEntitlementSnapshot | null;
   // 原类型/守卫硬绑 bigmodelCodingPlan，zai team 上下文永远返回 null。
@@ -391,7 +391,7 @@ export interface V4ComposerToolbarProps {
   modelSelectionRefresh?: () => Promise<ModelSelectionRefreshResult>;
   sessionId: string | null;
   phase: SessionPhase | null;
-  provider?: ZCodeProvider;
+  provider?: NexProvider;
   /** 当前工具条是否运行在 Web 远控壳中。 */
   isWebRemoteControl?: boolean;
   /** 当前视口是否为手机输入布局。 */
@@ -467,9 +467,9 @@ function V4ComposerModelControlsImpl({
   onSendCompressionCommand,
   onRecoverCustomModelSelection,
 }: V4ComposerToolbarProps) {
-  const { intl, locale } = useZCodeIntl();
+  const { intl, locale } = useNexIntl();
   const { openCodingPlanUpgrade } = useCodingPlanUpgradeDialog();
-  const displayProvider = provider ?? ZCODE_AGENT_PROVIDER;
+  const displayProvider = provider ?? NEX_AGENT_PROVIDER;
   // 配置面读取：workspace 缺省目录（taskId=null），不读旧会话态。
   const { error: configOptionsError } = useToolbarConfigOptions(
     workspacePath,
@@ -523,7 +523,7 @@ function V4ComposerModelControlsImpl({
         type: "select",
         currentValue: "",
         options: [],
-      } satisfies ZCodeConfigOption)
+      } satisfies NexConfigOption)
     : undefined;
 
   // 空模型/档位曾被 Session 旧值补回，界面显示与实际不可提交状态矛盾。
@@ -625,7 +625,7 @@ function V4ComposerModelControlsImpl({
     resolveModelProviderFamilySpecByProviderId(effectiveConfig?.provider ?? "")?.id ??
     sharedSettings?.providerFamilyDomain ??
     "bigmodel";
-  const user = useZCodeStoreWithDefault((state) => state.user, undefined);
+  const user = useNexStoreWithDefault((state) => state.user, undefined);
   const connectionAuthenticated =
     user !== null &&
     Boolean(
@@ -654,7 +654,7 @@ function V4ComposerModelControlsImpl({
         : undefined) ?? [],
     [connectionAuthenticated, enterpriseProducts.snapshot?.productList],
   );
-  const authSessionSeq = useZCodeStoreWithDefault((state) => state.authSessionSeq, 0);
+  const authSessionSeq = useNexStoreWithDefault((state) => state.authSessionSeq, 0);
   const teamUsageScope = useMemo(
     () => ({}),
     [baseServices, connectionFamily, user?.id, authSessionSeq],
@@ -1082,7 +1082,7 @@ function V4ComposerModelControlsImpl({
   );
 
   // 候选档位只来自目标 Host 的 ModelSelectionView，已选档位只来自 Composer。
-  const thoughtOption = useMemo<ZCodeConfigOption | null>(() => {
+  const thoughtOption = useMemo<NexConfigOption | null>(() => {
     if (!effectiveConfig) return null;
     if (!draftModelThoughtOption) return null;
     return {
@@ -1391,4 +1391,4 @@ function V4ComposerModelControlsImpl({
 }
 
 export const V4ComposerModelControls = memo(V4ComposerModelControlsImpl);
-import { isApiKeyAccess } from "@zcode/provider";
+import { isApiKeyAccess } from "@nex/provider";

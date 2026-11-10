@@ -2,7 +2,7 @@ import {
   BUILTIN_MODEL_PROVIDER_IDS,
   isStartPlanModelProviderId,
   type UsageEntitlementSnapshot,
-} from "@zcode/shared";
+} from "@nex/shared";
 import type {
   GlmQuotaBannerBusinessCode,
   StartPlanConcurrentLimitBannerReason,

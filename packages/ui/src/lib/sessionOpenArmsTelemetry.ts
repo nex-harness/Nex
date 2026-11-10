@@ -1,4 +1,4 @@
-import type { ArmsCustomEventPayload } from "@zcode/shared";
+import type { ArmsCustomEventPayload } from "@nex/shared";
 import { logger } from "@/logger.js";
 
 export const SESSION_OPEN_ARMS_GROUP = "ui_perf";

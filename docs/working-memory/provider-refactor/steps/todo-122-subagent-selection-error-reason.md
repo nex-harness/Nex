@@ -50,9 +50,9 @@
 
 ## 代码入口
 
-- `apps/zcode-cli/packages/core/src/runtime/helpers/subagent-selection.ts`
-- `apps/zcode-cli/packages/core/src/errors/error-payload.ts`
-- `apps/zcode-cli/packages/core/src/tool/executor/errors.ts`
-- `apps/zcode-cli/packages/core/src/subagent/runner.ts`
-- `apps/zcode-cli/packages/adapters/src/logging/serialize.ts`
+- `apps/nex-cli/packages/core/src/runtime/helpers/subagent-selection.ts`
+- `apps/nex-cli/packages/core/src/errors/error-payload.ts`
+- `apps/nex-cli/packages/core/src/tool/executor/errors.ts`
+- `apps/nex-cli/packages/core/src/subagent/runner.ts`
+- `apps/nex-cli/packages/adapters/src/logging/serialize.ts`
 - `packages/ui/src/ToolCallBlocks/ToolLayout.tsx`

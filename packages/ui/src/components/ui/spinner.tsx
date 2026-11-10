@@ -1,9 +1,9 @@
 import { cn } from "../lib/utils.js";
 import { LoaderIcon } from "lucide-react";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 
 function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   return (
     <LoaderIcon
       role="status"

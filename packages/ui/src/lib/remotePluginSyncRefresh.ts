@@ -1,12 +1,12 @@
-import type { ICommandsService, ISkillsService, IZCodeAgentService } from "@zcode/services";
+import type { ICommandsService, ISkillsService, INexAgentService } from "@nex/services";
 import { logger } from "@/logger.js";
-import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/zcodeDraftSkillInvalidation.js";
+import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/nexDraftSkillInvalidation.js";
 import { refreshSharedSkillStoreForWorkspace } from "@/lib/skillStoreRefresh.js";
 import { mergeSlashCommandsAfterCommandRefresh } from "@/settings/pluginSlashCommandRefresh.js";
 import { useCommandsStore } from "@/store/commandsStore.js";
 import { useMcpStore } from "@/store/mcpStore.js";
 import { notifyPluginManagementChange } from "@/store/pluginManagementStoreLoading.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useNexSessionStore } from "@/store/nexSessionStore.js";
 
 function toMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -48,15 +48,15 @@ export async function refreshSlashCommandsAfterRemoteSync(params: {
       });
     }
 
-    const zcodeSessionStore = useZCodeSessionStore.getState();
-    const currentSlashCommands = zcodeSessionStore.getWorkspaceState(
+    const nexSessionStore = useNexSessionStore.getState();
+    const currentSlashCommands = nexSessionStore.getWorkspaceState(
       workspacePath,
       workspaceIdentityParam,
     ).slashCommands;
     // 远程插件同步入口不一定打开过命令设置页，commandsStore 可能尚未初始化。
-    // 输入框 `/` 面板读取的是 zcodeSessionStore.slashCommands，所以同步后必须直接
+    // 输入框 `/` 面板读取的是 nexSessionStore.slashCommands，所以同步后必须直接
     // 向当前远端 workspace 拉取 commands 并写回 slashCommands，不能只刷新设置页 store。
-    zcodeSessionStore.setSlashCommands(
+    nexSessionStore.setSlashCommands(
       workspacePath,
       mergeSlashCommandsAfterCommandRefresh(currentSlashCommands, result.commands),
       workspaceIdentityParam,
@@ -112,7 +112,7 @@ export async function refreshWorkspacePluginCapabilitiesAfterRemoteSync(params: 
   skillsService: ISkillsService;
   workspaceIdentity?: string | null;
   workspacePath?: string | null;
-  zcodeAgentService: IZCodeAgentService;
+  nexAgentService: INexAgentService;
 }): Promise<void> {
   const workspacePath = params.workspacePath;
   if (!workspacePath) {

@@ -1,5 +1,5 @@
 {
-  "name": "@zcode/provider",
+  "name": "@nex/provider",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,8 +11,8 @@
     "lint": "oxlint"
   },
   "dependencies": {
-    "@zcode/model-option-map": "workspace:*",
-    "@zcode/shared": "workspace:*",
+    "@nex/model-option-map": "workspace:*",
+    "@nex/shared": "workspace:*",
     "zod": "4.6.5"
   },
   "devDependencies": {

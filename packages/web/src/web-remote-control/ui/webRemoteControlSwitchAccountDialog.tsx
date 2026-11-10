@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { Button } from "@zcode/ui/button";
+import { Button } from "@nex/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@zcode/ui/dialog";
+} from "@nex/ui/dialog";
 import type { WebRemoteControlScreenLocale } from "#src/web-remote-control/domain/webRemoteControlScreenCopy.js";
 
 const copyByLocale = {

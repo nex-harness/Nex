@@ -1,5 +1,5 @@
 import { useEffect, useState, useReducer } from "react";
-import type { PluginUiSurfaceEntry } from "@zcode/services";
+import type { PluginUiSurfaceEntry } from "@nex/services";
 import { useOptionalServices } from "@/hooks/useServices.js";
 import { logger } from "@/logger.js";
 import {

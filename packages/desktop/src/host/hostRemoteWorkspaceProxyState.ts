@@ -1,5 +1,5 @@
-import type { IDisposable } from "@zcode/rpc";
-import { resolveWorkspaceKey } from "@zcode/shared";
+import type { IDisposable } from "@nex/rpc";
+import { resolveWorkspaceKey } from "@nex/shared";
 
 export interface HostRemoteTaskMeta {
   taskId: string;

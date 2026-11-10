@@ -1,5 +1,5 @@
-import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
-import { TID_V4_COMPOSER_INPUT } from "@zcode/shared/test-ids";
+import { BUILTIN_MODEL_PROVIDER_IDS } from "@nex/shared";
+import { TID_V4_COMPOSER_INPUT } from "@nex/shared/test-ids";
 import { getE2EAppDataPaths, setInputValueByTestIdDom } from "./desktop-app.js";
 import {
   restartIntoWorkspace,

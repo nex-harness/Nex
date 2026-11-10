@@ -1,16 +1,16 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { InternalChannels, PlatformChannels } from "@zcode/shared";
-import type { PluginSandboxCaptureRequest } from "@zcode/shared/mcp-apps";
+import { InternalChannels, PlatformChannels } from "@nex/shared";
+import type { PluginSandboxCaptureRequest } from "@nex/shared/mcp-apps";
 import { enableSandboxRetainedMoves } from "./retainedMoves.js";
 
 export function installPluginSandboxHostBridge(): void {
   const supportsRetainedMove =
     contextBridge.executeInMainWorld({ func: enableSandboxRetainedMoves }) === true;
   /**
-   * 插件 UI 沙箱：独立命名空间，不进 window.zcode。只暴露明确的沙箱操作；
+   * 插件 UI 沙箱：独立命名空间，不进 window.nex。只暴露明确的沙箱操作；
    * 端口不能过 contextBridge，走下面的 window.postMessage transfer。
    */
-  contextBridge.exposeInMainWorld("zcodePluginSandbox", {
+  contextBridge.exposeInMainWorld("nexPluginSandbox", {
     supportsRetainedMove,
     setExecutionActive: (sandboxId: string, initId: number, active: boolean) =>
       ipcRenderer.invoke(

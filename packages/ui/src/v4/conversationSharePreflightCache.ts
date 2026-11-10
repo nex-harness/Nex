@@ -2,9 +2,9 @@ import type {
   ConversationShareFailureIssue,
   ConversationSharePreflightResult,
   ConversationShareTurnPreflightResult,
-} from "@zcode/services";
-import { extractConversationPreviewFileReferences } from "@zcode/shared";
-import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
+} from "@nex/services";
+import { extractConversationPreviewFileReferences } from "@nex/shared";
+import type { ConversationRow } from "@nex/shared/nex-protocol-v4";
 
 function hashString(value: string): string {
   let hash = 2166136261;

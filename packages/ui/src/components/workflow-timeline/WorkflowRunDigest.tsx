@@ -5,14 +5,14 @@ import {
   SlidersHorizontalIcon,
   SquareIcon,
 } from "lucide-react";
-import { TID_CHAT_WORKFLOW_RUN_DIGEST } from "@zcode/shared";
-import { testId } from "@zcode/shared/test-ids";
-import type { WorkflowRunState } from "@zcode/shared/zcode-protocol-v4";
+import { TID_CHAT_WORKFLOW_RUN_DIGEST } from "@nex/shared";
+import { testId } from "@nex/shared/test-ids";
+import type { WorkflowRunState } from "@nex/shared/nex-protocol-v4";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import type { WorkflowCausalityGraphData } from "@/components/workflow-graph/types.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import type { WorkflowRunCardSummary } from "@/ToolCallBlocks/fileSummaryTypes.js";
 import type { HoleLabels } from "./timeline-holes.js";
 import { buildWorkflowTimeline, type TimelinePill } from "./timeline-model.js";
@@ -96,7 +96,7 @@ export function WorkflowRunDigest({
   summary,
   testIdKey,
 }: WorkflowRunDigestProps) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const run = summary?.run;
   const [expanded, setExpanded] = useState(true);
 
@@ -316,7 +316,7 @@ function ConfigureRunButton({
   host: WorkflowRunSettingsHost;
   run: WorkflowRunState;
 }) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const { anchorRef, open, setOpen, toggleFrom } = useWorkflowRunSettingsPopoverState();
   const label = intl.formatMessage({ id: "chat.toolCall.workflow.run.settings.title" });
   return (
@@ -355,7 +355,7 @@ function ConfigureRunButton({
  * 撤走——决定已经做完了，没什么可再劝的。
  */
 function CancelRunButton({ onCancel }: { onCancel: () => void }) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const [cancelling, setCancelling] = useState(false);
   const label = intl.formatMessage({
     id: cancelling ? "chat.toolCall.workflow.run.cancelling" : "chat.toolCall.workflow.run.cancel",

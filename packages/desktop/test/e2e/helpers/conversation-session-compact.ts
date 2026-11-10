@@ -6,7 +6,7 @@ import {
   TID_CHAT_COMPACT_MARKER,
   TID_CHAT_USER_MESSAGE,
   TID_CHAT_VIEW,
-} from "@zcode/shared/test-ids";
+} from "@nex/shared/test-ids";
 
 export interface CompactMarkerSnapshot {
   attempt: number | null;
@@ -163,7 +163,7 @@ function getCompactMarkerDiagnostics() {
       }));
       const input = document.querySelector<
         HTMLElement & {
-          __zcodeLexicalInputE2E?: { getText?: () => string };
+          __nexLexicalInputE2E?: { getText?: () => string };
         }
       >(`[data-testid="${inputTestId}"]`);
 
@@ -179,7 +179,7 @@ function getCompactMarkerDiagnostics() {
         },
         compactMarkers: [...legacyCompactMarkers, ...v4CompactMarkers],
         composer: {
-          bridgeText: input?.__zcodeLexicalInputE2E?.getText?.() ?? null,
+          bridgeText: input?.__nexLexicalInputE2E?.getText?.() ?? null,
           domText: (input?.innerText || input?.textContent || "")
             .replace(/\u00a0/g, " ")
             .trim(),

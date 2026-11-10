@@ -5,7 +5,7 @@
 - **实时上传**：手机主动推 `mobile-log` 帧，桌面按设备和会话分文件落盘。
 - **按需拉取**：桌面发 `mobile-log-pull-request`，手机按 cursor 分片回 `mobile-log-pull-response`，桌面导出成一个 JSONL 文件。
 
-所有报文都是普通远控 app payload（`zcode_type` 区分），走现有 relay 加密通道，不新增连接。schema 定义在 `packages/shared/src/web-remote-relay/mobileLog.ts`，桌面收到后用 `parseWebRemoteControlAppPayload` 校验，非法报文直接丢弃。schema 不是 strict：多出来的字段会被忽略，方便手机新版本往前扩展。
+所有报文都是普通远控 app payload（`nex_type` 区分），走现有 relay 加密通道，不新增连接。schema 定义在 `packages/shared/src/web-remote-relay/mobileLog.ts`，桌面收到后用 `parseWebRemoteControlAppPayload` 校验，非法报文直接丢弃。schema 不是 strict：多出来的字段会被忽略，方便手机新版本往前扩展。
 
 ## 公共结构
 
@@ -23,7 +23,7 @@
 
 ```json
 {
-  "zcode_type": "mobile-log",
+  "nex_type": "mobile-log",
   "device": {
     "id": "install-uuid",
     "name": "Pixel 8",
@@ -43,7 +43,7 @@
 ### 落盘位置
 
 ```
-~/.zcode/v2/logs/mobile/<设备>/<YYYY-MM-DD>_<会话>.jsonl
+~/.nex/v2/logs/mobile/<设备>/<YYYY-MM-DD>_<会话>.jsonl
                                  <YYYY-MM-DD>_<会话>.1.jsonl   # 滚动分片
 ```
 
@@ -58,7 +58,7 @@
 
 ```json
 {
-  "zcode_type": "mobile-log-pull-request",
+  "nex_type": "mobile-log-pull-request",
   "requestId": "mobile-log-pull-<uuid>",
   "sinceTs": 1761098400000,
   "untilTs": 1761184800000,
@@ -112,7 +112,7 @@
 
 ```json
 {
-  "zcode_type": "mobile-log-pull-response",
+  "nex_type": "mobile-log-pull-response",
   "requestId": "…",
   "success": false,
   "reason": "busy",
@@ -139,7 +139,7 @@
 
 手机不支持拉取时，按优先级从高到低：
 
-1. 回 `app-error`：`{"zcode_type":"app-error","requestId":"<请求的 requestId>","reason":"unsupported-action","error":"…"}`。**推荐**，桌面会立即提示「手机端版本不支持日志拉取」。
+1. 回 `app-error`：`{"nex_type":"app-error","requestId":"<请求的 requestId>","reason":"unsupported-action","error":"…"}`。**推荐**，桌面会立即提示「手机端版本不支持日志拉取」。
 2. 回 `success:false`，并带 `reason:"unsupported-action"`，效果同上。
 3. 完全不回（旧版本会忽略未知报文）：桌面 30s 后按超时提示。
 
@@ -147,16 +147,16 @@
 
 - 远控面板：手机已连接时，连接卡片（设备行）上有「拉取手机日志」按钮，走桌面命令 `DesktopCommandIds.PullMobileLogs`。2026-10-28 起这是唯一用户入口，帮助菜单（macOS 原生菜单栏、Windows/Linux 工作区帮助按钮）里的同名项已移除。
 - 目标连接：优先当前窗口已配对的远控连接，其次任一已配对窗口。没有已配对连接时弹框说明。
-- 导出文件：`~/.zcode/export-log/mobile-logs-<设备>-<YYYYMMDD-HHmmss>.jsonl`。完成后弹框给出文件路径和实时日志目录，可「打开所在文件夹」。
+- 导出文件：`~/.nex/export-log/mobile-logs-<设备>-<YYYYMMDD-HHmmss>.jsonl`。完成后弹框给出文件路径和实时日志目录，可「打开所在文件夹」。
 - 文件在收到第一片有效数据（或成功结束）时才创建，并以独占方式打开，绝不覆盖已有文件。
 - 中途失败时：已经写入了条目，就保留这份部分文件，并在弹框里说明；一条都没写，就删除文件。
 
 ### 桌面日志
 
-拉取统一打 `[web-remote-control]` 前缀、关键字 `zcode_rc_log_pull`：
+拉取统一打 `[web-remote-control]` 前缀、关键字 `nex_rc_log_pull`：
 
-- `[web-remote-control] zcode_rc_log_pull_start`：开始拉取，带 `window`、`since_ts`、`until_ts`、`max_entries`。
-- `[web-remote-control] zcode_rc_log_pull_result`：结束，成功 info、失败 warn。字段：`request_id`（成功时）、`outcome`（`ok` / `error`）、`error_code`、`error_msg`、`duration_ms`、`bytes`（写入文件的字节数，含 header 和 summary）、`entries`、`shards`、`compressed_shards`、`truncated`、`file`（只有文件名）。
+- `[web-remote-control] nex_rc_log_pull_start`：开始拉取，带 `window`、`since_ts`、`until_ts`、`max_entries`。
+- `[web-remote-control] nex_rc_log_pull_result`：结束，成功 info、失败 warn。字段：`request_id`（成功时）、`outcome`（`ok` / `error`）、`error_code`、`error_msg`、`duration_ms`、`bytes`（写入文件的字节数，含 header 和 summary）、`entries`、`shards`、`compressed_shards`、`truncated`、`file`（只有文件名）。
 
 ## 代码位置
 

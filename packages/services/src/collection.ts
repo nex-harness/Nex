@@ -1,4 +1,4 @@
-import { ProxyChannel, type IChannelServer } from "@zcode/rpc";
+import { ProxyChannel, type IChannelServer } from "@nex/rpc";
 import type { ServiceDescriptor } from "./descriptors.js";
 
 export interface ServiceExposurePolicy {

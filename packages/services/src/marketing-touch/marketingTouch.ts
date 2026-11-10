@@ -1,4 +1,4 @@
-import { ServiceChannels, type MarketingTouchSnapshot } from "@zcode/shared";
+import { ServiceChannels, type MarketingTouchSnapshot } from "@nex/shared";
 import { createServiceDescriptor } from "#src/descriptors.js";
 
 export interface IMarketingTouchService {

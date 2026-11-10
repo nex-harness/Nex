@@ -1,11 +1,11 @@
 // MD07：真实 Web 入口，受控 relay/桌面响应；不替代真机 OAuth/线上部署验收。
-// 启动：pnpm --filter @zcode/web exec vite --host 127.0.0.1 --port 5178 --strictPort
+// 启动：pnpm --filter @nex/web exec vite --host 127.0.0.1 --port 5178 --strictPort
 // 运行：pnpm exec tsx packages/web/test/e2e/manual-review/pending/remote-device-switch.mjs
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium } from "playwright-core";
-import { TID_AUTOMATIONS_OPEN, TID_TASK_NEW_BUTTON } from "@zcode/shared/test-ids";
+import { TID_AUTOMATIONS_OPEN, TID_TASK_NEW_BUTTON } from "@nex/shared/test-ids";
 import { createDeviceSwitchDesktopBridge } from "./remote-device-switch.helpers.mjs";
 import { setup, mixedDevices, assertEventually } from "./remote-login-v2.helpers.mjs";
 
@@ -52,7 +52,7 @@ try {
               if (message.type === "pair_status_query")
                 socket.send(JSON.stringify({ type: "pair_status_ack", pair_status: "matched" }));
               const payload = message.payload;
-              if (payload?.zcode_type === "rpc-frame" || payload?.zcode_type === "rpc-frame-ack") {
+              if (payload?.nex_type === "rpc-frame" || payload?.nex_type === "rpc-frame-ack") {
                 connection.bridge?.acceptPayload(payload);
                 return;
               }
@@ -65,7 +65,7 @@ try {
                 ...(mode === "bridge" ? { remoteSessionId: `remote-${connection.sid}` } : {}),
               };
               connection.result ??= { workspaces: [workspace] };
-              if (payload?.zcode_type === "workspace-bridge-open") {
+              if (payload?.nex_type === "workspace-bridge-open") {
                 const bridge = {
                   ...workspace,
                   workspaceKey: workspace.workspaceIdentity,
@@ -73,7 +73,7 @@ try {
                   bridgeGeneration: payload.bridgeGeneration,
                 };
                 send(socket, {
-                  zcode_type: "workspace-bridge-ready",
+                  nex_type: "workspace-bridge-ready",
                   requestId: payload.requestId,
                   bridgeSessionId: payload.bridgeSessionId,
                   bridgeGeneration: payload.bridgeGeneration,
@@ -84,9 +84,9 @@ try {
                   theme,
                 });
               }
-              if (payload?.zcode_type === "bootstrap-request") {
+              if (payload?.nex_type === "bootstrap-request") {
                 const response = {
-                  zcode_type: "bootstrap-response",
+                  nex_type: "bootstrap-response",
                   requestId: payload.requestId,
                   success: true,
                   result: {
@@ -98,16 +98,16 @@ try {
                 if (connection.holdBootstrap) connection.pendingBootstrap = response;
                 else send(socket, response);
               }
-              if (payload?.zcode_type === "workspace-list-request")
+              if (payload?.nex_type === "workspace-list-request")
                 send(socket, {
                   ...(connection.failList
                     ? {
-                        zcode_type: "app-error",
+                        nex_type: "app-error",
                         reason: "unexpected-error",
                         error: "E2E_REFRESH_FAILED",
                       }
                     : {
-                        zcode_type: "workspace-list-response",
+                        nex_type: "workspace-list-response",
                         success: true,
                         result: connection.result,
                       }),
@@ -193,7 +193,7 @@ try {
             assert.equal(new URL(page.url()).searchParams.has("name"), false);
             assert.equal(new URL(page.url()).searchParams.get("app_version"), "3.13.0");
             assert.equal(
-              await page.evaluate(() => localStorage.getItem("zcode-web-remote-last-device-sid")),
+              await page.evaluate(() => localStorage.getItem("nex-web-remote-last-device-sid")),
               "e2e-device",
             );
             await page.getByRole("button", { name: /Alice’s MacBook/ }).waitFor();

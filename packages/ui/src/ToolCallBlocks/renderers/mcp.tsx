@@ -14,7 +14,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useNexIntl } from "@/i18n/IntlProvider.js";
 import {
   ToolCallProgressIndicator,
   readToolCallProgress,
@@ -160,7 +160,7 @@ export function formatMcpToolLabel(toolName: string, serverLabel: string): strin
 }
 
 export function McpToolCallBlock(context: ToolCallBlockRenderContext) {
-  const { intl } = useZCodeIntl();
+  const { intl } = useNexIntl();
   const presentation = readMcpToolPresentation(context);
   const { toolCall } = context.toolCallNode;
   const serverLabel = presentation?.serverName

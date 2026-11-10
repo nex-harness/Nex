@@ -1,4 +1,4 @@
-import type { RemoteTarget } from "@zcode/shared";
+import type { RemoteTarget } from "@nex/shared";
 import type { SourceServerDirectory } from "./sourceServerDirectory.js";
 import {
   type ConnectSourceServerOptions,
