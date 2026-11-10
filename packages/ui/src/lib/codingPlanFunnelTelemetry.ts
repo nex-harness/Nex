@@ -3,12 +3,10 @@ import {
   BUILTIN_MODEL_PROVIDER_IDS,
   isZaiCodingPlanProviderId,
   ZAI_PROVIDER_ID,
-  type IPlatformService,
   type UsageEntitlementSnapshot,
 } from "@nex/shared";
 import type { ProviderSettingsView } from "@nex/services";
 import { logger } from "@/logger.js";
-import { reportAppTelemetryEvent } from "@/lib/appTelemetry.js";
 
 export type CodingPlanUpgradeSource =
   | "profile_menu"
@@ -42,8 +40,6 @@ export interface CodingPlanEntryPlanState {
   entryPlanStatus: CodingPlanEntryPlanStatus;
   entryPlanLevel: string;
 }
-
-type TelemetryPlatform = Pick<IPlatformService, "reportTelemetryEvent">;
 
 export function createPurchaseFunnelId(): string {
   return globalThis.crypto?.randomUUID?.() ?? createFallbackFunnelId();
@@ -163,26 +159,6 @@ export function resolveCodingPlanEntryPlanStateFromProviderSettings(
     });
   }
   return resolveCodingPlanEntryPlanState({ displayStatus: "notPurchased" });
-}
-
-export function reportCodingPlanUpgradeClick(
-  platform: TelemetryPlatform | null | undefined,
-  context: CodingPlanFunnelContext | null | undefined,
-): void {
-  if (!platform || !context) {
-    return;
-  }
-  void reportAppTelemetryEvent(
-    platform,
-    {
-      eventType: "ck",
-      eventRegion: context.eventRegion,
-      elementName: "coding_plan_upgrade_ck",
-      eventText: context.eventText,
-      eventExtraDetail: buildFunnelBaseDetail(context),
-    },
-    "codingPlanFunnelTelemetry",
-  );
 }
 
 export function buildFunnelBaseDetail(context: CodingPlanFunnelContext): Record<string, string> {

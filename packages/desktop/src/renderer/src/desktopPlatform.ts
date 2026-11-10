@@ -1,4 +1,3 @@
-import { recordArmsCustomEventForE2E } from "@nex/ui";
 import {
   DesktopCommandIds,
   buildLocalMediaPreviewUrl,
@@ -87,25 +86,6 @@ export function createDesktopPlatform(options: {
     onPaymentCallback: (callback) => window.nex.onPaymentCallback(callback),
     onShareImport: (callback) => window.nex.onShareImport?.(callback) ?? (() => {}),
     notifyRendererReady: () => window.nex.notifyRendererReady(),
-    syncTelemetryContext: (context) => window.nex.syncTelemetryContext(context),
-    reportTelemetryEvent: (payload) => window.nex.reportTelemetryEvent(payload),
-    reportArmsCustomEvent: (payload) => {
-      recordArmsCustomEventForE2E(payload);
-      return window.nex.reportArmsCustomEvent(payload);
-    },
-    getRendererActionTraceConfig: window.nex.getRendererActionTraceConfig
-      ? () => window.nex.getRendererActionTraceConfig!()
-      : undefined,
-    onRendererActionTraceConfigChanged: window.nex.onRendererActionTraceConfigChanged
-      ? (callback) => window.nex.onRendererActionTraceConfigChanged!(callback)
-      : undefined,
-    reportLocalTtftBatch: (batch) => window.nex.reportLocalTtftBatch(batch),
-    reportRendererActionTraceBatch: window.nex.reportRendererActionTraceBatch
-      ? (batch) => window.nex.reportRendererActionTraceBatch!(batch)
-      : undefined,
-    reportRendererHeapSample: window.nex.reportRendererHeapSample
-      ? (sample) => window.nex.reportRendererHeapSample!(sample)
-      : undefined,
     showTaskNotification: (payload) => window.nex.showTaskNotification(payload),
     syncWindowTabs: (paths) => window.nex.syncWindowTabs(paths),
     syncWebRemoteControlWorkspaces: (workspaces) =>

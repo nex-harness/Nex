@@ -1,7 +1,5 @@
 import type { DraftPluginUiOpenRequest } from "@/plugin-ui/contract.js";
 import { withPluginTelemetry } from "@nex/services";
-import { usePlatform } from "@/hooks/usePlatform.js";
-import { reportAppTelemetryEvent } from "@/lib/appTelemetry.js";
 /* eslint-disable max-lines -- 插件商店容器统一编排列表/详情、市场源对话框、卸载确认、试用跳转与技能刷新收尾，集中维护保证交互一致。 */
 import { PluginAddMenu } from "@/conversation-workspace-target/PluginAddMenu.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -89,7 +87,6 @@ export function PluginStorePage({
   onOpenDraftUi,
   onBack,
 }: PluginStorePageProps) {
-  const platform = usePlatform();
   const { intl, locale } = useNexIntl();
   const { order: storeOrder, refresh: refreshStoreOrder } = usePluginStoreOrder();
   const { pluginManagementService, skillsService } = useServices();
@@ -224,39 +221,6 @@ export function PluginStorePage({
         (workspaceIdentity?.trim() || workspacePath),
     );
   });
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root || view === "manage" || typeof IntersectionObserver === "undefined") return;
-    let visible = false;
-    const observer = new IntersectionObserver(([entry]) => {
-      const next = Boolean(entry?.isIntersecting);
-      if (next && !visible) {
-        void reportAppTelemetryEvent(
-          platform,
-          {
-            elementName: "plugin_discovery",
-            eventRegion: "app",
-            eventType: "view",
-            eventExtraDetail: {
-              schema_version: "1",
-              action: view === "detail" ? "detail_view" : "store_view",
-              entry: embedded
-                ? "side_pane_market"
-                : view === "detail"
-                  ? "store_detail"
-                  : "store_list",
-              client_kind: isWebRemoteControl ? "mobile" : "desktop",
-              ...(view === "detail" && detailPluginId ? { plugin_id: detailPluginId } : {}),
-            },
-          },
-          "plugin-discovery",
-        );
-      }
-      visible = next;
-    });
-    observer.observe(root);
-    return () => observer.disconnect();
-  }, [platform, view, detailPluginId, embedded, isWebRemoteControl]);
   useEffect(() => {
     if (embedded || marketingRequest?.target.page !== "plugin_marketplace") return;
     if (!isMarketingDestinationVisible) return;
@@ -795,24 +759,6 @@ export function PluginStorePage({
           }
           query={query}
           onQueryChange={setQuery}
-          onSearchSubmit={() => {
-            if (!query.trim()) return;
-            void reportAppTelemetryEvent(
-              platform,
-              {
-                elementName: "plugin_discovery",
-                eventRegion: "app",
-                eventType: "view",
-                eventExtraDetail: {
-                  schema_version: "1",
-                  action: "search",
-                  entry: embedded ? "side_pane_market" : "store_list",
-                  client_kind: isWebRemoteControl ? "mobile" : "desktop",
-                },
-              },
-              "plugin-discovery",
-            );
-          }}
           segment={segment}
           onSegmentChange={setSegment}
         />

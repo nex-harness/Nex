@@ -18,11 +18,6 @@ import {
   type WebRemoteControlRelayV2IncomingMessage,
   type WebRemoteControlRelayV2OutgoingMessage,
 } from "@nex/shared/web-remote-relay";
-import {
-  noteWebRemoteRelayConnectAttempt,
-  noteWebRemoteRelayReconnect,
-} from "#src/main/desktopNetworkTelemetry.js";
-
 import type {
   WebRemoteControlDeviceTransportState,
   WebRemoteControlDeviceTransportOptions,
@@ -40,8 +35,6 @@ export class WebRemoteControlDeviceTransport {
   private controller?: AbortController;
   private generation = 0;
   private pairedGeneration = 0;
-  private connectStartedAt = 0;
-  private connectAttempt = 0;
   private deviceSid?: string;
   private authenticated = false;
   private registrationRetried = false;
@@ -100,8 +93,6 @@ export class WebRemoteControlDeviceTransport {
     if (!signal || signal.aborted) return;
     this.closeSocket();
     const generation = this.generation;
-    this.connectStartedAt = Date.now();
-    this.connectAttempt += 1;
     this.setState("connecting");
     try {
       // 首次注册和失效后的重注册共用连接尝试，网络失败均由此处退避，不能在 manager 裸 await。
@@ -159,11 +150,6 @@ export class WebRemoteControlDeviceTransport {
       });
       socket.on("close", () => {
         if (socket !== this.socket) return;
-        if (this.state !== "paired") {
-          noteWebRemoteRelayConnectAttempt(Date.now() - this.connectStartedAt, false, {
-            attempt: this.connectAttempt,
-          });
-        }
         this.scheduleReconnect();
       });
     } catch (error) {
@@ -247,7 +233,6 @@ export class WebRemoteControlDeviceTransport {
     this.closeSocket();
     clearTimeout(this.reconnectTimer);
     this.setState("connecting");
-    noteWebRemoteRelayReconnect();
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined;
       void this.connect();
@@ -273,11 +258,6 @@ export class WebRemoteControlDeviceTransport {
   private setState(state: WebRemoteControlDeviceTransportState): void {
     if (this.state === state) return;
     this.state = state;
-    if (state === "paired") {
-      noteWebRemoteRelayConnectAttempt(Date.now() - this.connectStartedAt, true, {
-        attempt: this.connectAttempt,
-      });
-    }
     this.options.logger.info("[web-remote-control] V2 device state", { state });
     this.options.onStateChange(state);
   }

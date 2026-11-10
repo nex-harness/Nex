@@ -11,8 +11,6 @@ const telemetryMocks = vi.hoisted(() => ({
   emitToolOnAppCreate: false,
   disposeProcessProviderRegistryRuntime: vi.fn(),
   disposeProviderRegistryRuntime: vi.fn(),
-  prepareModelTelemetryEnv: vi.fn(async (env: Record<string, string | undefined>) => env),
-  shutdownPreparedModelTelemetry: vi.fn(async () => {}),
 }));
 
 vi.mock("../src/app/process-provider-registry-runtime.js", async (importOriginal) => {
@@ -123,68 +121,37 @@ vi.mock("../src/app/create-app.js", async (importOriginal) => {
   };
 });
 
-vi.mock("@nex/telemetry", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@nex/telemetry")>()),
-  prepareModelTelemetryEnv: telemetryMocks.prepareModelTelemetryEnv,
-  shutdownPreparedModelTelemetry: telemetryMocks.shutdownPreparedModelTelemetry,
-}));
-
 import { runNexProtocolAgent } from "../src/nex-protocol-entrypoint.js";
 
-describe("Nex Protocol telemetry lifecycle", () => {
+describe("Nex Protocol resource notification lifecycle", () => {
   afterEach(() => {
     vi.clearAllMocks();
     telemetryMocks.emitMcpOnStart = false;
     telemetryMocks.emitToolOnAppCreate = false;
   });
 
-  it.each([
-    ["缺少注入时回退本地 Host", undefined, "desktop_local_host"],
-    ["保留远程 Host 注入", "remote_workspace_host", "remote_workspace_host"],
-  ] as const)("%s", async (_label, injectedSurface, expectedSurface) => {
-    await runProtocolAgent(injectedSurface);
-
-    expect(telemetryMocks.prepareModelTelemetryEnv).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.objectContaining({
-        runtimeSurface: expectedSurface,
-      }),
-    );
-    expect(telemetryMocks.shutdownPreparedModelTelemetry).toHaveBeenCalledOnce();
-  });
-
-  it("OTLP Owner 关闭失败保持旁路", async () => {
-    telemetryMocks.shutdownPreparedModelTelemetry.mockRejectedValueOnce(
-      new Error("exporter shutdown failed"),
-    );
-
-    await expect(runProtocolAgent(undefined)).resolves.toBeUndefined();
-  });
-
-  it("MCP 关闭失败仍继续关闭 OTLP Owner", async () => {
+  it("MCP 关闭失败仍完成协议清理", async () => {
     telemetryMocks.closeMcp.mockRejectedValueOnce(new Error("mcp close failed"));
 
-    await expect(runProtocolAgent(undefined)).resolves.toBeUndefined();
+    await expect(runProtocolAgent()).resolves.toBeUndefined();
 
     expect(telemetryMocks.closeMcp).toHaveBeenCalledOnce();
-    expect(telemetryMocks.shutdownPreparedModelTelemetry).toHaveBeenCalledOnce();
   });
 
-  it("MCP 关闭悬空时有界等待并继续关闭 OTLP Owner", async () => {
+  it("MCP 关闭悬空时有界等待并完成协议清理", async () => {
     telemetryMocks.closeMcp.mockImplementationOnce(
       async () => await new Promise<void>(() => undefined),
     );
 
-    await expect(runProtocolAgent(undefined)).resolves.toBeUndefined();
+    await expect(runProtocolAgent()).resolves.toBeUndefined();
 
     expect(telemetryMocks.closeMcp).toHaveBeenCalledOnce();
-    expect(telemetryMocks.shutdownPreparedModelTelemetry).toHaveBeenCalledOnce();
   }, 5_000);
 
   it("MCP 资源数组从入口发到新通知，旧 memory 内部事实不再发上协议", async () => {
     telemetryMocks.emitMcpOnStart = true;
     const chunks: string[] = [];
-    await runProtocolAgent(undefined, chunks);
+    await runProtocolAgent(chunks);
     const messages = chunks
       .join("")
       .split("\n")
@@ -206,7 +173,7 @@ describe("Nex Protocol telemetry lifecycle", () => {
   it("App 的 Bash 完成回调经入口进入独立协议通知", async () => {
     telemetryMocks.emitToolOnAppCreate = true;
     const chunks: string[] = [];
-    await runProtocolAgent(undefined, chunks, true);
+    await runProtocolAgent(chunks, true);
     const messages = chunks
       .join("")
       .split("\n")
@@ -224,7 +191,7 @@ describe("Nex Protocol telemetry lifecycle", () => {
   });
 
   it("Protocol 关闭时释放完整 Process Provider Registry Runtime owner", async () => {
-    await runProtocolAgent(undefined);
+    await runProtocolAgent();
 
     expect(telemetryMocks.disposeProcessProviderRegistryRuntime).toHaveBeenCalledOnce();
     expect(telemetryMocks.disposeProviderRegistryRuntime).not.toHaveBeenCalled();
@@ -232,7 +199,6 @@ describe("Nex Protocol telemetry lifecycle", () => {
 });
 
 async function runProtocolAgent(
-  runtimeSurface: "remote_workspace_host" | undefined,
   outputChunks?: string[],
   createSession = false,
 ): Promise<void> {
@@ -255,7 +221,6 @@ async function runProtocolAgent(
         NEX_SESSION_DB_PATH: join(root, "session.sqlite"),
         NEX_STORAGE_DIR: root,
         ...providerEnv,
-        ...(runtimeSurface ? { NEX_TELEMETRY_RUNTIME_SURFACE: runtimeSurface } : {}),
       },
       input,
       output: new Writable({

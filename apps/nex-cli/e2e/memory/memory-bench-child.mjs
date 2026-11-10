@@ -59,7 +59,6 @@ try {
         ...process.env,
         NEX_ENV: "test",
         NEX_STORAGE_DIR: settings.storageRoot,
-        NEX_MODEL_TELEMETRY_ENABLED: "false",
       },
       skipUserConfig: true,
       loadDotenv: () => ({ keys: [], loaded: false }),

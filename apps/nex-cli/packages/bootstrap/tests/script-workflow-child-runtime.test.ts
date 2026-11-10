@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createNodeFileSystemAdapter } from "@nex/adapters/fs";
 import { createInMemorySessionEventStore, createSqliteSessionStore } from "@nex/adapters/storage";
 import { type AgentRuntime, PermissionService, defaultPermissionConfig } from "@nex/core";
-import { createModelTelemetry } from "@nex/telemetry";
 import {
   createRootTraceContext,
   createSessionId,
@@ -107,7 +106,6 @@ describe("script workflow child runtime — actor transcript 直播通道", () =
 
   function makeDeps(): ScriptWorkflowAgentRuntimeDeps {
     return {
-      agentTelemetry: createModelTelemetry().agentExecution,
       appOptions: { env: process.env },
       appVersion: "0.0.0-test",
       configResult: {
@@ -366,7 +364,6 @@ describe("script workflow child runtime — 与父会话共享 model factory", (
 
   async function baseDeps(parentRuntime: AgentRuntime): Promise<ScriptWorkflowAgentRuntimeDeps> {
     return {
-      agentTelemetry: createModelTelemetry().agentExecution,
       appOptions: { env: {} },
       appVersion: "0.0.0-test",
       configResult: {
@@ -559,7 +556,6 @@ describe("script workflow child runtime — 对外交互端口由父 runtime 铸
 
   async function makeActorRuntime(): Promise<AgentRuntime> {
     const deps = {
-      agentTelemetry: createModelTelemetry().agentExecution,
       appOptions: { env: process.env },
       appVersion: "0.0.0-test",
       configResult: {
@@ -715,7 +711,6 @@ describe("script workflow child runtime — 子代理经父 broker 请求权限�
     subagentPermissionMode: WorkflowSubagentPermissionMode | undefined,
   ): Promise<AgentRuntime> {
     const deps = {
-      agentTelemetry: createModelTelemetry().agentExecution,
       appOptions: { env: process.env, executionPort: { run: execute } },
       appVersion: "0.0.0-test",
       configResult: {
@@ -1024,7 +1019,6 @@ describe("script workflow child runtime — 子代理的 Browser Use", () => {
     >[0]["browserControlPort"],
   ): Promise<AgentRuntime> {
     const deps = {
-      agentTelemetry: createModelTelemetry().agentExecution,
       appOptions: { env: process.env },
       appVersion: "0.0.0-test",
       configResult: {

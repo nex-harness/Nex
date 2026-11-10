@@ -124,8 +124,8 @@ function pruneCrashDumpArchive(
   archiveDir: string,
   policy: CrashArchiveRetentionPolicy,
 ): CrashArchiveCleanupResult {
-  // 启动时必须先完成本地留档与清理，再让 ARMS 扫描并删除 live；这里保持与既有归档一致的
-  // 同步临界区，避免异步 IO 改变 appCrashCaptureBootstrap -> appARMSBootstrap 的先后顺序。
+  // 启动时必须先完成本地留档与清理；这里保持与既有归档一致的
+  // 同步临界区，避免异步 IO 改变 appCrashCaptureBootstrap 的初始化顺序。
   const deletedFiles: string[] = [];
   const failedFiles: string[] = [];
   const dumps: Array<{ entry: string; path: string; mtimeMs: number; size: number }> = [];
@@ -405,7 +405,7 @@ export interface CrashEventMonitorHooks {
 export function resolveProcessGoneLogLevel(reason: string): "info" | "warn" {
   // Bug 原因：Electron 也会为 clean-exit / killed 这类受控终止发送 gone 事件。
   // 原始 gone 回调只记录生命周期事实，最终是否为 crash 交给稳定性分类；旧实现无条件打
-  // error，随后被 ARMS console collector 当作异常，污染错误统计。
+  // error，把受控终止误报成崩溃。
   return reason === "clean-exit" || reason === "killed" ? "info" : "warn";
 }
 

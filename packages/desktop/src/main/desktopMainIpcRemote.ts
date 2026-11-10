@@ -1,11 +1,7 @@
 import { normalizeRemoteConnectionError } from "@nex/shared";
-/* eslint-disable max-lines -- 远程连接、OAuth 回调、遥测和通知 IPC 共用窗口级上下文，集中注册避免跨文件状态漂移。 */
+/* eslint-disable max-lines -- 远程连接、OAuth 回调和通知 IPC 共用窗口级上下文，集中注册避免跨文件状态漂移。 */
 import { app, BrowserWindow, ipcMain, shell, type WebContents } from "electron";
-import armsRum from "@arms/rum-electron";
 import {
-  armsCustomEventPayloadSchema,
-  buildRemoteWorkspaceConnectResultTelemetry,
-  classifyRemoteUsageError,
   formatZodError,
   hostRemoteWorkspaceConnectFailedResponseSchema,
   normalizeUnknownError,
@@ -14,14 +10,10 @@ import {
   isTrustedCodingPlanWebviewOrigin,
   PlatformChannels,
   remoteTargetSchema,
-  rendererTelemetryEventPayloadSchema,
-  telemetryRendererContextSchema,
-  type ArmsRumEnv,
   type BindRemoteWorkspaceSessionContextIpcResult,
   type RemoteTarget,
   type WindowHostRemoteWorkspaceDescriptor,
   type BindRemoteWorkspaceSessionContextResult,
-  type TelemetryEventPayload,
 } from "@nex/shared";
 import { dispatchTaskNotification } from "./desktopNotifications.js";
 import {
@@ -30,15 +22,6 @@ import {
   parseOAuthStateRegistration,
   registerOAuthState,
 } from "./desktopOAuthDeepLink.js";
-import {
-  dispatchFinalArmsCustomEvent,
-  enableSharedFinalArmsCustomEventE2EController,
-} from "./desktopArmsCustomEvent.js";
-import {
-  configureRemoteUsageArmsTelemetry,
-  reportRemoteConnectResultToArms,
-  type RemoteConnectionStats,
-} from "./desktopRemoteUsageArmsTelemetry.js";
 import {
   registerWebRemoteControlIpcHandlers,
   type WebRemoteControlIpcManager,
@@ -198,25 +181,6 @@ export function registerRemoteIpcHandlers(options: {
     warn: (...args: unknown[]) => void;
     error: (...args: unknown[]) => void;
   };
-  appTelemetryRuntime: {
-    onRendererReady(payload: { hasPendingOAuthCallback: boolean; rendererId: number }): void;
-    syncRendererContext(payload: { rendererId: number; context: unknown }): void;
-    onOAuthCallbackHandled(payload: { rendererId: number }): void;
-  };
-  /** OAuth 回调处理完成后的额外副作用（如刷新 ARMS user.id）；不影响既有 runtime 流程 */
-  onOAuthCallbackHandledSideEffect?: () => void;
-  appTelemetryCore: {
-    reportEvent(payload: unknown): Promise<void>;
-  };
-  reportRemoteUsageEvent: (rendererId: number, event: TelemetryEventPayload) => void;
-  armsCustomContext: {
-    deviceMid: string;
-    platform: NodeJS.Platform;
-    appVersion: string;
-    armsEnv: ArmsRumEnv;
-  };
-  /** 仅由 VITE_NEX_E2E_STORE_BRIDGE + test runner 双门禁打开。 */
-  finalArmsCustomEventE2EEnabled?: boolean;
   webRemoteControlManager: WebRemoteControlIpcManager;
   createRemoteWorkspaceSession: (
     win: BrowserWindow,
@@ -228,11 +192,9 @@ export function registerRemoteIpcHandlers(options: {
       confirmSourceServerInstall?: boolean;
     },
     lifecycle?: {
-      remoteUsageTelemetryEligible?: boolean;
       onConnected?: (descriptor: WindowHostRemoteWorkspaceDescriptor) => void;
     },
   ) => Promise<string>;
-  getRemoteConnectionStats: () => RemoteConnectionStats;
   disposeRemoteWorkspaceSession: (
     sessionId: string,
     reason: string,
@@ -262,41 +224,6 @@ export function registerRemoteIpcHandlers(options: {
   listAvailableDockerContainers: () => Promise<unknown[]>;
   listSSHConfigAliases: () => Promise<unknown[]>;
 }) {
-  function reportRemoteUsageEvent(rendererId: number, event: TelemetryEventPayload): void {
-    try {
-      options.reportRemoteUsageEvent(rendererId, event);
-    } catch (error) {
-      // 埋点是旁路能力，不能把已成功的远程连接改写成业务失败。
-      options.logger.warn("[remote-usage-telemetry] dispatch failed", {
-        elementName: event.elementName,
-        error,
-      });
-    }
-  }
-
-  const finalArmsCustomEventE2E = options.finalArmsCustomEventE2EEnabled
-    ? enableSharedFinalArmsCustomEventE2EController()
-    : null;
-
-  configureRemoteUsageArmsTelemetry({
-    armsCustomContext: options.armsCustomContext,
-    getRemoteConnectionStats: options.getRemoteConnectionStats,
-    sendCustom: (payload) =>
-      armsRum.sendCustom(payload as Parameters<typeof armsRum.sendCustom>[0]),
-    e2eController: finalArmsCustomEventE2E,
-    logger: options.logger,
-  });
-
-  function reportRemoteConnectResultToArmsSafely(
-    params: Parameters<typeof reportRemoteConnectResultToArms>[0],
-  ): void {
-    try {
-      reportRemoteConnectResultToArms(params);
-    } catch (error) {
-      options.logger.warn("[remote-usage-arms] connect result reporter failed", { error });
-    }
-  }
-
   ipcMain.on(InternalChannels.ScopedServicePortReady, (event, rawPayload: unknown) => {
     if (!rawPayload || typeof rawPayload !== "object") return;
     const payload = rawPayload as {
@@ -312,25 +239,7 @@ export function registerRemoteIpcHandlers(options: {
       attachmentId,
     });
   });
-  if (finalArmsCustomEventE2E) {
-    ipcMain.handle(PlatformChannels.ReadFinalArmsCustomEventsE2E, () =>
-      finalArmsCustomEventE2E.read(),
-    );
-    ipcMain.handle(PlatformChannels.ClearFinalArmsCustomEventsE2E, () => {
-      finalArmsCustomEventE2E.clear();
-    });
-    ipcMain.handle(
-      PlatformChannels.ConfigureFinalArmsCustomEventsE2E,
-      (_event, request: unknown) => {
-        finalArmsCustomEventE2E.configure(
-          request as Parameters<typeof finalArmsCustomEventE2E.configure>[0],
-        );
-      },
-    );
-  }
-
   registerWebRemoteControlIpcHandlers({
-    reportRemoteUsageEvent,
     webRemoteControlManager: options.webRemoteControlManager,
   });
 
@@ -391,71 +300,7 @@ export function registerRemoteIpcHandlers(options: {
   );
 
   ipcMain.on(PlatformChannels.RendererReady, (event) => {
-    const hasPendingOAuthCallback = deliverPendingDeepLink(event.sender);
-    options.appTelemetryRuntime.onRendererReady({
-      hasPendingOAuthCallback,
-      rendererId: event.sender.id,
-    });
-  });
-
-  ipcMain.on(PlatformChannels.SyncTelemetryContext, (event, context: unknown) => {
-    const result = telemetryRendererContextSchema.safeParse(context);
-    if (!result.success) return;
-    options.appTelemetryRuntime.syncRendererContext({
-      rendererId: event.sender.id,
-      context: result.data,
-    });
-  });
-
-  ipcMain.handle(PlatformChannels.ReportTelemetryEvent, async (_event, payload: unknown) => {
-    const result = rendererTelemetryEventPayloadSchema.safeParse(payload);
-    if (!result.success) {
-      options.logger.warn(
-        "[report-telemetry-event] invalid payload:",
-        formatZodError(result.error),
-      );
-      return;
-    }
-
-    await options.appTelemetryCore.reportEvent(result.data);
-  });
-
-  ipcMain.handle(PlatformChannels.ReportArmsCustomEvent, async (event, payload: unknown) => {
-    const result = armsCustomEventPayloadSchema.safeParse(payload);
-    if (!result.success) {
-      options.logger.warn(
-        "[report-arms-custom-event] invalid payload:",
-        formatZodError(result.error),
-      );
-      return;
-    }
-
-    try {
-      dispatchFinalArmsCustomEvent({
-        payload: result.data,
-        context: {
-          ...options.armsCustomContext,
-          rendererId: event.sender.id,
-        },
-        e2eController: finalArmsCustomEventE2E,
-        // FinalArmsCustomEventPayload 是 SDK RumCustomEvent 的收窄子集；SDK 额外要求
-        // BaseObject 索引签名，但这里不会动态追加未声明字段。
-        sendCustom: (payload) =>
-          armsRum.sendCustom(payload as Parameters<typeof armsRum.sendCustom>[0]),
-      });
-    } catch (error) {
-      options.logger.warn(
-        "[report-arms-custom-event] sendCustom failed:",
-        normalizeUnknownError(error).message,
-      );
-    }
-  });
-
-  ipcMain.on(PlatformChannels.OAuthCallbackHandled, (event) => {
-    options.appTelemetryRuntime.onOAuthCallbackHandled({
-      rendererId: event.sender.id,
-    });
-    options.onOAuthCallbackHandledSideEffect?.();
+    deliverPendingDeepLink(event.sender);
   });
 
   ipcMain.on(PlatformChannels.ShowTaskNotification, (event, payload: unknown) => {
@@ -481,7 +326,6 @@ export function registerRemoteIpcHandlers(options: {
       requestId?: unknown;
       workspacePath?: unknown;
       workspaceIdentity?: unknown;
-      connectTrigger?: unknown;
       confirmSourceServerInstall?: unknown;
     } =
       rawPayload && typeof rawPayload === "object" && "target" in rawPayload
@@ -490,7 +334,6 @@ export function registerRemoteIpcHandlers(options: {
             requestId?: unknown;
             workspacePath?: unknown;
             workspaceIdentity?: unknown;
-            connectTrigger?: unknown;
             confirmSourceServerInstall?: unknown;
           })
         : { target: rawPayload, requestId: undefined };
@@ -514,11 +357,6 @@ export function registerRemoteIpcHandlers(options: {
       wrappedPayload.workspaceIdentity.trim().length > 0
         ? wrappedPayload.workspaceIdentity
         : undefined;
-    const connectTriggerValue = wrappedPayload.connectTrigger;
-    const connectTrigger =
-      connectTriggerValue === "reconnect" || connectTriggerValue === "restore"
-        ? connectTriggerValue
-        : "new";
     const confirmSourceServerInstall = wrappedPayload.confirmSourceServerInstall === true;
 
     try {
@@ -540,26 +378,11 @@ export function registerRemoteIpcHandlers(options: {
             }
           : undefined,
         {
-          remoteUsageTelemetryEligible: true,
           onConnected: (descriptor) => {
             reusedConnectionTarget = descriptor.reusedConnectionTarget;
           },
         },
       );
-      reportRemoteUsageEvent(
-        event.sender.id,
-        buildRemoteWorkspaceConnectResultTelemetry({
-          result: "success",
-          remoteKind: result.data.kind,
-          connectTrigger,
-        }),
-      );
-      reportRemoteConnectResultToArmsSafely({
-        rendererId: event.sender.id,
-        result: "success",
-        remoteKind: result.data.kind,
-        connectTrigger,
-      });
       return {
         success: true,
         sessionId,
@@ -567,7 +390,6 @@ export function registerRemoteIpcHandlers(options: {
       };
     } catch (error) {
       const normalizedError = normalizeRemoteConnectionError(error);
-      const errorCategory = classifyRemoteUsageError(error);
       // 这里之前直接把 Error 对象交给 logger，落盘时会被 JSON.stringify 压成 `{}`。
       // 改成显式展开 message/code/stack，保证远程建连失败时主进程日志里能看到真实上下文。
       options.logger.error("[connect-remote] caught error:", {
@@ -576,22 +398,6 @@ export function registerRemoteIpcHandlers(options: {
         message: normalizedError.message,
         code: normalizedError.code,
         stack: error instanceof Error ? error.stack : undefined,
-      });
-      reportRemoteUsageEvent(
-        event.sender.id,
-        buildRemoteWorkspaceConnectResultTelemetry({
-          result: "failure",
-          remoteKind: result.data.kind,
-          connectTrigger,
-          errorCategory,
-        }),
-      );
-      reportRemoteConnectResultToArmsSafely({
-        rendererId: event.sender.id,
-        result: "failure",
-        remoteKind: result.data.kind,
-        connectTrigger,
-        errorCategory,
       });
       const reasonCode = isPublicRemoteReasonCode(normalizedError.code)
         ? normalizedError.code

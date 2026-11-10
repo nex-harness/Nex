@@ -20,9 +20,6 @@ patchedDependencies:
   '@aiden0z/pptx-renderer@1.2.4':
     hash: e1a90a724324c45a2cc90cf84d1ae1f35755b8fc9438a208d610960bd0d5f65a
     path: patches/@aiden0z__pptx-renderer@1.2.4.patch
-  '@arms/rum-electron@0.0.3':
-    hash: a3da5def80796b3f01e330c9aa0e6831c214d0ded3d7400798f8065cba9acb9e
-    path: patches/@arms__rum-electron@0.0.3.patch
   '@extend-ai/react-xlsx@0.16.0':
     hash: b2fc5fcfa1aab1271d20fd539d2a367f06aac08a191425885cf8f1125b7c6bc8
     path: patches/@extend-ai__react-xlsx@0.16.0.patch
@@ -854,15 +851,6 @@ importers:
       '@opentelemetry/otlp-exporter-base':
         specifier: ^0.214.0
         version: 0.214.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/resources':
-        specifier: 2.6.1
-        version: 2.6.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-metrics':
-        specifier: 2.6.1
-        version: 2.6.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-trace-base':
-        specifier: 2.6.1
-        version: 2.6.1(@opentelemetry/api@1.9.1)
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
@@ -985,12 +973,6 @@ importers:
 
   packages/desktop:
     dependencies:
-      '@arms/rum-electron':
-        specifier: ^0.0.3
-        version: 0.0.3(patch_hash=a3da5def80796b3f01e330c9aa0e6831c214d0ded3d7400798f8065cba9acb9e)(@babel/runtime@7.29.7)(electron@44.7.0)
-      '@babel/runtime':
-        specifier: ^7.24.5
-        version: 7.29.7
       '@fiahfy/icns':
         specifier: ^0.0.7
         version: 0.0.7
@@ -1042,15 +1024,6 @@ importers:
       '@nex/ui':
         specifier: workspace:*
         version: link:../ui
-      '@opentelemetry/api':
-        specifier: 1.9.1
-        version: 1.9.1
-      '@opentelemetry/exporter-metrics-otlp-proto':
-        specifier: 0.214.0
-        version: 0.214.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/exporter-trace-otlp-proto':
-        specifier: 0.214.0
-        version: 0.214.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources':
         specifier: 2.6.1
         version: 2.6.1(@opentelemetry/api@1.9.1)
@@ -1063,9 +1036,6 @@ importers:
       electron-updater:
         specifier: 6.8.10
         version: 6.8.10
-      module-details-from-path:
-        specifier: ^1.0.4
-        version: 1.0.4
       node-forge:
         specifier: ^1.4.0
         version: 1.4.0

@@ -1,10 +1,6 @@
 import type { BuiltinModelProviderId, IPlatformService } from "@nex/shared";
 import type { IOAuthService } from "@nex/services";
 import { resolveOAuthProviderIdByPreset } from "./utils.js";
-import {
-  reportAppTelemetryEvent,
-  resolvePresetModelProviderTelemetryLabel,
-} from "@/lib/appTelemetry.js";
 import { logger } from "@/logger.js";
 
 export async function startPresetSubscriptionLogin(params: {
@@ -35,21 +31,3 @@ export async function startPresetSubscriptionLogin(params: {
   }
 }
 
-export async function reportPresetSubscriptionSuccess(params: {
-  platform: IPlatformService;
-  presetId: BuiltinModelProviderId;
-}) {
-  await reportAppTelemetryEvent(
-    params.platform,
-    {
-      elementName: "add_model_success",
-      eventRegion: "app_setting",
-      eventType: "ck",
-      eventExtraDetail: {
-        login_default: "1",
-        model_provider: resolvePresetModelProviderTelemetryLabel(params.presetId),
-      },
-    },
-    "ModelProviderSection",
-  );
-}

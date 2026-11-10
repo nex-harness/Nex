@@ -17,8 +17,6 @@ import {
   useCodingPlanEntryPlanList,
   type CodingPlanEntryInventory,
 } from "@/hooks/useCodingPlanEntryPlanList.js";
-import { usePlatform } from "@/hooks/usePlatform.js";
-import { reportCodingPlanUpgradeClick } from "@/lib/codingPlanFunnelTelemetry.js";
 
 interface CodingPlanUpgradeDialogContextValue {
   inventory: CodingPlanEntryInventory;
@@ -33,7 +31,6 @@ const CodingPlanUpgradeDialogContext = createContext<CodingPlanUpgradeDialogCont
 );
 
 export function CodingPlanUpgradeDialogProvider({ children }: { children: ReactNode }) {
-  const platform = usePlatform();
   const inventory = useCodingPlanEntryPlanList();
   const inventoryRef = useRef(inventory);
   inventoryRef.current = inventory;
@@ -74,15 +71,12 @@ export function CodingPlanUpgradeDialogProvider({ children }: { children: ReactN
             funnelContext: { ...nextTarget.funnelContext, entryPlanList },
           }
         : nextTarget;
-      if (nextTarget.funnelContext) {
-        void reportCodingPlanUpgradeClick(platform, nextTarget.funnelContext);
-      }
       setTarget(nextTarget);
       // 每次显式打开隔离旧 webview 事件，旧 dom-ready 不能确认新的观察请求。
       setOpenVersion((version) => version + 1);
       return true;
     },
-    [platform],
+    [],
   );
   const value = useMemo(
     () => ({ openCodingPlanUpgrade, inventory }),

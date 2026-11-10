@@ -29,8 +29,8 @@ const cuaPluginRuntimeStagingEnv = {
   NEX_CUA_DEV_MODE: "1",
 };
 // 修复原因：桌面 Agent 构建有普通 pnpm 和 bootstrap:with-remote 直跑 tsc 两条路径。
-// 过去两条路径分别维护依赖顺序，新增 @nex/telemetry 后只更新了 bootstrap 依赖，
-// 干净 CI 中 telemetry/dist 尚不存在，bootstrap 会因无法解析类型入口而失败。
+// 过去两条路径分别维护依赖顺序，新增 workspace 依赖后只更新了 bootstrap 一侧，
+// 干净 CI 中上游 dist 尚不存在，bootstrap 会因无法解析类型入口而失败。
 // 两条路径统一从这一份有序清单派生，避免后续新增 workspace 依赖时再次漂移。
 const cliWorkspaceBuilds = [
   { packageName: "@nex/shared-types", packageDir: "shared-types" },
@@ -48,7 +48,6 @@ const cliWorkspaceBuilds = [
   { packageName: "@nex/core", packageDir: "core" },
   { packageName: "@nex/adapters", packageDir: "adapters" },
   { packageName: "@nex/i18n", packageDir: "i18n" },
-  { packageName: "@nex/telemetry", packageDir: "telemetry" },
   { packageName: "@nex/bootstrap", packageDir: "bootstrap" },
 ];
 // 官方插件 manifest 可以在 server.js 缺失时被 filesystem seed，直到 session

@@ -62,14 +62,14 @@ export const PROCESS_RESOURCE_EVENT_NAMES = {
 export type ProcessResourceEventName =
   (typeof PROCESS_RESOURCE_EVENT_NAMES)[keyof typeof PROCESS_RESOURCE_EVENT_NAMES];
 
-/** ARMS 单个自定义事件的属性数上限（全局属性与事件属性合并后计算）。 */
-export const ARMS_CUSTOM_EVENT_PROPERTY_LIMIT = 20;
+/** 单个资源事件的属性数上限（全局属性与事件属性合并后计算）。 */
+export const RESOURCE_EVENT_PROPERTY_LIMIT = 20;
 
 /** 所有资源事件共有的全局属性。 */
 const PROCESS_RESOURCE_GLOBAL_PROPERTY_KEYS = [
   "platform",
   "app_version",
-  "arms_env",
+  "nex_env",
   "device_mid",
 ] as const;
 
@@ -167,7 +167,7 @@ export function checkProcessResourceEventProperties(
     PROCESS_RESOURCE_FORBIDDEN_PROPERTY_KEY_PATTERN.test(key),
   );
   const count = presentKeys.length;
-  const overLimit = count > ARMS_CUSTOM_EVENT_PROPERTY_LIMIT;
+  const overLimit = count > RESOURCE_EVENT_PROPERTY_LIMIT;
 
   return {
     ok: unknownKeys.length === 0 && forbiddenKeys.length === 0 && !overLimit,

@@ -98,24 +98,7 @@ const asarCliPath = resolve(
   "asar.js",
 );
 const REQUIRED_ASAR_RUNTIME_MODULES = [
-  "module-details-from-path",
-  "@opentelemetry/api-logs",
-  // Bugfix: telemetry 的 OTLP exporter 会在启动阶段加载 sdk-metrics。pnpm 开发态可从
-  // workspace 根目录解析，但 electron-builder 不会稳定复制这条 hoisted 依赖，导致安装包启动即崩溃。
-  // 将 sdk-metrics 作为闭包根注入，同时递归带齐它的 OpenTelemetry 运行时依赖。
-  "@opentelemetry/sdk-metrics",
-  // Bugfix：主进程的本地 TTFT / renderer 动作追踪导出器使用 OTLP proto 导出链。pnpm hoisted 布局下
-  // electron-builder 会把 otlp-transformer 打进 app.asar，却漏拷其传递依赖 protobufjs，已安装应用启动即报
-  // Cannot find module protobufjs/minimal（开源侧 3.14.0 arm64 DMG 实测复现）。以两个 proto exporter
-  // 作为闭包根注入，递归带齐 otlp-transformer、protobufjs 与 @protobufjs/* 全链。
-  "@opentelemetry/exporter-trace-otlp-proto",
-  "@opentelemetry/exporter-metrics-otlp-proto",
   "pngjs",
-  // Bugfix: @arms/rum-core 把 @babel/runtime 声明成 peerDependency，pnpm 安装时可由 peer 解析兜住，
-  // 但 electron-builder 重打 app.asar 时不会因为 @arms/rum-electron 本体进包，就稳定把这个 peer 运行时一起带上。
-  // 线上已出现安装包启动即报 Cannot find module '@babel/runtime/helpers/interopRequireDefault'，
-  // 这里显式把 @babel/runtime 作为闭包根注入，确保 ARMS 主进程埋点链路在生产包内可解析。
-  "@babel/runtime",
   // Bugfix: @nex/services 的代理连通性探测会动态 require("undici") 取 ProxyAgent。
   // tsup 虽然把 services 代码并进了主/host 产物，但不会把这个运行时 require 的包内联进去，
   // electron-builder 产物又可能漏掉 hoisted 的 undici，最终 mac 安装包启动即报 Cannot find module "undici"。
@@ -256,12 +239,10 @@ const PACKAGING_PRUNE_PATTERNS = [
   //   @babel 生态与 caniuse-lite/browserslist/baseline-browser-mapping 数据包；
   // - node-gyp/node-addon-api 是 CUA 原生模块构建工具链；
   // - cpu-features/nan 是 ssh2 的可选原生加速，缺失时 ssh2 自动降级。
-  // @babel/runtime 可能被在包库运行时 require，紧随整目录排除后重新包含。
   "!node_modules/shadcn/**",
   "!node_modules/@ts-morph/**",
   "!node_modules/ts-morph/**",
   "!node_modules/@babel/**",
-  "node_modules/@babel/runtime/**",
   "!node_modules/caniuse-lite/**",
   "!node_modules/browserslist/**",
   "!node_modules/baseline-browser-mapping/**",
@@ -420,7 +401,7 @@ async function injectHoistedRuntimeModulesIntoAsar(context) {
 
         // pnpm hoisted 布局下，electron-builder 可能把主包打进 app.asar，
         // 却漏掉它解析时还要去根 node_modules 找的运行时依赖。
-        // 之前 require-in-the-middle 漏过 module-details-from-path，这次 @fiahfy/icns 又漏了 pngjs，
+        // 之前这里漏过 @fiahfy/icns 的 pngjs，
         // 最终都会在已安装应用里触发 Cannot find module 并让主进程启动直接崩溃。
         // 这里按 package.json 递归补齐依赖闭包，避免每次只补一个缺失包、上线后再暴露下一个子依赖。
         // 只靠 package.json 显式依赖、本包 node_modules 镜像、files include 都没让它稳定进 asar，

@@ -256,7 +256,6 @@ export async function reconnectRemoteWorkspaceHistoryEntry({
       sessionId = await connectRemoteWorkspaceTarget(reconnectTarget, options?.requestId, {
         workspacePath: sessionEntry.workspacePath,
         workspaceIdentity: fallbackWorkspaceIdentity,
-        connectTrigger: "reconnect",
       });
     } catch (error) {
       // 这两个结构化错误只由 Host 在 Source 已上线后的目录 admission 发出。发起项目被删

@@ -43,13 +43,11 @@ export const SubagentSessionSidePane = memo(function SubagentSessionSidePane({
       <SessionPane
         paneId={tab.id}
         sessionId={tab.childSessionId}
-        openTrigger="subagent"
         rootSessionId={tab.rootSessionId}
         readOnly
         allowWorkspaceFileRewind
         compactForRemoteControl={compactForRemoteControl}
         focused={focused}
-        telemetryVisible={focused}
         workspacePath={tab.workspacePath}
         workspaceIdentity={tab.workspaceIdentity}
         remoteSessionId={tab.remoteSessionId}

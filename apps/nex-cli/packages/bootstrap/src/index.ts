@@ -77,7 +77,6 @@ export { runNexProtocolAgent } from "./nex-protocol-entrypoint.js";
 // Exposed for the CLI's --output-format stream-json: it needs the same event
 // shape the protocol server emits, rather than inventing a second one.
 export { mapSessionEvent } from "./nex-protocol/session-mapper.js";
-export { prepareNexTelemetryEnv, shutdownNexTelemetry } from "./telemetry-bootstrap.js";
 export type { SessionTranscriptMessage, SessionTranscriptPart } from "./session-transcript.js";
 export { listNexSessions, resolveLatestSession } from "./sessions.js";
 export { inspectNexSkill, listNexSkills } from "./skills.js";

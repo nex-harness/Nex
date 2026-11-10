@@ -30,7 +30,6 @@ import type {
   SessionPhase,
 } from "@nex/shared/nex-protocol-v4";
 import { cn } from "@/components/lib/utils.js";
-import { runUserAction } from "@/lib/userActionTelemetry.js";
 import { Button } from "@/components/ui/button.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
@@ -168,12 +167,7 @@ function ConversationBackToBottomButton({
       className={cn("rounded-full bg-card hover:bg-card-selected", className)}
       data-testid={TID_V4_TIMELINE_BOTTOM}
       onClick={() =>
-        runUserAction({
-          input: { featureId: "conversation.navigation", action: "jump_bottom", trigger: "button" },
-          operation: onClick,
-          completed: { resultSource: "local_commit" },
-          failureStage: "timeline_scroll",
-        })
+        onClick
       }
     >
       <ArrowDownIcon className="size-4" />

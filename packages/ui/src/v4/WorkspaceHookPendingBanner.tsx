@@ -22,7 +22,6 @@ import {
   setPendingSettingsPluginIntent,
 } from "@/lib/settingsNavigation.js";
 import { logger } from "@/logger.js";
-import { runUserAction } from "@/lib/userActionTelemetry.js";
 import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
 import {
   findWorkspaceHookCommandBinding,
@@ -117,15 +116,11 @@ export const WorkspaceHookPendingIndicator = memo(function WorkspaceHookPendingI
 
   const handleDismiss = useCallback(() => {
     if (admission) {
-      runUserAction({
-        input: { featureId: "conversation.blocking.hook", action: "dismiss", trigger: "button" },
-        operation: () => {
+      {
           setOpen(false);
           setReminderState(reminderKey, "dismissed");
-        },
-        completed: { resultSource: "local_commit" },
-        failureStage: "hook_dismiss",
-      });
+        }
+
     }
   }, [admission, reminderKey]);
 

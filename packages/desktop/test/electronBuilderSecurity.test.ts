@@ -233,7 +233,7 @@ it("DMG contents 不得引用镜像内生成的隐藏文件", async () => {
   expect(generatedHiddenFiles).toEqual([]);
 });
 
-it("files 规则裁剪已核实为构建期的依赖，且保留 @babel/runtime", async () => {
+it("files 规则裁剪已核实为构建期的依赖", async () => {
   const { default: config } = await import("../electron-builder.config.js");
   const files = config.files as string[];
 
@@ -254,8 +254,4 @@ it("files 规则裁剪已核实为构建期的依赖，且保留 @babel/runtime"
   ]) {
     expect(files).toContain(pattern);
   }
-  // @babel/runtime 被部分库运行时 require，重新包含必须晚于整目录排除（后序模式优先）。
-  expect(files.indexOf("node_modules/@babel/runtime/**")).toBeGreaterThan(
-    files.indexOf("!node_modules/@babel/**"),
-  );
 });

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { sanitizeTelemetrySkillName } from "../telemetry.js";
 import { nexSyntheticUserMessageSourceSchema } from "../nex-protocol-legacy-types.js";
 import { timestampSchema } from "./core.js";
 
@@ -142,10 +141,8 @@ const toolLifecycleFactSchema = z
     background: z.boolean().optional(),
     skillName: z
       .string()
-      .refine(
-        (value) => sanitizeTelemetrySkillName(value) === value,
-        "skillName must be a bounded, safe resolved Skill identifier",
-      )
+      .max(64)
+      .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/u)
       .optional(),
     skillQualifiedName: z.string().min(1).optional(),
     skillPluginId: z.string().min(1).optional(),

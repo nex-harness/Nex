@@ -2436,7 +2436,6 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                   readOnlyReason={workspaceReadOnlyReason}
                   workspacePath={workspaceAbsPath}
                   workspaceIdentity={workspaceIdentity}
-                  isDesktop={isDesktop === true}
                   compactForRemoteControl={isWebRemoteControlShell}
                   sessionId={activeTaskId}
                   provider={activeTaskProvider ?? undefined}
@@ -2885,7 +2884,6 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                                 foregroundEnabled={isWorkspaceVisible}
                                 workspacePath={workspaceAbsPath}
                                 workspaceIdentity={workspaceIdentity}
-                                isDesktop={isDesktop === true}
                                 remoteSessionId={workspaceRemoteSessionId}
                                 compactForRemoteControl={isWebRemoteControlShell}
                                 sessionId={activeTaskId}

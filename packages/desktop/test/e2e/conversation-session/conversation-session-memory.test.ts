@@ -135,9 +135,6 @@ describe("Desktop Memory continuous 链路 WDIO", () => {
   it("从真实窗口覆盖默认分支、Extraction、custom agent 和 disabled gate", async function () {
     this.timeout(E2E_TIMEOUT_MS);
 
-    const telemetryFetch = await browser.electron.mock("net", "fetch");
-    await telemetryFetch.mockResolvedValue({ ok: true, status: 204 });
-
     await openMemorySettings();
     expect(await readMemorySwitch()).toBe(false);
     expect((await readSettings()).memoryEnabled).toBe(false);
@@ -148,7 +145,6 @@ describe("Desktop Memory continuous 链路 WDIO", () => {
     await waitForV4TimelineContaining(DISABLED_DONE, 90_000);
     const initiallyDisabledSessionId = requireSessionId((await getV4PaneSnapshot()).sessionId);
 
-    await expectMemoryTelemetry(telemetryFetch, initiallyDisabledSessionId, "0");
     await setMemoryEnabled(true, initiallyDisabledSessionId);
     await verifyMemorySettingsViewer(initiallyDisabledSessionId);
     // 修复原因：Settings 初始化会异步刷新内置 provider，并可能覆盖 case-local replay
@@ -167,7 +163,6 @@ describe("Desktop Memory continuous 链路 WDIO", () => {
       90_000,
     );
     const projectSessionId = requireSessionId(projectPane.sessionId);
-    await expectMemoryTelemetry(telemetryFetch, projectSessionId, "1");
 
     await waitForUpstreamRequest(
       { includes: [DEFAULT_BRANCH_PROMPT, "memory_default_branch_boundary"] },
@@ -844,27 +839,3 @@ function countCaptureOccurrences(value: unknown, marker: string): number {
   );
 }
 
-/** 真实网络上报验证开关维度；后台 Extraction 的结果不影响该值。 */
-async function expectMemoryTelemetry(
-  telemetryFetch: Awaited<ReturnType<typeof browser.electron.mock>>,
-  sessionId: string,
-  expected: "0" | "1",
-): Promise<void> {
-  let reports: Array<{ element_name: string; event_extra_detail: Record<string, unknown> }> = [];
-  const events = ["send_btn", "message_completion", "agent_step"];
-  await browser.waitUntil(
-    async () => {
-      await telemetryFetch.update();
-      reports = telemetryFetch.mock.calls.flatMap(([input, init]) => {
-        if (!String(input).includes("/api/v1/event/report")) return [];
-        const body = (init as { body?: string } | undefined)?.body;
-        if (!body) return [];
-        const report = JSON.parse(body);
-        return report.talk_id === sessionId && events.includes(report.element_name) ? [report] : [];
-      });
-      return events.every((name) => reports.some((report) => report.element_name === name));
-    },
-    { timeout: 15_000, timeoutMsg: "Memory 三类埋点未完整上报" },
-  );
-  for (const report of reports) expect(report.event_extra_detail.memory_enabled).toBe(expected);
-}

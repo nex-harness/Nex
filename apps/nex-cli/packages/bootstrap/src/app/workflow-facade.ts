@@ -44,7 +44,7 @@ import type { PrepareUserExecutionBoundary, NexAppOptions } from "./types.js";
 import { createWorkflowMethods, type WorkflowFacade } from "./workflow-methods.js";
 
 interface CreateWorkflowFacadeDeps {
-  agentTelemetry: AgentExecutionTelemetryPort;
+  agentTelemetry?: AgentExecutionTelemetryPort;
   appOptions: NexAppOptions;
   appVersion: string;
   artifactStore?: ToolArtifactStorePort;
@@ -299,7 +299,7 @@ function createWorkflowChildRuntime(
     },
     {
       agentTelemetry: deps.agentTelemetry,
-      agentTelemetryCausation: deps.agentTelemetry.captureCausation(),
+      agentTelemetryCausation: deps.agentTelemetry?.captureCausation(),
       // Workflow 在父工具返回后独立调度，不能伪装成父 Span 的同步 Child。
       agentTelemetryCausationMode: "linked_root",
       eventStore: createInMemorySessionEventStore(),

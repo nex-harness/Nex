@@ -5,7 +5,6 @@ import type {
   NexSessionContentProfile,
 } from "@nex/shared";
 /* eslint-disable max-lines -- Nex agent service 接口集中声明 protocol/session/workspace 方法，拆分会增加 service descriptor 迁移成本。 */
-import type { RemoteConversationTelemetryEvent } from "@nex/shared/conversation-telemetry";
 import type { Event, IDisposable } from "@nex/rpc";
 import { ServiceChannels } from "@nex/shared";
 import type { AppUsageRange, AppUsageSnapshot, NexTaskTokenUsageResult } from "@nex/shared";
@@ -903,10 +902,7 @@ export interface INexAgentService {
    * 该事件不属于 session/conversation continuous 或 replayable 状态。
    */
   onDynamicProcessResourceSample(): Event<AgentLaneResourceSample>;
-  /** MCP 进程生命周期与低频内存事件，仅供可信 Host relay 上报 ARMS。 */
-  /** 仅 trusted Host relay 订阅；手机统计不依赖 renderer 生命周期。 */
-  onDynamicRemoteConversationTelemetry(): Event<RemoteConversationTelemetryEvent>;
-
+  /** MCP 进程生命周期与低频内存事件，仅供可信 Host relay 做本地展示。 */
   onDynamicMcpTelemetry(): Event<NexMcpTelemetryEvent>;
   /** MCP 进程树资源事实，只供可信 Host 汇总上报。 */
   onDynamicMcpResourceSamples(): Event<NexMcpResourceSample[]>;
@@ -1016,9 +1012,6 @@ export interface INexAgentService {
     params: NexAgentWorkspaceTarget,
   ): Event<ConversationTopicWireCandidate>;
   /** workspace 级 live telemetry 事实；connection facade 仅向可信 desktop-continuous 下游暴露。 */
-  onDynamicLocalTtftFacts(
-    params: NexAgentWorkspaceTarget,
-  ): Event<import("@nex/shared").LocalTtftFacts>;
   onDynamicConversationTelemetryFact(
     params: NexAgentWorkspaceTarget,
   ): Event<ConversationTelemetryFact>;

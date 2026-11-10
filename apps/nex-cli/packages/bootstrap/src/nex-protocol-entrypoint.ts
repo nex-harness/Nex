@@ -56,7 +56,6 @@ import { NexProtocolNdjsonConnection } from "./nex-protocol/transport.js";
 import { cleanupProtocolRuntime } from "./nex-protocol/runtime-cleanup.js";
 import { startProtocolResourceSampler } from "./nex-protocol/resource-sampler.js";
 import { acquireProtocolStartupResource } from "./nex-protocol/startup-resource.js";
-import { prepareNexTelemetryEnv, shutdownNexTelemetry } from "./telemetry-bootstrap.js";
 import type { NexProcessResourceSampler } from "./process-resource-sampler.js";
 
 export function applyProtocolPresentationSurface(
@@ -178,24 +177,11 @@ export async function runNexProtocolAgent(
       module: "bootstrap.nex_protocol",
       providerCount: providerRegistryRuntime.snapshot.registry.providers.length,
     });
-    const runtimeSurface = resolveProtocolRuntimeSurface(runtimeEnv);
-    const telemetryEnv = await acquireProtocolStartupResource({
-      signal: options.lifecycle?.signal,
-      logger,
-      disposeLate: () => shutdownNexTelemetry(),
-      create: () =>
-        prepareNexTelemetryEnv(runtimeEnv, {
-          cliVersion: options.version,
-          productVersion: options.env?.NEX_APP_VERSION,
-          runtimeSurface,
-        }),
-    });
-    const telemetryDeviceMid = telemetryEnv.NEX_TELEMETRY_DEVICE_MID;
     mcpTelemetryTracker =
       configResult.config.features.mcp === false
         ? undefined
         : createMcpTelemetryTracker({
-            idSalt: telemetryDeviceMid ?? traceContext.traceId,
+            idSalt: traceContext.traceId,
             onEvent: (event) => mcpTelemetrySink?.(event),
             onResourceSamples: (samples) => mcpResourceSink?.(samples),
           });
@@ -318,9 +304,8 @@ export async function runNexProtocolAgent(
             };
           },
           env: {
-            ...telemetryEnv,
+            ...runtimeEnv,
             ...appOptions.env,
-            ...(telemetryDeviceMid ? { NEX_TELEMETRY_DEVICE_MID: telemetryDeviceMid } : {}),
           },
           ...(nodeReplBrowserBroker ? { nodeReplBrowserBroker } : {}),
           ...(mcpConnectionPool
@@ -445,13 +430,4 @@ export async function runNexProtocolAgent(
       status: "completed",
     });
   }
-}
-
-function resolveProtocolRuntimeSurface(
-  env: NodeJS.ProcessEnv,
-): "desktop_local_host" | "remote_workspace_host" {
-  // Bug 根因：入口曾无条件覆盖 Host 注入值，远程 SSH/WSL/容器 Trace 被归入本地 Desktop。
-  return env.NEX_TELEMETRY_RUNTIME_SURFACE?.trim() === "remote_workspace_host"
-    ? "remote_workspace_host"
-    : "desktop_local_host";
 }

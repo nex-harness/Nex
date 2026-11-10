@@ -1,6 +1,6 @@
 import { BrowserWindow, MessageChannelMain } from "electron";
 import type { MessagePortMain, UtilityProcess as ElectronUtilityProcess } from "electron";
-import { HostMessageTypes, type RemoteUsageRemoteKind } from "@nex/shared";
+import { HostMessageTypes } from "@nex/shared";
 
 type WebRemoteControlSharedHostKind = "local" | "remote";
 
@@ -18,7 +18,6 @@ interface WebRemoteControlSharedHostAttachment {
   attachmentId: string;
   process: ElectronUtilityProcess;
   port: MessagePortMain;
-  remoteKind?: RemoteUsageRemoteKind;
 }
 
 interface WebRemoteControlSharedHostError extends Error {
@@ -53,7 +52,6 @@ export function createWebRemoteControlSharedHostAttachments(dependencies: {
   }) => {
     process: ElectronUtilityProcess;
     port: MessagePortMain;
-    remoteKind: RemoteUsageRemoteKind;
   };
   logger: {
     info: (...args: unknown[]) => void;
@@ -151,7 +149,6 @@ export function createWebRemoteControlSharedHostAttachments(dependencies: {
       attachmentId,
       process: attached.process,
       port: attached.port,
-      remoteKind: attached.remoteKind,
     };
   }
 

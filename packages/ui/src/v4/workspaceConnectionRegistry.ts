@@ -44,7 +44,6 @@ export type WorkspaceConnectionAgentService = Pick<
   | "getSessionLifecycle"
   | "onDynamicSessionLifecycle"
   | "onDynamicConversationFrame"
-  | "onDynamicLocalTtftFacts"
   | "onAgentRuntimeRestarted"
 >;
 

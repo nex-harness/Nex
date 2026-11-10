@@ -1,6 +1,5 @@
 import type { AiSdkModelAdapter } from "@nex/adapters/model";
 import type {
-  AgentTelemetryRuntimeOwner,
   AutomationPort,
   BackgroundTaskCancelResult,
   BrowserControlPort,
@@ -165,8 +164,6 @@ export interface NexAppOptions {
   /** 新 Session 使用的 Environment 默认选择；仅在没有显式 runtime modelSelection 时参与初始化。 */
   configuredDefaultModelSelection?: ModelSelection;
   modelIoFullRetentionEnabled?: boolean;
-  /** 同进程嵌入宿主可注入完整的 borrowed 进程级 Owner；Endpoint 配置不得覆盖它。 */
-  telemetryOwner?: AgentTelemetryRuntimeOwner;
   providerEndpointRoutingPort?: ProviderEndpointRoutingPort;
   /**
    * provider runtime headers 端口：主 runtime 每次调用报自己的会话；child runtime 一律向父

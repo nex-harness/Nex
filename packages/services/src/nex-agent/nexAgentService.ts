@@ -7,12 +7,6 @@ import {
   NEX_PROVIDER_CONFIG_NETWORK_ERROR,
   nexProviderRuntimeHeadersErrorCode,
 } from "@nex/shared";
-import { RemoteConversationTelemetry } from "#src/conversation-telemetry/remoteConversationTelemetry.js";
-import {
-  remoteConversationTelemetryEventSchema,
-  type RemoteConversationTelemetryEvent,
-} from "@nex/shared/conversation-telemetry";
-import { resolveWorkspaceTelemetryDetail } from "@nex/shared";
 import { isAuxiliarySessionKind } from "@nex/shared";
 import {
   pluginUiToolResultNotificationSchema,
@@ -41,11 +35,7 @@ import {
   type ChannelReplyResult,
 } from "@nex/shared";
 import { requestPluginReferenceCatalog } from "#src/nex-agent/pluginReferenceCatalogRequest.js";
-import {
-  localTtftFactsSchema,
-  sessionDebugSnapshotSchema,
-  type LocalTtftFacts,
-} from "@nex/shared";
+import { sessionDebugSnapshotSchema } from "@nex/shared";
 /* oxlint-disable eslint(max-lines) -- Nex Protocol transport、通知 wiring 和 app-facing session 方法必须共享同一个 client/emitter 上下文。 */
 import { ensureIndependentPlanSupport } from "./independentPlanSupport.js";
 import { isRemoteInputPredictionEnabled } from "./inputPredictionSwitch.js";
@@ -1421,29 +1411,7 @@ export function createNexAgentService(
     snapshot: SessionLifecycleSnapshot;
   }>();
   const conversationFrameEmitters = new Map<string, Emitter<ConversationTopicWireCandidate>>();
-  const localTtftFactsEmitter = new Emitter<{ workspaceKey: string; facts: LocalTtftFacts }>();
   const conversationTelemetryFactEmitters = new Map<string, Emitter<ConversationTelemetryFact>>();
-  const remoteConversationTelemetryEmitter = new Emitter<RemoteConversationTelemetryEvent>();
-  const remoteConversationTelemetry = new Map<string, RemoteConversationTelemetry>();
-  function collectRemoteConversationFact(
-    workspace: NexAgentWorkspaceTarget,
-    fact: ConversationTelemetryFact,
-  ): boolean {
-    const key = resolveWorkspaceKey(workspace);
-    let collector = remoteConversationTelemetry.get(key);
-    if (!collector) {
-      collector = new RemoteConversationTelemetry({
-        workspaceScopeKey: `${v4ConnectionId}\0${key}`,
-        workspaceTelemetryDetail: resolveWorkspaceTelemetryDetail(workspace),
-        report: async (event) =>
-          remoteConversationTelemetryEmitter.fire(
-            remoteConversationTelemetryEventSchema.parse(event),
-          ),
-      });
-      remoteConversationTelemetry.set(key, collector);
-    }
-    return collector.acceptFact(fact);
-  }
 
   const offPeakLifecycleEmitters = new Map<string, Emitter<OffPeakLifecycleNotification>>();
   const pluginUiToolResultEmitter = new Emitter<
@@ -2603,21 +2571,10 @@ export function createNexAgentService(
           return;
         }
 
-        if (message.method === V4_NOTIFICATIONS.localTtftFacts) {
-          const parsed = localTtftFactsSchema.safeParse(message.params);
-          if (parsed.success && !workspace.remoteSessionId && !workspace.workspaceIdentity?.trim())
-            localTtftFactsEmitter.fire({
-              workspaceKey: resolveWorkspaceKey(workspace),
-              facts: parsed.data,
-            });
-          return;
-        }
         if (message.method === V4_NOTIFICATIONS.conversationTelemetryFact) {
           const parsed = conversationTelemetryFactSchema.safeParse(message.params);
           if (parsed.success) {
-            // 远控事实由执行服务独占，避免桌面同时打开该会话时重复计 step。
-            if (!collectRemoteConversationFact(workspace, parsed.data))
-              getConversationTelemetryFactEmitter(workspace).fire(parsed.data);
+            getConversationTelemetryFactEmitter(workspace).fire(parsed.data);
           } else {
             // 严格丢弃未知字段，避免 CLI runtime 新字段未经审计穿透到 renderer reporter。
             logger.warn(undefined, "丢弃无效 v4 conversation telemetry fact", {
@@ -4134,12 +4091,8 @@ export function createNexAgentService(
       emitter.dispose();
     }
     conversationTelemetryFactEmitters.clear();
-    for (const collector of remoteConversationTelemetry.values()) collector.dispose();
-    remoteConversationTelemetry.clear();
-    remoteConversationTelemetryEmitter.dispose();
     for (const emitter of offPeakLifecycleEmitters.values()) emitter.dispose();
     offPeakLifecycleEmitters.clear();
-    localTtftFactsEmitter.dispose();
     cuaPermissionObservationEmitter.dispose();
     pluginUiToolResultEmitter.dispose();
     for (const emitter of workspaceConfigFrameEmitters.values()) {
@@ -7237,15 +7190,6 @@ export function createNexAgentService(
       return getConversationFrameEmitter(params).event;
     },
 
-    onDynamicLocalTtftFacts(params: NexAgentWorkspaceTarget) {
-      return (listener: (facts: LocalTtftFacts) => void) =>
-        localTtftFactsEmitter.event((event) => {
-          if (event.workspaceKey === resolveWorkspaceKey(params)) listener(event.facts);
-        });
-    },
-    onDynamicRemoteConversationTelemetry() {
-      return remoteConversationTelemetryEmitter.event;
-    },
     onDynamicConversationTelemetryFact(params: NexAgentWorkspaceTarget) {
       return getConversationTelemetryFactEmitter(params).event;
     },
@@ -7440,8 +7384,6 @@ export function createNexAgentService(
         // 该入口被 restartWorkspaceProcess 用作 runtime invalidation，并非
         // workspace/service 真 teardown。销毁 workspace emitter 会让既有 UI/task-index
         // listener 永久绑在死对象上；emitters 只由 disposeLocalState/disposeAll 释放。
-        remoteConversationTelemetry.get(workspaceKey)?.dispose();
-        remoteConversationTelemetry.delete(workspaceKey);
       }
       await processManager.disposeWorkspace(params);
     },

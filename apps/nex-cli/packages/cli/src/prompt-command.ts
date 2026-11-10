@@ -135,7 +135,6 @@ export const runPrompt = async (
     | undefined;
   let closePromise: Promise<void> | undefined;
   let browserRuntime: ReturnType<typeof createCliHeadlessBrowserRuntime>;
-  let shutdownTelemetry: (() => Promise<void>) | undefined;
   // 常驻事件订阅的摘除句柄。声明在这里而不是 try 内，是为了让 finally 也能收口——
   // 任何早退（command-center 路径、抛错）都不能留下一个还在写 stdout 的 sink。
   let detachEvents: (() => void) | undefined;
@@ -157,9 +156,6 @@ export const runPrompt = async (
       await runCliCleanupWithTimeout(async () => targetApp?.close?.(), cleanupTimeoutMs);
       // Browser process 由 CLI adapter 持有；App close 悬空或失败也必须继续回收 Chromium。
       await runCliCleanupWithTimeout(async () => browserRuntime?.close(), cleanupTimeoutMs);
-      // Bug 根因：App.close 只结束 Session 并 flush，共享 OTLP Owner 过去没有进程级终态。
-      // 单次 prompt 是最外层生命周期，必须与 prepare 对称 shutdown。
-      await runCliCleanupWithTimeout(async () => shutdownTelemetry?.(), cleanupTimeoutMs);
       providerRegistryRuntime?.dispose();
     })();
     await closePromise;
@@ -203,17 +199,6 @@ export const runPrompt = async (
       stderr: ctx.stderr,
       stdout: ctx.stdout,
     });
-    const prepareTelemetry =
-      deps.prepareNexTelemetryEnv ?? bootstrapModule?.prepareNexTelemetryEnv;
-    if (prepareTelemetry) {
-      shutdownTelemetry = deps.shutdownNexTelemetry ?? bootstrapModule?.shutdownNexTelemetry;
-    }
-    const appEnv = prepareTelemetry
-      ? await prepareTelemetry(env, {
-          cliVersion: version,
-          productVersion: env.NEX_APP_VERSION,
-        })
-      : env;
     const startProviderRegistryRuntime =
       deps.startProcessProviderRegistryRuntime ??
       bootstrapModule?.startProcessProviderRegistryRuntime;
@@ -221,7 +206,7 @@ export const runPrompt = async (
       throw new Error("Provider Registry runtime is unavailable.");
     }
     providerRegistryRuntime = await startProviderRegistryRuntime(
-      appEnv,
+      env,
       deps.skipUserConfig
         ? {}
         : {
@@ -243,7 +228,7 @@ export const runPrompt = async (
     app = await createApp({
       modelSelectionMode: "cli-default",
       browserControlPort: browserRuntime?.browserControlPort,
-      env: appEnv,
+      env,
       // headless 没有交互审批面，core 因此退到 deny broker，于是 CreateWorkflow 的
       // alwaysAsk gate 在 -p 下**必然被拒**（"No permission client configured"）。
       // 这个最小 broker 只按工具名放行 CreateWorkflow，其余工具委托回同一个 deny

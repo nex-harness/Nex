@@ -22,12 +22,10 @@ import {
 import { NEX_OFFICIAL_PLUGIN_MARKETPLACE_ID } from "@nex/shared";
 import { cn } from "@/components/lib/utils.js";
 import { toast } from "@/components/ui/toast.js";
-import { usePlatform } from "@/hooks/usePlatform.js";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import type { AutomationsNavigationTab } from "@/lib/taskNavigationHistory.js";
-import { reportPromptTemplateClick } from "@/lib/promptTemplateTelemetry.js";
 import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/nexDraftSkillInvalidation.js";
 import { useNexSessionStore } from "@/store/nexSessionStore.js";
 import {
@@ -86,11 +84,9 @@ export function ConversationDraftSuggestedPromptsContainer({
   workspaceIdentity,
   remoteSessionId,
   onOpenAutomations,
-  isDesktop = false,
   isWebRemoteControl = false,
 }: Props) {
   const { intl, locale } = useNexIntl();
-  const platform = usePlatform();
   const isOfficeMode = useIsOfficeMode();
   const { update } = useSettings();
   const onboardingRecordService = useOnboardingRecordService();
@@ -538,16 +534,7 @@ export function ConversationDraftSuggestedPromptsContainer({
     async (item: DraftSuggestedPromptItem) => {
       const requestVersion = requestVersionRef.current + 1;
       requestVersionRef.current = requestVersion;
-      const templateName = resolveDraftSuggestedPromptText(item.label, locale);
       const prompt = resolveDraftSuggestedPromptText(item.prompt, locale);
-      if (isDesktop) {
-        // 埋点是旁路观测，必须早于导航或异步插件解析，且不能阻塞既有交互。
-        void reportPromptTemplateClick(platform, {
-          templateId: item.id,
-          templateName,
-          templatePrompt: prompt,
-        });
-      }
       if (
         onOpenAutomations &&
         item.actions?.includes(DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS_OFFPEAK)
@@ -713,11 +700,9 @@ export function ConversationDraftSuggestedPromptsContainer({
     [
       cancelOperation,
       clearOperationFeedback,
-      isDesktop,
       isWebRemoteControl,
       locale,
       onOpenAutomations,
-      platform,
       replacePlainPrompt,
       replaceWithResolvedPluginAndPrompt,
       resolution.rpcReady,

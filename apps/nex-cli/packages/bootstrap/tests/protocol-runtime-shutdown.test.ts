@@ -7,12 +7,6 @@ import type { Logger } from "@nex/contracts";
 import { createInMemorySessionEventStore } from "@nex/adapters/storage";
 import { NexProtocolAgentServer } from "../src/nex-protocol/server.js";
 
-const telemetry = vi.hoisted(() => ({ shutdown: vi.fn(async () => {}) }));
-vi.mock("@nex/telemetry", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@nex/telemetry")>()),
-  shutdownPreparedModelTelemetry: telemetry.shutdown,
-}));
-
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
@@ -182,7 +176,6 @@ describe("protocol runtime resource ownership", () => {
     await vi.advanceTimersByTimeAsync(451);
     expect(completed).toBe(true);
     expect(order).toEqual(["apps", "projections", "mcp", "pool", "registry"]);
-    expect(telemetry.shutdown).toHaveBeenCalledOnce();
     await cleanup;
   });
 });

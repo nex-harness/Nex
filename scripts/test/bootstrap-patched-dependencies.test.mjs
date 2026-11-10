@@ -11,8 +11,8 @@ import {
 
 test("解析 scoped 与普通 patched dependency key", () => {
   assert.equal(
-    resolvePatchedDependencyPackageName("@arms/rum-electron@0.0.3"),
-    "@arms/rum-electron",
+    resolvePatchedDependencyPackageName("@scope/example@1.2.3"),
+    "@scope/example",
   );
   assert.equal(resolvePatchedDependencyPackageName("vitest@4.1.7"), "vitest");
 });
@@ -26,13 +26,13 @@ test("bootstrap install 前只清理 hoisted patched dependency 目标", async (
       JSON.stringify({
         pnpm: {
           patchedDependencies: {
-            "@arms/rum-electron@0.0.3": "patches/arms.patch",
+            "@scope/example@1.2.3": "patches/example.patch",
             "vitest@4.1.7": "patches/vitest.patch",
           },
         },
       }),
     );
-    await mkdir(join(rootDir, "node_modules/@arms/rum-electron"), {
+    await mkdir(join(rootDir, "node_modules/@scope/example"), {
       recursive: true,
     });
     await mkdir(join(rootDir, "node_modules/vitest"), { recursive: true });
@@ -43,8 +43,8 @@ test("bootstrap install 前只清理 hoisted patched dependency 目标", async (
       packageJsonPath,
     });
 
-    assert.deepEqual(removed.sort(), ["@arms/rum-electron", "vitest"]);
-    await assert.rejects(access(join(rootDir, "node_modules/@arms/rum-electron")));
+    assert.deepEqual(removed.sort(), ["@scope/example", "vitest"]);
+    await assert.rejects(access(join(rootDir, "node_modules/@scope/example")));
     await assert.rejects(access(join(rootDir, "node_modules/vitest")));
     await access(join(rootDir, "node_modules/unrelated"));
   } finally {

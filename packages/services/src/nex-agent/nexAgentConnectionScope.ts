@@ -891,17 +891,6 @@ export function createNexAgentConnectionScope(
         base.onDynamicConversationFrame(params),
       );
     },
-    onDynamicLocalTtftFacts(params) {
-      assertOpen();
-      if (
-        role !== "terminal-client" ||
-        context.clientMode !== "desktop-continuous" ||
-        params.workspaceIdentity?.trim() ||
-        params.remoteSessionId
-      )
-        return RpcEvent.None;
-      return base.onDynamicLocalTtftFacts(workspaceTarget(params));
-    },
     onDynamicConversationTelemetryFact(params) {
       assertOpen();
       // 可信 clientMode 来自 host attachment；Web/mobile/relay 即使能读权威对话态，
@@ -957,10 +946,6 @@ export function createNexAgentConnectionScope(
       // 资源事实不属于会话流，桌面 continuous 与手机 replayable attachment 均不能订阅。
       if (disposed || role !== "trusted-host-relay") return RpcEvent.None;
       return base.onDynamicMcpResourceSamples();
-    },
-    onDynamicRemoteConversationTelemetry() {
-      if (disposed || role !== "trusted-host-relay") return RpcEvent.None;
-      return base.onDynamicRemoteConversationTelemetry();
     },
     onDynamicMcpTelemetry() {
       assertOpen();

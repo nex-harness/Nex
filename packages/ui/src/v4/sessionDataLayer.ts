@@ -6,7 +6,6 @@
 import { ConversationProjectionStore } from "@/v4/conversationProjectionStore.js";
 import { ConversationRowPool } from "@/v4/conversationRowSharing.js";
 import { shouldExposeE2EStoreBridge } from "@/lib/e2eStoreBridge.js";
-import type { SessionOpenKind } from "@/lib/sessionOpenArmsTelemetry.js";
 import { conversationTopic, type ConversationTransport } from "@/v4/transport.js";
 import { logger } from "@/logger.js";
 import type { CommandsQueryParams, CommandsQueryResult } from "@nex/shared/nex-protocol-v4";
@@ -15,10 +14,6 @@ import type { CommandsQueryParams, CommandsQueryResult } from "@nex/shared/nex-p
 export interface SessionLease {
   readonly sessionId: string;
   readonly store: ConversationProjectionStore;
-  /** 由数据层按 projection 生命周期判定，避免 pane 首次 render 时 snapshot 仍为空。 */
-  readonly openKind: SessionOpenKind;
-  /** pane acquire 的 Renderer 单调时钟起点。 */
-  readonly startedAt: number;
   release(): void;
 }
 
@@ -80,9 +75,7 @@ export class SessionDataLayer {
     const topic = conversationTopic(sessionId);
     const startedAt = monotonicNow();
     let entry = this.entries.get(topic);
-    let openKind: SessionOpenKind;
     if (entry) {
-      openKind = entry.keepWarmTimer !== null ? "keep_warm" : "warm";
       entry.refCount++;
       if (entry.keepWarmTimer !== null) {
         clearTimeout(entry.keepWarmTimer);
@@ -92,7 +85,6 @@ export class SessionDataLayer {
       const store = new ConversationProjectionStore(topic, this.transport, this.rowPool);
       entry = { store, refCount: 1, keepWarmTimer: null };
       this.entries.set(topic, entry);
-      openKind = "cold";
       // 订阅失败落在 store.state（status=error + retry()），不在这里抛。
       void store.connect({ rendererPrepareStartedAt: startedAt });
     }
@@ -100,7 +92,6 @@ export class SessionDataLayer {
       event: "v4.session_data.acquire",
       keepWarm: entry.keepWarmTimer !== null,
       module: "ui.v4.session_data_layer",
-      openKind,
       refCount: entry.refCount,
       sessionId,
       status: "completed",
@@ -111,8 +102,6 @@ export class SessionDataLayer {
     return {
       sessionId,
       store: entry.store,
-      openKind,
-      startedAt,
       release: () => {
         if (released) return;
         released = true;

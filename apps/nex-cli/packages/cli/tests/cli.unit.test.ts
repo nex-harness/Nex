@@ -2402,36 +2402,6 @@ test("wires TUI new command into a fresh active app", async () => {
   assert.deepEqual(closedSessionIds, ["sess_new_0", "sess_new_1"]);
 });
 
-test("keeps shared telemetry alive across TUI session replacement and shuts it down once", async () => {
-  const ctx = createContext(["tui"]);
-  let telemetryPrepareCount = 0;
-  let telemetryShutdownCount = 0;
-  const exitCode = await run(ctx, {
-    ...createPromptDeps(),
-    prepareNexTelemetryEnv: async (env) => {
-      telemetryPrepareCount += 1;
-      return env;
-    },
-    shutdownNexTelemetry: async () => {
-      telemetryShutdownCount += 1;
-    },
-    runTui: async (options) => {
-      await options.submitPrompt("hello first", {
-        abortSignal: new AbortController().signal,
-      });
-      await options.submitPrompt("/new", {
-        abortSignal: new AbortController().signal,
-      });
-      assert.equal(telemetryShutdownCount, 0);
-      return 0;
-    },
-  });
-
-  assert.equal(exitCode, 0);
-  assert.equal(telemetryPrepareCount, 2);
-  assert.equal(telemetryShutdownCount, 1);
-});
-
 test("reuses provider endpoint routing when TUI replaces its active session", async () => {
   const ctx = createContext(["tui"]);
   const providerEndpointRoutingPort = {
@@ -2485,14 +2455,9 @@ test("closes the active TUI app on process shutdown signals", async () => {
   const shutdownProcess = createTestShutdownProcess("darwin");
   const exitDeferred = createDeferred<number>();
   let closeCount = 0;
-  let telemetryShutdownCount = 0;
 
   const exitCode = await run(ctx, {
     ...createPromptDeps(),
-    prepareNexTelemetryEnv: async (env) => env,
-    shutdownNexTelemetry: async () => {
-      telemetryShutdownCount += 1;
-    },
     createNexApp: () =>
       ({
         close: async () => {
@@ -2527,7 +2492,6 @@ test("closes the active TUI app on process shutdown signals", async () => {
 
   assert.equal(exitCode, 0);
   assert.equal(closeCount, 1);
-  assert.equal(telemetryShutdownCount, 1);
 });
 
 test("parses built-in slash commands outside the TUI", () => {
@@ -5061,39 +5025,6 @@ test("closes the app after a headless prompt", async () => {
   assert.equal(exitCode, 0);
   assert.equal(closeCount, 1);
   assert.equal(ctx.stdout.output(), "hello\n");
-});
-
-test("shuts down prepared telemetry after a headless prompt", async () => {
-  const ctx = createContext(["--prompt", "hello telemetry"]);
-  let telemetryShutdownCount = 0;
-  const exitCode = await run(ctx, {
-    ...createPromptDeps(),
-    prepareNexTelemetryEnv: async (env) => env,
-    shutdownNexTelemetry: async () => {
-      telemetryShutdownCount += 1;
-    },
-  });
-
-  assert.equal(exitCode, 0);
-  assert.equal(telemetryShutdownCount, 1);
-});
-
-test("shuts down prepared telemetry when headless app creation fails", async () => {
-  const ctx = createContext(["--prompt", "failing telemetry"]);
-  let telemetryShutdownCount = 0;
-  const exitCode = await run(ctx, {
-    ...createPromptDeps(),
-    createNexApp: () => {
-      throw new Error("app creation failed");
-    },
-    prepareNexTelemetryEnv: async (env) => env,
-    shutdownNexTelemetry: async () => {
-      telemetryShutdownCount += 1;
-    },
-  });
-
-  assert.equal(exitCode, 1);
-  assert.equal(telemetryShutdownCount, 1);
 });
 
 test("aborts and closes the headless app on process shutdown signals", async () => {

@@ -1,7 +1,6 @@
 import type { Logger, McpPort } from "@nex/contracts";
 import type { McpConnectionPool, McpTelemetryTracker } from "@nex/adapters/mcp";
 import type { SqliteSessionStore } from "@nex/adapters/storage";
-import { shutdownPreparedModelTelemetry } from "@nex/telemetry";
 import { closeSessionStore } from "../app/session-store.js";
 import type { NodeReplBrowserBroker } from "../app/node-repl-browser-broker.js";
 import type { NexProcessResourceSampler } from "../process-resource-sampler.js";
@@ -63,6 +62,5 @@ export async function cleanupProtocolRuntime(options: {
       if (options.sessionStore) closeSessionStore(options.sessionStore);
     }),
     step("provider_registry", () => options.providerRegistryRuntime?.dispose()),
-    step("telemetry", () => shutdownPreparedModelTelemetry()),
   ]);
 }

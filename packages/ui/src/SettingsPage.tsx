@@ -132,32 +132,17 @@ import { useOptionalRemoteWorkspaceController } from "@/remote/useRemoteWorkspac
 import { AppearanceSectionContent } from "./settingsCodePreview.js";
 import type { SettingsSectionId } from "@/lib/settingsNavigation.js";
 import { requestPluginStoreOpen } from "@/lib/pluginStoreNavigation.js";
-import {
-  runUserAction,
-  runUserActionAsync,
-  type UserActionResult,
-  type UserActionTrigger,
-} from "@/lib/userActionTelemetry.js";
-import type { SettingsUserActionFeatureId } from "@/lib/userActionTraceCatalog.js";
+import type { UserActionResult, UserActionTrigger } from "@/lib/userActionTelemetry.js";
 
 function runSettingsActionAsync<T>(options: {
-  featureId: SettingsUserActionFeatureId;
+  featureId: string;
   action: string;
   trigger: UserActionTrigger;
   operation: () => Promise<T>;
   completed: UserActionResult;
   failureStage?: string;
 }): Promise<T> {
-  return runUserActionAsync({
-    input: {
-      featureId: options.featureId,
-      action: options.action,
-      trigger: options.trigger,
-    },
-    operation: options.operation,
-    completed: options.completed,
-    failureStage: options.failureStage ?? "settings_commit",
-  });
+  return options.operation();
 }
 
 function SettingsUsageProviderTabs({
@@ -1411,21 +1396,11 @@ export function SettingsPage({
   const handleFooterLocaleChange = useCallback(
     (value: string) => {
       if (value === "system") {
-        runUserAction({
-          input: { featureId: "settings.locale", action: "change_locale", trigger: "select" },
-          operation: () => setLocalePreference("system"),
-          completed: { resultSource: "local_commit", valueAfter: "system" },
-          failureStage: "local_commit",
-        });
+        setLocalePreference("system");
         return;
       }
       if (value === "zh-CN" || value === "en-US") {
-        runUserAction({
-          input: { featureId: "settings.locale", action: "change_locale", trigger: "select" },
-          operation: () => setLocalePreference(value as Locale),
-          completed: { resultSource: "local_commit", valueAfter: value },
-          failureStage: "local_commit",
-        });
+        setLocalePreference(value as Locale);
       }
     },
     [setLocalePreference],
@@ -1439,41 +1414,14 @@ export function SettingsPage({
         value === "zai-dark" ||
         value === "system"
       ) {
-        runUserAction({
-          input: { featureId: "settings.appearance", action: "change_theme", trigger: "select" },
-          operation: () => setTheme(value as Theme),
-          completed: { resultSource: "local_commit", valueAfter: value },
-          failureStage: "local_commit",
-        });
+        setTheme(value as Theme);
       }
     },
     [setTheme],
   );
   const handleCodePreviewSettingsChange = useCallback(
     (patch: Parameters<typeof setCodePreviewSettings>[0]) => {
-      const [key] = Object.keys(patch);
-      const action =
-        key === "lightTheme"
-          ? "change_code_light_theme"
-          : key === "darkTheme"
-            ? "change_code_dark_theme"
-            : key === "showLineNumbers"
-              ? "toggle_code_line_numbers"
-              : key === "wrapLongLines"
-                ? "toggle_code_line_wrap"
-                : "change_code_font_size";
-      const value = Object.values(patch)[0];
-      return runUserAction({
-        input: { featureId: "settings.appearance", action, trigger: "select" },
-        operation: () => setCodePreviewSettings(patch),
-        completed: {
-          resultSource: "local_commit",
-          ...(typeof value === "boolean"
-            ? { stateAfter: value ? ("enabled" as const) : ("disabled" as const) }
-            : { valueAfter: String(value) }),
-        },
-        failureStage: "local_commit",
-      });
+      return setCodePreviewSettings(patch);
     },
     [setCodePreviewSettings],
   );
@@ -1557,21 +1505,10 @@ export function SettingsPage({
                       })}
                       className="m-1 w-[calc(100%-0.5rem)] justify-start gap-2 rounded-xl bg-surface px-1.5 text-remote-foreground-muted hover:bg-surface-hover hover:text-foreground max-lg:m-1 max-lg:size-10 max-lg:justify-center max-lg:px-0"
                       onClick={() => {
-                        runUserAction({
-                          input: {
-                            featureId: "settings.navigation",
-                            action: "back_to_workspace",
-                            trigger: "button",
-                          },
-                          operation: () => {
-                            if (pluginNavigationOrigin === "plugin-store") {
-                              requestPluginStoreOpen("user");
-                            }
-                            onBack?.();
-                          },
-                          completed: { resultSource: "local_commit" },
-                          failureStage: "navigation_commit",
-                        });
+                        if (pluginNavigationOrigin === "plugin-store") {
+                          requestPluginStoreOpen("user");
+                        }
+                        onBack?.();
                       }}
                     >
                       <ArrowLeft className="size-4" />
@@ -1628,21 +1565,10 @@ export function SettingsPage({
                                 data-testid={testId(TID_SETTINGS_SECTION_NAV, id)}
                                 data-settings-section-nav={id}
                                 onClick={() => {
-                                  runUserAction({
-                                    input: {
-                                      featureId: "settings.navigation",
-                                      action: "open_section",
-                                      trigger: "button",
-                                    },
-                                    operation: () => {
-                                      setPluginNavigationOrigin(undefined);
-                                      setTargetSourceServerId(undefined);
-                                      setSettingsSectionNavigationVersion((version) => version + 1);
-                                      setActiveSettingsSection(id);
-                                    },
-                                    completed: { resultSource: "local_commit", sectionId: id },
-                                    failureStage: "navigation_commit",
-                                  });
+                                  setPluginNavigationOrigin(undefined);
+                                  setTargetSourceServerId(undefined);
+                                  setSettingsSectionNavigationVersion((version) => version + 1);
+                                  setActiveSettingsSection(id);
                                 }}
                               >
                                 <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -1828,36 +1754,8 @@ export function SettingsPage({
                               defaultHomeDir={defaultHomeDir}
                               showIntegratedTerminalShell={hostPlatform === "win32"}
                               setLocalePreference={handleFooterLocaleChange}
-                              setNotificationEnabled={(enabled) =>
-                                runUserAction({
-                                  input: {
-                                    featureId: "settings.notification",
-                                    action: "toggle_notification",
-                                    trigger: "switch",
-                                  },
-                                  operation: () => setNotificationEnabled(enabled),
-                                  completed: {
-                                    resultSource: "local_commit",
-                                    stateAfter: enabled ? "enabled" : "disabled",
-                                  },
-                                  failureStage: "local_commit",
-                                })
-                              }
-                              setNotificationSoundEnabled={(enabled) =>
-                                runUserAction({
-                                  input: {
-                                    featureId: "settings.notification",
-                                    action: "toggle_notification_sound",
-                                    trigger: "switch",
-                                  },
-                                  operation: () => setNotificationSoundEnabled(enabled),
-                                  completed: {
-                                    resultSource: "local_commit",
-                                    stateAfter: enabled ? "enabled" : "disabled",
-                                  },
-                                  failureStage: "local_commit",
-                                })
-                              }
+                              setNotificationEnabled={setNotificationEnabled}
+                              setNotificationSoundEnabled={setNotificationSoundEnabled}
                               messageStreamShowReasoning={messageStreamShowReasoning}
                               messageStreamShowTodos={messageStreamShowTodos}
                               toolGroupingExploreEnabled={toolGroupingExploreEnabled}
@@ -1913,16 +1811,7 @@ export function SettingsPage({
                                 handleAskUserQuestionAutoResolutionEnabledChange
                               }
                               onOpenOnboardingDialog={() =>
-                                runUserAction({
-                                  input: {
-                                    featureId: "settings.navigation",
-                                    action: "open_onboarding",
-                                    trigger: "button",
-                                  },
-                                  operation: openOccupationOnboarding,
-                                  completed: { resultSource: "local_commit" },
-                                  failureStage: "dialog_open",
-                                })
+                                openOccupationOnboarding
                               }
                             />
                           ) : activeSection === "dataSync" ? (
@@ -2062,21 +1951,7 @@ export function SettingsPage({
                               theme={theme}
                               setTheme={(nextTheme) => handleFooterThemeChange(nextTheme)}
                               uiFontSizePx={uiFontSizePx}
-                              setUiFontSizePx={(fontSizePx) =>
-                                runUserAction({
-                                  input: {
-                                    featureId: "settings.appearance",
-                                    action: "change_ui_font_size",
-                                    trigger: "keyboard",
-                                  },
-                                  operation: () => setUiFontSizePx(fontSizePx),
-                                  completed: {
-                                    resultSource: "local_commit",
-                                    valueAfter: String(fontSizePx),
-                                  },
-                                  failureStage: "local_commit",
-                                })
-                              }
+                              setUiFontSizePx={setUiFontSizePx}
                             />
                           ) : activeSection === "shortcuts" ? (
                             <ShortcutSettingsSection isDesktop={Boolean(isDesktop)} />

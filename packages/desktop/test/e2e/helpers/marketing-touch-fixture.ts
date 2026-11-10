@@ -2,14 +2,12 @@ import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createMarketingTouchAssets } from "./marketing-touch-assets.js";
 import { createMarketingAssetGate } from "./marketing-touch-asset-gate.js";
-import { createTelemetryReportFixture } from "./telemetry-report-fixture.js";
 
 export async function createMarketingTouchFixture() {
   const { png, zip, assets } = await createMarketingTouchAssets();
   const assetGate = createMarketingAssetGate();
   const hash = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
   const events: unknown[] = [];
-  const handleTelemetry = createTelemetryReportFixture();
   let held = true;
   let claimed = false;
   let claimFailure: unknown = null;
@@ -53,7 +51,6 @@ export async function createMarketingTouchFixture() {
         res.end(JSON.stringify(value));
       };
       const assetControl = assetGate.control(path);
-      if (await handleTelemetry(req, res)) return true;
       if (assetControl) {
         json(assetControl);
         return true;

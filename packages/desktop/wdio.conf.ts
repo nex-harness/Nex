@@ -1,5 +1,4 @@
 import { createConversationShareMockRoute } from "./test/e2e/helpers/conversation-share-mock-route.js";
-import { prepareTtftOtlpFixture } from "./test/e2e/helpers/ttft-otlp-fixture.js";
 import {
   loadToolSearchResponses,
   toolSearchResponseStage,
@@ -646,7 +645,6 @@ let modelContextBudgetConfigMockServer: ModelContextBudgetConfigMockServer | nul
 let dynamicWorkflowConfigMockServer: DynamicWorkflowConfigMockServer | null = null;
 let clientScenesMockServer: ClientScenesMockServer | null = null;
 let stopOAuthCompletionRaceFixture: (() => Promise<void>) | null = null;
-let stopTtftOtlpFixture: (() => Promise<void>) | null = null;
 let stopWebRemoteControlAuthGateFixture: (() => Promise<void>) | null = null;
 let stopAccessToken401Fixture: (() => Promise<void>) | null = null;
 let stopOfficialMcpAuthRoutingFixture: (() => Promise<void>) | null = null;
@@ -4603,16 +4601,6 @@ export const config: WebdriverIO.Config = {
     // 修复原因：普通 E2E 的 NEX_ENV=test 会把配置接口路由到测试域；
     // 请求安全 capture 与独立 live-team 显式覆盖生产控制面，其他用例保持原行为。
     ...getE2EProviderEndpointEnv(configuredE2ESpecs, e2eProviderPresetName, upstreamE2EHttpMode),
-    ...(process.env.NEX_TELEMETRY_PARITY_CAPTURE_PATH?.trim()
-      ? {
-          NEX_TELEMETRY_PARITY_CAPTURE_PATH: process.env.NEX_TELEMETRY_PARITY_CAPTURE_PATH,
-        }
-      : {}),
-    ...(process.env.NEX_TELEMETRY_PARITY_VARIANT?.trim()
-      ? {
-          NEX_TELEMETRY_PARITY_VARIANT: process.env.NEX_TELEMETRY_PARITY_VARIANT,
-        }
-      : {}),
   },
   framework: "mocha",
   reporters: ["spec"],
@@ -4934,8 +4922,6 @@ export const config: WebdriverIO.Config = {
         // Client Scenes 是布局 case 的远端目录依赖；必须在 resetHome 完成、Electron
         // 启动前覆盖 endpoint，确保 Main → Host 首次 import 时拿到 case-local fixture。
         await startClientScenesE2EMockIfNeeded(specs);
-        await stopTtftOtlpFixture?.();
-        stopTtftOtlpFixture = await prepareTtftOtlpFixture(specs);
         await startRequestSecurityFixture(specs, E2E_HOME_DIR);
         stopOAuthCompletionRaceFixture = await prepareOAuthCompletionRaceFixture(specs);
         stopAccessToken401Fixture = await prepareAccessToken401Fixture({
@@ -5069,8 +5055,6 @@ export const config: WebdriverIO.Config = {
           currentE2EElectronAppPid = null;
           await stopOAuthCompletionRaceFixture?.();
           stopOAuthCompletionRaceFixture = null;
-          await stopTtftOtlpFixture?.();
-          stopTtftOtlpFixture = null;
           await stopWebRemoteControlAuthGateFixture?.();
           stopWebRemoteControlAuthGateFixture = null;
           await stopAccessToken401Fixture?.();

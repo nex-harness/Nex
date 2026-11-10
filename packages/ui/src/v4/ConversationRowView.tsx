@@ -1,4 +1,3 @@
-import { getLocalTtftObserver } from "@/v4/telemetry/local-ttft/contract.js";
 import { GenUiMessageResponse } from "@/gen-ui/index.js";
 import { ConversationUserInputBubble } from "@/v4/ConversationUserInputBubble.js";
 import { expandTopicInputMessages } from "@/v4/topicInputMessages.js";
@@ -10,7 +9,6 @@ import {
   memo,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -101,9 +99,6 @@ import {
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
 import { resolveWorkflowRunOpenToolCallId } from "@/v4/workflowRunCardJoin.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
-import { useOptionalPlatform } from "@/hooks/usePlatform.js";
-import { reportAppTelemetryEvent } from "@/lib/appTelemetry.js";
-import { runUserAction, runUserActionAsync } from "@/lib/userActionTelemetry.js";
 import { logger } from "@/logger.js";
 import { PluginUiModelContextChip, formatPluginDisplayName } from "@/plugin-ui/index.js";
 import type { AssistantPreviewCard } from "@/lib/assistantPreviewCards.js";
@@ -195,12 +190,7 @@ const CopyRowAction = memo(function CopyRowAction({
   const [copied, setCopied] = useState(false);
   const handleCopy = useCallback(() => {
     if (!text || !navigator.clipboard) return;
-    void runUserActionAsync({
-      input: { featureId: "conversation.history.feedback", action: "copy", trigger: "button" },
-      operation: () => navigator.clipboard.writeText(text),
-      completed: { resultSource: "platform_result" },
-      failureStage: "clipboard_write",
-    }).then(() => {
+    void navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1200);
     });
@@ -1508,7 +1498,6 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   className?: string;
 }) {
   const { intl, locale } = useNexIntl();
-  const platform = useOptionalPlatform();
   const [localFeedback, setLocalFeedback] = useState<AssistantMessageFeedback | null>(feedback);
   const copyLabel = intl.formatMessage({ id: "chat.message.copy" });
   const likeLabel = intl.formatMessage({
@@ -1551,31 +1540,12 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
           },
         );
       }
-      if (platform && entityId) {
-        void reportAppTelemetryEvent(
-          platform,
-          {
-            elementName: "assistant_message_feedback",
-            eventRegion: "chat",
-            eventType: "ck",
-            eventExtraDetail: { reaction: resolvedFeedback ?? "none" },
-            ...(sessionId ? { talkId: sessionId } : {}),
-            messageId: entityId,
-          },
-          "ConversationRowView",
-        );
-      }
     },
-    [entityId, localFeedback, onFeedbackChange, platform, rowId, sessionId],
+    [entityId, localFeedback, onFeedbackChange, rowId, sessionId],
   );
   const handleFork = useCallback(() => {
     if (entityId) {
-      runUserAction({
-        input: { featureId: "conversation.history.branch", action: "fork", trigger: "button" },
-        operation: () => onFork?.({ rowId, entityId }),
-        completed: { resultSource: "optimistic_projection" },
-        failureStage: "fork",
-      });
+      onFork?.({ rowId, entityId });
     }
   }, [entityId, onFork, rowId]);
   return (
@@ -1691,56 +1661,6 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
     [projectsCodeComments, row.text, streaming],
   );
   const visiblePreviewCards = previewCards && previewCards.length > 0 ? previewCards : null;
-  const textElement = useRef<HTMLDivElement>(null);
-  const paintFrames = useRef<number[]>([]);
-  useEffect(
-    () => () => {
-      for (const frame of paintFrames.current) cancelAnimationFrame(frame);
-    },
-    [],
-  );
-  useLayoutEffect(() => {
-    if (context.workspaceIdentity || !context.sessionId) return;
-    const observer = getLocalTtftObserver();
-    const args = [context.workspacePath, context.sessionId, row.turnId, row.rowId] as const;
-    if (!observer?.needsTextRender(...args)) return;
-    const element = textElement.current;
-    if (!element?.textContent?.trim()) return;
-    const visible = () => {
-      if (
-        !element.isConnected ||
-        document.visibilityState !== "visible" ||
-        !element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
-      )
-        return false;
-      const rect = element.getBoundingClientRect();
-      return (
-        rect.bottom > 0 &&
-        rect.right > 0 &&
-        rect.top < window.innerHeight &&
-        rect.left < window.innerWidth
-      );
-    };
-    if (!observer.textRendered(...args, "committed", visible())) return;
-    // 接收帧早于 React 提交；两次 rAF 只代表经过绘制机会，不能声称像素已上屏。
-    // 流式文本更新不能取消首帧观察，仅组件卸载取消，避免高频更新把计时拖到整轮结束。
-    paintFrames.current.push(
-      requestAnimationFrame(() => {
-        paintFrames.current.push(
-          requestAnimationFrame(() => {
-            observer.textRendered(...args, "paint_estimate", visible());
-          }),
-        );
-      }),
-    );
-  }, [
-    context.workspaceIdentity,
-    context.workspacePath,
-    context.sessionId,
-    row.turnId,
-    row.rowId,
-    visibleText,
-  ]);
   return (
     <RowShell rowId={row.rowId} className="group/assistant-row">
       {/* M5④ 阶段2：assistant 文本走 streamdown（MessageResponse），
@@ -1748,7 +1668,7 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
       {/* Bugfix：MessageResponse 只消费自身声明的 props，不会把 data-* 透传到真实 DOM，
           导致 assistant 正文虽然在 JSX 上标了 selectable，框选逻辑却永远找不到该区域。
           selectable 语义必须放在稳定的 DOM 包装层上，完成态和 streaming 共用同一路径。 */}
-      <div ref={textElement} data-conversation-selectable="true" className="w-full text-ui-base">
+      <div data-conversation-selectable="true" className="w-full text-ui-base">
         <GenUiMessageResponse
           completed={row.state === "complete"}
           messageKey={`${row.rowId}:${row.entityId ?? ""}`}

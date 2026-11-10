@@ -20,7 +20,7 @@ import type {
   TurnStartedPayload,
 } from "@nex/contracts";
 import { getModelUsageTotalTokens, SessionEventType } from "@nex/contracts";
-import { parseAutomationRunId, sanitizeTelemetrySkillName } from "@nex/shared";
+import { parseAutomationRunId } from "@nex/shared";
 import { workflowLifecycleFactFromProgress } from "./conversation-telemetry-workflow-facts.js";
 import {
   conversationTelemetryFactSchema,
@@ -109,8 +109,12 @@ function skillTelemetryFactFields(
   const pluginId = optionalString(value.pluginId);
   const source = optionalString(value.source);
   // 仅消费加载结果 metadata；请求参数不证明技能存在，不能进入遥测。
+  // 名称必须与 conversationTelemetryFactSchema.skillName 的边界一致，否则整条事实会被丢弃。
+  const rawName = source && typeof value.name === "string" ? value.name : undefined;
   const name =
-    source && value.name !== undefined ? sanitizeTelemetrySkillName(value.name) : undefined;
+    rawName && rawName.length <= 64 && /^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(rawName)
+      ? rawName
+      : undefined;
   return {
     ...(name ? { skillName: name } : {}),
     ...(qualifiedName ? { skillQualifiedName: qualifiedName } : {}),
