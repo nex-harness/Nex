@@ -25,7 +25,6 @@ function withLocalOnlyAccountServices(
   return {
     ...services,
     highspeedCardService: remoteUnsupportedHighspeedCardService,
-    offPeakTaskService: baseServices.offPeakTaskService,
   };
 }
 

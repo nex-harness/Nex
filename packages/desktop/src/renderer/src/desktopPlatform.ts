@@ -81,8 +81,6 @@ export function createDesktopPlatform(options: {
       : undefined,
     notifyWebRemoteControlAuthStateChanged: (change) =>
       window.nex.notifyWebRemoteControlAuthStateChanged(change),
-    registerOAuthState: (payload) => window.nex.registerOAuthState(payload),
-    onOAuthCallback: (callback) => window.nex.onOAuthCallback(callback),
     onPaymentCallback: (callback) => window.nex.onPaymentCallback(callback),
     onShareImport: (callback) => window.nex.onShareImport?.(callback) ?? (() => {}),
     notifyRendererReady: () => window.nex.notifyRendererReady(),
