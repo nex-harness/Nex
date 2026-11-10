@@ -1,0 +1,25 @@
+<svg width="436" height="360" viewBox="0 0 436 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 空态沿用旧 Z 的灰色水印：只换 N 轮廓，保留透明底、渐隐、0.15 填充和 1.2px 模糊。 -->
+  <defs>
+    <linearGradient id="nex-watermark" x1="513" y1="257.8" x2="513" y2="769.8" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#444444" stop-opacity="0.6" />
+      <stop offset="0.5" stop-color="#2A2A2A" stop-opacity="0.3" />
+      <stop offset="1" stop-color="#1A1A1A" stop-opacity="0.1" />
+    </linearGradient>
+    <filter id="nex-watermark-blur" x="16.6" y="10" width="402.74" height="340" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="1.2" />
+    </filter>
+  </defs>
+  <g opacity="0.15" filter="url(#nex-watermark-blur)">
+    <g transform="translate(58.625 18.75) scale(.625) translate(-258 -255)" fill="url(#nex-watermark)">
+      <path d="M263 356C263 333 276 337 286 343C305 355 342 402 399 469V702C399 720 392 729 376 736L290 766C271 772 263 762 263 741Z" />
+      <path d="M625 528V327C625 307 632 299 649 291L728 260C750 251 763 262 763 282V645C763 671 741 659 724 638Z" />
+      <path d="M263 356V316C263 282 282 262 313 262H389C406 262 415 272 429 288L722 638C741 660 763 673 763 645V707C763 741 743 763 707 763H663C645 763 636 756 623 741L306 369C282 340 264 336 263 356Z" />
+    </g>
+  </g>
+  <g transform="translate(58.625 18.75) scale(.625) translate(-258 -255)" stroke="url(#nex-watermark)" stroke-width="1.6">
+      <path d="M263 356C263 333 276 337 286 343C305 355 342 402 399 469V702C399 720 392 729 376 736L290 766C271 772 263 762 263 741Z" />
+      <path d="M625 528V327C625 307 632 299 649 291L728 260C750 251 763 262 763 282V645C763 671 741 659 724 638Z" />
+      <path d="M263 356V316C263 282 282 262 313 262H389C406 262 415 272 429 288L722 638C741 660 763 673 763 645V707C763 741 743 763 707 763H663C645 763 636 756 623 741L306 369C282 340 264 336 263 356Z" />
+  </g>
+</svg>
