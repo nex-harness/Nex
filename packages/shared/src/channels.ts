@@ -8,7 +8,6 @@ import type {
   MigrateLegacyCommonMcpResult,
   SaveCliMcpToUserDirectoryRequest,
 } from "./index.js";
-import type { OAuthStateRegistration } from "./oauth.js";
 import type {
   WebRemoteControlContext,
   WebRemoteControlReconnectWorkspaceRequest,
@@ -382,16 +381,10 @@ export const PlatformChannels = {
    * 立刻消失可能打断正在进行的拖拽。
    */
   NotifyCuaHelperPermissionDragEnded: "nex:notify-cua-helper-permission-drag-ended",
-  /** Renderer → Main：上报 OAuth state 用于 deep link 路由 */
-  OAuthRegisterState: "nex:oauth-register-state",
-  /** Main → Renderer：转发 deep link URL */
-  OAuthCallback: "nex:oauth-callback",
   /** Main → Renderer：转发支付 deep link URL */
   PaymentCallback: "nex:payment-callback",
   /** Main → Renderer：外部分享页请求导入 share code。 */
   ShareImport: "nex:share-import",
-  /** Renderer → Main：OAuth 回调已处理完成，可继续后置启动流程 */
-  OAuthCallbackHandled: "nex:oauth-callback-handled",
   /** Renderer → Main：renderer 已就绪，可接收缓存的 deep link */
   RendererReady: "nex:renderer-ready",
   /** Renderer → Main：读取 Renderer 用户操作 Trace 灰度配置。 */
@@ -1074,24 +1067,12 @@ export interface PlatformChannelMap {
     request: { operationId: string };
     response: void;
   };
-  [PlatformChannels.OAuthRegisterState]: {
-    request: OAuthStateRegistration;
-    response: void;
-  };
-  [PlatformChannels.OAuthCallback]: {
-    request: string;
-    response: void;
-  };
   [PlatformChannels.PaymentCallback]: {
     request: string;
     response: void;
   };
   [PlatformChannels.ShareImport]: {
     request: { shareCode: string };
-    response: void;
-  };
-  [PlatformChannels.OAuthCallbackHandled]: {
-    request: void;
     response: void;
   };
   [PlatformChannels.RendererReady]: {

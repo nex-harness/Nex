@@ -487,41 +487,6 @@ Todo103 本轮运行证据记录在 staging-integration ledger。
 
 用户于 2026-09-16 确认转正。正式用例 `packages/desktop/test/e2e/help-menu-about.test.ts`，默认 desktop E2E 收集 Preview 分支，production 使用 `NEX_E2E_HELP_MENU_FLAVOR=production` 与 production 构建单独运行。HM-02 对下载完成状态分别验证动作文案和版本 pill，关闭重开后再次验证版本。共 4 个 case，覆盖草稿页/设置页、中英文关于窗口、更新状态及禁用/重开、真实开发包检查更新回执和 Preview 隐藏。无模型请求，无 provider replay fixture 依赖；合成更新事件仅用于菜单状态展示。完整矩阵和运行命令见 [桌面帮助菜单](../windows-caption-help-menu.md)。
 
-## AUTH-07: OAuth 回调与轮询完成竞态（pending）
-
-- Spec：`packages/desktop/test/e2e/oauth-completion-race.test.ts`。
-- Fixture：`helpers/oauth-completion-race-fixture.ts` 启动本地 HTTP，init 后真实 Host 轮询；
-  preload 回调启动 token 兑换并挂起，poll ready 返回后才释放 token HTTP 500。
-- 先挂起一次兑换并通过 UI 取消，释放兑换成功响应；等待 Host 回调完成后确认未登录、无错误，再重新发起登录。
-- 断言：客户端继续用 polling 凭据登录、登录面板退出、无失败提示、归因参数保留；
-  再投递同 state 迟到回调，更新归因且 token 请求次数仍为 1。
-- 无模型请求，无真实第三方登录。浏览器打开用 Electron mock 拦截，Host OAuth 服务保持真实。
-- 两种先到顺序、双失败、取消和旧响应由服务层受控 Promise 测试覆盖；此 E2E 仅覆盖桌面
-  local 的用户可见回退，不宣称覆盖手机 shared-host 或 Windows。保持 pending，等待人工 review。
-
-### AUTH-07 本次验证（2026-09-17，macOS）
-
-- Electron E2E：通过；产物 run id `desktop-e2e-20260917065456399-p21750-95ee455f2fa5007d`。
-  使用本分支已构建产物，最后一次重跑仅修改 fixture，跳过重复 App/CLI 构建。
-- Host 日志证实 `/oauth/token` 500 后 `oauth.pollPendingOAuth` 和 `oauth.handleCallback` 正常返回；
-  断言加密落盘的业务 token、归因字段、登录面板退出及迟到回调不再兑换均通过。
-- OAuth 服务测试 109 项、UI/桥接边界测试 38 项通过。服务层及 E2E 类型检查、lint、架构门禁通过。
-- 全仓 `pnpm typecheck` 被基线 `packages/ui/src/i18n/locales/en-US.ts`、`zh-CN.ts` 重复键
-  TS1117 阻塞；两文件本分支未改动。fixture checker 当前不支持 auth-config pending 目录，
-  无模型请求 manifest 已保留，未进行 promotion/CI admission。手机、Windows/Linux 未实测。
-
-### !2703 Suggestions 回归（2026-09-17，macOS）
-
-- SG-01：manifest 指向实际 pending spec 路径。
-- SG-02：服务声明 nullable 回调，Root 忽略失效结果；单测复现原 TypeError 后验证修复。
-  E2E 先取消挂起兑换，再放行成功响应，确认凭据未替换、无登录错误；随后重新登录完成原回退场景。
-- SG-03：双路径均失败时分别保留原错误，两种到达顺序均验证。
-- SG-04：可控时钟验证 pending 和成功后窗口内接收的回调即使排队超过 30 秒仍保存归因，
-  窗口外的新回调拒绝；未增加处理时刻的过期判断。
-- 相关单测 151 项通过；服务/E2E 类型检查、lint、架构门禁通过。全仓类型检查仍仅有上述基线 TS1117。
-- Electron E2E 通过（1 case），run id `desktop-e2e-20260917074228667-p30511-55b50bde685ed92b`。
-  首轮重新构建 App，修正测试日志路径和预置账号断言后复用同一构建重跑。
-
 ### 最新 staging 基线复验
 
 - 已 rebase 到 `origin/staging` 的 `c7a795d2df`，旧基线的翻译重复键已不存在。

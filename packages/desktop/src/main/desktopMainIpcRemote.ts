@@ -19,8 +19,6 @@ import { dispatchTaskNotification } from "./desktopNotifications.js";
 import {
   clearOAuthRoutesForWindow,
   deliverPendingDeepLink,
-  parseOAuthStateRegistration,
-  registerOAuthState,
 } from "./desktopOAuthDeepLink.js";
 import {
   registerWebRemoteControlIpcHandlers,
@@ -241,16 +239,6 @@ export function registerRemoteIpcHandlers(options: {
   });
   registerWebRemoteControlIpcHandlers({
     webRemoteControlManager: options.webRemoteControlManager,
-  });
-
-  ipcMain.on(PlatformChannels.OAuthRegisterState, (event, payload: unknown) => {
-    const registration = parseOAuthStateRegistration(payload);
-    if (!registration) {
-      options.logger.warn("[oauth-register-state] invalid payload", payload);
-      return;
-    }
-
-    registerOAuthState(event.sender.id, registration);
   });
 
   ipcMain.on(PlatformChannels.OpenExternal, (event, payload: unknown) => {

@@ -1,89 +1,98 @@
-import { applyDynamicWorkflowUserMode, type ApiClient } from "@nex/shared";
-import type { ICredentialService } from "../credential/credential.js";
+import type { ApiClient, DynamicWorkflowClientConfig } from "@nex/shared";
+import {
+  applyDynamicWorkflowUserMode,
+  buildRuntimeNexApiUrl,
+  createDynamicWorkflowClientConfig,
+  DEFAULT_DYNAMIC_WORKFLOW_MODE,
+  NEX_DYNAMIC_WORKFLOW_MODE_ENV,
+  NEX_VERSION,
+  normalizeDynamicWorkflowMode,
+  resolveDynamicWorkflowClientConfig,
+} from "@nex/shared";
+import { readApiJson } from "../providers/api/apiJson.js";
+import { createServiceLogger } from "../logger/serviceLogger.js";
 import type { ICodingPlanSubscriptionService } from "./codingPlanSubscription.js";
-import { BigModelCodingPlanSubscriptionProvider } from "./bigmodelCodingPlanSubscriptionProvider.js";
-import type { ModelSelectionView } from "@nex/provider";
-import { ZaiCodingPlanSubscriptionProvider } from "./zaiCodingPlanSubscriptionProvider.js";
 
-interface CodingPlanSubscriptionServiceDependencies {
-  apiClient: ApiClient;
-  credentialService: Pick<ICredentialService, "load">;
-  resolveOffPeakModelSelectionView?: () => Promise<ModelSelectionView>;
-  /**
-   * 用户在设置里选的动态工作流模式（launch.md「The user's choice」）。只有拥有设置权威的装配
-   * （desktop 本地 Host、web/standalone server）注入；缺省时快照只含服务端的「提供」。
-   */
-  resolveDynamicWorkflowUserMode?: () => Promise<unknown>;
+const NEX_CLIENT_CONFIG_API_PREFIX = "/api/v1/client/configs";
+const REQUEST_TIMEOUT_MS = 15_000;
+const CLIENT_CONFIG_CACHE_TTL_MS = 60 * 60 * 1000;
+const log = createServiceLogger("codingPlanSubscription");
+
+interface NexClientConfigEnvelope {
+  data?: {
+    configs?: {
+      // mode 的取值域由 shared 的 normalizeDynamicWorkflowMode 裁决，这里不在类型层假设服务端合法。
+      dynamicWorkflow?: {
+        mode?: unknown;
+      } | null;
+    } | null;
+  } | null;
 }
 
-/**
- * 原 service 把所有调用直接绑定到单一 BigModelCodingPlanSubscriptionProvider，
- * zai family 没有独立的 Team Plan 定价来源（死代码）。
- *
- * zai 与 bigmodel Team Plan 全链路对称化：
- * 同时持有 bigmodel 和 zai 两个 provider 实例；enterprise 读路径（getEnterprisePricing）按
- * request.family 路由到对应实例；缺省 family 时保持 bigmodel，向后兼容既有调用点。
- *
- * 其余方法（购买/staticConfigs/preview 等）语义与 family 无关或已在 provider 内部按
- * request.providerId 动态路由，统一委托给 bigmodel provider 即可：
- *   - 企业购买闭环（balance/order/pending/cancel/continue/status）按产品决策仍只走 bigmodel 域。
- *   - staticConfigs 是平台级 client/configs，与 family 无关。
- *   - 购买类（Stripe/PayPal/preview/createSign 等）已通过 request.providerId 在 provider 内路由。
- */
-export function createCodingPlanSubscriptionService(
-  dependencies: CodingPlanSubscriptionServiceDependencies,
-): ICodingPlanSubscriptionService {
-  const bigmodelProvider = new BigModelCodingPlanSubscriptionProvider(dependencies);
-  const zaiProvider = new ZaiCodingPlanSubscriptionProvider(dependencies);
+export function createCodingPlanSubscriptionService(dependencies: {
+  apiClient: ApiClient;
+  resolveDynamicWorkflowUserMode?: () => Promise<unknown>;
+}): ICodingPlanSubscriptionService {
+  let snapshot: NexClientConfigEnvelope | null = null;
+  let snapshotExpiresAt = 0;
+  let pending: Promise<NexClientConfigEnvelope> | null = null;
 
-  // 按 family 选择 enterprise 读路径 provider；缺省（含未指定 family 的历史调用）走 bigmodel。
-  const resolveEnterprisePricingProvider = (
-    family?: "bigmodel" | "zai",
-  ): BigModelCodingPlanSubscriptionProvider => (family === "zai" ? zaiProvider : bigmodelProvider);
+  async function getClientConfigs(): Promise<NexClientConfigEnvelope> {
+    if (snapshot && snapshotExpiresAt > Date.now()) {
+      return snapshot;
+    }
+    if (pending) {
+      return await pending;
+    }
+    // client/configs 和其他 Nex 平台接口共享运行时 endpoint；E2E 通过 NEX_BASE_URL 指向本地 mock。
+    const url = new URL(buildRuntimeNexApiUrl(process.env, NEX_CLIENT_CONFIG_API_PREFIX));
+    url.searchParams.set("app_version", NEX_VERSION);
+    url.searchParams.set("platform", `${process.platform}-${process.arch}`);
+    pending = readApiJson<NexClientConfigEnvelope>(dependencies.apiClient, url, {
+      method: "GET",
+      timeoutMs: REQUEST_TIMEOUT_MS,
+    });
+    try {
+      const payload = await pending;
+      snapshot = payload;
+      snapshotExpiresAt = Date.now() + CLIENT_CONFIG_CACHE_TTL_MS;
+      return payload;
+    } finally {
+      pending = null;
+    }
+  }
 
   return {
-    batchPreview: (request) => bigmodelProvider.batchPreview(request),
-    getStaticProducts: () => bigmodelProvider.getStaticProducts(),
-    getStaticTeamProducts: () => bigmodelProvider.getStaticTeamProducts(),
-    getStartPlanPreview: () => bigmodelProvider.getStartPlanPreview(),
-    getManualClaimPlanPreviews: () => bigmodelProvider.getManualClaimPlanPreviews(),
-    claimManualPlan: (request) => bigmodelProvider.claimManualPlan(request),
-    getOffPeakClientConfig: (options) => bigmodelProvider.getOffPeakClientConfig(options),
-    // 动态工作流灰度：与 client/configs 同源，
-    // 因此和其它平台级配置一样固定走 bigmodel provider，与 family 无关。
-    // 用户选择在这里套到「提供」上，renderer 读到的就是生效值；规则只写在 shared 的
-    // applyDynamicWorkflowUserMode 里，renderer 不自己算。
-    getDynamicWorkflowClientConfig: async (options) => {
-      const offer = await bigmodelProvider.getDynamicWorkflowClientConfig(options);
-      const resolveUserMode = dependencies.resolveDynamicWorkflowUserMode;
-      return resolveUserMode ? applyDynamicWorkflowUserMode(offer, await resolveUserMode()) : offer;
+    /**
+     * 三条边界：
+     *   1. 本地覆盖（NEX_DYNAMIC_WORKFLOW_MODE）在任何网络动作之前裁决，命中即返回；
+     *   2. forceRefresh 清掉快照后重拉（灰度翻转最长 1h 不可见）；
+     *   3. 请求失败 fail-closed：返回 default（disabled）并 warn，绝不把异常抛给调用方——
+     *      调用方在 session create/client 就绪路径上，灰度读失败不能阻断普通聊天。
+     */
+    async getDynamicWorkflowClientConfig(options): Promise<DynamicWorkflowClientConfig> {
+      if (normalizeDynamicWorkflowMode(process.env[NEX_DYNAMIC_WORKFLOW_MODE_ENV])) {
+        return resolveDynamicWorkflowClientConfig({ remote: undefined, env: process.env });
+      }
+      if (options?.forceRefresh) {
+        snapshot = null;
+        snapshotExpiresAt = 0;
+      }
+      try {
+        const payload = await getClientConfigs();
+        const offer = resolveDynamicWorkflowClientConfig({
+          remote: payload.data?.configs?.dynamicWorkflow,
+          env: process.env,
+        });
+        // 用户在设置里的明确选择取代服务端「提供」的模式（launch.md「The user's choice」）。
+        const resolveUserMode = dependencies.resolveDynamicWorkflowUserMode;
+        return resolveUserMode ? applyDynamicWorkflowUserMode(offer, await resolveUserMode()) : offer;
+      } catch (error) {
+        log.warn(undefined, "动态工作流灰度配置读取失败，按关闭处理", {
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+        return createDynamicWorkflowClientConfig(DEFAULT_DYNAMIC_WORKFLOW_MODE, "default");
+      }
     },
-    getModelContextBudgetStrategy: () => bigmodelProvider.getModelContextBudgetStrategy(),
-    getBillingDiscount: () => bigmodelProvider.getBillingDiscount(),
-    getRequestVerificationConfig: () => bigmodelProvider.getRequestVerificationConfig(),
-    getForceUpdateConfig: () => bigmodelProvider.getForceUpdateConfig(),
-    productInfo: (request) => bigmodelProvider.productInfo(request),
-    preview: (request) => bigmodelProvider.preview(request),
-    createSign: (request) => bigmodelProvider.createSign(request),
-    updateSign: (request) => bigmodelProvider.updateSign(request),
-    checkPayment: (request) => bigmodelProvider.checkPayment(request),
-    checkPendingOrders: (request) => bigmodelProvider.checkPendingOrders(request),
-    queryStripeCards: (request) => bigmodelProvider.queryStripeCards(request),
-    bindStripeCard: (request) => bigmodelProvider.bindStripeCard(request),
-    unbindStripeCard: (request) => bigmodelProvider.unbindStripeCard(request),
-    payStripe: (request) => bigmodelProvider.payStripe(request),
-    checkPaypalSupport: (request) => bigmodelProvider.checkPaypalSupport(request),
-    createPaypalSetupToken: (request) => bigmodelProvider.createPaypalSetupToken(request),
-    subscribePaypal: (request) => bigmodelProvider.subscribePaypal(request),
-    getEnterprisePricing: (request) =>
-      resolveEnterprisePricingProvider(request?.family).getEnterprisePricing(request),
-    getEnterpriseBalance: () => bigmodelProvider.getEnterpriseBalance(),
-    calculateEnterpriseOrder: (request) => bigmodelProvider.calculateEnterpriseOrder(request),
-    createEnterpriseOrder: (request) => bigmodelProvider.createEnterpriseOrder(request),
-    getEnterprisePendingOrders: () => bigmodelProvider.getEnterprisePendingOrders(),
-    cancelEnterpriseOrder: (request) => bigmodelProvider.cancelEnterpriseOrder(request),
-    continueEnterpriseOrderPayment: (request) =>
-      bigmodelProvider.continueEnterpriseOrderPayment(request),
-    checkEnterpriseOrderStatus: (request) => bigmodelProvider.checkEnterpriseOrderStatus(request),
   };
 }

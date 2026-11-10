@@ -24,16 +24,15 @@ function inferProviderFamilyDomainFromSelection(
 }
 
 export async function ensureProviderFamilyDomainMigration(
-  services: Pick<IServiceAccessor, "settingService" | "oauthService" | "modelSelectionService">,
+  services: Pick<IServiceAccessor, "settingService" | "modelSelectionService">,
 ): Promise<void> {
   const settings = await services.settingService.get();
   if (settings.providerFamilyDomain || settings.providerFamilyDomainMigrated) {
     return;
   }
 
-  let inferredDomain = resolveProviderFamilyDomainFromOAuthProvider(
-    await services.oauthService.getActiveProvider(),
-  );
+  // Nex 无账号体系：不再从 OAuth 登录身份推断 family，只按模型目录推断。
+  let inferredDomain = null;
   let selectableProviders: readonly { readonly providerId: string }[] | null = null;
 
   if (!inferredDomain) {

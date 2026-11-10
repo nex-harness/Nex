@@ -1,26 +1,20 @@
 import {
-  prepareRequestVerificationClaim,
   useRequestVerificationPrewarm,
 } from "@/request-security-edition/claim.js";
 import { requestVerificationClaimFailureMessageId } from "@/request-security-edition/errors.js";
-import { useStartPlanEntitlement } from "@/hooks/useStartPlanEntitlement.js";
 import { createContext, useContext, useEffect, useCallback, useState, useRef } from "react";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
-import { useCodingPlanUpgradeDialog } from "@/settings/CodingPlanUpgradeDialogProvider.js";
 import { useOpenRewards } from "@/rewards/RewardsProvider.js";
-import { useWorkspaceSidebarFooterUsageSummaryState } from "@/WorkspaceSidebarFooterUsageSummary.js";
 import { useTabStore, useTabStoreApi } from "@/store/TabStoreProvider.js";
 import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
 import { requestPluginStoreOpen } from "@/lib/pluginStoreNavigation.js";
 import {
   requestMarketingNavigation,
-  marketingNavigation,
-  finishMarketingNavigation,
   marketingSettingsSections,
   waitForMarketingCapability,
 } from "@/lib/marketingNavigation.js";
-import { BUILTIN_MODEL_PROVIDER_IDS, NEX_ENV } from "@nex/shared";
+import { NEX_ENV } from "@nex/shared";
 import { useServices } from "@/hooks/useServices.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useNexStore } from "@/store/StoreProvider.js";
@@ -63,16 +57,10 @@ export function MarketingTouchProvider({
   const platform = usePlatform();
   const openSettingsTab = useTabStore((state) => state.openSettingsTab);
   const tabStore = useTabStoreApi();
-  const { openCodingPlanUpgrade } = useCodingPlanUpgradeDialog();
   const workspacePath = useTabStore((state) => state.activeWorkspacePath);
   const workspaceIdentity = useTabStore((state) => state.activeWorkspaceIdentity);
-  const { upgradeTargetProviderId } = useWorkspaceSidebarFooterUsageSummaryState({
-    enabled: true,
-    workspacePath: workspacePath ?? undefined,
-    workspaceIdentity: workspaceIdentity ?? undefined,
-  });
-  const upgradeTargetRef = useRef(upgradeTargetProviderId);
-  upgradeTargetRef.current = upgradeTargetProviderId;
+  // Nex 无账号体系：侧栏套餐升级入口已移除，活动投放不再有升级目标。
+  const upgradeTargetRef = useRef<string | null>(null);
   const user = useNexStore((state) => state.user);
   const restoring = useNexStore((state) => state.isRestoringOAuthSession);
   const requestLogin = useNexStore((state) => state.requestLoginEntry);
@@ -80,12 +68,7 @@ export function MarketingTouchProvider({
   const openRewardsRef = useRef(openRewards);
   openRewardsRef.current = openRewards;
   const { intl, locale } = useNexIntl();
-  const startEntitlement = useStartPlanEntitlement(
-    BUILTIN_MODEL_PROVIDER_IDS.bigmodelStartPlan,
-    services.usageStatsService,
-  );
-  const refreshStartEntitlementRef = useRef(startEntitlement.refresh);
-  refreshStartEntitlementRef.current = startEntitlement.refresh;
+  // Nex 无账号体系：Start Plan 权益查询已移除。
   const identity = user?.id ?? "anonymous";
   const createRuntime = useCallback(() => {
     const service = services.marketingTouchService;
@@ -169,23 +152,8 @@ export function MarketingTouchProvider({
               try {
                 await requestMarketingNavigation(action.args, signal, () => {
                   if (action.args.page === "upgrade") {
-                    if (!desktop) throw new Error("marketing_navigation_unavailable");
-                    const requestId = marketingNavigation.getState().request!.id;
-                    if (
-                      !openCodingPlanUpgrade(
-                        { providerId: upgradeTargetRef.current },
-                        {
-                          signal: opening.signal,
-                          onResult: (opened) =>
-                            finishMarketingNavigation(
-                              requestId,
-                              opened ? undefined : new Error("marketing_upgrade_unavailable"),
-                            ),
-                        },
-                      )
-                    )
-                      throw new Error("marketing_upgrade_unavailable");
-                    return;
+                    // Nex 无账号体系：Coding Plan 购买页已移除，活动里的升级入口直接不可用。
+                    throw new Error("marketing_upgrade_unavailable");
                   }
                   if (action.args.page === "settings") {
                     if (action.args.section)
@@ -241,57 +209,11 @@ export function MarketingTouchProvider({
             };
           }
         }
-        if (!user) {
-          requestLogin();
-          return { status: "cancelled" };
-        }
-        let submitted = false;
-        try {
-          const proof = await prepareRequestVerificationClaim(
-            services.codingPlanSubscriptionService,
-            signal,
-            () => phase("verifying"),
-          );
-          if (!proof)
-            return {
-              status: "cancelled",
-              message: intl.formatMessage({ id: requestVerificationClaimFailureMessageId }),
-            };
-          phase("submitting");
-          submitted = true;
-          const result = await services.codingPlanSubscriptionService.claimManualPlan({
-            planId: action.args.plan_id,
-            ...proof,
-          });
-          signal.throwIfAborted();
-          if (!result.success)
-            return {
-              status: "failure",
-              terminal: [1001, 1002, 1003, 1004, 1005].includes(result.code),
-              message: result.message?.trim()
-                ? result.message
-                : intl.formatMessage({ id: "manualClaimPlan.claim.failure.generic" }),
-            };
-          // 成功已由 claim 确定，后置刷新失败只影响本地权益投影，不能逆转领取结果。
-          void Promise.allSettled([
-            refreshStartEntitlementRef.current({ force: true, silent: true, reason: "purchase" }),
-            // Provider 迁移后旧服务已不存在；统一刷新权威设置视图，不重建第二条凭据刷新链路。
-            services.providerSettingsService.refresh("marketing-plan-claim"),
-          ]).then((results) => {
-            if (results.some((value) => value.status === "rejected"))
-              logger.warn("[marketing-touch] claim succeeded but entitlement refresh failed");
-          });
-          // 领取结果由 Controller 的结果弹窗承载，避免成功 toast 与弹窗重复提示。
-          return { status: "success" };
-        } catch {
-          if (signal.aborted) return { status: "cancelled" };
-          return {
-            status: submitted ? "uncertain" : "failure",
-            message: intl.formatMessage({
-              id: submitted ? "marketingTouch.uncertain" : "marketingTouch.failed",
-            }),
-          };
-        }
+        // Nex 无账号体系：活动里的「领取套餐」需要账号与权益接口，已随账号能力移除。
+        return {
+          status: "failure",
+          message: intl.formatMessage({ id: "marketingTouch.failed" }),
+        };
       },
     });
     poller = createMarketingTouchPoller({
@@ -315,7 +237,6 @@ export function MarketingTouchProvider({
     desktop,
     openSettingsTab,
     tabStore,
-    openCodingPlanUpgrade,
   ]);
   const [runtime, setRuntime] = useState<ReturnType<typeof createRuntime>>(null);
   useEffect(() => {

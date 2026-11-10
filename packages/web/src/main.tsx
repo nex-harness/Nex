@@ -28,15 +28,11 @@ import {
   createAcknowledgedWebRemoteControlRelayProtocol,
 } from "@nex/client";
 
-import { WebCallbackPage } from "./auth/WebCallbackPage.js";
-import { WebLoginPage } from "./auth/WebLoginPage.js";
-import { createWebAuthService } from "./auth/webAuthService.js";
-import { WEB_ZAI_OAUTH_CONFIG, resolveWebAuthDevReturnTo } from "./auth/webZaiOAuthConfig.js";
-import { parseOAuthState, resolveSafeAppReturnTo } from "./auth/oauthStateCodec.js";
 import {
   ConversationShareLandingLoader,
   ConversationShareLandingStatus,
 } from "./share/ConversationShareLandingPage.js";
+import { INERT_WEB_AUTH_PORT } from "./web-remote-control/webAuthPort.js";
 import {
   ConversationSharePreviewClient,
   resolveConversationShareRouteLocale,
@@ -218,7 +214,6 @@ function resolveWebThemePreference(defaultTheme: Theme = WEB_REMOTE_CONTROL_DEFA
 // 浏览器标签页 / 手机切后台时禁用 CSS 动画，避免 DocumentTimeline 持有已卸载的 DOM 子树。
 installDocumentHiddenMotionPause();
 const root = createRoot(document.getElementById("root")!);
-const webAuthService = createWebAuthService();
 let isPageUnloading = false;
 
 // 初始化 Web 端流式 clientId，确保所有 hook 在首次渲染前就使用稳定 ID
@@ -273,33 +268,10 @@ function renderWebRemoteControlFailure(failure: WebRemoteControlFailure): void {
   );
 }
 
-function isWebOAuthCallback(params: URLSearchParams): boolean {
-  return (
-    isWebRemoteControlOAuthCallback(new URL(window.location.href)) ||
-    (["/cn/share/callback", "/share/callback"].includes(window.location.pathname) &&
-      params.has("state") &&
-      // BigModel 的 authCode 要先进入回调页，才能由 provider 归一化为 code。
-      (params.has("code") || params.has("authCode") || params.has("error")))
-  );
-}
-
-function renderWebAuthCallbackPage(): void {
-  document.title = "Nex - Web Remote Control Sign In";
-  const callbackState = parseOAuthState(
-    new URLSearchParams(window.location.search).get("state") ?? "",
-  );
-  const safeRetryTarget = resolveSafeAppReturnTo(callbackState?.app_return_to);
-  root.render(
-    <WebCallbackPage
-      authService={webAuthService}
-      onSuccess={({ appReturnTo }) => {
-        window.location.replace(appReturnTo ?? "/remote/v4");
-      }}
-      onRetry={() => {
-        window.location.replace(safeRetryTarget ?? "/remote/v4");
-      }}
-    />,
-  );
+// Nex 无账号体系：Web 端不再有 OAuth 回调页与登录页。
+// 远控 OAuth 回调路径仍由 relay 的 token 链路处理，这里直接回到设备列表。
+function isWebRemoteControlCallbackPath(): boolean {
+  return isWebRemoteControlOAuthCallback(new URL(window.location.href));
 }
 
 async function renderConversationSharePage(): Promise<void> {
@@ -342,42 +314,27 @@ async function renderConversationSharePage(): Promise<void> {
     mockMode && window.sessionStorage.getItem("nex:share:mock-auth") === "owner"
       ? "mock-owner-token"
       : null;
+  // Nex 没有账号体系：Web 只匿名预览公开分享；mock 模式保留 owner token 便于本地预览。
   const onLogout = () => {
-    if (mockMode) {
-      window.sessionStorage.removeItem("nex:share:mock-auth");
-      window.location.reload();
-      return;
-    }
-    void webAuthService.logout();
+    if (!mockMode) return;
+    window.sessionStorage.removeItem("nex:share:mock-auth");
+    window.location.reload();
   };
   root.render(
     <ConversationShareLandingLoader
       shareCode={shareCode}
       client={client}
-      getAccessToken={() => getMockToken() ?? webAuthService.getNexJwtToken()}
-      onLogin={(provider) => {
-        if (mockMode) {
-          window.sessionStorage.setItem("nex:share:mock-auth", "owner");
-          window.location.reload();
-          return;
-        }
-        webAuthService.startLogin({
-          provider,
-          appReturnTo: window.location.href,
-          redirectUri: WEB_ZAI_OAUTH_CONFIG.shareRedirectUri,
-          devReturnTo: resolveWebAuthDevReturnTo(WEB_ZAI_OAUTH_CONFIG, "share"),
-        });
+      getAccessToken={() => getMockToken()}
+      onLogin={() => {
+        if (!mockMode) return;
+        window.sessionStorage.setItem("nex:share:mock-auth", "owner");
+        window.location.reload();
       }}
       onLogout={onLogout}
       locale={routeLocale}
       theme={resolveWebThemePreference("zai-light")}
     />,
   );
-}
-
-function renderWebLoginPage(): void {
-  document.title = "Nex - Web Remote Control Sign In";
-  root.render(<WebLoginPage onLogin={(provider) => remoteEntry.startLogin(provider)} />);
 }
 
 // 访问 window.localStorage 本身在部分浏览器会抛错，统一包在方法里交给调用方兜底。
@@ -387,7 +344,7 @@ const webRemoteControlStorage: Pick<Storage, "getItem" | "setItem"> = {
 };
 
 const remoteEntry = new WebRemoteControlEntry({
-  auth: webAuthService,
+  auth: INERT_WEB_AUTH_PORT,
   getHref: () => window.location.href,
   replaceHref: (href) => window.history.replaceState(window.history.state, "", href),
   storage: webRemoteControlStorage,
@@ -400,15 +357,12 @@ const remoteEntry = new WebRemoteControlEntry({
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   },
-  loginOptions: { devReturnTo: resolveWebAuthDevReturnTo(WEB_ZAI_OAUTH_CONFIG) },
   token: createWebRemoteControlV2TokenClient(window.location.origin),
   connect: (connection) => {
     void bootstrapExternalRelayWebRemoteControl(connection);
   },
   onView: (view) => {
-    if (view.kind === "callback") renderWebAuthCallbackPage();
-    else if (view.kind === "login") renderWebLoginPage();
-    else if (view.kind === "devices") {
+    if (view.kind === "devices") {
       document.title = "Nex - Web Remote Control";
       root.render(
         <WebRemoteControlDeviceListPage
@@ -695,17 +649,6 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
     fileWatcherService: createEmptyHomeOnlyService<RootServices["fileWatcherService"]>({
       watch: async () => ({ dispose: () => {} }),
     }),
-    oauthService: createEmptyHomeOnlyService<RootServices["oauthService"]>({
-      getProviders: async () => [],
-      getActiveProvider: async () => null,
-      restoreCachedSession: async () => null,
-      restoreCachedSessionState: async () => ({ status: "signed-out" }),
-      restoreSession: async () => null,
-      refreshToken: async () => {},
-      logout: async () => {},
-      logoutAll: async () => {},
-      cancelPending: async () => {},
-    }),
     providerSettingsService: createEmptyHomeOnlyService<RootServices["providerSettingsService"]>({
       getView: async () => ({ revision: 0, providers: [] }),
       refresh: async () => ({ revision: 0, providers: [] }),
@@ -733,9 +676,6 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
     clientScenesService: createEmptyHomeOnlyService<RootServices["clientScenesService"]>({
       list: async () => ({ code: 0, msg: "", data: [] }),
     }),
-    // 闲时任务仅桌面本地（D13）；web home-only 环境按不支持处理。
-    offPeakTaskService:
-      createUnsupportedHomeOnlyService<RootServices["offPeakTaskService"]>("offPeakTaskService"),
     highspeedCardService:
       createUnsupportedHomeOnlyService<RootServices["highspeedCardService"]>(
         "highspeedCardService",
@@ -1774,15 +1714,9 @@ async function bootstrapExternalRelayWebRemoteControl(
 }
 
 async function bootstrapWebApp() {
-  const params = new URLSearchParams(window.location.search);
   if (isWebRemoteControlRoute() || isWebRemoteControlOAuthCallback(new URL(window.location.href))) {
     document.documentElement.lang = resolveWebRemoteControlScreenLocale(navigator.language);
   }
-  if (isWebOAuthCallback(params)) {
-    renderWebAuthCallbackPage();
-    return;
-  }
-
   if (isConversationSharePath(window.location.pathname)) {
     await renderConversationSharePage();
     return;

@@ -1,22 +1,19 @@
-import {
-  createContext,
-  useCallback,
-  useEffect,
-  useContext,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import {
-  CodingPlanUpgradeDialog,
-  type CodingPlanUpgradeDialogTarget,
-} from "@/settings/CodingPlanUpgradeDialog.js";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
+export interface CodingPlanEntryInventory {
+  entryPlanList: string;
+  status: "loading" | "error" | "ready";
+  retry: () => void;
+}
 
-import {
-  useCodingPlanEntryPlanList,
-  type CodingPlanEntryInventory,
-} from "@/hooks/useCodingPlanEntryPlanList.js";
+/**
+ * 购买面板目标。Nex 无账号体系后不再有购买页，仅保留形状让既有入口类型不变。
+ */
+export interface CodingPlanUpgradeDialogTarget {
+  providerId: string;
+  initialAudience?: "personal" | "team" | "enterprise";
+  initialTeamPlanKey?: string;
+  funnelContext?: unknown;
+}
 
 interface CodingPlanUpgradeDialogContextValue {
   inventory: CodingPlanEntryInventory;
@@ -26,76 +23,36 @@ interface CodingPlanUpgradeDialogContextValue {
   ) => boolean;
 }
 
+/**
+ * Nex 无账号体系：Coding Plan 购买面板与套餐库存查询已移除。
+ * 这里保留同名 Provider 与 hook，让既有入口（错误横幅、侧栏、活动投放）
+ * 继续编译，但打开动作恒为失败——不会再出现任何购买 UI 或远端请求。
+ */
 const CodingPlanUpgradeDialogContext = createContext<CodingPlanUpgradeDialogContextValue | null>(
   null,
 );
 
+const INERT_INVENTORY: CodingPlanEntryInventory = {
+  status: "ready",
+  entryPlanList: "",
+  retry: () => {},
+};
+
 export function CodingPlanUpgradeDialogProvider({ children }: { children: ReactNode }) {
-  const inventory = useCodingPlanEntryPlanList();
-  const inventoryRef = useRef(inventory);
-  inventoryRef.current = inventory;
-  const [target, setTarget] = useState<CodingPlanUpgradeDialogTarget | undefined>(undefined);
-  const [openVersion, setOpenVersion] = useState(0);
-  const opening = useRef<((opened: boolean) => void) | null>(null);
-  const handleOpenResult = useCallback((opened: boolean) => opening.current?.(opened), []);
-  useEffect(() => () => opening.current?.(false), []);
-  const openCodingPlanUpgrade = useCallback(
-    (
-      nextTarget: CodingPlanUpgradeDialogTarget,
-      observation?: { signal: AbortSignal; onResult: (opened: boolean) => void },
-    ) => {
-      // 所有入口统一守卫；查询完成后不自动重放之前被拦截的点击。
-      const { status, entryPlanList } = inventoryRef.current;
-      if (observation?.signal.aborted) return false;
-      if (status !== "ready") {
-        if (observation && status === "error") inventoryRef.current.retry();
+  const value = useMemo<CodingPlanUpgradeDialogContextValue>(
+    () => ({
+      inventory: INERT_INVENTORY,
+      openCodingPlanUpgrade: (_target, observation) => {
+        if (observation?.signal.aborted) return false;
+        observation?.onResult(false);
         return false;
-      }
-      opening.current?.(false);
-      if (observation) {
-        const finish = (opened: boolean) => {
-          if (opening.current !== finish) return;
-          opening.current = null;
-          observation.signal.removeEventListener("abort", abort);
-          if (!opened) setTarget(undefined);
-          observation.onResult(opened);
-        };
-        const abort = () => finish(false);
-        opening.current = finish;
-        observation.signal.addEventListener("abort", abort, { once: true });
-      }
-      // 原入口只携带当前卡片的套餐；在点击时冻结全连接列表，App 与 WebView 共用同一快照。
-      nextTarget = nextTarget.funnelContext
-        ? {
-            ...nextTarget,
-            funnelContext: { ...nextTarget.funnelContext, entryPlanList },
-          }
-        : nextTarget;
-      setTarget(nextTarget);
-      // 每次显式打开隔离旧 webview 事件，旧 dom-ready 不能确认新的观察请求。
-      setOpenVersion((version) => version + 1);
-      return true;
-    },
+      },
+    }),
     [],
   );
-  const value = useMemo(
-    () => ({ openCodingPlanUpgrade, inventory }),
-    [openCodingPlanUpgrade, inventory],
-  );
-
   return (
     <CodingPlanUpgradeDialogContext.Provider value={value}>
       {children}
-      <CodingPlanUpgradeDialog
-        key={openVersion}
-        target={target}
-        onClose={() => {
-          handleOpenResult(false);
-          setTarget(undefined);
-        }}
-        onOpenResult={opening.current ?? undefined}
-        onReopen={setTarget}
-      />
     </CodingPlanUpgradeDialogContext.Provider>
   );
 }
@@ -110,9 +67,7 @@ export function useCodingPlanUpgradeDialog() {
   return context;
 }
 
-/**
- * 可独立挂载的 conversation pane 使用可选上下文；完整 App Root 仍会注入真实购买面板。
- */
+/** 可独立挂载的 conversation pane 使用可选上下文。 */
 export function useOptionalCodingPlanUpgradeDialog() {
   return useContext(CodingPlanUpgradeDialogContext);
 }

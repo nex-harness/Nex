@@ -133,23 +133,6 @@ export async function createWorkerSelectionIntegration(
       },
     }),
     modelSelectionReadinessSource: modelSelectionService,
-    accountProviderConfigSource: deliverySource,
-    // 测试只核对选择合同；不使用真实账号、真实 secret 或外部 IM 网络。
-    accountRequestAuthService: {
-      resolveAccessCurrent: async () => ({
-        type: "zhipu-account",
-        family: "bigmodel",
-        planKind: "team-coding-plan",
-        productId: "product-team-a",
-        organizationId: "org-team-a",
-        projectId: "proj-team-a",
-      }),
-      // 合成凭据仍须符合账号接口的 key.secret 形状；裸标签会在本地校验阶段被拒绝。
-      resolveCurrent: async () => ({ apiKey: "e2e-fixture-key.synthetic-secret" }),
-      assertCurrent: async () => {},
-    },
-    // 夹具只用 Team Plan，不会读取验证配置；返回 null 保持 Start Plan 失败关闭的正式语义。
-    readRequestVerificationConfig: async () => null,
   });
   const syncer = createNexTaskIndexSyncer({ agentService: agent, taskIndexRepo: repo });
   const task = createNexTaskServiceAdapter({

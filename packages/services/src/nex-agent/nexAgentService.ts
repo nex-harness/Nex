@@ -27,6 +27,12 @@ import {
   allowRequestVerificationHeaders,
   requestVerificationInteractionAvailable,
 } from "@nex/shared";
+import type {
+  OffPeakCodingPlanSupport,
+  OffPeakTaskCreateResult,
+  NexOffPeakTask,
+  NexOffPeakTaskCreateParams,
+} from "@nex/shared";
 import { nexMcpUiSamplingResultSchema } from "@nex/shared";
 import { MCP_APPS_SAMPLING_TRANSPORT_TIMEOUT_MS } from "@nex/shared/mcp-apps";
 import {
@@ -58,7 +64,6 @@ import type {
   ProviderSource,
 } from "@nex/provider";
 import { completeNewModelSelection } from "@nex/provider";
-import type { OffPeakClientConfig } from "#src/coding-plan-subscription/codingPlanSubscription.js";
 import {
   subagentRuntimeConfigSchema,
   nexSubagentsReadRuntimeConfigParamsSchema,
@@ -126,7 +131,6 @@ import {
   nexComputerUseOperationEventSchema,
   nexProviderRuntimeHeadersCancelledSchema,
   nexProviderRuntimeHeadersRequestParamsSchema,
-  nexProviderRefreshRegistryResultSchema,
   nexProviderTestModelConnectivityResultSchema,
   nexOfficialMcpAuthHeadersRequestParamsSchema,
   type OfficialAuthConsumerKind,
@@ -160,7 +164,6 @@ import {
   nexWorkspaceHookTrustGrantResultSchema,
   nexWorkspaceUpdateInteractionPreferencesResultSchema,
   nexWorkspaceUpdateModelIoPreferencesResultSchema,
-  nexProviderUpdateAccountConfigResultSchema,
   type NexSessionStateSnapshot,
   type NexAutomation,
   type NexAutomationRun,
@@ -182,11 +185,6 @@ import {
   type NexTaskMode,
 } from "@nex/shared";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
-import { createOfficialMcpIssuanceAudit } from "#src/official-mcp/officialMcpIssuanceAudit.js";
-import type {
-  AccountRequestAuthMaterial,
-  IAccountRequestAuthService,
-} from "#src/model-provider/accountRequestAuthService.js";
 import {
   mergeAutomationMutationToolDenylist,
   mergeOffPeakMutationToolDenylist,
@@ -390,7 +388,6 @@ import { TaskIndexRepo } from "#src/session/taskIndexRepo.js";
 import { NexAgentMcpStatusModeUnsupportedError } from "#src/nex-agent/nexAgentErrors.js";
 import { NexAgentProcessManager } from "./nexAgentProcessManager.js";
 import type { NexAgentProcessManagerOptions } from "./nexAgentProcessManager.js";
-import type { IOffPeakTaskService } from "#src/session/offPeakTask.js";
 import {
   NexProtocolRequestTimeoutError,
   type NexProtocolClient,
@@ -1069,17 +1066,24 @@ function describeVerificationConfigError(cause: unknown): {
   };
 }
 
-// 账号鉴权先用配置快照判定 Start Plan 是否需要界面验证；只注入服务会让每个
-// Start Plan 请求都在运行时失败且没有装配期提示，因此两者必须成对注入。
-type AccountRequestAuthOptions =
-  | { accountRequestAuthService?: undefined; readRequestVerificationConfig?: undefined }
-  | {
-      accountRequestAuthService: IAccountRequestAuthService;
-      readRequestVerificationConfig: () => Promise<RequestVerificationConfig | null>;
-    };
+/**
+ * Nex 无账号体系：Coding Plan / Off-Peak 的 Host 服务已移除。
+ * Agent 侧仍保留协议端口（旧 CLI 会请求），因此这里只声明所需的最小结构类型；
+ * 缺省不注入即整体关闭（isOffPeakToolSupported 返回 false）。
+ */
+interface OffPeakClientConfig {
+  readonly enabled: boolean;
+  readonly modelSelectionView: ModelSelectionView;
+  readonly codingPlanActive?: boolean;
+}
 
-type CreateNexAgentServiceOptions = CreateNexAgentServiceBaseOptions &
-  AccountRequestAuthOptions;
+interface OffPeakTaskServicePort {
+  createTask(params: NexOffPeakTaskCreateParams): Promise<OffPeakTaskCreateResult>;
+  list(): Promise<NexOffPeakTask[]>;
+  getCodingPlanSupport(): Promise<OffPeakCodingPlanSupport>;
+}
+
+type CreateNexAgentServiceOptions = CreateNexAgentServiceBaseOptions;
 
 interface CreateNexAgentServiceBaseOptions extends Omit<
   NexAgentProcessManagerOptions,
@@ -1087,7 +1091,6 @@ interface CreateNexAgentServiceBaseOptions extends Omit<
 > {
   /** 仅供 MCP 状态探测进程使用，不能把空闲回收传给 chat。 */
   mcpStatusIdleTimeoutMs?: number;
-  accountProviderConfigSource?: ProviderSource<AccountProviderConfigSnapshot>;
   /** Desktop Host 请求 Main 登记 Agent 已授权的精确本地视频路径。 */
   authorizeLocalMediaPreviewPath?: (path: string) => Promise<string>;
   modelSelectionReadinessSource?: ModelSelectionReadinessSource;
@@ -1141,9 +1144,7 @@ interface CreateNexAgentServiceBaseOptions extends Omit<
   resolveDynamicWorkflowUserMode?: () => Promise<DynamicWorkflowMode | undefined>;
   /** 用户选择同步后交给装配层转发（Desktop Host 推给本窗口的远程 Host）；值取自本机设置。 */
   forwardDynamicWorkflowUserMode?: (mode: DynamicWorkflowMode | undefined) => void;
-  resolveOffPeakTaskService?: () =>
-    | Pick<IOffPeakTaskService, "createTask" | "list" | "getCodingPlanSupport">
-    | undefined;
+  resolveOffPeakTaskService?: () => OffPeakTaskServicePort | undefined;
   /**
    * browser-use 执行桥：把 agent 的 interaction/browserExecute 反向请求转发到 main
    * （WebContentsView+CDP）。desktop host 装配时注入；缺省（纯 CLI/远控无 main）则
@@ -1370,7 +1371,6 @@ export function createNexAgentService(
    * 全量记 info 就是消息量级的日志膨胀。折中：每个三元组只在本进程内首次发放时记一条 info，
    * 之后仍走 debug。审计线索到"哪个插件、哪个 workspace、什么时候第一次拿"这个粒度。
    */
-  const officialMcpIssuanceAudit = createOfficialMcpIssuanceAudit();
   const providerRuntimeHeadersWorkspaceEmitters = new Map<
     string,
     Emitter<NexAgentProviderRuntimeHeadersRequest>
@@ -1566,12 +1566,7 @@ export function createNexAgentService(
     }
     waitingWorkspaceStartups.clear();
   }
-  const accountConfigSyncByClient = new WeakMap<NexProtocolClient, Promise<void>>();
-  // 此缓存只去重已交付的账号快照，不表示 Worker 的 Registry 已应用该版本。
-  const accountConfigReceivedRevisionByClient = new WeakMap<NexProtocolClient, string>();
   const sessionTraceIdBySessionKey = new Map<string, TraceId>();
-  const accountRequestAuthService = options?.accountRequestAuthService;
-  const accountProviderConfigSource = options?.accountProviderConfigSource;
   const modelSelectionReadinessSource = options?.modelSelectionReadinessSource;
   const sessionRuntimePreferencesAuthority = options?.sessionRuntimePreferencesAuthority ?? "local";
   const resolveSessionRuntimePreferences = options?.resolveSessionRuntimePreferences;
@@ -1627,64 +1622,17 @@ export function createNexAgentService(
     invalidateWorkspaceClient(event.workspaceKey, active.client);
   });
 
-  async function resolveAccountRequestAuth(
-    request: NexProviderRuntimeHeadersRequestParams,
-  ): Promise<AccountRequestAuthMaterial | undefined> {
-    if (!request.accountAccess || !accountRequestAuthService) {
-      return undefined;
-    }
-    return accountRequestAuthService.resolveCurrent({
-      providerId: request.providerId,
-      modelId: request.modelSelection.modelId,
-      accountAccess: request.accountAccess,
-      expectedAccountScope: request.expectedAccountScope,
-      rejectedProjectTokenFingerprint: request.rejectedProjectTokenFingerprint,
-      reason: request.reason,
-    });
-  }
-
-  async function respondAccountRequestAuthWithoutInteraction(params: {
-    key: string;
-    pending: PendingProviderRuntimeHeadersRequest;
+  /**
+   * Nex 无账号体系：Account Provider Config 不再存在，同步屏障保留为空实现，
+   * 让既有 session/provider 路径的时序与调用点保持原状。
+   */
+  async function ensureAccountProviderConfigSynced(_params: {
+    client: NexProtocolClient;
+    reason: string;
+    workspace: NexAgentWorkspaceTarget;
+    refreshRegistry?: boolean;
   }): Promise<void> {
-    params.pending.responding = true;
-    try {
-      const requestAuth = await resolveAccountRequestAuth(params.pending.request);
-      // 账号解析是异步 IO；取消/进程退出后不能把迟到材料发给已撤销的请求。
-      if (pendingProviderRuntimeHeaders.get(params.key) !== params.pending) return;
-      if (!requestAuth) {
-        throw new Error("Account request auth resolver returned no material");
-      }
-      await params.pending.client.respond(params.pending.protocolRequestId, {
-        headersApplied: true,
-        requestAuth,
-      });
-      logger.info(undefined, "Nex provider runtime headers 已应用", {
-        modelId: params.pending.request.modelSelection.modelId,
-        providerId: params.pending.request.providerId,
-        requestId: params.pending.request.requestId,
-        sessionId: params.pending.request.sessionId,
-        workspaceKey: resolveWorkspaceKey(params.pending.request.workspace),
-      });
-    } catch (error) {
-      if (pendingProviderRuntimeHeaders.get(params.key) !== params.pending) return;
-      logger.warn(undefined, "Nex provider runtime headers 应用失败", {
-        modelId: params.pending.request.modelSelection.modelId,
-        providerId: params.pending.request.providerId,
-        requestId: params.pending.request.requestId,
-        sessionId: params.pending.request.sessionId,
-        error: error instanceof Error ? error.message : String(error),
-        workspaceKey: resolveWorkspaceKey(params.pending.request.workspace),
-      });
-      await params.pending.client.respond(params.pending.protocolRequestId, {
-        headersApplied: false,
-        errorMessage: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      if (pendingProviderRuntimeHeaders.get(params.key) === params.pending) {
-        pendingProviderRuntimeHeaders.delete(params.key);
-      }
-    }
+    // 无账号配置可交付。
   }
 
   async function routeProviderRuntimeHeadersRequest(
@@ -1696,11 +1644,14 @@ export function createNexAgentService(
       | (typeof nexProviderRuntimeHeadersErrorCode)[keyof typeof nexProviderRuntimeHeadersErrorCode]
       | undefined;
     try {
+      // Nex 无账号体系：不再有 Account Provider 请求需要 Host 解析鉴权材料。
+      // 保留协议端口本身，让旧 CLI 的请求稳定 fail-closed 而不是崩溃。
       const access = pending.request.accountAccess;
       if (requiresRequestVerification(access)) {
         let config: RequestVerificationConfig | null;
         try {
-          config = (await options?.readRequestVerificationConfig?.()) ?? null;
+          // Nex 无账号体系：不再有远端请求验证配置来源。
+          config = null;
         } catch (error) {
           // 根因：底层 fetch/远端错误正文不能进入 Agent 与界面可见的 errorMessage。
           // 稳定文案让 Agent 仍能区分“读取失败”和“凭据缺失”，原始异常只随 cause 进 Host 日志。
@@ -1722,14 +1673,6 @@ export function createNexAgentService(
         // 根因：关闭开关原来由 Renderer 判定，后台界面延迟也会耗尽鉴权 RPC 时限。
         // Host 绑定同一快照后再决定是否投递；跳过时直接复用账号鉴权，不等待界面。
         pending.request = { ...pending.request, requestVerificationConfig: config };
-      }
-      if (
-        accountRequestAuthService &&
-        access &&
-        !requiresRequestVerification(access, pending.request.requestVerificationConfig)
-      ) {
-        await respondAccountRequestAuthWithoutInteraction({ key, pending });
-        return;
       }
       if (!requestVerificationInteractionAvailable)
         throw new Error("Provider request auth is unavailable");
@@ -1831,100 +1774,6 @@ export function createNexAgentService(
       });
     });
   });
-  let accountProviderConfigUnsubscribe = accountProviderConfigSource?.onDidChange((reason) => {
-    void handleAccountProviderConfigChanged(reason).catch((error) => {
-      logger.warn(undefined, "account provider config 热同步失败", {
-        message: error instanceof Error ? error.message : String(error),
-        reason,
-      });
-    });
-  });
-
-  async function syncAccountProviderConfigToClient(params: {
-    client: NexProtocolClient;
-    reason: string;
-    refreshRegistry?: boolean;
-  }): Promise<void> {
-    if (!accountProviderConfigSource) return;
-    const previous = accountConfigSyncByClient.get(params.client) ?? Promise.resolve();
-    const current = previous
-      .catch(() => {
-        // 前一次失败不能阻断后续较新的 Account Config；当前调用会重新尝试。
-      })
-      .then(async () => {
-        // 排队前异步读取可能晚返回，把旧结果排在新结果之后。读取与交付
-        // 共用现有 Client 串行队列；不新增发送屏障，也不按内容 revision 猜测时间先后。
-        const snapshot = await accountProviderConfigSource.read();
-        if (accountConfigReceivedRevisionByClient.get(params.client) !== snapshot.revision) {
-          const result = await params.client.request(
-            nexProtocolMethods.providerUpdateAccountConfig,
-            {
-              revision: snapshot.revision,
-              basedOnNexBuiltinRevision: snapshot.basedOnNexBuiltinRevision,
-              // Account 是运行时事实信封，不是磁盘 Provider 规则集合；保持原有协议字典。
-              providers: Object.fromEntries(
-                [...snapshot.providers.entries()].map(([providerId, config]) => [
-                  providerId,
-                  config.toJSON(),
-                ]),
-              ),
-              states: snapshot.states ?? {},
-            },
-            nexProviderUpdateAccountConfigResultSchema,
-          );
-          if (result.receivedRevision !== snapshot.revision) {
-            throw new Error("Account Config 接收回执版本与交付版本不一致");
-          }
-          accountConfigReceivedRevisionByClient.set(params.client, result.receivedRevision);
-          logger.info(undefined, "account provider config 已交付到 Nex agent", {
-            providerCount: result.providerCount,
-            reason: params.reason,
-            receivedRevision: result.receivedRevision,
-            status: result.status,
-          });
-        }
-        if (params.refreshRegistry) {
-          await params.client.request(
-            nexProtocolMethods.providerRefreshRegistry,
-            { reason: params.reason },
-            nexProviderRefreshRegistryResultSchema,
-          );
-        }
-      });
-    accountConfigSyncByClient.set(params.client, current);
-    try {
-      await current;
-    } finally {
-      if (accountConfigSyncByClient.get(params.client) === current) {
-        accountConfigSyncByClient.delete(params.client);
-      }
-    }
-  }
-
-  async function ensureAccountProviderConfigSynced(params: {
-    client: NexProtocolClient;
-    reason: string;
-    workspace: NexAgentWorkspaceTarget;
-    refreshRegistry?: boolean;
-  }): Promise<void> {
-    await syncAccountProviderConfigToClient({
-      client: params.client,
-      reason: params.reason,
-      refreshRegistry: params.refreshRegistry,
-    });
-  }
-
-  async function handleAccountProviderConfigChanged(reason: string): Promise<void> {
-    await Promise.all(
-      Array.from(activeClientsByWorkspaceKey.values()).map(async (active) => {
-        await syncAccountProviderConfigToClient({
-          client: active.client,
-          reason,
-        });
-      }),
-    );
-  }
-
   function enqueueInteractionPreferenceSync(params: {
     client: NexProtocolClient;
     preferences: NexAgentAppRuntimePreferences;
@@ -3083,15 +2932,9 @@ export function createNexAgentService(
               // host 侧不能只在失败时留日志，成功路径完全静默会无法回答"到底发了哪几个头"。
               // 只记 header 名与套餐维度：凭证值绝不入日志（日志留存周期不受控）。
               if (result.ok) {
-                const firstIssuance = officialMcpIssuanceAudit.markFirst(
-                  parsed.data.pluginId,
-                  mcpKey,
-                  authWorkspace.workspaceKey,
-                );
-                const logIssuance = firstIssuance ? logger.info : logger.debug;
-                logIssuance(request.trace?.traceId, "官方 MCP 身份头已解析", {
+                // Nex 无账号体系：不再统计首次签发审计。
+                logger.debug(request.trace?.traceId, "官方 MCP 身份头已解析", {
                   lane,
-                  firstIssuance,
                   ...summarizeOfficialMcpIdentityHeaders(result.headers),
                   mcpKey,
                   consumer,
@@ -4058,8 +3901,6 @@ export function createNexAgentService(
   }
 
   function disposeLocalState(): void {
-    accountProviderConfigUnsubscribe?.();
-    accountProviderConfigUnsubscribe = undefined;
     modelSelectionSubscription?.dispose();
     modelSelectionSubscription = undefined;
     memoryDiagnostics.dispose();
@@ -6187,46 +6028,14 @@ export function createNexAgentService(
         });
         return;
       }
-      let accountRequestAuth: AccountRequestAuthMaterial | undefined;
-      try {
-        accountRequestAuth = await resolveAccountRequestAuth(pending.request);
-      } catch (error) {
-        if (pendingProviderRuntimeHeaders.get(key) !== pending) return;
-        pendingProviderRuntimeHeaders.delete(key);
-        logger.warn(undefined, "Nex provider runtime headers 应用失败", {
-          modelId: pending.request.modelSelection.modelId,
-          providerId: pending.request.providerId,
-          requestId: pending.request.requestId,
-          sessionId: pending.request.sessionId,
-          error: error instanceof Error ? error.message : String(error),
-          workspaceKey: resolveWorkspaceKey(pending.request.workspace),
-        });
-        await pending.client.respond(pending.protocolRequestId, {
-          headersApplied: false,
-          errorMessage: error instanceof Error ? error.message : String(error),
-        });
-        return;
-      }
+      // Nex 无账号体系：不再解析 Account 请求材料；界面补投的请求头仍是唯一来源。
       if (pendingProviderRuntimeHeaders.get(key) !== pending) return;
       pendingProviderRuntimeHeaders.delete(key);
-      const requestHeaders = {
-        ...accountRequestAuth?.headers,
-      };
-      Object.assign(
-        requestHeaders,
-        allowRequestVerificationHeaders(params.response.runtimeProviderHeaders ?? {}),
+      const requestHeaders = allowRequestVerificationHeaders(
+        params.response.runtimeProviderHeaders ?? {},
       );
       const requestAuth =
-        accountRequestAuth?.apiKey || Object.keys(requestHeaders).length > 0
-          ? {
-              ...(accountRequestAuth?.apiKey ? { apiKey: accountRequestAuth.apiKey } : {}),
-              ...(accountRequestAuth?.apiKeyId ? { apiKeyId: accountRequestAuth.apiKeyId } : {}),
-              ...(accountRequestAuth?.accountScope
-                ? { accountScope: accountRequestAuth.accountScope }
-                : {}),
-              ...(Object.keys(requestHeaders).length > 0 ? { headers: requestHeaders } : {}),
-            }
-          : undefined;
+        Object.keys(requestHeaders).length > 0 ? { headers: requestHeaders } : undefined;
       await pending.client.respond(
         pending.protocolRequestId,
         requestAuth

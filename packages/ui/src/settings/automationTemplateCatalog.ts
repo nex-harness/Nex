@@ -1,6 +1,5 @@
 import type { ClientSceneConfig, ClientSceneItem } from "@nex/services";
 import type { AutomationScheduledTemplateIconName } from "@/settings/AutomationScheduledTemplateIcon.js";
-import type { OffPeakTemplateIconName } from "@/settings/OffPeakTemplateIcon.js";
 import { canVisualizeCronInAutomationEditor } from "@/settings/automationFormat.js";
 
 export interface AutomationTemplateLocalizedText {
@@ -24,7 +23,7 @@ export interface ScheduledAutomationTemplate extends AutomationTemplateBase {
 export interface OffPeakAutomationTemplate extends AutomationTemplateBase {
   homepageDescription?: AutomationTemplateLocalizedText;
   customize: boolean;
-  icon: OffPeakTemplateIconName;
+  icon: string;
 }
 
 type FormatAutomationMessage = (descriptor: { id: string }) => string;
@@ -73,7 +72,7 @@ function scheduledIcon(id: string): AutomationScheduledTemplateIconName {
   return "list";
 }
 
-function offPeakIcon(id: string, customize: boolean): OffPeakTemplateIconName {
+function offPeakIcon(id: string, customize: boolean): string {
   if (customize) return "customize";
   const normalized = normalizeTemplateId(id).toLowerCase();
   if (normalized.includes("standup") || normalized.includes("git")) {

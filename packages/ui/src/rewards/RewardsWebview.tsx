@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button.js";
 import { EmbeddedWebsiteHeader } from "@/components/EmbeddedWebsiteHeader.js";
 
 export function RewardsWebview({ onClose }: { onClose: () => void }) {
-  const { credentialService, oauthService } = useServices();
+  const { credentialService } = useServices();
   const platform = usePlatform();
   const { intl, locale } = useNexIntl();
   const themePreference = useNexStore((s) => s.theme);
@@ -91,9 +91,8 @@ export function RewardsWebview({ onClose }: { onClose: () => void }) {
         );
         injectedIdentity.current = identity;
       }
-      const rawProvider = identity ? await oauthService.getActiveProvider() : null;
-      const provider =
-        rawProvider === "zai" ? "zai" : rawProvider === "bigmodel" ? "bigmodel" : null;
+      // Nex 无账号体系：不再读取 OAuth 当前 provider。
+      const provider: "zai" | "bigmodel" | null = null;
       const [oauth, jwt] = provider
         ? await Promise.all([
             credentialService.load(`oauth:${provider}:access_token`),
@@ -130,7 +129,7 @@ export function RewardsWebview({ onClose }: { onClose: () => void }) {
         logger.warn("[rewards] context injection failed");
       }
     }
-  }, [credentialService, oauthService, policy.dev, policy.e2e]);
+  }, [credentialService, policy.dev, policy.e2e]);
   const injectRef = useRef(inject);
   injectRef.current = inject;
   useEffect(() => {

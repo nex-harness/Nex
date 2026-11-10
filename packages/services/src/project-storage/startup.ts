@@ -8,7 +8,6 @@ const { DatabaseSync } = createRequire(import.meta.url)(
 ) as typeof import("node:sqlite");
 import { TaskIndexRepo } from "#src/session/taskIndexRepo.js";
 import { AutomationRepo } from "#src/session/automationRepo.js";
-import { OffPeakTaskRepo } from "#src/session/offPeakTaskRepo.js";
 import {
   runTasksDatabaseMigrations,
   inspectTasksMigrationKind,
@@ -100,10 +99,10 @@ export async function prepareTasksIndexStorage(
     }
   }
   markTasksStorageMigrated(path);
+  // Nex 无账号体系：Off-Peak 任务表不再创建；历史库中的 off_peak_tasks 由身份迁移按存在性兼容。
   const repos = [
     new TaskIndexRepo(settings, undefined, path, LOCK_WAIT_MS),
     new AutomationRepo(path, LOCK_WAIT_MS),
-    new OffPeakTaskRepo(path, LOCK_WAIT_MS),
   ];
   let preparationFailure: unknown;
   try {
