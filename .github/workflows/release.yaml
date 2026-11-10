@@ -5,14 +5,11 @@
 # electron-builder publishes with GH_TOKEN and uploads the installers together
 # with latest-mac.yml, which the desktop auto-updater consumes.
 #
-# 2.0 基线差异（相对旧 fork 的 main）：
-#   - publish provider 仍是 generic 占位（packages/desktop/electron-builder.config.js），
-#     不是旧 fork 的 github provider。`--publish always` 会尝试往配置里的 url 发布，
-#     在 provider 切到 github 之前本工作流的发布步骤不会产出可用的 Release 资产。
-#   - packages/desktop/scripts/bundle.mjs 在 2.0 基线还不支持 NEX_ELECTRON_BUILDER_ARGS，
-#     因此 `--publish always` 当前传不进去（见 "Package and publish" 步骤的说明）。
-#   - 桌面构建需要 `pnpm bootstrap`：它负责 apps/nex-cli 的 agent bundle、runtime assets
-#     与 build:bootstrap 的 workspace 编译。
+# 发布通道：electron-builder 的 github provider（nex-harness/Nex Releases）。
+# 前置条件：
+#   - `pnpm bootstrap`：生成 apps/nex-cli 的 agent bundle、runtime assets 与 workspace 编译。
+#   - NEX_ELECTRON_BUILDER_ARGS 由 packages/desktop/scripts/bundle.mjs 透传给
+#     electron-builder（`--publish always` 依赖它）。
 #
 # Required repo variables/secrets (optional; unsigned build when unset):
 #   vars.NEX_ENABLE_MAC_SIGN == "1"
@@ -108,8 +105,8 @@ jobs:
           rm -f /tmp/nex-signing.p12
 
       # electron-builder 在 macOS 上产出 dmg + zip + latest-mac.yml；GH_TOKEN 由
-      # `--publish always` 消费（github provider）。2.0 基线的 bundle.mjs 还没有透传
-      # NEX_ELECTRON_BUILDER_ARGS，此变量当前会被忽略，产物只落在 packages/desktop/dist。
+      # `--publish always` 消费（github provider，见 electron-builder.config.js）。
+      # bundle.mjs 把 NEX_ELECTRON_BUILDER_ARGS 透传给 electron-builder。
       - name: Package and publish (electron-builder)
         run: pnpm bundle:desktop
         env:

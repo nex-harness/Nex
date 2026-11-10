@@ -728,6 +728,11 @@ function verifyPackagedRuntimeDependencies(os, arch) {
 
 async function main() {
   const { os, arch, skipPrepare, skipBuild, dryRun } = parseArgs(process.argv.slice(2));
+  // 额外参数经环境变量传入（pnpm 会吃掉一层 "--"，命令行透传不可靠），
+  // 例如 NEX_ELECTRON_BUILDER_ARGS="--publish always"。
+  const extraBuilderArgs = (process.env.NEX_ELECTRON_BUILDER_ARGS ?? "")
+    .split(/\s+/)
+    .filter(Boolean);
   const buildArgs = [
     "exec",
     "electron-builder",
@@ -735,6 +740,7 @@ async function main() {
     "electron-builder.config.js",
     osBuilderFlagMap[os],
     archBuilderFlagMap[arch],
+    ...extraBuilderArgs,
   ];
 
   console.log(`[bundle] target=${os}/${arch}`);
