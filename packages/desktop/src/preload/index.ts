@@ -47,7 +47,6 @@ import type {
   EmbeddedBrowserSitePermissionResetRequest,
   EmbeddedBrowserSitePermissionsSnapshot,
   Locale,
-  OAuthStateRegistration,
   WebRemoteControlAuthStateChange,
   OpenInEditorOptions,
   FileApplicationTarget,
@@ -86,7 +85,6 @@ import {
   formatNexRendererProcessName,
   scopedServicePortPayloadSchema,
 } from "@nex/shared";
-import { createOAuthCallbackHandler } from "./oauthCallbackBridge.js";
 
 const updateReadyCallbacks = new Set<(version: string) => void>();
 const updateStateCallbacks = new Set<(payload: UpdateStatePayload) => void>();
@@ -706,17 +704,6 @@ contextBridge.exposeInMainWorld("nex", {
     ipcRenderer.send(PlatformChannels.StartCuaHelperPermissionDrag),
   notifyWebRemoteControlAuthStateChanged: (change: WebRemoteControlAuthStateChange) =>
     ipcRenderer.send(PlatformChannels.WebRemoteControlAuthStateChanged, change),
-  /** 上报 OAuth state 用于 deep link 路由 */
-  registerOAuthState: (payload: OAuthStateRegistration) =>
-    ipcRenderer.send(PlatformChannels.OAuthRegisterState, payload),
-  /** 注册 OAuth deep link 回调，返回 disposer */
-  onOAuthCallback: (cb: (url: string) => void): (() => void) => {
-    const handler = createOAuthCallbackHandler(cb, () => {
-      ipcRenderer.send(PlatformChannels.OAuthCallbackHandled);
-    });
-    ipcRenderer.on(PlatformChannels.OAuthCallback, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.OAuthCallback, handler);
-  },
   /** 注册支付 deep link 回调，返回 disposer */
   onPaymentCallback: (callback: (url: string) => void): (() => void) => {
     const handler = (_event: unknown, url: string) => callback(url);

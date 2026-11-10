@@ -114,7 +114,13 @@ if (process.platform === "darwin" && existsSync(electronBinary)) {
 const electron = spawn(electronCommand, ["."], {
   cwd: root,
   stdio: "inherit",
-  env: { ...process.env, ELECTRON_RENDERER_URL: rendererUrl },
+  env: {
+    ...process.env,
+    ELECTRON_RENDERER_URL: rendererUrl,
+    // Host 跑在 Electron utility process 里，cwd 不是仓库目录；dev 下显式传仓库根，
+    // 让 Agent 解析链能找到 monorepo 入口 apps/nex-cli/packages/cli/dist/nex.cjs。
+    NEX_DEV_REPO_ROOT: resolve(root, "..", ".."),
+  },
   windowsHide: true,
   detached: process.platform !== "win32",
 });

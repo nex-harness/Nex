@@ -7,6 +7,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Emitter } from "@nex/rpc";
 import { GEN_UI_OUTPUT_DIRECTORY, GEN_UI_OUTPUT_ROOT_ENV } from "@nex/shared/node";
 import { getAppConfigDir, getNexDataRootDir } from "#src/paths.js";
@@ -320,8 +321,8 @@ function parseArgsJson(raw: string | undefined): string[] | undefined {
   return parsed;
 }
 
-function findUpward(relativePath: string): string | null {
-  let current = process.cwd();
+function walkUp(from: string, relativePath: string): string | null {
+  let current = resolve(from);
   while (true) {
     const candidate = join(current, relativePath);
     if (existsSync(candidate)) {
@@ -333,6 +334,26 @@ function findUpward(relativePath: string): string | null {
     }
     current = parent;
   }
+}
+
+/**
+ * 从一组候选根向上查找 monorepo 内的相对路径。
+ *
+ * 修复依据：此前只从 `process.cwd()` 向上找。桌面 dev 下 Host 跑在 Electron utility
+ * process 里，cwd 是 package 目录甚至系统根，于是 `apps/nex-cli/packages/cli/dist/nex.cjs`
+ * 永远找不到，storage 启动报 `unsupported_runtime`。cwd 找不到时再按模块自身位置
+ * （services 包源码/dist 都在 `packages/services` 下）兜底，两种布局都能命中仓库根。
+ */
+function findUpward(relativePath: string): string | null {
+  const search = (from: string | undefined): string | null =>
+    from ? walkUp(from, relativePath) : null;
+  return (
+    search(process.cwd()) ??
+    // 桌面 dev：Host 打包成单文件，cwd 与模块位置都到不了仓库根，由 dev.mjs 显式注入。
+    search(process.env["NEX_DEV_REPO_ROOT"]) ??
+    search(dirname(fileURLToPath(import.meta.url))) ??
+    search(process.env["NEX_AGENT_SERVER_CWD"])
+  );
 }
 
 async function buildNexAgentSpawnPreflight(
