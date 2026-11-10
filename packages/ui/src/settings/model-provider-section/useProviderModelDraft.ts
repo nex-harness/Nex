@@ -119,7 +119,6 @@ export function useProviderModelDraft({
       Boolean(resolve) &&
       rawDraft.idValue.trim() !== originalModelId &&
       !config.resolution,
-    defaultsLoaded: smart && config.defaultsLoaded,
     flush: config.flush,
     cancel: config.cancel,
   };

@@ -36,6 +36,10 @@ interface ProviderSaveNotificationTarget {
   operation?: "delete";
   /** 显式弹窗在原草稿中重试，不让外部通知另起一次脱离编辑事务的保存。 */
   draftOwnsRetry?: boolean;
+  /** 批量操作共用一个通知 key，把 N 条相同格式的保存提示合成一条。 */
+  feedbackKey?: string;
+  /** 批量文案的单复数语境；只改通知文案，不影响保存行为。 */
+  aggregate?: { readonly count: number };
 }
 
 export const PROVIDER_TEXT_INPUT_IDLE_SAVE_MS = MODEL_PROVIDER_TEXT_IDLE_TRIGGER_MS;
@@ -278,30 +282,42 @@ export function InlineEditableProviderCard({
       const revision = draftRevisionRef.current + 1;
       draftRevisionRef.current = revision;
       const notification = saveNotificationRef.current;
-      const dedupeKey = target.modelId
-        ? `model-save:${notification.providerId}:${target.modelId}`
-        : `provider-save:${notification.providerId}`;
+      const dedupeKey =
+        target.feedbackKey ??
+        (target.modelId
+          ? `model-save:${notification.providerId}:${target.modelId}`
+          : `provider-save:${notification.providerId}`);
+      const aggregateValues = target.aggregate;
       const messageValues = {
         provider: notification.providerDisplayName,
         model: target.modelId ?? "",
+        ...(aggregateValues ? { count: aggregateValues.count } : {}),
       };
-      const messageIds = target.modelId
-        ? target.operation === "delete"
-          ? {
-              pending: "settings.modelProvider.modelDeleting",
-              success: "settings.modelProvider.modelDeleteSuccess",
-              failure: "settings.modelProvider.modelDeleteFailure",
-            }
+      // formatMessage 不解析 ICU plural，单复数由独立的 .one/.other 文案 key 表达。
+      const pluralSuffix = aggregateValues?.count === 1 ? "one" : "other";
+      const messageIds = target.aggregate
+        ? {
+            pending: `settings.modelProvider.modelsAdding.${pluralSuffix}`,
+            success: `settings.modelProvider.modelsAddSuccess.${pluralSuffix}`,
+            failure: `settings.modelProvider.modelsAddFailure.${pluralSuffix}`,
+          }
+        : target.modelId
+          ? target.operation === "delete"
+            ? {
+                pending: "settings.modelProvider.modelDeleting",
+                success: "settings.modelProvider.modelDeleteSuccess",
+                failure: "settings.modelProvider.modelDeleteFailure",
+              }
+            : {
+                pending: "settings.modelProvider.modelSaving",
+                success: "settings.modelProvider.modelSaveSuccess",
+                failure: "settings.modelProvider.modelSaveFailure",
+              }
           : {
-              pending: "settings.modelProvider.modelSaving",
-              success: "settings.modelProvider.modelSaveSuccess",
-              failure: "settings.modelProvider.modelSaveFailure",
-            }
-        : {
-            pending: "settings.modelProvider.providerSaving",
-            success: "settings.modelProvider.providerSaveSuccess",
-            failure: "settings.modelProvider.providerSaveFailure",
-          };
+              pending: "settings.modelProvider.providerSaving",
+              success: "settings.modelProvider.providerSaveSuccess",
+              failure: "settings.modelProvider.providerSaveFailure",
+            };
       notification.showFeedback({
         key: dedupeKey,
         message: notification.formatMessage(
@@ -706,7 +722,10 @@ export function InlineEditableProviderCard({
   );
 
   const handleAddModel = useCallback(
-    async (model: ProviderSettingsFormModel) => {
+    async (
+      model: ProviderSettingsFormModel,
+      notification?: Pick<ProviderSaveNotificationTarget, "feedbackKey" | "aggregate">,
+    ) => {
       if (!onAddPersonalModel) throw new Error("当前设置入口未装配 Personal Model 添加能力");
       const added = { ...model, modelId: model.modelId.trim(), hasPersonalConfig: true };
       if (!added.modelId) return;
@@ -719,7 +738,7 @@ export function InlineEditableProviderCard({
             added.useRecommendedConfig,
           );
         },
-        { modelId: added.modelId, draftOwnsRetry: true },
+        { modelId: added.modelId, draftOwnsRetry: true, ...notification },
       );
     },
     [onAddPersonalModel, provider.providerId, runSaveOperation],

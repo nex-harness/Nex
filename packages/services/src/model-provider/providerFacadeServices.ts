@@ -19,6 +19,7 @@ import {
 import { createServiceDescriptor } from "../descriptors.js";
 import type { ModelConnectivityResult } from "@nex/shared";
 import { createServiceLogger } from "../logger/serviceLogger.js";
+import { fetchRemoteModelList, type RemoteModelList } from "./remoteModelList.js";
 
 export type {
   ProviderSettingsProviderView,
@@ -26,6 +27,14 @@ export type {
   ModelSelectionViewInput,
   ProviderSettingsView,
 } from "@nex/provider";
+
+export interface ModelInfoLookupResult {
+  readonly found: boolean;
+  /** models.dev 上的供应商标识，未命中时省略。 */
+  readonly providerId?: string;
+  /** 命中条目映射出的稀疏 ModelConfig；未命中时为空对象。 */
+  readonly config: ModelConfigObject;
+}
 
 export interface IProviderSettingsService {
   readonly onDidChange: Event<ProviderSettingsView>;
@@ -35,6 +44,10 @@ export interface IProviderSettingsService {
     input?: Parameters<ProviderSettingsFacade["createPersonalProvider"]>[0],
   ): Promise<ProviderSettingsCreationResult>;
   resolveModelConfig(input: ResolveModelConfigInput): Promise<ModelConfigResolution>;
+  /** 手动"获取模型信息"：按模型 ID 查询 models.dev 目录并返回稀疏配置。 */
+  lookupModelInfo(modelId: ModelId): Promise<ModelInfoLookupResult>;
+  /** 用供应商配置的地址和密钥请求远端 /models 接口，返回可用模型 ID 列表。 */
+  listRemoteModels(providerId: ProviderId): Promise<RemoteModelList>;
   savePersonalProviderOverlay(
     providerId: ProviderId,
     config: ProviderConfigObject,
@@ -113,6 +126,17 @@ export function createProviderSettingsService(
 ): IProviderSettingsService {
   return {
     onDidChange: toEvent((listener) => facade.onDidChange(listener)),
+    // models.dev 查询依赖 Node 侧磁盘缓存，由 createProviderSettingsWithModelsDevLookup
+    // 在服务端装配时覆盖；未装配时显式报错，避免 UI 误报"未收录"。
+    lookupModelInfo: async () => {
+      throw new Error("Model info lookup is not available in this host");
+    },
+    listRemoteModels: async (providerId) => {
+      await ensureReady();
+      const provider = facade.getView().providers.find((p) => p.providerId === providerId);
+      if (!provider) throw new Error(`Provider not found: ${providerId}`);
+      return fetchRemoteModelList(provider.effectiveConfig);
+    },
     getView: async () => {
       await ensureReady();
       return facade.getView();

@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import type { ModelConfigObject } from "@nex/provider";
+import type { ModelInfoLookupResult } from "@nex/services";
 import type {
   ProviderModelDraftValues,
   ProviderModelDraftCommitResult,
@@ -26,9 +27,9 @@ import { isImeComposingKeyEvent } from "@/lib/imeComposition.js";
 import { TECHNICAL_INPUT_ATTRIBUTES } from "@/lib/technicalInputAttributes.js";
 import {
   ProviderModelMetadataDialogActions,
-  ModelSmartConfigSwitch,
   ModelConfigDraftFeedback,
   ModelConfigRestoreButton,
+  ModelInfoLookupButton,
 } from "@/settings/model-provider-section/ProviderModelMetadataDialogActions.js";
 import { modelEditorControlStyle } from "@/settings/model-provider-section/modelEditorControlStyle.js";
 import { cn } from "@/components/lib/utils.js";
@@ -38,8 +39,9 @@ import {
 } from "@/settings/model-provider-section/ModelConfigHelp.js";
 
 import { ModelEditorAdvanced } from "@/settings/model-provider-section/ModelEditorAdvanced.js";
+import { useModelInfoLookup } from "@/settings/model-provider-section/useModelInfoLookup.js";
 
-export function selectFocusedInputText(event: Pick<FocusEvent<HTMLInputElement>, "currentTarget">) {
+function selectFocusedInputText(event: Pick<FocusEvent<HTMLInputElement>, "currentTarget">) {
   event.currentTarget.select();
 }
 
@@ -55,11 +57,11 @@ export function ProviderModelMetadataDialog({
   onOpenChange,
   onDraftChange,
   onRestore,
+  onLookupModelInfo,
   onCommit,
   modelConfigResolutionPending = false,
   modelIdReadOnly = false,
   saving = false,
-  modelDefaultsLoaded = false,
   onModelIdBlur,
 }: {
   mode?: "add" | "edit";
@@ -73,15 +75,22 @@ export function ProviderModelMetadataDialog({
   onOpenChange: (open: boolean) => void;
   onDraftChange: (patch: Partial<ProviderModelDraftValues>) => void;
   onRestore?: () => void;
+  /** 手动"获取模型信息"：按当前模型 ID 查询 models.dev 并填入表单。 */
+  onLookupModelInfo?: (modelId: string) => Promise<ModelInfoLookupResult>;
   onCommit: () => boolean | Promise<boolean>;
   modelConfigResolutionPending?: boolean;
   modelIdReadOnly?: boolean;
   saving?: boolean;
-  modelDefaultsLoaded?: boolean;
   onModelIdBlur?: () => void;
 }) {
   const { intl } = useNexIntl();
   const [validationAttempt, setValidationAttempt] = useState(0);
+  const modelInfo = useModelInfoLookup({
+    open,
+    modelId: draft.idValue,
+    lookup: onLookupModelInfo,
+    onApply: onDraftChange,
+  });
   const commit = async () => {
     const result = await onCommit();
     if (!result) setValidationAttempt((value) => value + 1);
@@ -160,11 +169,6 @@ export function ProviderModelMetadataDialog({
               id: "settings.modelProvider.editModelDescription",
             })}
           </DialogDescription>
-          <ModelSmartConfigSwitch
-            disabled={saving}
-            checked={smart}
-            onChange={(useRecommendedConfigValue) => onDraftChange({ useRecommendedConfigValue })}
-          />
         </DialogHeader>
         {/* 保存期间锁定正文交互，不改变原有滚动容器；页脚单独显示提交状态。 */}
         <div
@@ -363,9 +367,30 @@ export function ProviderModelMetadataDialog({
             />
           </ModelEditorAdvanced>
         </div>
-        <ModelConfigDraftFeedback error={draftErrorMessage} matched={modelDefaultsLoaded} />
+        <ModelConfigDraftFeedback
+          error={
+            draftErrorMessage ??
+            (modelInfo.status === "not-found"
+              ? intl.formatMessage({ id: "settings.modelProvider.modelInfoNotFound" })
+              : modelInfo.status === "failed"
+                ? intl.formatMessage({ id: "settings.modelProvider.modelInfoLookupFailed" })
+                : null)
+          }
+          matched={modelInfo.status === "found"}
+        />
         <ProviderModelMetadataDialogActions
-          leadingAction={<ModelConfigRestoreButton disabled={saving} onRestore={onRestore} />}
+          leadingAction={
+            <div className="flex items-center gap-4">
+              {modelInfo.available ? (
+                <ModelInfoLookupButton
+                  loading={modelInfo.status === "loading"}
+                  disabled={saving || !draft.idValue.trim()}
+                  onLookup={() => void modelInfo.run()}
+                />
+              ) : null}
+              <ModelConfigRestoreButton disabled={saving} onRestore={onRestore} />
+            </div>
+          }
           saveLabel={intl.formatMessage({ id: "common.save" })}
           cancelLabel={intl.formatMessage({ id: "common.cancel" })}
           saving={saving}

@@ -486,6 +486,7 @@ import {
   IModelSelectionService,
   IProviderSettingsService,
 } from "./model-provider/providerFacadeServices.js";
+import { createProviderSettingsWithModelsDevLookup } from "./model-provider/modelsDevLookupService.js";
 import { createProviderSettingsConnectivityTester } from "./model-provider/providerSettingsConnectivity.js";
 import {
   createProviderProvisioningSource,
@@ -3033,7 +3034,10 @@ export function createLocalServices(options: {
     });
   }
   services
-    .register(IProviderSettingsService, providerRuntime.providerSettings)
+    .register(
+      IProviderSettingsService,
+      createProviderSettingsWithModelsDevLookup(providerRuntime.providerSettings),
+    )
     .register(IModelSelectionService, providerRuntime.modelSelection);
   if (isDesktopAttachedRemote || options.providerProvisioningTargetEnabled === true) {
     services.register(

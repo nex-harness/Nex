@@ -156,5 +156,8 @@
   "packages/nex-server-cli/test/packaging.test.ts",
   "packages/nex-server-cli/test/stageRemoteAssetsCli.test.ts",
   "packages/nex-server-cli/test/tsupConfig.test.ts",
-  "packages/nex-server-cli/test/verifyRemoteSshTarget.test.ts"
+  "packages/nex-server-cli/test/verifyRemoteSshTarget.test.ts",
+  "packages/services/test/modelsDevCatalog.test.ts",
+  "packages/services/test/remoteModelList.test.ts",
+  "packages/ui/test/providerModelDraft.test.ts"
 ]
