@@ -116,7 +116,24 @@ export function projectWorkspaceSettings(
   return {
     lastActiveWorkspace: active,
     lastWorkspaceSession,
-    recentProjects: localPaths.slice(0, 10),
+    recentProjects: mergeRecentProjects(settings.recentProjects, localPaths),
     lastActiveTabIndex: Math.max(0, activeIndex),
   };
+}
+
+/**
+ * 合并「旧的项目列表」与「项目树投影出的根目录」。
+ *
+ * 修复依据：`0005_projects` 迁移后 `recentProjects` 由 projects 表重建，1.x 升级用户的
+ * 旧列表会被整体覆盖（12 个项目只剩 1 个），表现为「升级后对话历史没了」，而任务数据其实
+ * 完好。这里保留旧值中仍被项目树覆盖的条目（维持原顺序），再追加项目树里新增的根。
+ * 旧值中已从项目树消失的路径会被丢弃——它确实被用户移除了。
+ */
+function mergeRecentProjects(
+  previous: readonly string[] | undefined,
+  projectPaths: readonly string[],
+): string[] {
+  const projectSet = new Set(projectPaths);
+  const merged = [...(previous ?? []).filter((path) => projectSet.has(path)), ...projectPaths];
+  return [...new Set(merged)].slice(0, 10);
 }
