@@ -6,7 +6,6 @@ import {
   useSettingsScopeForm,
 } from "@/settings-scope/index.js";
 /* eslint-disable max-lines -- 子智能体管理页集中维护作用域列表、表单和启用状态，避免状态分散 */
-import { useStartPlanRecommendation } from "@/hooks/useStartPlanRecommendation.js";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Bot, Check, Plus, Trash2 } from "lucide-react";
 import { completeNewModelSelection } from "@nex/provider";
@@ -51,6 +50,7 @@ import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useModelSelectionServiceView } from "@/hooks/useModelSelectionView.js";
 import { useConfigWorkspaceServicesResolution as useWorkspaceServicesResolution } from "@/workspace-config-catalog/index.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
+import { useStartPlanRecommendation } from "@/hooks/useStartPlanRecommendation.js";
 import {
   buildRegistryModelSelectGroups,
   resolveModelDisplayName,
@@ -622,8 +622,8 @@ function SubagentModelOverrideControl({
     config: { model?: string; thoughtLevel?: string },
   ) => Promise<void>;
 }) {
-  const recommendStartPlan = useStartPlanRecommendation(modelSelectionView, "subagent");
   const { intl } = useNexIntl();
+  const recommendStartPlan = useStartPlanRecommendation(modelSelectionView, "subagent");
   const [pending, setPending] = useState(false);
   const [config, setConfig] = useState<{
     model?: string;
@@ -830,7 +830,6 @@ function SubagentForm({
   workspaceTabs: ConfigWorkspaceTarget[];
   onScopeKeyChange: (scopeKey: string) => void;
 }) {
-  const recommendStartPlan = useStartPlanRecommendation(modelSelectionView, "subagent");
   const { intl } = useNexIntl();
   const initialFormStateKey = createSubagentFormInitialStateKey(initial);
   const initialFormState = useMemo(

@@ -268,12 +268,6 @@ function renderWebRemoteControlFailure(failure: WebRemoteControlFailure): void {
   );
 }
 
-// Nex 无账号体系：Web 端不再有 OAuth 回调页与登录页。
-// 远控 OAuth 回调路径仍由 relay 的 token 链路处理，这里直接回到设备列表。
-function isWebRemoteControlCallbackPath(): boolean {
-  return isWebRemoteControlOAuthCallback(new URL(window.location.href));
-}
-
 async function renderConversationSharePage(): Promise<void> {
   // 页面语言跟随路径前缀：/cn/share 中文，裸 /share 英文。
   const routeLocale = resolveConversationShareRouteLocale(window.location.pathname);

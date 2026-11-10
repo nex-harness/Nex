@@ -9,7 +9,6 @@ import {
   type MouseEvent,
 } from "react";
 import { ArrowUpRightIcon, MoonIcon, SunIcon } from "lucide-react";
-import { BIGMODEL_PROVIDER_ID, ZAI_PROVIDER_ID } from "@nex/shared";
 import type { ConversationSharePreview } from "@nex/shared";
 import { ConversationShareReadonlyTimeline } from "@nex/ui/conversation-share-readonly";
 import { applyTheme, resolveTheme, type Theme } from "@nex/ui/useTheme";
@@ -21,12 +20,6 @@ import {
   type ConversationSharePreviewErrorKind,
 } from "./conversationSharePreviewClient.js";
 import { resolveShareHeaderView, type ShareHeaderView } from "./shareHeaderLayout.js";
-
-/** 登录入口的展示顺序，与桌面端登录卡片一致（z.ai 在上）。 */
-const SHARE_LOGIN_PROVIDERS: readonly WebOAuthProviderId[] = [
-  ZAI_PROVIDER_ID,
-  BIGMODEL_PROVIDER_ID,
-];
 
 export type ConversationShareLandingLocale = "zh-CN" | "en-US";
 export type ConversationShareLandingState =
@@ -616,7 +609,6 @@ export function ConversationShareLandingPage({
 export function ConversationShareLandingStatus({
   state,
   locale,
-  onLogin,
   onRetry,
 }: {
   state: Exclude<ConversationShareLandingState, { kind: "ready" }>;

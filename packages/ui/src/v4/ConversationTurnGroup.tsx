@@ -1402,10 +1402,6 @@ function ConversationTurnGroupImpl({
         : resolveWorkflowTurnCompletion(unit.header, { byRunId: workflowRunByRunId }),
     [unit.header, unit.isRunning, workflowRunByRunId],
   );
-  const offPeakTurnCards: readonly never[] = useMemo(
-    () => [],
-    [unit.assistantWorkRows, unit.isRunning],
-  );
   const canRenderAssistantActions =
     !unit.timelineOnly &&
     latestAssistantTextRow?.state === "complete" &&

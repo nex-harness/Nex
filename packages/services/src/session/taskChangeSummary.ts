@@ -2,7 +2,6 @@ import type {
   NexPersistedFileChange,
   NexTaskChangeSummary,
   NexTaskChangedFileSummary,
-  NexTaskMeta,
 } from "@nex/shared";
 import { computeLineChangeStat } from "@nex/shared";
 

@@ -451,7 +451,6 @@ import { ensureAppCaCert } from "./runtime-tools/appCaCert.js";
 import { buildHelperOpenArgs, isCuaLocalDevelopmentRuntime } from "@nex/nex-cua/broker/server";
 import { createServiceLogger, type ServiceLogger } from "#src/logger/serviceLogger.js";
 import { ensureTelemetryDeviceMid } from "./device/deviceIdentity.js";
-import type { HighspeedMockScenario } from "@nex/shared";
 import {
   createOfficialMcpTrustedOriginRegistry,
   OFFICIAL_MCP_DEV_TRUSTED_ORIGINS_ENV,
@@ -500,7 +499,6 @@ import {
   DEFAULT_NEX_MODEL_CONTEXT_BUDGET_STRATEGY,
   formatLogPrefix,
   isCredentialDecryptError,
-  type ProviderFamilyDomain,
   type ServiceAuthorityMode,
   resolveRuntimeNexEndpointOrigin,
   type BrowserBackendDescriptor,

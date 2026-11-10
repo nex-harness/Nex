@@ -594,7 +594,7 @@ export function createNexTaskIndexSyncer(
   function applyTerminalTransition(
     target: NexAgentSessionTarget,
     summary: SessionSummary,
-    options?: { captureRepoSnapshot?: boolean },
+    _options?: { captureRepoSnapshot?: boolean },
   ): void {
     emitTerminalAndReady(target, summary);
     const failed = summary.phase === "error";
@@ -627,7 +627,7 @@ export function createNexTaskIndexSyncer(
         void resyncTaskIndexRowFromAgent(target, failed ? "phase.error" : "phase.completed", {
           // 修复原因：patch 已广播时不能让随后的 snapshot 回源再次制造完成提醒；
           // 行缺失时则把同一 signal 交给回源结果，保证提醒既不丢也不重复。
-          ...(meta || !unreadSignal ? {} : { unreadSignal }),
+          ...(meta || !unreadSignal ? undefined : { unreadSignal }),
         });
       })
       .catch((error) => {

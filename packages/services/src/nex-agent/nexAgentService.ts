@@ -58,11 +58,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Emitter } from "@nex/rpc";
 import type { IDisposable } from "@nex/rpc";
-import type {
-  AccountProviderConfigSnapshot,
-  ModelSelectionView,
-  ProviderSource,
-} from "@nex/provider";
+import type { ModelSelectionView } from "@nex/provider";
 import { completeNewModelSelection } from "@nex/provider";
 import {
   subagentRuntimeConfigSchema,
@@ -193,7 +189,6 @@ import { NEX_AGENT_RUNTIME_UNAVAILABLE_CODE } from "./nexAgent.js";
 import type {
   NexProtocolRequestId,
   ModelSelection,
-  NexProviderRuntimeHeadersRequestParams,
   NexProviderRuntimeHeadersCancelled,
   NexSessionEvent,
   NexSessionRuntimePreferencesScope,

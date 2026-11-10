@@ -2,7 +2,6 @@ import type { IServiceAccessor } from "@nex/services";
 import {
   type ProviderFamilyDomain,
   resolveModelProviderFamilyIdByProviderId,
-  resolveProviderFamilyDomainFromOAuthProvider,
 } from "@nex/shared";
 import { logger } from "@/logger.js";
 

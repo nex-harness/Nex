@@ -1,7 +1,6 @@
 import {
   useRequestVerificationPrewarm,
 } from "@/request-security-edition/claim.js";
-import { requestVerificationClaimFailureMessageId } from "@/request-security-edition/errors.js";
 import { createContext, useContext, useEffect, useCallback, useState, useRef } from "react";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
@@ -57,10 +56,6 @@ export function MarketingTouchProvider({
   const platform = usePlatform();
   const openSettingsTab = useTabStore((state) => state.openSettingsTab);
   const tabStore = useTabStoreApi();
-  const workspacePath = useTabStore((state) => state.activeWorkspacePath);
-  const workspaceIdentity = useTabStore((state) => state.activeWorkspaceIdentity);
-  // Nex 无账号体系：侧栏套餐升级入口已移除，活动投放不再有升级目标。
-  const upgradeTargetRef = useRef<string | null>(null);
   const user = useNexStore((state) => state.user);
   const restoring = useNexStore((state) => state.isRestoringOAuthSession);
   const requestLogin = useNexStore((state) => state.requestLoginEntry);

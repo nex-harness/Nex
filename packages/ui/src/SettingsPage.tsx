@@ -74,7 +74,6 @@ import {
 } from "@/project-sidebar/index.js";
 import { resolveRecentRemoteProjectPreference } from "@/project-sidebar/remote-project-connection.js";
 import { ModelProviderSection } from "@/settings/ModelProviderSection.js";
-import { useCodingPlanUpgradeDialog } from "@/settings/CodingPlanUpgradeDialogProvider.js";
 import { useEnterpriseCodingPlanProducts } from "@/settings/model-provider-section/useEnterpriseCodingPlanProducts.js";
 import { UsageStatsSection, type UsageStatsSectionTab } from "@/settings/UsageStatsSection.js";
 import {
@@ -287,12 +286,12 @@ export function SettingsPage({
   captionWorkspacePath,
   onBack,
   onCreateTask,
-  onOpenWorkspace,
+  onOpenWorkspace: _onOpenWorkspace,
   onOpenRemoteWorkspace,
-  allowOpenWorkspace = true,
-  onLogin,
-  onLogout,
-  user,
+  allowOpenWorkspace: _allowOpenWorkspace = true,
+  onLogin: _onLogin,
+  onLogout: _onLogout,
+  user: _user,
 }: {
   isDesktop?: boolean;
   isWindowsDesktop?: boolean;
