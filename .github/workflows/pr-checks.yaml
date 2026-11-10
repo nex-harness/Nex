@@ -1,0 +1,108 @@
+# PR pipeline: install deps, then lint / typecheck / architecture check / engineering unit tests.
+#
+# 2.0 基线差异（相对旧 fork 的 main）：
+#   - 旧 fork 各包用 `tsx --test test/*.test.ts`（node:test）。2.0 基线统一为 Vitest，
+#     工程单测清单在 scripts/engineering-test-files.json，入口是 `pnpm test:engineering`。
+#   - 根 workspace 已包含 apps/nex-cli/packages/*，根 install 会一并安装 CLI 子包的依赖，
+#     因此 CLI job 不再单独执行嵌套 `pnpm --dir apps/nex-cli install`。
+#
+# 已知前置阻塞（与本次 CI 迁移无关，需先修 lockfile）：
+#   - 根 pnpm-lock.yaml 缺 `packages/nex-server-cli` importer（该目录在 2.0 重命名时恢复，
+#     lockfile 未同步），`pnpm install --frozen-lockfile` 会报 ERR_PNPM_OUTDATED_LOCKFILE。
+#   - apps/nex-cli/pnpm-lock.yaml 的根 importer 缺 `@withfig/autocomplete`（package.json 有）。
+#   两处修好之前，"Install dependencies" 步骤无法通过。
+name: PR checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  # Skip the Electron binary download in CI; not needed for these checks.
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+  # 与 mise.toml / third-party/runtime/sources.json 保持一致。
+  NODE_VERSION: "24.14.0"
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # architecture:check --changed needs full history to diff against the baseline.
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm (pinned)
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          pnpm --version
+
+      - name: Cache pnpm store
+        id: pnpm-cache
+        run: echo "dir=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Architecture check
+        run: pnpm architecture:check -- --changed
+
+      # 工程单测的唯一清单入口（Vitest project "engineering"）。
+      - name: Engineering unit tests
+        run: pnpm test:engineering
+
+  # apps/nex-cli 是独立的 pnpm/turbo 子工作区，根 typecheck 不覆盖它的 packages。
+  cli-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm (pinned)
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          pnpm --version
+
+      - name: Cache pnpm store
+        id: pnpm-cache
+        run: echo "dir=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      # 根 workspace 已包含 apps/nex-cli 及其 packages/tools，根 install 会链接它们并
+      # 安装 apps/nex-cli 自身的 devDependencies（turbo/typescript）。
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck CLI packages
+        run: pnpm --dir apps/nex-cli run typecheck

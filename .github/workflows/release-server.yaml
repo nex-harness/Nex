@@ -1,0 +1,161 @@
+# Publish the Nex server SEA binaries as one-step install tarballs on GitHub
+# Releases.
+#
+# Release rules (mirrors the docker edge/latest flow):
+#   - main branch update / manual dispatch -> rolling release tagged
+#     alpha-<shortsha> (one release per main build, kept for rollback)
+#   - v* tag push -> versioned assets on that tag's release
+#
+# Artifacts (binary + packaging/: install.sh, systemd unit, launchd plist +
+# web static assets). The suffix distinguishes a build of main (<shortsha>, kept
+# per-commit for rollback) from a released version (<version>, the pushed tag):
+#   nex-server-darwin-arm64-<version|shortsha>.tar.gz
+#   nex-server-linux-x64-<version|shortsha>.tar.gz
+#   nex-server-linux-arm64-<version|shortsha>.tar.gz
+#
+# The tarball also carries the matching web build (packages/web/dist). The
+# installer deploys it next to the data dir and points NEX_WEB_STATIC_ROOT at
+# it, so a bare-metal server install serves a version-aligned web UI from the
+# same process — no separate web service, no drift between binary and UI.
+#
+# The Node version used for the build must match the license entry recorded in
+# third-party/runtime/sources.json (currently 24.14.0); CI pins it via setup-node.
+#
+# !!! 2.0 基线前置条件未满足 !!!
+# 本工作流依赖以下仅存在于旧 fork main 的产物，2.0 基线尚未迁移：
+#   - packages/server/scripts/build-sea.mjs（SEA 单二进制构建）
+#   - packages/server/scripts/sea-pty-assets.mjs
+#   - packages/server/src/seaEntry.ts
+#   - packages/server/packaging/{install.sh,nex-server.service,com.nex.server.plist}
+# 在补齐上述文件之前，"Build SEA binary" 与 "Package one-step install tarball" 两步必定失败。
+name: Server binaries (SEA)
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: "24.14.0"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, target: darwin-arm64 }
+          - { os: ubuntu-latest, target: linux-x64 }
+          - { os: ubuntu-latest, target: linux-arm64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      - name: Build workspace packages and agent bundle
+        run: |
+          # Root typecheck emits dist for repo-root packages (@nex/shared etc.)
+          # except @nex/model-option-map: it lives under packages/ too but is
+          # not in the tsc -b list, so build it explicitly. The CLI workspace
+          # turbo build emits dist for every apps/nex-cli package the SEA asset
+          # collectors scan (node-repl-host, ...); the CLI build produces the
+          # agent bundle.
+          pnpm typecheck
+          pnpm --filter @nex/model-option-map build
+          pnpm exec turbo --skip-infer --cwd apps/nex-cli run build --filter='!@nex/cli' --force
+          pnpm -r --filter "@nex/cli..." build
+          # Web static assets ship inside the install tarball so a bare-metal
+          # server serves a UI matching its own binary version.
+          pnpm --filter @nex/web build
+
+      # 版本发布用 tag 名（v1.2.2），main 的滚动构建用 short sha：两者的 Release 都由
+      # 本工作流创建，命名必须能区分版本与逐次构建，所以不是可选项。
+      - name: Resolve asset label
+        id: meta
+        run: |
+          shortsha="${GITHUB_SHA::7}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "label=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "label=${shortsha}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "shortsha=${shortsha}" >> "$GITHUB_OUTPUT"
+
+      # 阻塞项：packages/server/scripts/build-sea.mjs 尚未在 2.0 基线提供。
+      - name: Build SEA binary (${{ matrix.target }})
+        working-directory: packages/server
+        run: node scripts/build-sea.mjs --target ${{ matrix.target }}
+
+      - name: Package one-step install tarball
+        working-directory: packages/server/dist/sea
+        run: |
+          mkdir -p bundle/packaging bundle/web
+          cp nex-server-${{ matrix.target }} bundle/
+          cp -r ../../packaging/. bundle/packaging/
+          # Matching web build (index.html + hashed assets), served by the
+          # server process itself via NEX_WEB_STATIC_ROOT.
+          cp -r ../../../web/dist/. bundle/web/
+          tar -czf nex-server-${{ matrix.target }}-${{ steps.meta.outputs.label }}.tar.gz -C bundle .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nex-server-${{ matrix.target }}-${{ steps.meta.outputs.label }}
+          path: packages/server/dist/sea/nex-server-${{ matrix.target }}-${{ steps.meta.outputs.label }}.tar.gz
+          retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+
+      - name: Publish versioned release (v* tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/nex-server-*.tar.gz
+
+      - name: Resolve short sha
+        id: meta
+        run: echo "shortsha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      # main update -> a rolling alpha-<shortsha> release: each main build gets
+      # its own alpha release (tag pinned to that commit, history kept).
+      - name: Publish alpha release (main)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shortsha="${GITHUB_SHA::7}"
+          tag="alpha-${shortsha}"
+          notes="Alpha build of the server SEA binaries at commit ${GITHUB_SHA}. One-step install: extract the tarball for your platform and run \`sudo ./packaging/install.sh --binary ./nex-server-<target>\`."
+          gh release create "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Nex server (${tag})" \
+            --notes "$notes" \
+            dist/nex-server-*-${shortsha}.tar.gz

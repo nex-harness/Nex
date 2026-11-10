@@ -1,0 +1,114 @@
+# ghcr.io 镜像发布：构建 nex-server 单镜像（server 进程同时托管 Web UI）并推到 GitHub Container Registry。
+# 规格：docs/specs/docker-single-image.md。nex-web（nginx）镜像已废弃，旧 tag 留在 ghcr 但不再更新。
+#
+# 触发与 tag 规则：
+#   - main 分支更新 / 手动 dispatch → 预览 tag：edge、main-<shortsha>（不动 latest）
+#   - v* tag 推送 → 正式 tag：<version>（去 v 前缀）+ latest
+#
+# 产物（tag v1.0.2 为例）：
+#   ghcr.io/nex-harness/nex-server:1.0.2 / :latest
+# 镜像只有两层产物（SEA 二进制 + web/dist），没有可缓存的编译层，所以不再使用 GHA 层缓存。
+#
+# 首次发布后建议把 package 的可见性改为 public（GitHub → Packages →
+# Package settings → Danger Zone），部署机即可免登录拉取。
+#
+# !!! 2.0 基线前置条件未满足 !!!
+# 本工作流依赖 packages/server/scripts/build-sea.mjs（SEA 单二进制发行管线）和
+# packages/server/packaging/（install.sh、systemd unit、launchd plist）。两者随旧 fork 的
+# SEA 发行改造引入，尚未迁移到 2.0 基线，因此 "Build SEA binary" 与 "Stage Docker context"
+# 两步在当前分支必定失败。迁移 SEA 管线之前不要启用本工作流的自动触发。
+name: Docker images (ghcr)
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: nex-harness
+  # 必须与 third-party/runtime/sources.json 登记的 Node 版本一致（同 release-server.yaml）。
+  NODE_VERSION: "24.14.0"
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      # 与 release-server.yaml 相同的构建步骤：镜像只装配产物，不在镜像里重新构建。
+      - name: Build workspace packages, agent bundle and web
+        run: |
+          pnpm typecheck
+          pnpm --filter @nex/model-option-map build
+          pnpm exec turbo --skip-infer --cwd apps/nex-cli run build --filter='!@nex/cli' --force
+          pnpm -r --filter "@nex/cli..." build
+          pnpm --filter @nex/web build
+
+      # 阻塞项：packages/server/scripts/build-sea.mjs 尚未在 2.0 基线提供。
+      - name: Build SEA binary (linux-x64)
+        working-directory: packages/server
+        run: node scripts/build-sea.mjs --target linux-x64
+
+      - name: Stage Docker context
+        run: scripts/stage-docker-context.sh linux-x64
+
+      - name: Resolve image tags
+        id: meta
+        env:
+          IMAGE_SERVER: ${{ env.REGISTRY }}/${{ env.OWNER }}/nex-server
+        run: |
+          set -euo pipefail
+          write_tags() {
+            local output_name="$1" image="$2"
+            {
+              echo "${output_name}<<EOF"
+              if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+                echo "${image}:${GITHUB_REF_NAME#v}"
+                echo "${image}:latest"
+              else
+                echo "${image}:edge"
+                echo "${image}:main-$(git rev-parse --short HEAD)"
+              fi
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          }
+          write_tags server-tags "$IMAGE_SERVER"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.server-tags }}

@@ -1,0 +1,7 @@
+# 只作用于根目录的 Dockerfile（Docker 会优先使用 <Dockerfile 名>.dockerignore）。
+# 构建上下文只需要 dist-docker/（见 scripts/stage-docker-context.sh）。
+#
+# 不能改成根 .dockerignore：Dockerfile.desktop-e2e 用 `COPY . .` 构建整个仓库，
+# 那条链路仍需要根 .dockerignore 的完整排除规则。
+*
+!dist-docker

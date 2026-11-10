@@ -2,6 +2,8 @@ node_modules/
 dist/
 # nex-server-cli 发行包 staging 输出（spec §7.1），本地组装产物不入库。
 dist-release/
+# Docker 构建上下文（scripts/stage-docker-context.sh 生成），只装进镜像，不入库。
+dist-docker/
 # Bugfix: macOS CI 按架构隔离 electron-builder 输出目录，这些仍是构建产物。
 packages/desktop/dist-*/
 out/

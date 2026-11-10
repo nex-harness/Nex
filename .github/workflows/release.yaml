@@ -1,0 +1,176 @@
+# Release pipeline: push a tag (vX.Y.Z) or dispatch manually to build the macOS
+# desktop bundles, sign/notarize when credentials are configured, and publish
+# everything to a GitHub Release.
+#
+# electron-builder publishes with GH_TOKEN and uploads the installers together
+# with latest-mac.yml, which the desktop auto-updater consumes.
+#
+# 2.0 基线差异（相对旧 fork 的 main）：
+#   - publish provider 仍是 generic 占位（packages/desktop/electron-builder.config.js），
+#     不是旧 fork 的 github provider。`--publish always` 会尝试往配置里的 url 发布，
+#     在 provider 切到 github 之前本工作流的发布步骤不会产出可用的 Release 资产。
+#   - packages/desktop/scripts/bundle.mjs 在 2.0 基线还不支持 NEX_ELECTRON_BUILDER_ARGS，
+#     因此 `--publish always` 当前传不进去（见 "Package and publish" 步骤的说明）。
+#   - 桌面构建需要 `pnpm bootstrap`：它负责 apps/nex-cli 的 agent bundle、runtime assets
+#     与 build:bootstrap 的 workspace 编译。
+#
+# Required repo variables/secrets (optional; unsigned build when unset):
+#   vars.NEX_ENABLE_MAC_SIGN == "1"
+#   secrets.APPLE_CERT_P12 / APPLE_CERT_PASSWORD (Developer ID p12, base64)
+#   secrets.APPLE_SIGNING_IDENTITY / APPLE_ID / APPLE_TEAM_ID /
+#   APPLE_APP_SPECIFIC_PASSWORD
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  NEX_ENV: production
+  # Do not let electron-builder auto-pick a signing identity from the local
+  # keychain; signing is controlled by NEX_ENABLE_MAC_SIGN.
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  ELECTRON_MIRROR: "https://npmmirror.com/mirrors/electron/"
+  NODE_VERSION: "24.14.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm (pinned)
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          pnpm --version
+
+      - name: Cache pnpm store
+        id: pnpm-cache
+        run: echo "dir=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Cache Electron / electron-builder binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('packages/desktop/package.json', 'pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-electron-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bootstrap
+        run: pnpm bootstrap
+
+      - name: Build desktop bundles
+        run: pnpm --filter @nex/desktop build
+
+      # GitHub-hosted runner 是全新 VM，钥匙串里没有证书；自建临时 keychain 导入
+      # Developer ID p12（electron-builder 内置的 CSC_LINK 导入在此环境 unlock 失败）。
+      - name: Import signing certificate
+        if: vars.NEX_ENABLE_MAC_SIGN == '1'
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          KEYCHAIN=build.keychain-db
+          echo "$APPLE_CERT_P12" | base64 --decode -o /tmp/nex-signing.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import /tmp/nex-signing.p12 -k "$KEYCHAIN" -P "$APPLE_CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          rm -f /tmp/nex-signing.p12
+
+      # electron-builder 在 macOS 上产出 dmg + zip + latest-mac.yml；GH_TOKEN 由
+      # `--publish always` 消费（github provider）。2.0 基线的 bundle.mjs 还没有透传
+      # NEX_ELECTRON_BUILDER_ARGS，此变量当前会被忽略，产物只落在 packages/desktop/dist。
+      - name: Package and publish (electron-builder)
+        run: pnpm bundle:desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEX_ELECTRON_BUILDER_ARGS: "--publish always"
+          NEX_ENABLE_MAC_SIGN: ${{ vars.NEX_ENABLE_MAC_SIGN }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+
+      # Two-step flow: electron-builder only signs (notarize: false in config);
+      # notarize and staple the artifacts here.
+      - name: Notarize and staple
+        if: vars.NEX_ENABLE_MAC_SIGN == '1'
+        working-directory: packages/desktop
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for artifact in dist/*.dmg dist/*.zip; do
+            echo "[notarize] submit $artifact"
+            xcrun notarytool submit "$artifact" \
+              --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" --wait
+          done
+          # staple supports dmg/pkg/app; zip archives are verified online by Gatekeeper.
+          for dmg in dist/*.dmg; do
+            xcrun stapler staple "$dmg"
+            xcrun stapler validate "$dmg"
+          done
+          spctl -a -vv -t exec dist/mac-arm64/*.app
+
+      # The notarized/stapled artifacts must replace the copies uploaded by
+      # electron-builder before it finished notarization.
+      # 该步骤要求 tag 对应的 Release 已经存在。旧 fork 依赖 electron-builder 的 github
+      # provider 在 "Package and publish" 阶段创建 Release；2.0 基线的 provider 仍是
+      # generic 占位，所以启用签名前必须先决定发布通道（改 provider 或先手动建 Release）。
+      - name: Refresh release assets after notarization
+        if: vars.NEX_ENABLE_MAC_SIGN == '1'
+        working-directory: packages/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          for f in dist/*.dmg dist/*.zip dist/*.blockmap dist/latest-mac.yml; do
+            echo "[release] re-upload $(basename "$f")"
+            gh release upload "$tag" "$f" --clobber
+          done
+
+      - name: Smoke check artifacts
+        run: ls -lh packages/desktop/dist/*.dmg packages/desktop/dist/*.zip packages/desktop/dist/latest-mac.yml
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nex-macos-${{ github.ref_name }}
+          path: |
+            packages/desktop/dist/*.dmg
+            packages/desktop/dist/*.zip
+            packages/desktop/dist/*.blockmap
+            packages/desktop/dist/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 30
