@@ -19,7 +19,6 @@ export const REMOTE_WORKSPACE_RPC_CHANNELS = [
   "conversationShareService",
   "botsService",
   "fileWatcherService",
-  "oauthService",
   "providerSettingsService",
   "modelSelectionService",
   "mediaPreviewService",

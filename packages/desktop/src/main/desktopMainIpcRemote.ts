@@ -27,8 +27,6 @@ import { dispatchTaskNotification } from "./desktopNotifications.js";
 import {
   clearOAuthRoutesForWindow,
   deliverPendingDeepLink,
-  parseOAuthStateRegistration,
-  registerOAuthState,
 } from "./desktopOAuthDeepLink.js";
 import {
   dispatchFinalArmsCustomEvent,
@@ -334,16 +332,6 @@ export function registerRemoteIpcHandlers(options: {
     webRemoteControlManager: options.webRemoteControlManager,
   });
 
-  ipcMain.on(PlatformChannels.OAuthRegisterState, (event, payload: unknown) => {
-    const registration = parseOAuthStateRegistration(payload);
-    if (!registration) {
-      options.logger.warn("[oauth-register-state] invalid payload", payload);
-      return;
-    }
-
-    registerOAuthState(event.sender.id, registration);
-  });
-
   ipcMain.on(PlatformChannels.OpenExternal, (event, payload: unknown) => {
     const request = parseOpenExternalRequest(payload);
     if (!request) {
@@ -449,13 +437,6 @@ export function registerRemoteIpcHandlers(options: {
         normalizeUnknownError(error).message,
       );
     }
-  });
-
-  ipcMain.on(PlatformChannels.OAuthCallbackHandled, (event) => {
-    options.appTelemetryRuntime.onOAuthCallbackHandled({
-      rendererId: event.sender.id,
-    });
-    options.onOAuthCallbackHandledSideEffect?.();
   });
 
   ipcMain.on(PlatformChannels.ShowTaskNotification, (event, payload: unknown) => {

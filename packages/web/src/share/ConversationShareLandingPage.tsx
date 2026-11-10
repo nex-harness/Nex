@@ -12,10 +12,9 @@ import { ArrowUpRightIcon, MoonIcon, SunIcon } from "lucide-react";
 import { BIGMODEL_PROVIDER_ID, ZAI_PROVIDER_ID } from "@nex/shared";
 import type { ConversationSharePreview } from "@nex/shared";
 import { ConversationShareReadonlyTimeline } from "@nex/ui/conversation-share-readonly";
-import { renderOAuthProviderIcon } from "@nex/ui/oauth-provider-icon";
 import { applyTheme, resolveTheme, type Theme } from "@nex/ui/useTheme";
 import "./conversationShareLandingPage.css";
-import type { WebOAuthProviderId } from "../auth/browserOAuthCredentialRepo.js";
+import type { WebOAuthProviderId } from "../web-remote-control/webAuthPort.js";
 import {
   buildShareImportDeepLink,
   type ConversationSharePreviewClientError,
@@ -701,30 +700,6 @@ export function ConversationShareLandingStatus({
           <p className="mt-4 text-ui-base leading-6 text-foreground-subtle">
             {copy.notFoundAccountHint}
           </p>
-        ) : null}
-        {/*
-          两个 provider 竖排全宽，对齐桌面端登录卡片（图标 + 文案 + 区域徽标）。
-          必须两个都给：private 分享的 owner 身份是 provider 特定的，页面无法预先知道
-          这份分享属于哪一边——猜错就等于把用户挡在自己的分享外面。
-        */}
-        {showLogin && onLogin ? (
-          <div className="mt-5 space-y-2">
-            {SHARE_LOGIN_PROVIDERS.map((provider) => (
-              <button
-                key={provider}
-                type="button"
-                data-share-login-provider={provider}
-                className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-ui-base text-primary-foreground"
-                onClick={() => onLogin(provider)}
-              >
-                {renderOAuthProviderIcon(provider, "size-4")}
-                <span className="min-w-0 truncate">{copy.loginWith[provider]}</span>
-                <span className="ml-1 inline-flex h-5 shrink-0 items-center rounded-full border border-primary-foreground/30 px-2 text-ui-xs font-medium leading-none text-primary-foreground/60">
-                  {copy.loginRegion[provider]}
-                </span>
-              </button>
-            ))}
-          </div>
         ) : null}
         {canRetry || isNotFound ? (
           <div className="mt-5 flex flex-wrap gap-2">

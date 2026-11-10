@@ -21,7 +21,6 @@ import {
   IConversationShareService,
   IBotsService,
   IFileWatcherService,
-  IOAuthService,
   IModelSelectionService,
   IProviderSettingsService,
   IProviderProvisioningTargetService,
@@ -35,7 +34,6 @@ import {
   IClientScenesService,
   ICloudContentService,
   IMarketingTouchService,
-  IOffPeakTaskService,
   IHighspeedCardService,
   ISkillsService,
   ISkillSyncService,
@@ -93,7 +91,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly conversationShareService: IConversationShareService;
   readonly botsService: IBotsService;
   readonly fileWatcherService: IFileWatcherService;
-  readonly oauthService: IOAuthService;
   readonly providerSettingsService: IProviderSettingsService;
   readonly modelSelectionService: IModelSelectionService;
   /** Host-only target proxy；不属于 IServiceAccessor，避免向 Renderer 暴露 Secret 写入接口。 */
@@ -110,7 +107,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly clientScenesService: IClientScenesService;
   readonly cloudContentService: ICloudContentService;
   readonly marketingTouchService: IMarketingTouchService;
-  readonly offPeakTaskService: IOffPeakTaskService;
   readonly highspeedCardService: IHighspeedCardService;
   readonly skillsService: ISkillsService;
   readonly skillSyncService: ISkillSyncService;
@@ -219,9 +215,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
     this.fileWatcherService = ProxyChannel.toService<IFileWatcherService>(
       channelClient.getChannel(IFileWatcherService.channelName),
     );
-    this.oauthService = ProxyChannel.toService<IOAuthService>(
-      channelClient.getChannel(IOAuthService.channelName),
-    );
     this.providerSettingsService = ProxyChannel.toService<IProviderSettingsService>(
       channelClient.getChannel(IProviderSettingsService.channelName),
     );
@@ -272,9 +265,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
     );
     this.marketingTouchService = ProxyChannel.toService<IMarketingTouchService>(
       channelClient.getChannel(IMarketingTouchService.channelName),
-    );
-    this.offPeakTaskService = ProxyChannel.toService<IOffPeakTaskService>(
-      channelClient.getChannel(IOffPeakTaskService.channelName),
     );
     this.highspeedCardService = ProxyChannel.toService<IHighspeedCardService>(
       channelClient.getChannel(IHighspeedCardService.channelName),

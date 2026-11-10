@@ -5,14 +5,11 @@ import { app, BrowserWindow, dialog } from "electron";
 import type { WebContents } from "electron";
 import {
   type Locale,
-  type OAuthProviderId,
-  type OAuthStateRegistration,
   PlatformChannels,
 } from "@nex/shared";
 import {
   extractWorkspaceOpenPath,
   extractShareImportCode,
-  isOAuthCallbackUrl,
   isPaymentCallbackUrl,
   isWorkspaceOpenUrl,
   isShareImportUrl,
@@ -34,14 +31,7 @@ export interface ExternalWorkspaceOpenDialogCopy {
   detail: (path: string) => string;
 }
 
-interface OAuthRouteTarget {
-  windowId: number;
-  provider?: OAuthProviderId;
-}
-
-const oauthStateToWindow = new Map<string, OAuthRouteTarget>();
 const rendererReadyWebContentsIds = new Set<number>();
-let pendingDeepLinkUrl: string | null = null;
 let pendingPaymentDeepLinkUrl: string | null = null;
 let pendingOpenWorkspaceRequest: {
   path: string;
@@ -70,30 +60,6 @@ function enqueuePendingShareImport(
   }
 }
 
-export function parseOAuthStateRegistration(payload: unknown): OAuthStateRegistration | null {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-
-  const candidate = payload as {
-    state?: unknown;
-    provider?: unknown;
-  };
-
-  if (typeof candidate.state !== "string" || candidate.state.trim() === "") {
-    return null;
-  }
-
-  if (candidate.provider != null && typeof candidate.provider !== "string") {
-    return null;
-  }
-
-  return {
-    state: candidate.state.trim(),
-    ...(typeof candidate.provider === "string" ? { provider: candidate.provider } : {}),
-  };
-}
-
 function focusDeepLinkTargetWindow(targetWindow: BrowserWindow): void {
   // macOS 的 open-url 回调只会把 URL 投递给当前实例，不会自动把窗口带回前台。
   // 之前这里只做了 IPC 转发，用户完成 OAuth 或从系统服务打开目录后仍停留在外部应用。
@@ -111,10 +77,6 @@ function focusDeepLinkTargetWindow(targetWindow: BrowserWindow): void {
   }
 
   targetWindow.focus();
-}
-
-function hasOAuthAuthorizationCode(parsedUrl: URL): boolean {
-  return parsedUrl.searchParams.has("code") || parsedUrl.searchParams.has("authCode");
 }
 
 export function isValidLocalWorkspaceDirectory(path: string): boolean {
@@ -352,46 +314,7 @@ export function handleDeepLink(
     return false;
   }
 
-  if (!isOAuthCallbackUrl(parsedUrl)) {
-    return false;
-  }
-
-  const state = parsedUrl.searchParams.get("state");
-  if (!state) {
-    logger.warn("[deep-link] OAuth 回调缺少 state，忽略此次回调", {
-      protocol: parsedUrl.protocol,
-      host: parsedUrl.hostname,
-      path: parsedUrl.pathname,
-    });
-    return false;
-  }
-
-  const routeTarget = oauthStateToWindow.get(state);
-  const targetWindow = routeTarget
-    ? BrowserWindow.getAllWindows().find((window) => window.webContents.id === routeTarget.windowId)
-    : null;
-  const shouldCompleteOAuthRoute = hasOAuthAuthorizationCode(parsedUrl);
-
-  if (targetWindow) {
-    targetWindow.webContents.send(PlatformChannels.OAuthCallback, url);
-    if (shouldCompleteOAuthRoute) {
-      oauthStateToWindow.delete(state);
-    }
-    focusDeepLinkTargetWindow(targetWindow);
-    logger.info("[deep-link] OAuth 回调路由成功", {
-      state,
-      windowId: targetWindow.webContents.id,
-      provider: routeTarget?.provider,
-      completed: shouldCompleteOAuthRoute,
-    });
-    return true;
-  }
-
-  pendingDeepLinkUrl = url;
-  logger.warn("[deep-link] OAuth 回调未命中目标窗口，先缓存等待 renderer ready", {
-    state,
-    hasRouteTarget: Boolean(routeTarget),
-  });
+  // Nex 无账号体系：不再处理 OAuth 回调 deep link。
   return false;
 }
 
@@ -449,19 +372,10 @@ export function registerDeepLinkProtocol(
   }
 }
 
-export function registerOAuthState(windowId: number, registration: OAuthStateRegistration): void {
-  oauthStateToWindow.set(registration.state, {
-    windowId,
-    provider: registration.provider,
-  });
-
-  setTimeout(() => oauthStateToWindow.delete(registration.state), 5 * 60 * 1000);
-}
-
 export function deliverPendingDeepLink(webContents: WebContents): boolean {
   rendererReadyWebContentsIds.add(webContents.id);
 
-  const hasPendingOAuthCallback = pendingDeepLinkUrl != null;
+  const hasPendingOAuthCallback = false;
   // pending share import 绑定目标窗口后，只投递给目标窗口（或冷启动时未绑定目标的
   // 条目）；非目标窗口 ready 时保留条目，否则导入会写进错误窗口的 workspace。
   const undeliveredShareImports: typeof pendingShareImports = [];
@@ -473,10 +387,6 @@ export function deliverPendingDeepLink(webContents: WebContents): boolean {
     }
   }
   pendingShareImports.push(...undeliveredShareImports);
-  if (hasPendingOAuthCallback) {
-    webContents.send(PlatformChannels.OAuthCallback, pendingDeepLinkUrl);
-    pendingDeepLinkUrl = null;
-  }
   if (pendingPaymentDeepLinkUrl) {
     webContents.send(PlatformChannels.PaymentCallback, pendingPaymentDeepLinkUrl);
     pendingPaymentDeepLinkUrl = null;
@@ -502,12 +412,6 @@ export function clearOAuthRoutesForWindow(windowId: number): void {
   for (let index = pendingShareImports.length - 1; index >= 0; index -= 1) {
     if (pendingShareImports[index]!.targetWebContentsId === windowId) {
       pendingShareImports.splice(index, 1);
-    }
-  }
-
-  for (const [state, routeTarget] of oauthStateToWindow) {
-    if (routeTarget.windowId === windowId) {
-      oauthStateToWindow.delete(state);
     }
   }
 }

@@ -7,7 +7,7 @@ import type {
 import type { WebRemoteControlRelayV2Device } from "@nex/shared/web-remote-relay";
 import { parseWebRemoteControlExternalQrParams, type WebRemoteControlFailure } from "@nex/shared";
 import { WebRemoteControlV2ConnectionError } from "@nex/shared/web-remote-relay";
-import type { WebOAuthProviderId } from "#src/auth/browserOAuthCredentialRepo.js";
+import type { WebOAuthProviderId } from "../webAuthPort.js";
 import { groupWebRemoteControlDevices } from "#src/web-remote-control/domain/webRemoteControlDeviceGroups.js";
 import {
   readKnownDevices,

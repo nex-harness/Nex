@@ -81,11 +81,6 @@ export async function readHighspeedRegularTpsFromHealth(params: {
   accountAccess: CodingPlanRegularTpsRequest["accountAccess"];
   timeZone?: string;
 }): Promise<number | undefined> {
-  const getRegularTps = params.usageStatsService.getCodingPlanRegularTps;
-  if (!getRegularTps) return undefined;
-  return getRegularTps.call(params.usageStatsService, {
-    preferredProviderId: params.preferredProviderId,
-    accountAccess: params.accountAccess,
-    ...(params.timeZone ? { timeZone: params.timeZone } : {}),
-  });
+  // Nex 无账号体系：Coding Plan 常规 TPS 查询已移除，不再展示节省时间。
+  return undefined;
 }

@@ -1,4 +1,3 @@
-import type { IOAuthService } from "@nex/services";
 import type { IPlatformService } from "@nex/shared";
 import type { WebRemoteControlWorkspaceSwitcherApi } from "@/root/types.js";
 
@@ -9,7 +8,6 @@ export type WebRemoteControlAuthPlatform = Pick<
   IPlatformService,
   "notifyWebRemoteControlAuthStateChanged"
 >;
-export type WebRemoteControlAuthEvents = Pick<IOAuthService, "onDidChangeSession">;
 export type { WebRemoteControlMobileTaskView } from "@nex/shared";
 export type WebRemoteControlTaskViewSwitcher = Pick<
   WebRemoteControlWorkspaceSwitcherApi,

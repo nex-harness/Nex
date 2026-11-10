@@ -1,7 +1,7 @@
 import type { WebRemoteControlFailure, WebRemoteControlV2QrParams } from "@nex/shared";
 import type { WebRemoteControlRelayV2Device } from "@nex/shared/web-remote-relay";
-import type { WebOAuthProviderId } from "#src/auth/browserOAuthCredentialRepo.js";
-import type { WebAuthService } from "#src/auth/webAuthService.js";
+import type { WebOAuthProviderId } from "./webAuthPort.js";
+import type { WebAuthPort } from "./webAuthPort.js";
 
 export interface WebRemoteControlDeviceGroup {
   deviceMid: string;
@@ -47,14 +47,14 @@ export interface WebRemoteControlEntryConnection {
 
 export interface WebRemoteControlEntryOptions {
   // 浏览器 location/history/storage 经现有边界注入，不另存一份登录事实。
-  auth: Pick<WebAuthService, "getNexJwtToken" | "getActiveAccount" | "startLogin" | "logout">;
+  auth: WebAuthPort;
   getHref(): string;
   replaceHref(href: string): void;
   storage: Pick<Storage, "getItem" | "setItem">;
   locale: "zh-CN" | "en-US";
   devices(jwt: string, signal: AbortSignal): Promise<WebRemoteControlRelayV2Device[]>;
   subscribeVisible(listener: () => void): () => void;
-  loginOptions?: Parameters<WebAuthService["startLogin"]>[0];
+  loginOptions?: Parameters<WebAuthPort["startLogin"]>[0];
   token(jwt: string, signal: AbortSignal): Promise<string>;
   connect(connection: WebRemoteControlEntryConnection): void;
   onView(view: WebRemoteControlEntryView): void;

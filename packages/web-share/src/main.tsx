@@ -14,16 +14,8 @@ import {
   resolveConversationShareCodeFromPath,
 } from "../../web/src/share/conversationShareRoute.js";
 import { resolveWebRemoteControlInitialTheme } from "../../web/src/web-remote-control/adapters/webRemoteControlThemeSeed.js";
-import { createWebAuthService } from "../../web/src/auth/webAuthService.js";
-import {
-  WEB_ZAI_OAUTH_CONFIG,
-  resolveWebAuthDevReturnTo,
-} from "../../web/src/auth/webZaiOAuthConfig.js";
-import { parseOAuthState, resolveSafeAppReturnTo } from "../../web/src/auth/oauthStateCodec.js";
-import { ShareCallbackPage } from "./ShareAuthPages.js";
 
 const root = createRoot(document.getElementById("root")!);
-const webAuthService = createWebAuthService();
 
 function resolveThemePreference(): Theme {
   const saved = localStorage.getItem("nex-theme");
@@ -36,24 +28,7 @@ function resolveThemePreference(): Theme {
 const INITIAL_THEME = resolveThemePreference();
 applyTheme(INITIAL_THEME);
 
-function isOAuthCallback(): boolean {
-  return (
-    window.location.pathname === "/cn/share/callback" ||
-    window.location.pathname === "/share/callback"
-  );
-}
-
-function renderCallback(): void {
-  const state = parseOAuthState(new URLSearchParams(window.location.search).get("state") ?? "");
-  const retryTarget = resolveSafeAppReturnTo(state?.app_return_to) ?? "/share";
-  root.render(
-    <ShareCallbackPage
-      authService={webAuthService}
-      onSuccess={({ appReturnTo }) => window.location.replace(appReturnTo ?? "/share")}
-      onRetry={() => window.location.replace(retryTarget)}
-    />,
-  );
-}
+// Nex 无账号体系：分享页不再有 OAuth 回调/登录流程，只匿名预览公开分享。
 
 async function renderShare(): Promise<void> {
   const locale = resolveConversationShareRouteLocale(window.location.pathname);
@@ -89,23 +64,15 @@ async function renderShare(): Promise<void> {
     <ConversationShareLandingLoader
       shareCode={shareCode}
       client={client}
-      getAccessToken={() => getMockToken() ?? webAuthService.getNexJwtToken()}
-      onLogin={(provider) => {
-        if (mockMode) {
-          window.sessionStorage.setItem("nex:share:mock-auth", "owner");
-          window.location.reload();
-          return;
-        }
-        webAuthService.startLogin({
-          provider,
-          appReturnTo: window.location.href,
-          redirectUri: WEB_ZAI_OAUTH_CONFIG.shareRedirectUri,
-          devReturnTo: resolveWebAuthDevReturnTo(WEB_ZAI_OAUTH_CONFIG, "share"),
-        });
+      getAccessToken={() => getMockToken()}
+      onLogin={() => {
+        if (!mockMode) return;
+        window.sessionStorage.setItem("nex:share:mock-auth", "owner");
+        window.location.reload();
       }}
       onLogout={() => {
-        if (mockMode) window.sessionStorage.removeItem("nex:share:mock-auth");
-        void webAuthService.logout();
+        if (!mockMode) return;
+        window.sessionStorage.removeItem("nex:share:mock-auth");
         window.location.reload();
       }}
       locale={locale}
@@ -115,10 +82,6 @@ async function renderShare(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  if (isOAuthCallback()) {
-    renderCallback();
-    return;
-  }
   if (isConversationSharePath(window.location.pathname)) {
     await renderShare();
     return;

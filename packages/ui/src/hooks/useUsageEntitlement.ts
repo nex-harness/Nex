@@ -76,14 +76,15 @@ function getSharedEntitlementSnapshot(params: {
   // 侧栏、工具栏、设置页和 Usage 页会在启动/打开设置时同时读取同一份
   // Coding Plan entitlement。生产日志里同一分钟出现 12 个相同 quota RPC，直接拖慢 renderer。
   // 这里按服务实例 + 请求参数合并 in-flight 请求，保留各组件自己的状态更新语义。
-  const upstreamRequest = params.usageStatsService.getEntitlementSnapshot({
-    ...(params.options.invalidateBalanceCache ? { invalidateBalanceCache: true } : {}),
-    includeSubscription: params.options.includeSubscription,
-    preferredProviderId: params.options.preferredProviderId,
-    accountAccess: params.options.accountAccess,
-    allowDisabledPreferredProvider: params.options.allowDisabledPreferredProvider,
-    requirePreferredProvider: params.options.requirePreferredProvider,
-    allowEnvApiKey: params.options.allowEnvApiKey,
+  // Nex 无账号体系：额度/权益查询已从 UsageStats 移除，这里恒返回空快照。
+  const upstreamRequest = Promise.resolve<UsageEntitlementSnapshot>({
+    generatedAt: Date.now(),
+    authenticated: false,
+    unavailableReason: "not_authenticated",
+    provider: null,
+    remaining: null,
+    subscription: null,
+    quota: null,
   });
   const request = withUsageEntitlementTimeout(upstreamRequest).finally(() => {
     if (serviceRequests.get(requestKey) !== request) {
