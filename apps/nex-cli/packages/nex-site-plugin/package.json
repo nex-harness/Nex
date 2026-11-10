@@ -21,7 +21,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@nex/shared": "workspace:*",
+    "@nex/shared": "link:../../../../packages/shared",
     "esbuild": "^0.25.0",
     "lucide-react": "^1.17.0",
     "react": "^19.2.0",

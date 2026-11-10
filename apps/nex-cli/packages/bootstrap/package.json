@@ -32,16 +32,16 @@
     "@nex/dynamic-workflow": "workspace:*",
     "@nex/dynamic-workflow-runtime": "workspace:*",
     "@nex/i18n": "workspace:*",
-    "@nex/provider": "workspace:*",
-    "@nex/provider-node": "workspace:*",
-    "@nex/shared": "workspace:*",
+    "@nex/provider": "link:../../../../packages/provider",
+    "@nex/provider-node": "link:../../../../packages/provider-node",
+    "@nex/shared": "link:../../../../packages/shared",
     "diff": "^9.0.0",
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/yazl": "^3.3.1",
-    "@nex/formal-proof": "workspace:*",
+    "@nex/formal-proof": "link:../../../../packages/formal-proof",
     "yazl": "^3.3.1"
   }
 }

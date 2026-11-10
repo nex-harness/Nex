@@ -21,9 +21,9 @@
     "@nex/bootstrap": "workspace:*",
     "@nex/contracts": "workspace:*",
     "@nex/core": "workspace:*",
-    "@nex/model-option-map": "workspace:*",
-    "@nex/provider": "workspace:*",
-    "@nex/provider-node": "workspace:*",
+    "@nex/model-option-map": "link:../../../../packages/model-option-map",
+    "@nex/provider": "link:../../../../packages/provider",
+    "@nex/provider-node": "link:../../../../packages/provider-node",
     "zod": "4.6.5"
   },
   "devDependencies": {

@@ -23,8 +23,8 @@
     "@modelcontextprotocol/server": "2.0.0",
     "@nex/contracts": "workspace:*",
     "@nex/core": "workspace:*",
-    "@nex/shared": "workspace:*",
-    "@nex/nex-cua": "workspace:*",
+    "@nex/shared": "link:../../../../packages/shared",
+    "@nex/nex-cua": "link:../../../../packages/nex-cua",
     "zod": "^4.4.3"
   },
   "devDependencies": {

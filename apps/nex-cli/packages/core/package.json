@@ -35,9 +35,9 @@
   "dependencies": {
     "@nex/contracts": "workspace:*",
     "@nex/dynamic-workflow": "workspace:*",
-    "@nex/shared": "workspace:*",
+    "@nex/shared": "link:../../../../packages/shared",
     "@nex/shared-types": "workspace:*",
-    "@nex/nex-cua": "workspace:*",
+    "@nex/nex-cua": "link:../../../../packages/nex-cua",
     "cheerio": "^1.0.0",
     "diff": "^9.0.0",
     "ipaddr.js": "1.9.1",

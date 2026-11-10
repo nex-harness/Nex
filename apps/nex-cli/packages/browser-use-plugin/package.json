@@ -19,7 +19,7 @@
     "@nex/contracts": "workspace:*",
     "@nex/core": "workspace:*",
     "@nex/node-repl-host": "workspace:*",
-    "@nex/shared": "workspace:*",
+    "@nex/shared": "link:../../../../packages/shared",
     "zod": "4.6.5"
   },
   "devDependencies": {

@@ -25,7 +25,7 @@
     "@mbears/opentui-react": "0.2.15",
     "@nex/contracts": "workspace:*",
     "@nex/i18n": "workspace:*",
-    "@nex/shared": "workspace:*",
+    "@nex/shared": "link:../../../../packages/shared",
     "react": "19.2.5",
     "react-devtools-core": "7.0.1",
     "shiki": "^4.1.0",

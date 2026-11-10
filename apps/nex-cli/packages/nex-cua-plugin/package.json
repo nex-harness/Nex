@@ -15,7 +15,7 @@
     "typecheck": "node scripts/check-sdk.mjs"
   },
   "dependencies": {
-    "@nex/nex-cua": "workspace:*"
+    "@nex/nex-cua": "link:../../../../packages/nex-cua"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
