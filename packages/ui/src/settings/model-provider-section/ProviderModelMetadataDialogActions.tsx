@@ -1,9 +1,7 @@
 import { Loader2Icon, CircleAlertIcon, CheckCircle2Icon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button.js";
-import { Switch } from "@/components/ui/switch.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
-import { ModelConfigHelp } from "@/settings/model-provider-section/ModelConfigHelp.js";
 
 export function ModelConfigRestoreButton({
   disabled,
@@ -23,6 +21,32 @@ export function ModelConfigRestoreButton({
       onClick={onRestore}
     >
       {intl.formatMessage({ id: "settings.modelProvider.resetForm" })}
+    </Button>
+  );
+}
+
+/** "获取模型信息"：按当前模型 ID 查询 models.dev 并填入表单。 */
+export function ModelInfoLookupButton({
+  loading,
+  disabled,
+  onLookup,
+}: {
+  loading: boolean;
+  disabled: boolean;
+  onLookup: () => void;
+}) {
+  const { intl } = useNexIntl();
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="shrink-0 px-0 text-ui-sm text-foreground-subtle underline underline-offset-4 hover:bg-transparent"
+      disabled={disabled || loading}
+      onClick={onLookup}
+    >
+      {loading ? <Loader2Icon className="size-3.5 animate-spin" aria-hidden="true" /> : null}
+      {intl.formatMessage({ id: "settings.modelProvider.fetchModelInfo" })}
     </Button>
   );
 }
@@ -50,31 +74,6 @@ export function ModelConfigDraftFeedback({
       <span className="text-ui-sm font-medium">
         {error ?? intl.formatMessage({ id: "settings.modelProvider.modelDefaultsLoaded" })}
       </span>
-    </div>
-  );
-}
-
-export function ModelSmartConfigSwitch({
-  checked,
-  disabled,
-  onChange,
-}: {
-  checked: boolean;
-  disabled: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  const { intl } = useNexIntl();
-  const label = intl.formatMessage({ id: "settings.modelProvider.followRecommendedConfig" });
-  return (
-    <div
-      data-model-recommended-config="true"
-      className="flex shrink-0 items-center justify-start gap-2 pt-2 text-ui-base text-foreground"
-    >
-      <span className="inline-flex items-center whitespace-nowrap">
-        {label}
-        <ModelConfigHelp field="followRecommendedConfig" />
-      </span>
-      <Switch disabled={disabled} aria-label={label} checked={checked} onCheckedChange={onChange} />
     </div>
   );
 }

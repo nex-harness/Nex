@@ -41,6 +41,11 @@ export type ProviderModelDraftCommitResult =
         | "reasoningLevelMap";
     };
 
+export type ProviderModelDraftInvalidField = Extract<
+  ProviderModelDraftCommitResult,
+  { status: "invalid" }
+>["field"];
+
 export function createProviderModelDraftValues(
   model: ProviderSettingsFormModel,
 ): ProviderModelDraftValues {

@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- 模型供应商卡片仍在迁移期集中维护多个紧耦合区块，后续拆分时再移除。 */
 import {
   useCallback,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -21,7 +22,15 @@ import {
   TID_MODEL_PROVIDER_NAME_INPUT,
   testId,
 } from "@nex/shared/test-ids";
-import { InfoIcon, LockKeyholeIcon, Plus, Pencil, Trash2, MoreHorizontal } from "lucide-react";
+import {
+  GlobeIcon,
+  InfoIcon,
+  LockKeyholeIcon,
+  Plus,
+  Pencil,
+  Trash2,
+  MoreHorizontal,
+} from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import {
@@ -38,12 +47,14 @@ import { ApiKeyInput } from "./ApiKeyInput.js";
 import { ModelRowInput } from "./ProviderFormControls.js";
 import { PresetProviderApiKeyBanner } from "./PresetProviderApiKeyBanner.js";
 import { type ProviderModelDraftValues } from "@/settings/model-provider-section/ProviderModelMetadata.js";
+import type { ProviderModelDraftInvalidField } from "@/settings/model-provider-section/ProviderModelMetadata.js";
 import { ProviderModelMetadataDialog } from "@/settings/model-provider-section/ProviderModelMetadataDialog.js";
 import {
   PROVIDER_CONNECTION_API_FORMATS,
   ProviderApiFormatSelect,
   resolveProviderConnectionApiFormatDisplayLabel,
 } from "@/settings/model-provider-section/ProviderApiFormatSelect.js";
+import { ProviderRemoteModelPickerDialog } from "@/settings/model-provider-section/ProviderRemoteModelPickerDialog.js";
 import { SortableProviderModelList } from "@/settings/model-provider-section/SortableProviderModelList.js";
 import { useProviderModelDraft } from "@/settings/model-provider-section/useProviderModelDraft.js";
 import { ProviderLogo } from "@/settings/model-provider-section/ProviderLogo.js";
@@ -374,29 +385,81 @@ export function ProviderModelsSection({
   ) => void | Promise<void>;
   onDeleteModel: (modelId: string) => void;
   onModelEnabledChange?: (modelId: string, enabled: boolean) => void | Promise<void>;
-  onAddModel: (model: ProviderSettingsFormModel) => void | Promise<void>;
+  onAddModel: (
+    model: ProviderSettingsFormModel,
+    notification?: {
+      feedbackKey?: string;
+      aggregate?: { readonly count: number };
+    },
+  ) => void | Promise<void>;
   onReorderModelIds?: (modelIds: string[]) => void;
   settingsRevision?: number;
 }) {
   const { intl } = useNexIntl();
   const { providerSettingsService } = useServices();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [remotePickerOpen, setRemotePickerOpen] = useState(false);
   const [addSaving, setAddSaving] = useState(false);
   const addSavingRef = useRef(false);
   const [addCommitError, setAddCommitError] = useState<string | null>(null);
   const [addModel] = useState(createEmptyModel);
-  const [addDraftErrorField, setAddDraftErrorField] = useState<
-    | "id"
-    | "contextWindow"
-    | "maxOutputTokens"
-    | "inputFormat"
-    | "reasoningLevelValues"
-    | "reasoningLevelMap"
-    | null
-  >(null);
+  const [addDraftErrorField, setAddDraftErrorField] =
+    useState<ProviderModelDraftInvalidField | null>(null);
   const resolveAddModelConfig = useCallback(
     (modelId: string) => providerSettingsService.resolveModelConfig({ providerId, modelId }),
     [providerId, providerSettingsService],
+  );
+  const fetchRemoteModels = useCallback(
+    () => providerSettingsService.listRemoteModels(providerId),
+    [providerId, providerSettingsService],
+  );
+  const lookupModelInfo = useCallback(
+    (modelId: string) => providerSettingsService.lookupModelInfo(modelId),
+    [providerSettingsService],
+  );
+  const existingModelIds = useMemo(() => models.map((model) => model.modelId), [models]);
+  const handleConfirmPickedModels = useCallback(
+    async (modelIds: readonly string[]) => {
+      // models.dev 查询互不依赖可并发；查询失败不阻断添加，落盘为空配置走内建基线。
+      const lookups = await Promise.allSettled(modelIds.map(lookupModelInfo));
+      const failures: string[] = [];
+      // 批量添加共用一个通知 key 与计数：逐个保存仍写入各自的模型，但提示只有一条。
+      const batchNotification = {
+        feedbackKey: `models-add:${providerId}`,
+        aggregate: { count: modelIds.length },
+      };
+      // 添加会逐个写入供应商配置，保持串行以免并发写覆盖。
+      for (const [index, modelId] of modelIds.entries()) {
+        const lookup = lookups[index];
+        const config =
+          lookup?.status === "fulfilled" && lookup.value.found ? lookup.value.config : {};
+        try {
+          await onAddModel(
+            {
+              ...createEmptyModel(),
+              modelId,
+              personalConfig: structuredClone(
+                config,
+              ) as ProviderSettingsFormModel["personalConfig"],
+              hasPersonalConfig: true,
+              useRecommendedConfig: true,
+            },
+            batchNotification,
+          );
+        } catch {
+          failures.push(modelId);
+        }
+      }
+      if (failures.length > 0) {
+        throw new Error(
+          intl.formatMessage(
+            { id: "settings.modelProvider.remotePicker.addFailed" },
+            { models: failures.join(", ") },
+          ),
+        );
+      }
+    },
+    [intl, lookupModelInfo, onAddModel, providerId],
   );
   const editor = useProviderModelDraft({
     model: addModel,
@@ -474,17 +537,29 @@ export function ProviderModelsSection({
         <span className="text-ui-base text-foreground-subtle">
           {intl.formatMessage({ id: "settings.modelProvider.models" })}
         </span>
-        <Button
-          type="button"
-          variant="secondary"
-          size="default"
-          className="rounded-lg"
-          data-testid={TID_MODEL_PROVIDER_ADD_MODEL_BUTTON}
-          onClick={openAddDialog}
-        >
-          <Plus data-icon="inline-start" aria-hidden="true" />
-          {intl.formatMessage({ id: "settings.modelProvider.addModel" })}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="default"
+            className="rounded-lg"
+            onClick={() => setRemotePickerOpen(true)}
+          >
+            <GlobeIcon data-icon="inline-start" aria-hidden="true" />
+            {intl.formatMessage({ id: "settings.modelProvider.fetchFromModelsApi" })}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="default"
+            className="rounded-lg"
+            data-testid={TID_MODEL_PROVIDER_ADD_MODEL_BUTTON}
+            onClick={openAddDialog}
+          >
+            <Plus data-icon="inline-start" aria-hidden="true" />
+            {intl.formatMessage({ id: "settings.modelProvider.addModel" })}
+          </Button>
+        </div>
       </div>
       {models.length > 0 ? (
         <div className="overflow-hidden rounded-lg border border-input-border bg-input">
@@ -526,6 +601,7 @@ export function ProviderModelsSection({
                         personalConfig: structuredClone(personalConfig),
                       })
                     }
+                    onLookupModelInfo={lookupModelInfo}
                     settingsRevision={settingsRevision}
                     onDelete={!model.builtin ? () => onDeleteModel(model.modelId) : undefined}
                     onEnabledChange={(enabled) => {
@@ -572,13 +648,20 @@ export function ProviderModelsSection({
           overrideFields={editor.overrides}
           onOpenChange={handleAddDialogOpenChange}
           onDraftChange={updateAddDraft}
+          onLookupModelInfo={lookupModelInfo}
           onCommit={commitAddDraft}
           saving={addSaving}
           modelConfigResolutionPending={editor.pending}
-          modelDefaultsLoaded={editor.defaultsLoaded}
           onModelIdBlur={() => {
             void editor.flush().catch(() => undefined);
           }}
+        />
+        <ProviderRemoteModelPickerDialog
+          open={remotePickerOpen}
+          onOpenChange={setRemotePickerOpen}
+          onFetch={fetchRemoteModels}
+          onConfirm={handleConfirmPickedModels}
+          existingModelIds={existingModelIds}
         />
       </>
     </div>

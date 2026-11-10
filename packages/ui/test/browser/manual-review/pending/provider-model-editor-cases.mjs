@@ -101,14 +101,11 @@ export function registerProviderModelEditorCases(getEnvironment) {
             name: locale === "zh-CN" ? "重置表单" : "Reset form",
             exact: true,
           });
-          const toggle = page.locator('[data-model-recommended-config] [role="switch"]');
           const capacity = page.locator('[data-model-settings-group="tokens"] input').first();
-          if (action === "id") await toggle.click();
           await capacity.fill("333333");
           const first = request();
           await restore.click();
           const obsolete = await first;
-          if (action === "mode") await toggle.click();
           if (action === "scope")
             await page.getByTestId("external-scope").evaluate((node) => node.click());
           if (action === "close")
@@ -139,7 +136,7 @@ export function registerProviderModelEditorCases(getEnvironment) {
             await page
               .getByRole("button", { name: locale === "zh-CN" ? "保存" : "Save", exact: true })
               .click();
-            for (const control of [restore, toggle]) assert.equal(await control.isDisabled(), true);
+            assert.equal(await restore.isDisabled(), true);
           }
           const before = await page.getByTestId("editor-draft").textContent();
           await obsolete.fulfill(
@@ -167,7 +164,7 @@ export function registerProviderModelEditorCases(getEnvironment) {
         }
       }
     });
-    test(`seven help entries and header smart placement ${width}/${locale}`, async () => {
+    test(`six help entries and model identity layout ${width}/${locale}`, async () => {
       const { browser, origin, artifacts } = getEnvironment();
       const page = await browser.newPage({
         viewport: { width, height: 1000 },
@@ -184,7 +181,7 @@ export function registerProviderModelEditorCases(getEnvironment) {
         await page.goto(`${origin}fixture?${new URLSearchParams({ editor: "1", locale, theme })}`);
         const help = page.locator("button[data-model-help]");
         await help.first().waitFor();
-        assert.equal(await help.count(), 7);
+        assert.equal(await help.count(), 6);
         await page.locator("[data-model-advanced-trigger]").click();
         assert.equal(
           await help.evaluateAll((nodes) => nodes.every((node) => !node.closest("label"))),
@@ -200,9 +197,6 @@ export function registerProviderModelEditorCases(getEnvironment) {
         assert.equal(await page.locator('[data-model-help="modelId"]').count(), 0);
         assert.equal(await page.locator('[data-model-settings-footer] [role="switch"]').count(), 0);
         assert.equal(await page.locator('[data-model-identity-row] [role="switch"]').count(), 0);
-        const idBox = await page.locator("[data-model-identity-row] input").boundingBox();
-        const smartBox = await page.locator("[data-model-recommended-config]").boundingBox();
-        assert.ok(smartBox.y + smartBox.height <= idBox.y);
         const before = await page.getByTestId("editor-draft").textContent();
         for (const field of await help.evaluateAll((nodes) =>
           nodes.map((node) => node.dataset.modelHelp),
@@ -227,20 +221,18 @@ export function registerProviderModelEditorCases(getEnvironment) {
             assert.equal(await popup.locator("code").innerText(), "reasoningLevel");
           await page.keyboard.press("Escape");
         }
-        const keyboard = page.locator('[data-model-help="followRecommendedConfig"]');
-        // 智能帮助现为最后一个：Escape 关闭弹层后焦点仍在该按钮，先 Tab 离开再验证键盘重入。
+        const keyboard = help.last();
+        // 最后一个帮助按钮：Escape 关闭弹层后焦点仍在该按钮，先 Tab 离开再验证键盘重入。
+        const keyboardField = await keyboard.getAttribute("data-model-help");
         await page.keyboard.press("Tab");
         await page.mouse.move(0, 0);
         await keyboard.scrollIntoViewIfNeeded();
         await keyboard.focus();
-        await page
-          .locator('[data-model-help-content="followRecommendedConfig"]')
-          .waitFor({ timeout: 500 });
+        const finalPopup = page.locator(`[data-model-help-content="${keyboardField}"]`);
+        await finalPopup.waitFor({ timeout: 500 });
         await page.waitForTimeout(150);
-        const finalPopup = await page
-          .locator('[data-model-help-content="followRecommendedConfig"]')
-          .boundingBox();
-        assert.ok(finalPopup.y >= 0 && finalPopup.y + finalPopup.height <= 1001);
+        const finalBox = await finalPopup.boundingBox();
+        assert.ok(finalBox.y >= 0 && finalBox.y + finalBox.height <= 1001);
         await page.screenshot({ path: `${artifacts}/editor-help-${locale}.png` });
         assert.equal(await page.getByTestId("editor-draft").textContent(), before);
         assert.deepEqual(writes, []);
@@ -287,7 +279,6 @@ export function registerProviderModelEditorCases(getEnvironment) {
           exact: true,
         });
         const capacity = page.locator('[data-model-settings-group="tokens"] input').first();
-        const toggle = page.locator('[data-model-recommended-config] [role="switch"]');
         await capacity.fill("987654");
         const first = request();
         await restore.click({ timeout: 2000 });
@@ -301,7 +292,6 @@ export function registerProviderModelEditorCases(getEnvironment) {
               .contextWindowValue === "",
         );
         assert.equal(await capacity.getAttribute("placeholder"), "222222");
-        assert.equal(await toggle.getAttribute("aria-checked"), "true");
         assert.deepEqual(writes, []);
         const second = request();
         await restore.click();
@@ -344,10 +334,7 @@ export function registerProviderModelEditorCases(getEnvironment) {
       try {
         await page.goto(`${origin}fixture?${new URLSearchParams({ editor: "1", locale, theme })}`);
         const id = page.locator("[data-model-identity-row] input");
-        const toggle = page.locator('[data-model-recommended-config] [role="switch"]');
         await id.fill("");
-        await toggle.click();
-        assert.equal(await toggle.getAttribute("aria-checked"), "false");
         assert.deepEqual(requests, []);
         await page
           .getByRole("button", {
@@ -355,13 +342,10 @@ export function registerProviderModelEditorCases(getEnvironment) {
             exact: true,
           })
           .click();
-        assert.equal(await toggle.getAttribute("aria-checked"), "true");
         assert.equal(await id.inputValue(), "");
         assert.deepEqual(requests, [], "empty restore must not resolve an empty model ID");
         assert.deepEqual(writes, [], "restore only changes the editor draft");
-        await toggle.click();
         await id.fill("new-model");
-        await toggle.click();
         await id.focus();
         await id.blur();
         await page.waitForFunction(
@@ -375,7 +359,6 @@ export function registerProviderModelEditorCases(getEnvironment) {
             setTimeout(() => reject(new Error("missing resolution request")), 5000),
           ),
         ]);
-        await toggle.click();
         const before = await page.getByTestId("editor-draft").textContent();
         await held.fulfill(
           locale === "zh-CN"
@@ -393,7 +376,6 @@ export function registerProviderModelEditorCases(getEnvironment) {
         );
         await page.waitForTimeout(50);
         assert.equal(await page.getByTestId("editor-draft").textContent(), before);
-        assert.equal(await toggle.getAttribute("aria-checked"), "false");
         assert.deepEqual(writes, []);
         assert.deepEqual(errors, []);
       } finally {

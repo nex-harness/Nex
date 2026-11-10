@@ -21,15 +21,12 @@ export function useModelConfigResolution({
     readonly resolution: ModelConfigResolution;
   } | null>(null);
   const [resolving, setResolving] = useState(false);
-  const [defaultsLoaded, setDefaultsLoaded] = useState(false);
   const generationRef = useRef(0);
   const identity = useMemo(() => ({}), [open, modelId, resolve]);
   const identityRef = useRef(identity);
   identityRef.current = identity;
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
-  const inheritedSignatureRef = useRef<string | null>(null);
-  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resolveCurrent = useCallback(
     async (restore?: {
       isCurrent: () => boolean;
@@ -53,19 +50,6 @@ export function useModelConfigResolution({
       try {
         const resolution = await resolve(normalizedModelId);
         if (!isCurrent()) return undefined;
-        const inheritedSignature = JSON.stringify(resolution.inheritedConfig);
-        if (
-          resolution.issues.length === 0 &&
-          inheritedSignatureRef.current !== inheritedSignature
-        ) {
-          inheritedSignatureRef.current = inheritedSignature;
-          setDefaultsLoaded(true);
-          if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
-          feedbackTimerRef.current = setTimeout(() => {
-            feedbackTimerRef.current = null;
-            setDefaultsLoaded(false);
-          }, 3_500);
-        }
         const nextResult = { modelId: normalizedModelId, identity, resolution };
         setResult(nextResult);
         restore?.apply(resolution);
@@ -96,8 +80,6 @@ export function useModelConfigResolution({
       idle.cancel();
       setResult(null);
       setResolving(false);
-      setDefaultsLoaded(false);
-      if (!open) inheritedSignatureRef.current = null;
       return;
     }
     // 恢复成功与开启智能模式同批提交，沿用同一结果，不紧接着再发一次自动解析。
@@ -118,7 +100,6 @@ export function useModelConfigResolution({
   useEffect(
     () => () => {
       generationRef.current += 1;
-      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
     },
     [],
   );
@@ -138,7 +119,6 @@ export function useModelConfigResolution({
       idle.cancel();
       return resolveCurrent(intent);
     },
-    defaultsLoaded,
     flush: idle.flush,
     resolution: activeResult,
     resolving,

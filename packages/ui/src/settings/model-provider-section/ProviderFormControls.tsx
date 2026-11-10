@@ -7,9 +7,11 @@ import { ModelInputCapabilityBadge } from "@/components/ModelInputCapabilityBadg
 import { Switch } from "@/components/ui/switch.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { useProviderModelDraft } from "@/settings/model-provider-section/useProviderModelDraft.js";
+import type { ProviderModelDraftInvalidField } from "@/settings/model-provider-section/ProviderModelMetadata.js";
 import { ProviderModelMetadataDialog } from "@/settings/model-provider-section/ProviderModelMetadataDialog.js";
 import { formatModelContextWindowLabel } from "@/lib/tokenNumberFormat.js";
 import type { ModelConfigResolution, ProviderConfigObject } from "@nex/provider";
+import type { ModelInfoLookupResult } from "@nex/services";
 import { shouldShowModelVisionBadge } from "@/lib/modelVisionBadge.js";
 import { useProviderDetailFeedback } from "@/settings/model-provider-section/ProviderDetailFeedback.js";
 
@@ -23,6 +25,7 @@ export function ModelRowInput({
   deleteTestId,
   onCommit,
   onResolveDraft,
+  onLookupModelInfo,
   settingsRevision = 0,
   onDelete,
   onEnabledChange,
@@ -40,6 +43,7 @@ export function ModelRowInput({
     nextModelId: string,
     personalConfig: ProviderSettingsFormModel["personalConfig"],
   ) => Promise<ModelConfigResolution>;
+  onLookupModelInfo?: (modelId: string) => Promise<ModelInfoLookupResult>;
   settingsRevision?: number;
   onDelete?: () => void;
   onEnabledChange?: (enabled: boolean) => void;
@@ -62,15 +66,9 @@ export function ModelRowInput({
     resolve: onResolveDraft,
   });
   const { draft } = editor;
-  const [draftErrorField, setDraftErrorField] = useState<
-    | "id"
-    | "contextWindow"
-    | "maxOutputTokens"
-    | "inputFormat"
-    | "reasoningLevelValues"
-    | "reasoningLevelMap"
-    | null
-  >(null);
+  const [draftErrorField, setDraftErrorField] = useState<ProviderModelDraftInvalidField | null>(
+    null,
+  );
 
   const updateDraft = (patch: Parameters<typeof editor.change>[0]) => {
     editor.change(patch);
@@ -307,9 +305,9 @@ export function ModelRowInput({
           onOpenChange={handleMetadataDialogOpenChange}
           onDraftChange={updateDraft}
           onCommit={handleMetadataDialogCommit}
+          onLookupModelInfo={onLookupModelInfo}
           saving={metadataSaving}
           modelConfigResolutionPending={editor.pending}
-          modelDefaultsLoaded={editor.defaultsLoaded}
           onModelIdBlur={() => {
             void editor.flush().catch(() => undefined);
           }}
