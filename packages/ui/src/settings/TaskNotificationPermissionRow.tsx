@@ -10,8 +10,9 @@ type PermissionPlatform = Pick<
 >;
 
 /**
- * Web 浏览器通知权限行。只有平台提供权限接口（Web）且权限还不是 granted 时才展示；
- * Desktop 由系统通知接管，不实现这两个接口，因此整行不会出现。
+ * Web 浏览器通知权限行，四种状态都展示：default 给「允许」按钮，granted 显示已允许，
+ * denied / unsupported 给出处理指引（浏览器不允许脚本再次弹出已被拒绝的授权框）。
+ * Desktop 由系统通知接管，平台不实现这两个接口，因此整行不会出现。
  */
 export function TaskNotificationPermissionRow({
   platform,
@@ -38,7 +39,7 @@ export function TaskNotificationPermissionRow({
     setPermission(next ?? readPermission());
   }, [platform, readPermission]);
 
-  if (permission === null || permission === "granted") {
+  if (permission === null) {
     return null;
   }
 

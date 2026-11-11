@@ -77,6 +77,7 @@ import { useRootProviderSettingsSnapshot } from "@/root/useRootProviderSettingsS
 import { useWebRemoteControlAuthSync } from "@/web-remote-control/app/useWebRemoteControlAuthSync.js";
 import { useDesktopNativeThemeSync } from "@/root/useDesktopNativeThemeSync.js";
 import { useRootPlatformEffects } from "@/root/useRootPlatformEffects.js";
+import { useTaskNotificationPermissionPrompt } from "@/hooks/useTaskNotificationPermissionPrompt.js";
 import { useRootWorkspaceActions } from "@/root/useRootWorkspaceActions.js";
 import { useBotBroadcastEffects } from "@/root/useBotBroadcastEffects.js";
 import { registerBaseWorkspaceServices } from "@/store/remoteWorkspaceSessionStore.js";
@@ -858,6 +859,7 @@ function RootInner({
     isBootstrappingInitialWorkspace: isBootstrappingInitialWorkspace || isCreatingFallbackWorkspace,
   });
 
+  useTaskNotificationPermissionPrompt(platform);
   useRootPlatformEffects({
     clientMode: isWebRemoteControlRoot ? "web-remote-replayable" : "desktop-continuous",
     initialWorkspaceAbsPath,

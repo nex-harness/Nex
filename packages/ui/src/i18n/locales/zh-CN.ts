@@ -3256,7 +3256,12 @@ const zhCN: Record<string, string> = {
     "此网站的通知已被浏览器拦截。请在浏览器的站点设置中放开，然后回到本页。",
   "settings.notificationBrowserPermission.unsupported":
     "当前浏览器或页面无法显示通知。需要 HTTPS 或 localhost 页面，以及支持通知的浏览器。",
+  "settings.notificationBrowserPermission.granted": "已允许。页面在后台时，任务结束会通知你。",
   "settings.notificationBrowserPermissionAllow": "允许",
+  "notification.permissionPrompt.title": "任务结束时通知我",
+  "notification.permissionPrompt.body":
+    "允许浏览器通知后，页面在后台时也能收到任务完成、失败或需要确认的提醒。",
+  "notification.permissionPrompt.dismiss": "暂不",
   "settings.notificationSound": "通知声音",
   "settings.notificationSoundDescription": "通知开启后，可单独关闭任务通知提示音。",
   "notification.taskWithTitle": "任务：{title}",
