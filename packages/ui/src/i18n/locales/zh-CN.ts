@@ -3248,7 +3248,15 @@ const zhCN: Record<string, string> = {
   "settings.autoDownloadAndInstallUpdatesDescription":
     "开启后检测到更新会自动开始下载；下载完成后，如有任务正在运行，重启更新前仍会要求确认。",
   "settings.notification": "任务通知",
-  "settings.notificationDescription": "任务完成、失败或需要确认时发送桌面通知。",
+  "settings.notificationDescription": "任务完成、失败或需要确认时发送通知。",
+  "settings.notificationBrowserPermission": "浏览器通知",
+  "settings.notificationBrowserPermission.default":
+    "允许此网站显示通知。未授权时，任务完成后浏览器不会提醒你。",
+  "settings.notificationBrowserPermission.denied":
+    "此网站的通知已被浏览器拦截。请在浏览器的站点设置中放开，然后回到本页。",
+  "settings.notificationBrowserPermission.unsupported":
+    "当前浏览器或页面无法显示通知。需要 HTTPS 或 localhost 页面，以及支持通知的浏览器。",
+  "settings.notificationBrowserPermissionAllow": "允许",
   "settings.notificationSound": "通知声音",
   "settings.notificationSoundDescription": "通知开启后，可单独关闭任务通知提示音。",
   "notification.taskWithTitle": "任务：{title}",

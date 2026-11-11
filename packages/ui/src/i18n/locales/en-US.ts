@@ -3472,7 +3472,15 @@ const enUS: Record<string, string> = {
     "When enabled, updates start downloading as soon as they are found. Restart still requires confirmation when tasks are running.",
   "settings.notification": "Task notifications",
   "settings.notificationDescription":
-    "Send desktop notifications when a task completes, fails, or needs approval.",
+    "Send notifications when a task completes, fails, or needs approval.",
+  "settings.notificationBrowserPermission": "Browser notifications",
+  "settings.notificationBrowserPermission.default":
+    "Allow this site to show notifications. Without permission the browser will not alert you when a task finishes.",
+  "settings.notificationBrowserPermission.denied":
+    "Notifications are blocked for this site. Allow them in your browser's site settings, then come back to this page.",
+  "settings.notificationBrowserPermission.unsupported":
+    "This browser or page cannot show notifications. They need a secure (HTTPS or localhost) page and a browser that supports them.",
+  "settings.notificationBrowserPermissionAllow": "Allow",
   "settings.notificationSound": "Notification sound",
   "settings.notificationSoundDescription":
     "When notifications are enabled, you can mute the task notification sound separately.",

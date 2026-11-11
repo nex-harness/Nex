@@ -55,6 +55,9 @@ export interface TaskNotificationPayload {
   body: string;
 }
 
+/** Web 浏览器通知权限；unsupported 表示当前环境没有 Notification API（如非 HTTPS 页面）。 */
+export type TaskNotificationPermission = "default" | "granted" | "denied" | "unsupported";
+
 /** Main 将一次能够定位真实 tab 的 browser-use 操作投递给其 origin renderer。 */
 export interface BrowserViewOperationPayload {
   workspaceKey: string;
@@ -940,6 +943,11 @@ export interface IPlatformService {
 
   /** 触发任务状态对应的系统通知，由宿主环境决定是否真正展示 */
   showTaskNotification(payload: TaskNotificationPayload): void;
+
+  /** 读取浏览器通知权限；仅 Web 实现，Desktop 由系统通知接管。 */
+  getTaskNotificationPermission?(): TaskNotificationPermission;
+  /** 在用户手势内请求浏览器通知权限；仅 Web 实现。 */
+  requestTaskNotificationPermission?(): Promise<TaskNotificationPermission>;
 
   /** 读取 Desktop Renderer 用户操作 Trace 的当前灰度配置；Web/手机不实现。 */
   getRendererActionTraceConfig?(): Promise<RendererActionTraceConfigV1>;

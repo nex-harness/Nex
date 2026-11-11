@@ -5,6 +5,7 @@ import {
 } from "@nex/shared";
 import { playTaskNotificationSound } from "@nex/ui";
 import { resolveWebCommunityUrl, resolveWebHelpConfig } from "#src/communityUrl.js";
+import { createWebTaskNotifier, type BrowserNotificationApi } from "#src/webTaskNotifier.js";
 import type { WebRemoteControlPlatformProxy } from "#src/platform/contract.js";
 import { saveBrowserFile } from "#src/platform/saveBrowserFile.js";
 export type { WebRemoteControlPlatformProxy } from "#src/platform/contract.js";
@@ -17,6 +18,16 @@ export function createWebPlatform(options?: {
   externalWebRemoteControlProxy?: WebRemoteControlPlatformProxy;
 }): IPlatformService {
   const platformProxy = options?.externalWebRemoteControlProxy;
+  const taskNotifier = createWebTaskNotifier({
+    getNotificationApi: () =>
+      typeof window.Notification === "undefined"
+        ? undefined
+        : (window.Notification as unknown as BrowserNotificationApi),
+    hasFocus: () => document.hasFocus(),
+    focusWindow: () => window.focus(),
+    playSound: playTaskNotificationSound,
+    logger: console,
+  });
 
   return {
     canSelectFilePath: false,
@@ -135,28 +146,9 @@ export function createWebPlatform(options?: {
     onPaymentCallback: () => () => {},
     onShareImport: () => () => {},
     notifyRendererReady: () => {},
-    showTaskNotification: (payload) => {
-      if (document.hasFocus()) {
-        return;
-      }
-
-      if (
-        typeof window.Notification === "undefined" ||
-        window.Notification.permission !== "granted"
-      ) {
-        return;
-      }
-
-      try {
-        new window.Notification(payload.title, {
-          body: payload.body,
-          silent: true,
-        });
-        void playTaskNotificationSound();
-      } catch {
-        // 浏览器通知不可用时静默忽略，避免打断主流程
-      }
-    },
+    showTaskNotification: taskNotifier.show,
+    getTaskNotificationPermission: taskNotifier.getPermission,
+    requestTaskNotificationPermission: taskNotifier.requestPermission,
     // Web 端不需要跨窗口 tab 管理
     syncWindowTabs: () => {},
     // Web 端没有宿主层 Dock / 任务栏徽标，保持空实现以兼容统一平台接口
@@ -169,7 +161,7 @@ export function createWebPlatform(options?: {
     onNewTask: () => () => {},
     onOpenWorkspace: () => () => {},
     onWindowFullscreenChanged: () => () => {},
-    onTaskNotificationClick: () => () => {},
+    onTaskNotificationClick: taskNotifier.onClick,
     exportLogs: () => Promise.resolve({ success: false, error: "Not supported in web mode" }),
     captureWindowScreenshot: () => Promise.resolve(null),
     importChromeBrowserData: (_options) =>
