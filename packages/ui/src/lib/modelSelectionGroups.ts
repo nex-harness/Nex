@@ -63,7 +63,8 @@ export function buildRegistryModelSelectGroups(
         items: provider.models.map(({ modelId, config }) => ({
           key: `registry-provider:${provider.providerId}:${modelId}`,
           value: encodeCustomModelValue(provider.providerId, modelId),
-          name: modelId,
+          // value 编码的仍是 modelId；别名只影响展示，选择与请求都不读它。
+          name: config.name ?? modelId,
           ...(shouldShowModelVisionBadge(
             modelId,
             config.properties?.inputFormat?.supportsImage,

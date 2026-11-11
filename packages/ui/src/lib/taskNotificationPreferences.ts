@@ -45,3 +45,18 @@ export function persistTaskNotificationEnabled(enabled: boolean): void {
 export function persistTaskNotificationSoundEnabled(enabled: boolean): void {
   persistStoredBoolean(TASK_NOTIFICATION_SOUND_ENABLED_STORAGE_KEY, enabled);
 }
+
+const TASK_NOTIFICATION_PERMISSION_PROMPTED_STORAGE_KEY = "nex-notification-permission-prompted";
+
+export function hasPromptedTaskNotificationPermission(): boolean {
+  try {
+    return localStorage.getItem(TASK_NOTIFICATION_PERMISSION_PROMPTED_STORAGE_KEY) === "true";
+  } catch {
+    // 读不到记录时按已提示处理，宁可不弹也不要每次打开页面都打扰用户。
+    return true;
+  }
+}
+
+export function persistTaskNotificationPermissionPrompted(): void {
+  persistStoredBoolean(TASK_NOTIFICATION_PERMISSION_PROMPTED_STORAGE_KEY, true);
+}

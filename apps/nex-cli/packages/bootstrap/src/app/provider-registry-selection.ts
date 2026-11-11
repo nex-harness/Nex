@@ -187,7 +187,8 @@ function toModelOption(provider: Provider, model: ProviderModel): NexModelOption
   const reasoning = optionSpecs.reasoningLevel;
   return {
     ref: { providerId: provider.providerId, modelId: model.modelId },
-    label: model.modelId,
+    // 别名只改展示；ref 仍是 providerId + modelId，请求用的永远是模型 ID。
+    label: model.config.name ?? model.modelId,
     providerLabel: provider.providerName ?? provider.providerId,
     contextWindow: properties.contextWindow,
     maxOutputTokens: optionSpecs.maxOutputTokens.max,

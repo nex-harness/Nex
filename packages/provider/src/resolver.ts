@@ -78,6 +78,7 @@ export function serializeRegistryModelConfig(
 ): RegistryModelConfigObject {
   return {
     enabled: config.enabled,
+    ...(config.name === undefined ? {} : { name: config.name }),
     properties: {
       requiresMfjsToolSchema: config.properties.requiresMfjsToolSchema,
       contextWindow: config.properties.contextWindow,

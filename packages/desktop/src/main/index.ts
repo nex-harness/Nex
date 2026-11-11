@@ -136,7 +136,8 @@ import { resolveWindowsAppUserModelIdForFlavor } from "../../scripts/desktop-pro
 import type { DesktopWindowSize } from "./desktopWindowSize.js";
 import { maybeWarnArchitectureMismatch } from "./desktopArchitectureGuard.js";
 import { maybeBlockStartupForForceUpdate } from "./forceUpdateGuard.js";
-import { createDesktopTray, updateWindowsDesktopTrayMenu } from "./desktopTray.js";
+import { createDockVisibilityController } from "./desktopDockVisibility.js";
+import { createDesktopTray, updateDesktopTrayMenu } from "./desktopTray.js";
 import {
   createCloseToTrayCapabilityMonitor,
   resolveCloseToTrayBootstrapValue,
@@ -278,6 +279,12 @@ const linuxDesktopIntegrationIconPath =
     : iconPath;
 let currentApplicationLocale: Locale = DEFAULT_LOCALE;
 let closeToTrayOnWindows = true;
+// macOS Dock 图标开关的唯一执行者；设置值由 showDockIcon 同步进来。
+const dockVisibility = createDockVisibilityController({
+  platform: process.platform,
+  dock: app.dock,
+  logger,
+});
 // CR-01：托盘实例创建结果（模块级，关窗分支读取）。DBus 能力探测通过不等于 Electron
 // Tray 创建成功；隐藏窗口前必须确认最终用户入口真实存在，否则隐藏即失联。
 let desktopTrayReady = false;
@@ -1020,6 +1027,10 @@ function syncCloseToTrayOnWindows(value: unknown) {
 function syncImmediateAppSettings(patch: ReturnType<typeof appSettingsPatchSchema.parse>) {
   syncCloseToTrayOnWindows(patch.closeToTrayOnWindows);
 
+  if (typeof patch.showDockIcon === "boolean") {
+    dockVisibility.setPreference(patch.showDockIcon);
+  }
+
   if (typeof patch.keepAwakeWhileRunning === "boolean") {
     keepAwakeWhileRunning = patch.keepAwakeWhileRunning;
     reconcileKeepAwakeBlocker();
@@ -1514,7 +1525,7 @@ function rebuildMenu() {
       });
     },
   );
-  updateWindowsDesktopTrayMenu();
+  updateDesktopTrayMenu();
 }
 
 function resolveFocusedDesktopZoomLevel(): number {
@@ -2008,6 +2019,7 @@ app.whenReady().then(async () => {
       linuxMigrationInitialized: bootstrapSettings.closeToTrayLinuxMigrationInitialized,
       migrationPersisted: closeToTrayMigrationPersisted,
     });
+    dockVisibility.setPreference(bootstrapSettings.showDockIcon ?? true);
     keepAwakeWhileRunning = bootstrapSettings.keepAwakeWhileRunning ?? false;
     currentDesktopZoomLevel = clampDesktopZoomLevel(bootstrapSettings.desktopZoomLevel ?? 0);
     currentDesktopWindowSize = bootstrapSettings.desktopWindowSize;
@@ -2131,8 +2143,14 @@ app.whenReady().then(async () => {
   );
   const desktopTrayOptions = {
     getLocale: () => currentApplicationLocale,
-    showCurrentWindow: () =>
-      primaryWindowCoordinator.ensurePrimaryWindow("tray-show-current-window"),
+    showCurrentWindow: () => {
+      // Dock 图标隐藏后应用处于 accessory 状态，仅 focus 窗口不会把应用带到前台。
+      if (process.platform === "darwin") {
+        app.show();
+        app.focus({ steal: true });
+      }
+      return primaryWindowCoordinator.ensurePrimaryWindow("tray-show-current-window");
+    },
     executeDesktopCommand: executeDesktopCommandForApp,
     quitApp: () => {
       markExplicitQuit("tray-quit");
@@ -2145,6 +2163,11 @@ app.whenReady().then(async () => {
   // 唯一入口（失联）。trayReady 由创建结果置位，关窗与设置页能力查询都读它。
   if (process.platform === "win32") {
     desktopTrayReady = createDesktopTray(desktopTrayOptions) !== null;
+  }
+  // macOS 菜单栏图标不参与关闭驻留，但只有它真的创建成功，才允许隐藏 Dock 图标，
+  // 否则应用会失去唯一入口。
+  if (process.platform === "darwin") {
+    dockVisibility.setMenuBarEntryAvailable(createDesktopTray(desktopTrayOptions) !== null);
   }
 
   const ensureLinuxDesktopTray = async (): Promise<void> => {
@@ -2295,6 +2318,7 @@ app.whenReady().then(async () => {
   });
 
   registerRemoteIpcHandlers({
+    revealDockForForeground: dockVisibility.revealForForeground,
     logger,
     webRemoteControlManager,
     createRemoteWorkspaceSession: remoteSessionManager.createRemoteWorkspaceSession,

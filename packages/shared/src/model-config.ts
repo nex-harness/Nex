@@ -99,9 +99,23 @@ export const modelOptionSpecsDataSchema = z
   })
   .strict();
 
+/** 仅用于展示的模型别名；不参与请求，请求始终使用模型 ID。 */
+export const MODEL_DISPLAY_NAME_MAX_LENGTH = 64;
+export const modelDisplayNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MODEL_DISPLAY_NAME_MAX_LENGTH)
+  .refine(
+    (value) => ![...value].some((char) => char.charCodeAt(0) < 0x20 || char === "\u007f"),
+    "模型名称不能包含控制字符",
+  );
+
 export const completeModelConfigDataSchema = z
   .object({
     enabled: z.boolean(),
+    // 可选叶子：缺省表示显示名等于模型 ID，因此完整配置校验不要求它存在。
+    name: modelDisplayNameSchema.optional(),
     properties: completeModelPropertiesDataSchema,
     optionSpecs: completeModelOptionSpecsDataSchema,
   })

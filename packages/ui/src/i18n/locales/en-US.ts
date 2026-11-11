@@ -3411,6 +3411,10 @@ const enUS: Record<string, string> = {
   "settings.memory.viewer.refresh": "Refresh",
   "settings.memory.viewer.loading": "Loading memories…",
   "settings.memory.viewer.empty": "No saved workspace memories",
+  "settings.memory.preview.loading": "Loading memory file…",
+  "settings.memory.preview.tooLarge":
+    "This memory file is too large to preview. Open it in an editor on the desktop app instead.",
+  "settings.memory.preview.serviceUnavailable": "The memory service is currently unavailable.",
   "settings.memory.viewer.workspaces": "Workspaces",
   "settings.memory.viewer.files": "Files",
   "settings.memory.viewer.searchPlaceholder": "Search memory files…",
@@ -3468,7 +3472,21 @@ const enUS: Record<string, string> = {
     "When enabled, updates start downloading as soon as they are found. Restart still requires confirmation when tasks are running.",
   "settings.notification": "Task notifications",
   "settings.notificationDescription":
-    "Send desktop notifications when a task completes, fails, or needs approval.",
+    "Send notifications when a task completes, fails, or needs approval.",
+  "settings.notificationBrowserPermission": "Browser notifications",
+  "settings.notificationBrowserPermission.default":
+    "Allow this site to show notifications. Without permission the browser will not alert you when a task finishes.",
+  "settings.notificationBrowserPermission.denied":
+    "Notifications are blocked for this site. Allow them in your browser's site settings, then come back to this page.",
+  "settings.notificationBrowserPermission.unsupported":
+    "This browser or page cannot show notifications. They need a secure (HTTPS or localhost) page and a browser that supports them.",
+  "settings.notificationBrowserPermission.granted":
+    "Allowed. You will be notified when a task finishes while this tab is in the background.",
+  "settings.notificationBrowserPermissionAllow": "Allow",
+  "notification.permissionPrompt.title": "Get notified when tasks finish",
+  "notification.permissionPrompt.body":
+    "Allow browser notifications to hear about finished, failed or blocked tasks while this tab is in the background.",
+  "notification.permissionPrompt.dismiss": "Not now",
   "settings.notificationSound": "Notification sound",
   "settings.notificationSoundDescription":
     "When notifications are enabled, you can mute the task notification sound separately.",
@@ -3490,6 +3508,9 @@ const enUS: Record<string, string> = {
     "Your desktop environment has no system tray, so close-to-tray cannot be enabled.",
   "settings.closeToTrayGnomeHint":
     "On GNOME, install an AppIndicator extension and restart the app to enable this.",
+  "settings.showDockIcon": "Show icon in Dock",
+  "settings.showDockIconDescription":
+    "macOS only. When off, Nex hides its Dock icon and stays reachable from the menu bar icon.",
   "settings.keepAwakeWhileRunning": "Keep computer running",
   "settings.keepAwakeWhileRunningDescription":
     "Prevent the system from sleeping due to idle. You can still sleep manually or by closing the lid. Desktop only.",
@@ -4684,6 +4705,9 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.remotePicker.empty": "No models found",
   "settings.modelProvider.remotePicker.addFailed": "Failed to add: {models}",
   "settings.modelProvider.modelId": "Model ID",
+  "settings.modelProvider.modelName": "Model name",
+  "settings.modelProvider.modelNameHelp":
+    "Optional short name shown in the chat model picker as Provider/Name. Requests still use the Model ID.",
   "settings.modelProvider.modelDisplayName": "Display name",
   "settings.modelProvider.modelApiFormat.anthropic": "Anthropic messages",
   "settings.modelProvider.modelApiFormat.openaiCompatible": "OpenAI Compatible",
@@ -4720,6 +4744,8 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.modality.audio": "Audio",
   "settings.modelProvider.modality.pdf": "PDF",
   "settings.modelProvider.modelMetadata.invalid.id": "Model ID is required",
+  "settings.modelProvider.modelMetadata.invalid.name":
+    "Model name must be 1–64 characters without control characters",
   "settings.modelProvider.modelMetadata.invalid.kinds": "Select at least one API format",
   "settings.modelProvider.modelMetadata.invalid.contextWindow":
     "Context window must be a positive integer",

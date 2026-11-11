@@ -31,6 +31,7 @@ import { Switch } from "@/components/ui/switch.js";
 import { Input } from "@/components/ui/input.js";
 import { Button } from "@/components/ui/button.js";
 import { SettingsBadge, SettingsGroupCard, SettingsRow } from "@/settings/SettingsPageParts.js";
+import { TaskNotificationPermissionRow } from "@/settings/TaskNotificationPermissionRow.js";
 import { DataBaseDirControl } from "@/settings/DataBaseDirControl.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { useOptionalServices } from "@/hooks/useServices.js";
@@ -134,6 +135,8 @@ export function GeneralSectionContent({
   notificationEnabled,
   notificationSoundEnabled,
   closeToTrayOnWindows,
+  showDockIcon = true,
+  onShowDockIconChange = () => {},
   keepAwakeWhileRunning = false,
   desktopChromiumHardwareAccelerationEnabled = true,
   receivePreviewUpdates,
@@ -153,7 +156,9 @@ export function GeneralSectionContent({
   isDesktop,
   isWindowsDesktop,
   isLinuxDesktop,
+  isMacDesktop,
   linuxCloseToTray,
+  platform,
   showIntegratedTerminalShell = false,
   setLocalePreference,
   setNotificationEnabled,
@@ -196,6 +201,8 @@ export function GeneralSectionContent({
   notificationEnabled: boolean;
   notificationSoundEnabled: boolean;
   closeToTrayOnWindows: boolean;
+  showDockIcon?: boolean;
+  onShowDockIconChange?: (enabled: boolean) => void | Promise<void>;
   keepAwakeWhileRunning?: boolean;
   desktopChromiumHardwareAccelerationEnabled?: boolean;
   receivePreviewUpdates: boolean;
@@ -216,6 +223,7 @@ export function GeneralSectionContent({
   isWindowsDesktop?: boolean;
   /** Linux 桌面端（isDesktop 且非 win/mac）；关闭驻留托盘设置在 Linux 上按能力自适应展示 */
   isLinuxDesktop?: boolean;
+  isMacDesktop?: boolean;
   /** Linux 关闭驻留托盘能力状态（spec：docs/desktop/linux-close-to-tray.md）；Windows 不传 */
   linuxCloseToTray?: {
     /** 能力探测中或确认不可用，开关锁定 */
@@ -749,6 +757,7 @@ export function GeneralSectionContent({
             <Switch checked={notificationEnabled} onCheckedChange={setNotificationEnabled} />
           }
         />
+        {notificationEnabled ? <TaskNotificationPermissionRow platform={platform} /> : null}
         <SettingsRow
           label={intl.formatMessage({ id: "settings.notificationSound" })}
           description={intl.formatMessage({
@@ -782,6 +791,21 @@ export function GeneralSectionContent({
                 disabled={Boolean(linuxCloseToTray?.disabled)}
                 onCheckedChange={(checked) => {
                   void onCloseToTrayOnWindowsChange(checked);
+                }}
+              />
+            }
+          />
+        ) : null}
+        {isMacDesktop ? (
+          <SettingsRow
+            label={intl.formatMessage({ id: "settings.showDockIcon" })}
+            description={intl.formatMessage({ id: "settings.showDockIconDescription" })}
+            control={
+              <Switch
+                aria-label={intl.formatMessage({ id: "settings.showDockIcon" })}
+                checked={showDockIcon}
+                onCheckedChange={(checked) => {
+                  void onShowDockIconChange(checked);
                 }}
               />
             }

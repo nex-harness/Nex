@@ -3189,6 +3189,10 @@ const zhCN: Record<string, string> = {
   "settings.memory.viewer.refresh": "刷新",
   "settings.memory.viewer.loading": "正在加载记忆…",
   "settings.memory.viewer.empty": "暂无已保存的工作区记忆",
+  "settings.memory.preview.loading": "正在加载记忆文件…",
+  "settings.memory.preview.tooLarge":
+    "记忆文件过大，无法预览。请在桌面端用编辑器打开查看。",
+  "settings.memory.preview.serviceUnavailable": "记忆服务当前不可用。",
   "settings.memory.viewer.workspaces": "工作区",
   "settings.memory.viewer.files": "文件",
   "settings.memory.viewer.searchPlaceholder": "搜索记忆文件…",
@@ -3244,7 +3248,20 @@ const zhCN: Record<string, string> = {
   "settings.autoDownloadAndInstallUpdatesDescription":
     "开启后检测到更新会自动开始下载；下载完成后，如有任务正在运行，重启更新前仍会要求确认。",
   "settings.notification": "任务通知",
-  "settings.notificationDescription": "任务完成、失败或需要确认时发送桌面通知。",
+  "settings.notificationDescription": "任务完成、失败或需要确认时发送通知。",
+  "settings.notificationBrowserPermission": "浏览器通知",
+  "settings.notificationBrowserPermission.default":
+    "允许此网站显示通知。未授权时，任务完成后浏览器不会提醒你。",
+  "settings.notificationBrowserPermission.denied":
+    "此网站的通知已被浏览器拦截。请在浏览器的站点设置中放开，然后回到本页。",
+  "settings.notificationBrowserPermission.unsupported":
+    "当前浏览器或页面无法显示通知。需要 HTTPS 或 localhost 页面，以及支持通知的浏览器。",
+  "settings.notificationBrowserPermission.granted": "已允许。页面在后台时，任务结束会通知你。",
+  "settings.notificationBrowserPermissionAllow": "允许",
+  "notification.permissionPrompt.title": "任务结束时通知我",
+  "notification.permissionPrompt.body":
+    "允许浏览器通知后，页面在后台时也能收到任务完成、失败或需要确认的提醒。",
+  "notification.permissionPrompt.dismiss": "暂不",
   "settings.notificationSound": "通知声音",
   "settings.notificationSoundDescription": "通知开启后，可单独关闭任务通知提示音。",
   "notification.taskWithTitle": "任务：{title}",
@@ -3263,6 +3280,9 @@ const zhCN: Record<string, string> = {
     "点击关闭按钮或关闭窗口快捷键时隐藏窗口，托盘中的退出仍会完全退出应用。Windows 默认开启；Linux 上取决于桌面环境是否提供系统托盘。",
   "settings.closeToTrayUnavailable": "当前桌面环境未提供系统托盘，无法启用关闭驻留。",
   "settings.closeToTrayGnomeHint": "GNOME 用户可安装 AppIndicator 类扩展后重启应用启用。",
+  "settings.showDockIcon": "在 Dock 中显示图标",
+  "settings.showDockIconDescription":
+    "仅 macOS 生效。关闭后 Dock 不再显示 Nex 图标，可通过菜单栏图标打开主窗口。",
   "settings.keepAwakeWhileRunning": "保持电脑运行",
   "settings.keepAwakeWhileRunningDescription":
     "打开后阻止系统因空闲进入休眠（仍可手动睡眠/合盖休眠）。桌面端全局生效。",
@@ -4371,6 +4391,9 @@ const zhCN: Record<string, string> = {
   "settings.modelProvider.remotePicker.empty": "未获取到模型",
   "settings.modelProvider.remotePicker.addFailed": "以下模型添加失败：{models}",
   "settings.modelProvider.modelId": "模型 ID",
+  "settings.modelProvider.modelName": "模型名称",
+  "settings.modelProvider.modelNameHelp":
+    "可选的简短名称，在对话模型选择器中显示为「供应商/名称」；请求仍使用模型 ID。",
   "settings.modelProvider.modelDisplayName": "显示名称",
   "settings.modelProvider.modelApiFormat.anthropic": "Anthropic Messages",
   "settings.modelProvider.modelApiFormat.openaiCompatible": "OpenAI Compatible",
@@ -4405,6 +4428,7 @@ const zhCN: Record<string, string> = {
   "settings.modelProvider.modality.audio": "音频",
   "settings.modelProvider.modality.pdf": "PDF",
   "settings.modelProvider.modelMetadata.invalid.id": "模型 ID 不能为空",
+  "settings.modelProvider.modelMetadata.invalid.name": "模型名称需为 1–64 个字符，且不含控制字符",
   "settings.modelProvider.modelMetadata.invalid.kinds": "至少选择一种 API 格式",
   "settings.modelProvider.modelMetadata.invalid.contextWindow": "上下文窗口必须是正整数",
   "settings.modelProvider.modelMetadata.invalid.maxOutputTokens": "最大输出 Token 必须是正整数",

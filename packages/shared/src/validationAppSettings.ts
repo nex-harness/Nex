@@ -525,6 +525,7 @@ const appSettingsObjectSchema = z.object({
   taskAutoArchiveResetVersion: z.literal(1).default(1),
   taskAutoArchiveOlderThanDays: z.number().int().positive().max(365).default(30),
   closeToTrayOnWindows: z.boolean().default(true),
+  showDockIcon: z.boolean().default(true),
   closeToTrayOnWindowsMigrationInitialized: z.boolean().default(true),
   // default(false)：新装与存量用户首次启动都视为未归位，由 main 进程按平台决定是否迁移。
   closeToTrayLinuxMigrationInitialized: z.boolean().default(false),
@@ -622,6 +623,7 @@ export const appSettingsPatchSchema = z.object({
   taskAutoArchiveEnabled: z.boolean().optional(),
   taskAutoArchiveOlderThanDays: z.number().int().positive().max(365).optional(),
   closeToTrayOnWindows: z.boolean().optional(),
+  showDockIcon: z.boolean().optional(),
   keepAwakeWhileRunning: z.boolean().optional(),
   closeToTrayOnWindowsMigrationInitialized: z.boolean().optional(),
   closeToTrayLinuxMigrationInitialized: z.boolean().optional(),
