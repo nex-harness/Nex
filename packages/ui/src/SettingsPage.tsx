@@ -1183,6 +1183,14 @@ export function SettingsPage({
     },
     [localHostServices.settingService, platform],
   );
+  // Dock 图标开关：写盘后经 syncAppSettings 让主进程即时应用，不需要重启。
+  const handleShowDockIconChange = useCallback(
+    async (enabled: boolean) => {
+      await updateSharedSettings({ showDockIcon: enabled });
+      platform.syncAppSettings?.({ showDockIcon: enabled });
+    },
+    [updateSharedSettings, platform],
+  );
   // keep-awake：走 useSettings 统一写盘 + syncAppSettings，和 Automations/创建页入口共享同一状态源。
   const handleKeepAwakeWhileRunningChange = useCallback(
     async (enabled: boolean) => {
@@ -1700,6 +1708,9 @@ export function SettingsPage({
                               isDesktop={isDesktop}
                               isWindowsDesktop={isWindowsDesktop}
                               isLinuxDesktop={isLinuxDesktop}
+                              isMacDesktop={isMacDesktop}
+                              showDockIcon={sharedSettings?.showDockIcon ?? true}
+                              onShowDockIconChange={handleShowDockIconChange}
                               linuxCloseToTray={linuxCloseToTray}
                               platform={platform}
                               notificationEnabled={notificationEnabled}

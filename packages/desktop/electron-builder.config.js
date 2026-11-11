@@ -776,6 +776,19 @@ export default {
       from: "build/icon_windows.png",
       to: "icon_windows.png",
     },
+    ...(targetPlatform.os === "darwin"
+      ? [
+          {
+            // macOS 菜单栏图标：单色 template 图，@2x 与 1x 同名后缀由 Electron 自动选取。
+            from: "build/trayTemplate.png",
+            to: "trayTemplate.png",
+          },
+          {
+            from: "build/trayTemplate@2x.png",
+            to: "trayTemplate@2x.png",
+          },
+        ]
+      : []),
     ...(targetPlatform.os === "win32"
       ? [
           {

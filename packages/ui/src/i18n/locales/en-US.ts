@@ -3494,6 +3494,9 @@ const enUS: Record<string, string> = {
     "Your desktop environment has no system tray, so close-to-tray cannot be enabled.",
   "settings.closeToTrayGnomeHint":
     "On GNOME, install an AppIndicator extension and restart the app to enable this.",
+  "settings.showDockIcon": "Show icon in Dock",
+  "settings.showDockIconDescription":
+    "macOS only. When off, Nex hides its Dock icon and stays reachable from the menu bar icon.",
   "settings.keepAwakeWhileRunning": "Keep computer running",
   "settings.keepAwakeWhileRunningDescription":
     "Prevent the system from sleeping due to idle. You can still sleep manually or by closing the lid. Desktop only.",
