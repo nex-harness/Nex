@@ -338,6 +338,9 @@ importers:
       meriyah:
         specifier: ^7.1.1
         version: 7.4.2
+      quickjs-wasi:
+        specifier: 3.6.2
+        version: 3.6.2
       unbash:
         specifier: 4.0.1
         version: 4.0.1
@@ -3739,6 +3742,9 @@ packages:
 
   quickjs-wasi@2.2.0:
     resolution: {integrity: sha512-zQxXmQMrEoD3S+jQdYsloq4qAuaxKFHZj6hHqOYGwB2iQZH+q9e/lf5zQPXCKOk0WJuAjzRFbO4KwHIp2D05Iw==}
+
+  quickjs-wasi@3.6.2:
+    resolution: {integrity: sha512-FCqGtGOrMgzUiIrMNMA2YnsOxCNwo31dzqXvclXUC6xeT35NJLKXQJsvbeCTjvoFAwZgEAPg8U6+KAPDGXn8Mg==}
 
   range-parser@1.2.1:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
@@ -7529,6 +7535,8 @@ snapshots:
       side-channel: 1.1.0
 
   quickjs-wasi@2.2.0: {}
+
+  quickjs-wasi@3.6.2: {}
 
   range-parser@1.2.1: {}
 

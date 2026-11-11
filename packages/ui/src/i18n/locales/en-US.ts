@@ -3383,6 +3383,9 @@ const enUS: Record<string, string> = {
   "settings.nativeSearchEnhancements": "Enhanced Find and Grep",
   "settings.nativeSearchEnhancementsDescription":
     "Use enhanced Find and Grep in new sessions and sessions restored after an app restart. Active sessions keep their current setting; Find remains unchanged on Windows.",
+  "settings.codemode": "Codemode (script tool calls)",
+  "settings.codemodeDescription":
+    "Let the model write a short JavaScript program that calls tools in an isolated sandbox, so intermediate results stay out of the conversation. Applies to new sessions and sessions restored after an app restart.",
   "settings.memory": "Memory",
   "settings.personalization.title": "Personalization",
   "settings.personalization.description":

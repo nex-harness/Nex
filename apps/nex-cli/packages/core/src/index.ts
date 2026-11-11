@@ -20,6 +20,9 @@ export type { ToolSchedule, ToolScheduleItem, ToolDependency } from "./tool/sche
 export { createToolRegistry, ToolRegistry, ToolRegistryImpl } from "./tool/registry.js";
 export { createToolExecutor, ToolExecutor, ToolExecutorImpl } from "./tool/executor.js";
 export { builtInTools, registerBuiltInTools } from "./tool/handlers/index.js";
+export { createCodemodeToolEntry } from "./tool/handlers/codemode.js";
+export { buildCodemodeDescription } from "./codemode/description.js";
+export { setCodemodeWorkerUrl } from "./codemode/worker-url.js";
 export {
   supportsBackgroundTaskWaiter,
   supportsBashBackgroundLifecycle,

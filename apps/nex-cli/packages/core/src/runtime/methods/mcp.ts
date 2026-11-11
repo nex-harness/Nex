@@ -156,6 +156,7 @@ export async function initializeMcp(
     const snapshot = await startup;
     this.shutdownSignal.throwIfAborted();
     const registered = registerMcpTools(this.registry, mcpPort, snapshot.tools, {
+      deferNonOfficialTools: (this.config.toolSearch?.mode ?? "off") !== "off",
       allowedTools: this.config.toolAllowlist,
       disallowedTools: this.config.toolDisallowlist,
       officialCuaServerNames: computeOfficialCuaServerNames(

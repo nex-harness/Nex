@@ -89,6 +89,7 @@ export interface NexProtocolSessionRecord {
   app: NexApp;
   subagentRuntimeConfigEnabled?: boolean;
   memoryEnabled: boolean;
+  codemodeEnabled: boolean;
   nativeSearchEnhancementsEnabled: boolean;
   toolSearchMode: AppToolSearchMode;
   modelContextBudgetStrategy: NexModelContextBudgetStrategy;
@@ -204,9 +205,7 @@ export function isRequest(message: NexProtocolMessage): message is NexProtocolRe
   return "method" in message && "id" in message;
 }
 
-export function isNotification(
-  message: NexProtocolMessage,
-): message is NexProtocolNotification {
+export function isNotification(message: NexProtocolMessage): message is NexProtocolNotification {
   return "method" in message && !("id" in message);
 }
 

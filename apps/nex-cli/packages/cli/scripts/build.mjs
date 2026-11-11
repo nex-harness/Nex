@@ -1,5 +1,6 @@
 import { chmod, readFile, rm } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import sharedPackage from "../../../../../packages/shared/package.json" with { type: "json" };
@@ -151,6 +152,31 @@ export const resolveBuildAliases = ({
   "@nex/core": resolve(cliDirectory, "../core/dist/index.js"),
 });
 
+// worker_threads 只能执行磁盘文件或 eval 源码；单文件 CLI / SEA 里两者都没有现成的 worker，
+// 所以先把 codemode worker（含 quickjs-wasi 的 JS）打成自包含 CJS，再连同 wasm 字节一起
+// 以 define 常量内嵌进 nex.cjs。运行时用 `new Worker(source, { eval: true })`，不依赖释放资产。
+export const buildCodemodeEmbeds = async ({ cliDirectory = cliRoot } = {}) => {
+  const coreDist = resolve(cliDirectory, "../core/dist/codemode");
+  const workerBuild = await build({
+    bundle: true,
+    entryPoints: [resolve(coreDist, "runtime/worker.js")],
+    format: "cjs",
+    legalComments: "none",
+    logLevel: "silent",
+    minify: true,
+    platform: "node",
+    target: "node22",
+    write: false,
+  });
+  const workerSource = workerBuild.outputFiles[0].text;
+  const wasmPath = createRequire(resolve(coreDist, "wasm.js")).resolve("quickjs-wasi/quickjs.wasm");
+  const wasmBase64 = (await readFile(wasmPath)).toString("base64");
+  return {
+    __CODEMODE_WORKER_SOURCE__: JSON.stringify(workerSource),
+    __CODEMODE_WASM_BASE64__: JSON.stringify(wasmBase64),
+  };
+};
+
 export const buildCli = async ({
   cliDirectory = cliRoot,
   rootDirectory = projectRoot,
@@ -178,6 +204,7 @@ export const buildCli = async ({
     bundle: true,
     define: {
       __CLI_VERSION__: JSON.stringify(cliVersion),
+      ...(await buildCodemodeEmbeds({ cliDirectory })),
     },
     entryPoints: [resolve(cliDirectory, "src/main.ts")],
     // Ink 7 and yoga-layout use top-level await, so the CJS CLI bundle loads the TUI

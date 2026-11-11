@@ -362,6 +362,8 @@ export interface AppSettings {
   toolSearchMode?: AppToolSearchMode;
   /** 新建或冷恢复 Session 是否启用 Memory；默认关闭。 */
   memoryEnabled?: boolean;
+  /** 新建或冷恢复 Session 是否注册 Codemode 工具（沙箱里写 JS 编排工具）；默认关闭。 */
+  codemodeEnabled?: boolean;
   onboardingOccupation?:
     | "office"
     | "developer"

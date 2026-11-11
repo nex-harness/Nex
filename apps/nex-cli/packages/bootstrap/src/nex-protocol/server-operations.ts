@@ -171,6 +171,7 @@ interface SessionStartupPreferences {
   additionalDirectories?: readonly string[];
   subagentRuntimeConfigEnabled?: boolean;
   memoryEnabled: boolean;
+  codemodeEnabled: boolean;
   modelContextBudgetStrategy: NexModelContextBudgetStrategy;
   nativeSearchEnhancementsEnabled: boolean;
   toolSearchMode: AppToolSearchMode;
@@ -2053,10 +2054,7 @@ export async function readEvents(context: NexProtocolAgentServerContext, rawPara
   };
 }
 
-export async function subscribeSession(
-  context: NexProtocolAgentServerContext,
-  rawParams: unknown,
-) {
+export async function subscribeSession(context: NexProtocolAgentServerContext, rawParams: unknown) {
   const params = parseParams(nexSessionSubscribeParamsSchema, rawParams);
   const record = requireSession(context, params.sessionId);
   record.deliveryKind = params.deliveryKind;
@@ -2878,10 +2876,7 @@ export async function setModel(context: NexProtocolAgentServerContext, rawParams
   return await afterStateMutation(context, record, "model_changed");
 }
 
-export async function setThoughtLevel(
-  context: NexProtocolAgentServerContext,
-  rawParams: unknown,
-) {
+export async function setThoughtLevel(context: NexProtocolAgentServerContext, rawParams: unknown) {
   const params = parseParams(nexSessionSetThoughtLevelParamsSchema, rawParams);
   if (!params.thoughtLevel) {
     throw new ProtocolRequestError(-32602, "thoughtLevel is required");
@@ -3414,10 +3409,7 @@ async function requestSessionRuntimePreferences(
     } else if (errorCode !== -32601 && errorCode !== -32020) {
       context.logger?.warn("Nex Protocol runtime preferences request failed", diagnostic);
     } else {
-      context.logger?.debug(
-        "Nex Protocol runtime preferences compatibility fallback",
-        diagnostic,
-      );
+      context.logger?.debug("Nex Protocol runtime preferences compatibility fallback", diagnostic);
     }
     if (error instanceof ProtocolRequestError && (error.code === -32601 || error.code === -32020)) {
       // 兼容旧 Host 或无 Host 的纯 CLI 创建路径；Memory 服从产品默认关闭，
@@ -3425,6 +3417,7 @@ async function requestSessionRuntimePreferences(
       return {
         askUserQuestionAutoResolutionEnabled: true,
         memoryEnabled: false,
+        codemodeEnabled: false,
         modelContextBudgetStrategy: DEFAULT_NEX_MODEL_CONTEXT_BUDGET_STRATEGY,
         nativeSearchEnhancementsEnabled: true,
         toolSearchMode: "off",
@@ -3447,6 +3440,7 @@ async function resolveSessionStartupPreferences(
     return {
       memoryEnabled: source.parent.memoryEnabled,
       subagentRuntimeConfigEnabled: source.parent.subagentRuntimeConfigEnabled,
+      codemodeEnabled: source.parent.codemodeEnabled,
       modelContextBudgetStrategy: DEFAULT_NEX_MODEL_CONTEXT_BUDGET_STRATEGY,
       nativeSearchEnhancementsEnabled: source.parent.nativeSearchEnhancementsEnabled,
       toolSearchMode: source.parent.toolSearchMode,
@@ -3470,6 +3464,7 @@ async function resolveSessionStartupPreferences(
     additionalDirectories: runtimePreferences.additionalDirectories,
     subagentRuntimeConfigEnabled: runtimePreferences.subagentRuntimeConfigEnabled,
     memoryEnabled: runtimePreferences.memoryEnabled,
+    codemodeEnabled: runtimePreferences.codemodeEnabled,
     modelContextBudgetStrategy: DEFAULT_NEX_MODEL_CONTEXT_BUDGET_STRATEGY,
     nativeSearchEnhancementsEnabled: runtimePreferences.nativeSearchEnhancementsEnabled,
     toolSearchMode: runtimePreferences.toolSearchMode,
@@ -3592,6 +3587,8 @@ async function createRecord(
       // Memory Settings 是现有 CLI features.memory/use 之外的总开关。只在关闭时
       // 写入 override，避免开启值反向覆盖用户已有的 CLI 禁用配置。
       ...(startupPreferences.memoryEnabled ? {} : { memory: { enabled: false } }),
+      // codemode：设置页开关（Codemode）经 runtime-materialization 偏好下发；默认关闭。
+      ...(startupPreferences.codemodeEnabled ? { codemode: { enabled: true } } : {}),
       // desktop-continuous session/create 由 UI 先解析 ~/.nex/.agents 的 enabled MCP，
       // 但 protocol app-server 自己不会读取 UI/main 侧的 MCP store；之前 createRecord 没把
       // params.mcpServers 注入 runtimeConfig，导致日志里 runtimeHasMcpConfig=false，工具永远不启动。
@@ -3671,6 +3668,7 @@ async function createRecord(
     eventStore,
     memoryEnabled: startupPreferences.memoryEnabled,
     subagentRuntimeConfigEnabled: startupPreferences.subagentRuntimeConfigEnabled,
+    codemodeEnabled: startupPreferences.codemodeEnabled,
     modelContextBudgetStrategy: startupPreferences.modelContextBudgetStrategy,
     nativeSearchEnhancementsEnabled: startupPreferences.nativeSearchEnhancementsEnabled,
     toolSearchMode: startupPreferences.toolSearchMode,
@@ -3723,9 +3721,7 @@ function derivePersistedSessionMode(
   return undefined;
 }
 
-function isNexSessionMode(
-  value: unknown,
-): value is NonNullable<NexSessionCreateParams["mode"]> {
+function isNexSessionMode(value: unknown): value is NonNullable<NexSessionCreateParams["mode"]> {
   return (
     value === "plan" ||
     value === "build" ||
@@ -4068,9 +4064,7 @@ async function readActiveSessionMessages(
   return projectActiveSessionMessages(messages, session, rewindEvents);
 }
 
-async function readSessionRewindEvents(
-  record: NexProtocolSessionRecord,
-): Promise<SessionEvent[]> {
+async function readSessionRewindEvents(record: NexProtocolSessionRecord): Promise<SessionEvent[]> {
   const events = await record.eventStore.getEvents(record.app.sessionId as SessionId);
   return events.filter((event) => event.type === SessionEventType.RewindTriggered);
 }

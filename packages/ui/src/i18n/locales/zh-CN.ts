@@ -3163,6 +3163,9 @@ const zhCN: Record<string, string> = {
   "settings.nativeSearchEnhancements": "增强 Find 和 Grep",
   "settings.nativeSearchEnhancementsDescription":
     "在新建会话或应用重启后恢复的会话中使用增强 Find 和 Grep。当前会话保持现有设置；Windows 的 Find 保持不变。",
+  "settings.codemode": "Codemode（脚本编排工具）",
+  "settings.codemodeDescription":
+    "允许模型写一小段 JavaScript，在隔离沙箱里批量调用工具，中间结果不进入对话。仅对新会话和应用重启后恢复的会话生效。",
   "settings.memory": "记忆",
   "settings.personalization.title": "个性化",
   "settings.personalization.description":

@@ -121,6 +121,10 @@ import type { WorkspaceHookRuntimeAdmissionPort } from "../hooks/workspace-hook-
 // -----------------------------------------------
 
 export interface AgentRuntimeConfig {
+  /**
+   * deferred 工具声明（docs/specs/codemode.md P1）。mode 为 off（默认）时所有工具照旧 direct、
+   * ToolSearch/DeferredToolCall 不声明；native/local 时 deferred MCP 工具经 ToolSearch 发现。
+   */
   toolSearch?: { mode?: ToolSearchMode };
   /** shared-host CUA request routing metadata; desktop is the safe default. */
   clientMode?: "desktop-continuous" | "web-remote-replayable";
@@ -181,6 +185,8 @@ export interface AgentRuntimeConfig {
      */
     browserDocumentationRoot?: string;
   };
+  /** 是否注册 Codemode 工具（沙箱里写 JS 编排其它工具）；默认关闭。 */
+  codemode?: { enabled?: boolean };
   modelAnomalyGuard?: Partial<ModelAnomalyGuardConfig>;
   mcp?: {
     enabled?: boolean;

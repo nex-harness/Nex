@@ -144,6 +144,8 @@ describe("tool contract declarations", () => {
       includeAgent: true,
       includeSendMessage: true,
       includeSkill: true,
+      // ToolSearch/DeferredToolCall 只在会话开启 toolSearch（mode ≠ off）时注册。
+      includeToolSearch: true,
     });
     expect(directRegistry.list().slice(0, 4)).toEqual([
       "ToolSearch",
@@ -161,6 +163,7 @@ describe("tool contract declarations", () => {
       includeAgent: true,
       includeSendMessage: true,
       includeSkill: true,
+      includeToolSearch: true,
     });
     expect(
       orderProviderVisibleToolContracts(embeddedRegistry.toContracts()).map((tool) => tool.name),

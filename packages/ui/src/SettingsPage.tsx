@@ -754,6 +754,7 @@ export function SettingsPage({
   }, [sharedSettings?.recentProjects, workspaceTabs]);
   const memoryEnabled = sharedSettings?.memoryEnabled === true;
   const toolSearchMode = sharedSettings?.toolSearchMode ?? "off";
+  const codemodeEnabled = sharedSettings?.codemodeEnabled === true;
   const nativeSearchEnhancementsEnabled = sharedSettings?.nativeSearchEnhancementsEnabled !== false;
   const askUserQuestionAutoResolutionEnabled =
     sharedSettings?.askUserQuestionAutoResolutionEnabled !== false;
@@ -982,6 +983,12 @@ export function SettingsPage({
         operation: () => updateSharedSettings({ toolSearchMode: mode }),
         completed: { resultSource: "shared_settings", valueAfter: mode },
       });
+    },
+    [updateSharedSettings],
+  );
+  const handleCodemodeEnabledChange = useCallback(
+    async (enabled: boolean) => {
+      await updateSharedSettings({ codemodeEnabled: enabled });
     },
     [updateSharedSettings],
   );
@@ -1730,6 +1737,8 @@ export function SettingsPage({
                               toolSearchMode={toolSearchMode}
                               onToolSearchModeChange={handleToolSearchModeChange}
                               nativeSearchEnhancementsEnabled={nativeSearchEnhancementsEnabled}
+                              codemodeEnabled={codemodeEnabled}
+                              onCodemodeEnabledChange={handleCodemodeEnabledChange}
                               httpProxy={httpProxy}
                               httpProxyNoProxy={httpProxyNoProxy}
                               httpProxyCaCertPath={httpProxyCaCertPath}

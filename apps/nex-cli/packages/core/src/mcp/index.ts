@@ -71,6 +71,13 @@ export interface RegisterMcpToolsOptions {
    * 只用于 display.ui 的归属投影；缺失时该 server 的工具不投影 UI。
    */
   pluginIdByServerName?: ReadonlyMap<string, string>;
+  /**
+   * codemode P1：会话开启 ToolSearch（runtimeConfig.toolSearch.mode ≠ off）时传 true。
+   * MCP 工具默认 deferred（只留检索文档，模型经 ToolSearch 发现）；官方 CUA 与
+   * alwaysLoad 工具除外。2.0 默认的 ToolSearch 目录推导见 tool/search/exposure.ts，
+   * 该标记同时让 registry.listDeferredDocuments() / Codemode 的 searchTools 看到这些工具。
+   */
+  deferNonOfficialTools?: boolean;
 }
 
 export function registerMcpTools(
@@ -95,6 +102,7 @@ export function registerMcpTools(
     registry.register(
       createMcpToolEntry(name, descriptor, mcpPort, officialCuaAuthorityVerified, {
         pluginId: options.pluginIdByServerName?.get(descriptor.serverName),
+        defer: options.deferNonOfficialTools,
       }),
     );
     registered.push(name);
@@ -124,7 +132,7 @@ export function createMcpToolEntry(
   descriptor: McpToolDescriptor,
   mcpPort: McpPort,
   officialCuaAuthorityVerified: boolean,
-  presentation: { pluginId?: string } = {},
+  presentation: { pluginId?: string; defer?: boolean } = {},
 ): ToolEntry {
   const readOnly = descriptor.annotations?.readOnlyHint === true;
   const destructive = descriptor.annotations?.destructiveHint === true;
@@ -211,6 +219,12 @@ export function createMcpToolEntry(
       },
       needsApproval,
       ...(providerVisible ? {} : { providerVisible: false }),
+      // codemode P1：会话开启 ToolSearch 时 MCP 工具默认 deferred（官方 CUA 与 server 端标记
+      // alwaysLoad 的工具除外）。deferred 的工具仍可调用，并进入 registry.listDeferredDocuments()
+      // 供 ToolSearch 与 Codemode 的 searchTools 检索。
+      ...(presentation.defer && !officialCuaAuthorityVerified && !descriptor.alwaysLoad
+        ? { exposure: "deferred" as const }
+        : {}),
       readOnly,
       riskLevel,
       sideEffectScope,
