@@ -7,6 +7,8 @@ export const manualModelConfigSchema = completeModelConfigDataSchema
   .pick({ enabled: true })
   .extend({
     enabled: modelConfigDataSchema.shape.enabled,
+    // 显示名与 enabled 一样是模型行的独立属性，不随手动/推荐模式冻结或清除。
+    name: modelConfigDataSchema.shape.name,
     properties: complete.properties
       .pick({
         contextWindow: true,
@@ -33,10 +35,10 @@ export function extractManualModelConfig(input: unknown): ManualModelConfig {
   return manualModelConfigSchema.parse(pickSchemaFields(manualModelConfigSchema, input));
 }
 
-/** 保留独立 enabled 和系统叶子；恢复智能配置及规则合成都使用同一字段归属。 */
+/** 保留独立 enabled、name 和系统叶子；恢复智能配置及规则合成都使用同一字段归属。 */
 export function clearManualModelConfig(input: z.infer<typeof modelConfigDataSchema>) {
   return modelConfigDataSchema.parse(
-    omitSchemaFields(manualModelConfigSchema.omit({ enabled: true }), input),
+    omitSchemaFields(manualModelConfigSchema.omit({ enabled: true, name: true }), input),
   );
 }
 

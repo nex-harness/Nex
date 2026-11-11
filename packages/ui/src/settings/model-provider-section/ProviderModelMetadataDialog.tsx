@@ -17,6 +17,7 @@ import type {
   ProviderModelDraftValues,
   ProviderModelDraftCommitResult,
 } from "@/settings/model-provider-section/ProviderModelMetadata.js";
+import { ProviderModelIdentityFields } from "@/settings/model-provider-section/ProviderModelIdentityFields.js";
 import { ProviderModelInputModalityOptions } from "@/settings/model-provider-section/ProviderModelModalityOptions.js";
 import { BooleanModelOption } from "@/settings/model-provider-section/ProviderModelMetadataFields.js";
 import {
@@ -32,7 +33,6 @@ import {
   ModelInfoLookupButton,
 } from "@/settings/model-provider-section/ProviderModelMetadataDialogActions.js";
 import { modelEditorControlStyle } from "@/settings/model-provider-section/modelEditorControlStyle.js";
-import { cn } from "@/components/lib/utils.js";
 import {
   ModelConfigHelp,
   ModelConfigInputLabel,
@@ -177,32 +177,20 @@ export function ProviderModelMetadataDialog({
           data-model-settings-scroll="true"
         >
           <ModelSettingsGroup group="basic">
-            <div data-model-identity-row="true" className="flex flex-col gap-4">
-              <div className="min-w-0 flex-1">
-                <label className="mb-1 block text-ui-base text-foreground-subtle">
-                  {intl.formatMessage({ id: "settings.modelProvider.modelId" })}
-                </label>
-                <Input
-                  {...TECHNICAL_INPUT_ATTRIBUTES}
-                  type="text"
-                  autoFocus={shouldFocusModelIdInput}
-                  size="lg"
-                  className={cn("font-mono", modelEditorControlStyle(false))}
-                  readOnly={modelIdReadOnly}
-                  value={draft.idValue}
-                  placeholder={intl.formatMessage({
-                    id: "settings.modelProvider.modelId",
-                  })}
-                  onChange={(event) => {
-                    onDraftChange({ idValue: event.target.value });
-                  }}
-                  onBlur={onModelIdBlur}
-                  onCompositionStart={handleCompositionStart}
-                  onCompositionEnd={handleCompositionEnd}
-                  onKeyDown={handleTechnicalInputKeyDown}
-                />
-              </div>
-            </div>
+            <ProviderModelIdentityFields
+              idValue={draft.idValue}
+              nameValue={draft.nameValue}
+              idReadOnly={modelIdReadOnly}
+              idAutoFocus={shouldFocusModelIdInput}
+              onIdChange={(idValue) => onDraftChange({ idValue })}
+              onIdBlur={onModelIdBlur}
+              onNameChange={(nameValue) => onDraftChange({ nameValue })}
+              inputHandlers={{
+                onCompositionStart: handleCompositionStart,
+                onCompositionEnd: handleCompositionEnd,
+                onKeyDown: handleTechnicalInputKeyDown,
+              }}
+            />
           </ModelSettingsGroup>
           <ModelSettingsGroup group="tokens">
             <div className="space-y-3">

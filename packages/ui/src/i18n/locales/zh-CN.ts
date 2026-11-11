@@ -4375,6 +4375,9 @@ const zhCN: Record<string, string> = {
   "settings.modelProvider.remotePicker.empty": "未获取到模型",
   "settings.modelProvider.remotePicker.addFailed": "以下模型添加失败：{models}",
   "settings.modelProvider.modelId": "模型 ID",
+  "settings.modelProvider.modelName": "模型名称",
+  "settings.modelProvider.modelNameHelp":
+    "可选的简短名称，在对话模型选择器中显示为「供应商/名称」；请求仍使用模型 ID。",
   "settings.modelProvider.modelDisplayName": "显示名称",
   "settings.modelProvider.modelApiFormat.anthropic": "Anthropic Messages",
   "settings.modelProvider.modelApiFormat.openaiCompatible": "OpenAI Compatible",
@@ -4409,6 +4412,7 @@ const zhCN: Record<string, string> = {
   "settings.modelProvider.modality.audio": "音频",
   "settings.modelProvider.modality.pdf": "PDF",
   "settings.modelProvider.modelMetadata.invalid.id": "模型 ID 不能为空",
+  "settings.modelProvider.modelMetadata.invalid.name": "模型名称需为 1–64 个字符，且不含控制字符",
   "settings.modelProvider.modelMetadata.invalid.kinds": "至少选择一种 API 格式",
   "settings.modelProvider.modelMetadata.invalid.contextWindow": "上下文窗口必须是正整数",
   "settings.modelProvider.modelMetadata.invalid.maxOutputTokens": "最大输出 Token 必须是正整数",

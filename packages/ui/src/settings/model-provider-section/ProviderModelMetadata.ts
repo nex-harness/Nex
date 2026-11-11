@@ -1,6 +1,6 @@
 /* oxlint-disable eslint(max-lines) -- Model Config 弹窗的 Draft、校验与稀疏 Overlay 必须共享同一字段映射，避免 UI 产生第二套规则。 */
 import type { ProviderSettingsFormModel } from "@/lib/providerSettingsFormTypes.js";
-import type { ModelInputFormatData } from "@nex/shared/model-config";
+import { modelDisplayNameSchema, type ModelInputFormatData } from "@nex/shared/model-config";
 import {
   EnumOptionSpecConfig,
   extractManualModelConfig,
@@ -12,6 +12,8 @@ export type ProviderModelInputFormatDraft = ModelInputFormatData;
 
 export interface ProviderModelDraftValues {
   idValue: string;
+  /** 仅展示用的别名；空串表示未设置，显示名回退为模型 ID。 */
+  nameValue: string;
   contextWindowValue: string;
   maxOutputTokensValue: string;
   inputFormatValue: ProviderModelInputFormatDraft;
@@ -34,6 +36,7 @@ export type ProviderModelDraftCommitResult =
       status: "invalid";
       field:
         | "id"
+        | "name"
         | "contextWindow"
         | "maxOutputTokens"
         | "inputFormat"
@@ -54,6 +57,8 @@ export function createProviderModelDraftValues(
   const inputFormat = properties?.inputFormat;
   return {
     idValue: model.modelId,
+    // 别名只读个人配置：继承值不存在，空输入的占位符是模型 ID。
+    nameValue: model.personalConfig.name ?? "",
     // 编辑器只把 Personal Overlay 当作真实输入；继承值由 UI 作为 placeholder 展示。
     contextWindowValue:
       model.personalConfig.properties?.contextWindow == null
@@ -129,6 +134,12 @@ export function resolveProviderModelDraftCommit({
   if (!modelId) {
     return { status: "invalid", field: "id" };
   }
+
+  const nameInput = draft.nameValue.trim();
+  if (nameInput && !modelDisplayNameSchema.safeParse(nameInput).success) {
+    return { status: "invalid", field: "name" };
+  }
+  const name = nameInput || undefined;
 
   const useRecommendedConfig = draft.useRecommendedConfigValue !== false;
   const inherited = useRecommendedConfig ? currentModel.inheritedConfig : undefined;
@@ -239,6 +250,9 @@ export function resolveProviderModelDraftCommit({
   };
   if (Object.keys(personalProperties).length === 0)
     deleteMutable(sparsePersonalConfig, "properties");
+  // 别名与推荐/固定模式无关，只由输入框决定；清空才删除。
+  if (name === undefined) deleteMutable(sparsePersonalConfig, "name");
+  else assignMutable(sparsePersonalConfig, "name", name);
 
   const inheritedMaxOption = inherited?.optionSpecs?.maxOutputTokens;
   // Option Spec 不再拥有 default；该输入框唯一表达模型硬上限 max。
@@ -320,7 +334,8 @@ export function resolveProviderModelDraftCommit({
       hasPersonalConfig: Object.keys(personalConfig).length > 0,
       personalConfig,
       config: {
-        ...currentModel.config,
+        ...withoutName(currentModel.config),
+        ...(name === undefined ? {} : { name }),
         enabled: effectiveEnabled,
         properties: effectiveProperties,
         optionSpecs: effectiveOptionSpecs,
@@ -329,8 +344,17 @@ export function resolveProviderModelDraftCommit({
   };
 }
 
-function preserveEnabledPersonalConfig(config: ModelConfigObject): ModelConfigObject {
-  return config.enabled === undefined ? {} : { enabled: config.enabled };
+function withoutName(config: ModelConfigObject): ModelConfigObject {
+  const { name: _name, ...rest } = config;
+  return rest;
+}
+
+/** enabled 与 name 都是模型行的独立属性，固定模式物化时按原值保留。 */
+function preserveModelRowPersonalConfig(config: ModelConfigObject): ModelConfigObject {
+  return {
+    ...(config.enabled === undefined ? {} : { enabled: config.enabled }),
+    ...(config.name == null ? {} : { name: config.name }),
+  };
 }
 
 function materializeEditorManagedPersonalConfig({
@@ -340,10 +364,10 @@ function materializeEditorManagedPersonalConfig({
   current: ModelConfigObject;
   effective: ModelConfigObject;
 }): ModelConfigObject {
-  // enabled 由模型列表行单独管理，不随“跟随推荐配置”模式物化或清除。
+  // enabled 由模型列表行单独管理、name 由别名输入框管理，二者都不随“跟随推荐配置”模式物化或清除。
   // 只提取可编辑叶子；隐藏请求映射必须来自当前身份规则，不能由旧模型草稿冻结。
   return extractManualModelConfig({
-    ...preserveEnabledPersonalConfig(current),
+    ...preserveModelRowPersonalConfig(current),
     properties: effective.properties,
     optionSpecs: effective.optionSpecs,
   });
