@@ -5275,6 +5275,29 @@ const zhCN: Record<string, string> = {
   "settings.hooks.review.reason.host_unavailable": "当前连接不支持审核此 Hook",
   "settings.hooks.review.reason.rejected": "操作被拒绝",
   "settings.hooks.title": "钩子",
+  "pets.controls.newChat": "新对话",
+  "pets.controls.voice": "语音",
+  "pets.controls.comingSoon": "即将推出",
+  "settings.pets.title": "宠物",
+  "settings.pets.enable": "桌面宠物",
+  "settings.pets.enableDescription":
+    "在桌面上显示一只小伙伴，跟随 Nex 的工作状态变化——即使窗口关闭它也会留在桌面上，点一下就能回到 Nex。",
+  "settings.pets.size": "大小",
+  "settings.pets.sizeDescription": "调整宠物在桌面上的显示大小。",
+  "settings.pets.sizeReset": "重置",
+  "settings.pets.visibility": "显示方式",
+  "settings.pets.visibilityDescription":
+    "选择宠物常驻桌面，或仅在按下 {shortcut} 时出现、点击其他位置后隐藏。",
+  "settings.pets.visibilityAlways": "始终显示",
+  "settings.pets.visibilityOnDemand": "按需显示",
+  "settings.pets.myPets": "我的宠物",
+  "settings.pets.refresh": "刷新",
+  "settings.pets.create": "创建宠物",
+  "settings.pets.createDisabledHint":
+    "创建宠物将在支持图片生成后开放。现在可以把兼容 Codex 格式的宠物目录放入 ~/.nex/pets/。",
+  "settings.pets.empty":
+    "还没有宠物。把兼容 Codex 格式的宠物目录（pet.json + spritesheet.webp）放入 ~/.nex/pets/ 后点击刷新。",
+  "settings.pets.errorsTitle": "部分目录被跳过",
   "settings.workspaceFileSearch.title": "工作区搜索范围",
   "settings.workspaceFileSearch.description":
     "编辑 .nexignore 忽略规则（语法与 .gitignore 一致），控制工作区文件搜索的范围。保存后下次搜索生效。",

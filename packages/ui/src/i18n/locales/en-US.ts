@@ -5652,6 +5652,29 @@ const enUS: Record<string, string> = {
   "settings.hooks.review.reason.host_unavailable": "This connection cannot review this Hook",
   "settings.hooks.review.reason.rejected": "Request rejected",
   "settings.hooks.title": "Hooks",
+  "pets.controls.newChat": "New chat",
+  "pets.controls.voice": "Voice",
+  "pets.controls.comingSoon": "Coming soon",
+  "settings.pets.title": "Pets",
+  "settings.pets.enable": "Desktop pet",
+  "settings.pets.enableDescription":
+    "Show a little companion on your desktop that reacts to what Nex is doing — it stays on top even when the window is closed, and you can click it to come back.",
+  "settings.pets.size": "Size",
+  "settings.pets.sizeDescription": "Adjust how large the pet appears on your desktop.",
+  "settings.pets.sizeReset": "Reset",
+  "settings.pets.visibility": "Visibility",
+  "settings.pets.visibilityDescription":
+    "Choose whether the pet is always shown, or only appears when you press {shortcut} and hides when you click elsewhere.",
+  "settings.pets.visibilityAlways": "Always visible",
+  "settings.pets.visibilityOnDemand": "On demand",
+  "settings.pets.myPets": "My pets",
+  "settings.pets.refresh": "Refresh",
+  "settings.pets.create": "Create pet",
+  "settings.pets.createDisabledHint":
+    "Pet creation will be available once image generation is supported. For now, drop a Codex-compatible pet folder into ~/.nex/pets/.",
+  "settings.pets.empty":
+    "No pets yet. Put a Codex-compatible pet folder (pet.json + spritesheet.webp) into ~/.nex/pets/ and click Refresh.",
+  "settings.pets.errorsTitle": "Some folders were skipped",
   "settings.workspaceFileSearch.title": "Workspace Search Scope",
   "settings.workspaceFileSearch.description":
     "Edit .nexignore rules (gitignore syntax) that scope workspace file search. Takes effect on the next search after saving.",

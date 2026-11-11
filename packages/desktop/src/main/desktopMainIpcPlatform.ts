@@ -101,6 +101,8 @@ export function registerPlatformIpcHandlers(options: {
   }>;
   setAutoDownloadAndInstallUpdates: (enabled: boolean) => Promise<void>;
   syncAppSettings: (patch: ReturnType<typeof appSettingsPatchSchema.parse>) => void;
+  /** 桌面宠物悬浮窗状态同步；docs/specs/desktop-pets.md。 */
+  syncPetState?: (state: import("@nex/shared").PetWindowState | null) => void;
   /** 关闭驻留托盘能力查询（spec：docs/desktop/linux-close-to-tray.md）；传入 monitor 的 refresh */
   refreshCloseToTrayCapability: () => Promise<import("@nex/shared").DesktopCloseToTrayCapability>;
   /** 快捷键设置页录制态开关：true 时 main 重建菜单摘除可配置 accelerator（见 shortcut-settings-spec §7） */
@@ -342,6 +344,11 @@ export function registerPlatformIpcHandlers(options: {
     }
 
     options.syncAppSettings(result.data);
+  });
+
+  // 桌面宠物悬浮窗状态同步（docs/specs/desktop-pets.md）。
+  ipcMain.on(PlatformChannels.SyncPetState, (_event, payload: unknown) => {
+    options.syncPetState?.(payload as Parameters<NonNullable<typeof options.syncPetState>>[0]);
   });
 
   // 快捷键录制态：renderer 设置页进入/退出录制时通知。macOS 系统菜单会先于 renderer

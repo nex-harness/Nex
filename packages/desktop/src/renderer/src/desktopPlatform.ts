@@ -95,6 +95,7 @@ export function createDesktopPlatform(options: {
     syncWindowUnreadCount: (count) => window.nex.syncWindowUnreadCount(count),
     syncActiveTaskSession: (sessionId) => window.nex.syncActiveTaskSession(sessionId),
     syncAppSettings: (patch) => window.nex.syncAppSettings?.(patch),
+    syncPetState: (state) => window.nex.syncPetState?.(state),
     // 桥缺失（旧 preload 升级窗口）时按 supported 兜底，与 Windows 现状一致，设置开关可用。
     getCloseToTrayCapability: () =>
       window.nex.getCloseToTrayCapability?.() ??
@@ -132,6 +133,7 @@ export function createDesktopPlatform(options: {
       return window.nex.onOpenWorkspace?.(handler) ?? (() => {});
     },
     onOpenWorkspacePath: (handler) => window.nex.onOpenWorkspacePath?.(handler) ?? (() => {}),
+    onOpenSettingsSection: (handler) => window.nex.onOpenSettingsSection?.(handler) ?? (() => {}),
     onOpenFeedbackDialog: (handler) => window.nex.onOpenFeedbackDialog?.(handler) ?? (() => {}),
     onOpenTicketsPanel: (handler) => window.nex.onOpenTicketsPanel?.(handler) ?? (() => {}),
     onWindowFullscreenChanged: (handler) => window.nex.onWindowFullscreenChanged(handler),

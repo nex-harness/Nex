@@ -1272,4 +1272,18 @@ export interface IPlatformService {
    *   抗浏览器/网络/语言/时区变化，换手机才会变
    */
   getDeviceId(): string;
+
+  /**
+   * 同步桌面宠物悬浮窗状态；传 null 表示销毁/隐藏悬浮窗。
+   * 仅 Desktop 实现；Web 端宠物以应用内浮动挂件呈现，不需要跨进程同步。
+   */
+  syncPetState?(state: import("./pets/index.js").PetWindowState | null): void;
+
+  /** 订阅 main 要求打开某个设置分区的请求（如宠物右键「设置」），返回 disposer。仅 Desktop 实现。 */
+  onOpenSettingsSection?(handler: (section: string) => void): () => void;
+
+  /** 订阅桌面宠物悬浮窗的用户动作（点击聚焦/拖拽移动），返回 disposer。仅 Desktop 实现。 */
+  onPetWindowAction?(
+    handler: (action: import("./pets/index.js").PetWindowAction) => void,
+  ): () => void;
 }

@@ -36,6 +36,7 @@ import {
   IMarketingTouchService,
   IHighspeedCardService,
   ISkillsService,
+  IPetService,
   ISkillSyncService,
   IUserConfigSyncService,
   IMcpSyncService,
@@ -109,6 +110,8 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly marketingTouchService: IMarketingTouchService;
   readonly highspeedCardService: IHighspeedCardService;
   readonly skillsService: ISkillsService;
+  /** 桌面宠物目录服务；旧 server wire 不提供时为 undefined（UI 按可选处理）。 */
+  readonly petService?: IPetService;
   readonly skillSyncService: ISkillSyncService;
   readonly mcpSyncService: IMcpSyncService;
   readonly genUiService: IGenUiService;
@@ -271,6 +274,9 @@ export class RemoteServiceAccess implements IServiceAccessor {
     );
     this.skillsService = ProxyChannel.toService<ISkillsService>(
       channelClient.getChannel(ISkillsService.channelName),
+    );
+    this.petService = ProxyChannel.toService<IPetService>(
+      channelClient.getChannel(IPetService.channelName),
     );
     this.skillSyncService = ProxyChannel.toService<ISkillSyncService>(
       channelClient.getChannel(ISkillSyncService.channelName),

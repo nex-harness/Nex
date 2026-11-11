@@ -190,6 +190,8 @@ export const ServiceChannels = {
   HighspeedCard: "highspeed-card",
   /** Onboarding 完成记录服务（本地持久化，后续上传服务器） */
   OnboardingRecord: "onboarding-record",
+  /** 桌面宠物目录服务 */
+  Pets: "pets",
 } as const;
 
 export type ServiceChannelName = (typeof ServiceChannels)[keyof typeof ServiceChannels];
@@ -499,6 +501,14 @@ export const PlatformChannels = {
   MigrateLegacyCommonMcp: "nex:migrate-legacy-common-mcp",
   /** Renderer → Main：获取当前设备的稳定标识符（deviceMid） */
   GetDeviceId: "nex:get-device-id",
+  /** Renderer → Main：同步桌面宠物悬浮窗状态（null 表示销毁/隐藏） */
+  SyncPetState: "nex:sync-pet-state",
+  /** Main → PetWindow：推送宠物悬浮窗状态 */
+  PetWindowState: "nex:pet-window-state",
+  /** PetWindow → Main：宠物悬浮窗用户动作（点击聚焦/拖拽移动） */
+  PetWindowAction: "nex:pet-window-action",
+  /** Main → Renderer：要求主窗口打开指定设置分区（宠物右键菜单「设置」） */
+  OpenSettingsSection: "nex:open-settings-section",
 } as const;
 
 export type PlatformChannelName = (typeof PlatformChannels)[keyof typeof PlatformChannels];
@@ -1308,6 +1318,10 @@ export interface PlatformChannelMap {
   };
   [PlatformChannels.SetTitleBarTheme]: {
     request: DesktopTitleBarTheme;
+    response: void;
+  };
+  [PlatformChannels.SyncPetState]: {
+    request: import("./pets/index.js").PetWindowState | null;
     response: void;
   };
 }

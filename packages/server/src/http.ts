@@ -25,6 +25,7 @@ import {
   INexAgentService,
   createNexAgentConnectionScope,
   IBotsService,
+  IPetService,
   IProviderProvisioningTargetService,
 } from "@nex/services";
 import {
@@ -365,6 +366,31 @@ export function createHttpServer(
 
   app.get("/api/server-info", (c) => c.json(createServerInfo(options)));
   app.post("/api/rpc-host-capability", (c) => c.json(hostCapabilities.issue()));
+
+  // 宠物精灵图静态路由（docs/specs/desktop-pets.md）。
+  // 走 /api/* 鉴权中间件；路径由 petService 解析保证不越出 pets 根目录。
+  app.get("/api/pets/:id/spritesheet", async (c) => {
+    const petService = services.getOptional(IPetService);
+    if (!petService) {
+      return c.json({ error: "Pets service unavailable" }, 404);
+    }
+    const petId = decodeURIComponent(c.req.param("id"));
+    const result = await petService.getPetSpritesheetPath({ petId });
+    if (!result) {
+      return c.json({ error: "Pet not found" }, 404);
+    }
+    try {
+      const content = await readFile(result.path);
+      const contentType =
+        extname(result.path).toLowerCase() === ".png" ? "image/png" : "image/webp";
+      return new Response(new Uint8Array(content), {
+        status: 200,
+        headers: { "Content-Type": contentType, "Cache-Control": "private, max-age=60" },
+      });
+    } catch {
+      return c.json({ error: "Spritesheet unreadable" }, 404);
+    }
+  });
 
   // 普通 `/ws` 永远是 terminal-client；浏览器/任意客户端设置旧 mode header
   // 都不能再把自己提升为 trusted host。

@@ -21,6 +21,7 @@ import {
   HardDrive,
   Keyboard,
   FileSearch,
+  PawPrint,
   RefreshCw,
   User,
 } from "lucide-react";
@@ -133,6 +134,12 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     id: "hooks",
     icon: Anchor,
     titleId: "settings.hooks.title",
+    groupId: "agentCapabilities",
+  },
+  {
+    id: "pets",
+    icon: PawPrint,
+    titleId: "settings.pets.title",
     groupId: "agentCapabilities",
   },
   {

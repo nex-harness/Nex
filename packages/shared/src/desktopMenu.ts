@@ -51,6 +51,8 @@ export const desktopMenuMessageIds = {
   trayTooltip: "tray.tooltip",
   trayOpenNex: "tray.menu.openNex",
   trayQuit: "tray.menu.quit",
+  petHide: "pet.menu.hide",
+  petSettings: "pet.menu.settings",
 } as const;
 
 export type DesktopMenuMessageId =
@@ -110,6 +112,8 @@ export const desktopMenuMessages: Record<Locale, DesktopMenuLocaleMessages> = {
     "tray.tooltip": "Nex",
     "tray.menu.openNex": "打开 Nex",
     "tray.menu.quit": "退出",
+    "pet.menu.hide": "隐藏",
+    "pet.menu.settings": "设置",
   },
   "en-US": {
     "titleBar.menu.file": "File",
@@ -162,6 +166,8 @@ export const desktopMenuMessages: Record<Locale, DesktopMenuLocaleMessages> = {
     "tray.tooltip": "Nex",
     "tray.menu.openNex": "Open Nex",
     "tray.menu.quit": "Quit",
+    "pet.menu.hide": "Hide",
+    "pet.menu.settings": "Settings",
   },
 };
 

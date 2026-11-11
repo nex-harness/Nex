@@ -240,6 +240,7 @@ export { runStorageScan } from "./storage/adapters/inProcessScanRunner.js";
 export { createClientConfigService } from "./client-config/clientConfigService.js";
 export { createClientScenesService } from "./client-scenes/clientScenesService.js";
 export { createSkillsService } from "./skills/skillsService.js";
+export { createPetService } from "./pets/petService.js";
 export { createSkillSyncService } from "./skill-sync/skillSyncService.js";
 export { createDeviceSyncStateService, createUserConfigSyncService } from "./data-sync/node.js";
 export { createHostProviderProvisioningStatus } from "./provider-provisioning-status/node.js";
@@ -330,6 +331,8 @@ import { ISourceServerWorkspaceService } from "./source-server-workspace/sourceS
 import { IUsageStatsService } from "./usage-stats/usageStats.js";
 import { IClientScenesService } from "./client-scenes/clientScenes.js";
 import { ISkillsService } from "./skills/skills.js";
+import { IPetService } from "./pets/contract.js";
+import { createPetService } from "./pets/petService.js";
 import { ISkillSyncService } from "./skill-sync/skillSync.js";
 import { IMcpSyncService } from "./mcp-sync/mcpSync.js";
 import { IPluginSyncService } from "./plugin-sync/pluginSync.js";
@@ -1336,6 +1339,10 @@ export function createLocalServices(options: {
     options.sourceServerWorkspaceService ?? createSourceServerWorkspaceService();
   // mcpSync/hooks 里引用 nexAgentService 的闭包是惰性调用，声明顺序不影响初始化。
   const skillsService = createSkillsService({ isDesktopRuntime: true });
+  const petService = createPetService({
+    authorizeLocalMediaPreviewPath: options?.authorizeLocalMediaPreviewPath,
+    createLocalMediaPreviewUrl: buildLocalMediaPreviewUrl,
+  });
   const mcpSyncService = createMcpSyncService({
     // mcp/list 的 host 消费点收拢到 mcpSync 服务；真实状态检查仍在 agent 进程。
     listMcpServerStatuses: (params) => nexAgentService.listMcpServerStatuses(params),
@@ -2338,6 +2345,7 @@ export function createLocalServices(options: {
     )
     .register(IClientScenesService, createClientScenesService({ apiClient }))
     .register(ISkillsService, skillsService)
+    .register(IPetService, petService)
     .register(ISkillSyncService, createSkillSyncService())
     .register(IMcpSyncService, mcpSyncService)
     .register(
