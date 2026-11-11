@@ -43,6 +43,7 @@
     "ipaddr.js": "1.9.1",
     "marked": "16.4.2",
     "meriyah": "^7.1.1",
+    "quickjs-wasi": "3.6.2",
     "unbash": "4.0.1",
     "yaml": "^2.9.0"
   },

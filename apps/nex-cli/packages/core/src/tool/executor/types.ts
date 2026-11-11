@@ -1,4 +1,6 @@
 import type { ToolSearchExecutionContext } from "@nex/contracts";
+import type { ToolSearchDocument } from "../tool-search-index.js";
+import type { NestedToolsPort } from "../nested/types.js";
 import type {
   AgentExecutionTelemetryPort,
   AgentTelemetryActorKind,
@@ -119,6 +121,7 @@ export interface ToolExecutorOptions {
   dynamicWorkflowSnippetPort?: DynamicWorkflowSnippetPort;
   /** 模型目录端口；缺席则 ListModels 报能力缺席，CreateWorkflow 的 subagent_model 被拒。 */
   modelCatalogPort?: ModelCatalogPort;
+  deferredToolCatalog?: () => readonly ToolSearchDocument[];
   runtimeTaskRegistry?: RuntimeTaskRegistry;
   readFileState?: ReadFileStateMap;
   /** 技能门的探针（ToolInputResolutionContext.hasLoadedSkill）；runtime 按 provider 可见历史回答。 */
@@ -193,6 +196,11 @@ export interface ToolExecuteOptions {
   offPeakTurn?: boolean;
   signal?: AbortSignal;
   traceContext?: TraceContext;
+  /**
+   * 嵌套调用（codemode 脚本发起）的父 tool call id。只进 trace 属性与审计，
+   * 不改变执行路径：嵌套调用与模型直发调用走同一条权限/校验/abort/预算链。
+   */
+  parentToolCallId?: string;
   subagentModelOverride?: SubagentRunOptions["modelOverride"];
   model?: Model;
 }
@@ -246,6 +254,8 @@ export interface ToolExecutorDeps {
   dynamicWorkflowSnippetPort?: DynamicWorkflowSnippetPort;
   /** 模型目录端口；缺席则 ListModels 报能力缺席，CreateWorkflow 的 subagent_model 被拒。 */
   modelCatalogPort?: ModelCatalogPort;
+  deferredToolCatalog?: () => readonly ToolSearchDocument[];
+  nestedTools?: NestedToolsPort;
   runtimeTaskRegistry?: RuntimeTaskRegistry;
   readFileState: ReadFileStateMap;
   /** 文件读取快照的下一个序号；执行器持有计数器，只增不减。 */

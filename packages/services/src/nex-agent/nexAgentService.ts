@@ -2690,6 +2690,7 @@ export function createNexAgentService(
                     askUserQuestionAutoResolutionEnabled: true,
                     nativeSearchEnhancementsEnabled: true,
                     memoryEnabled: false,
+                    codemodeEnabled: false,
                   },
                 );
                 if (

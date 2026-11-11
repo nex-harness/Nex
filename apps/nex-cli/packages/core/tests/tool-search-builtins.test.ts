@@ -40,6 +40,9 @@ function fixture(embeddedSearchEnabled = false) {
     includeNodeRepl: true,
     includeBrowserUse: true,
     embeddedSearchEnabled,
+    // ToolSearch 现在只在会话开启 toolSearch（mode ≠ off）时注册；这里显式开启，
+    // 与 prepareRuntimeProviderRequest 的 catalog 预置条件保持一致。
+    includeToolSearch: true,
   });
   const model: Model = {
     ...createTestRuntimeModel({

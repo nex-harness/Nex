@@ -300,5 +300,26 @@
     "provenance": "Bundled font name table identifies Hack 3.003 and retains Source Foundry, Bitstream Vera, and DejaVu license statements. The upstream v3.003 license is retained verbatim, including the DejaVu public-domain statement.",
     "importRevision": null,
     "sha256": "1f61bb7c790c59b4b0ecdf304628b94e42ae4c8020094a8c3da73381ab212623"
+  },
+  {
+    "id": "pi-codemode",
+    "referenceRevision": "d78dc83d633229d12f8b79631384c4c2717c399f",
+    "source": "https://raw.githubusercontent.com/earendil-works/pi/d78dc83d633229d12f8b79631384c4c2717c399f/LICENSE",
+    "file": "third-party/upstream/0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48.txt",
+    "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+    "importRevision": "d78dc83d633229d12f8b79631384c4c2717c399f",
+    "roots": ["apps/nex-cli/packages/core/src/codemode"],
+    "scope": "Sandbox host, worker, prelude, protocol, source and wasm loader vendored from @earendil-works/pi-codemode 1.0.3; import specifiers changed to .js. Nex-specific files in the same directory are not attributed to upstream.",
+    "license": "MIT",
+    "modifiedFiles": [
+      "apps/nex-cli/packages/core/src/codemode/identifier.ts",
+      "apps/nex-cli/packages/core/src/codemode/source.ts",
+      "apps/nex-cli/packages/core/src/codemode/types.ts",
+      "apps/nex-cli/packages/core/src/codemode/wasm.ts",
+      "apps/nex-cli/packages/core/src/codemode/runtime/host.ts",
+      "apps/nex-cli/packages/core/src/codemode/runtime/protocol.ts",
+      "apps/nex-cli/packages/core/src/codemode/runtime/prelude-source.ts",
+      "apps/nex-cli/packages/core/src/codemode/runtime/worker.ts"
+    ]
   }
 ]

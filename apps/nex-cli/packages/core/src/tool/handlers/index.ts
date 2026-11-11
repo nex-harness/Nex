@@ -10,6 +10,8 @@ import {
   FILL_WORKFLOW_HOLE_TOOL_NAME,
   GET_WORKFLOW_RUN_TOOL_NAME,
   LIST_MODELS_TOOL_NAME,
+  TOOL_SEARCH_NAME,
+  DEFERRED_TOOL_CALL_NAME,
   LIST_SAVED_WORKFLOWS_TOOL_NAME,
   LIST_WORKFLOW_RUNS_TOOL_NAME,
   RESOLVE_WORKFLOW_QUESTION_TOOL_NAME,
@@ -68,6 +70,9 @@ import { createWorkflowToolEntry } from "./create-workflow.js";
 import { saveWorkflowToolEntry } from "./save-workflow.js";
 import { listSavedWorkflowsToolEntry } from "./list-saved-workflows.js";
 import { listModelsToolEntry } from "./list-models.js";
+import { NESTED_FORBIDDEN_TOOL_NAMES } from "../nested/types.js";
+import { createCodemodeToolEntry } from "./codemode.js";
+import { buildCodemodeDescription } from "../../codemode/description.js";
 import { evalWorkflowSnippetToolEntry } from "./eval-workflow-snippet.js";
 import { listWorkflowRunsToolEntry } from "./list-workflow-runs.js";
 import { getWorkflowRunToolEntry } from "./get-workflow-run.js";
@@ -194,6 +199,10 @@ interface RegisterBuiltInToolsOptions {
   /** actor 的升级通道；门与 includeSubmitResult 同款（注入了 WorkflowEscalatePort 才注册）。 */
   includeEscalate?: boolean;
   includeWorkflow?: boolean;
+  /** 会话启用 deferred 工具时才注册 ToolSearch；缺席即不注册。 */
+  includeToolSearch?: boolean;
+  /** 会话启用 codemode 时才注册 Codemode 工具；缺席即不注册。 */
+  includeCodemode?: boolean;
   includeAutomation?: boolean;
   /** Off-Peak 会话内创建工具面；由 host 的 offPeakToolEnabled flag（灰度/远程门）驱动。 */
   includeOffPeak?: boolean;
@@ -222,6 +231,7 @@ export function registerBuiltInTools(
 ): void {
   const allowedTools = options.allowedTools ? new Set(options.allowedTools) : undefined;
   const disallowedTools = createToolRuleNameSet(options.disallowedTools);
+  const registeredBuiltIns: ToolEntry[] = [];
 
   for (const entry of builtInTools) {
     if (
@@ -282,10 +292,37 @@ export function registerBuiltInTools(
     ) {
       continue;
     }
+    // ToolSearch / DeferredToolCall 是 deferred 声明（toolSearch mode ≠ off）的配套控制面，
+    // 与 1.x 的「会话开启 toolSearch 才注册」同门：关闭时两者都不注册。
+    if (
+      (entry.metadata.name === TOOL_SEARCH_NAME ||
+        entry.metadata.name === DEFERRED_TOOL_CALL_NAME) &&
+      options.includeToolSearch !== true
+    ) {
+      continue;
+    }
     if (entry.metadata.name === "js" && options.includeNodeRepl !== true) {
       continue;
     }
-    registry.register(resolveBuiltInToolEntryForBranch(entry, options), {
+    const registeredEntry = resolveBuiltInToolEntryForBranch(entry, options);
+    registry.register(registeredEntry, {
+      silentDuplicateWarning: options.silentDuplicateWarnings,
+    });
+    registeredBuiltIns.push(registeredEntry);
+  }
+  if (options.includeCodemode === true) {
+    // 描述只列内置 direct 工具：MCP 连断不会改变描述，prompt 前缀 cache 保持稳定；
+    // MCP 与 deferred 工具由脚本内 searchTools / ALL_TOOLS 发现。
+    const listedCandidates = registeredBuiltIns
+      .filter((builtIn) => builtIn.metadata.exposure !== "deferred")
+      .filter((builtIn) => builtIn.metadata.providerVisible !== false)
+      .filter((builtIn) => !NESTED_FORBIDDEN_TOOL_NAMES.has(builtIn.metadata.name))
+      .map((builtIn) => ({
+        name: builtIn.metadata.name,
+        description: builtIn.metadata.description ?? builtIn.capability,
+        inputSchema: builtIn.inputSchema,
+      }));
+    registry.register(createCodemodeToolEntry(buildCodemodeDescription({ listedCandidates })), {
       silentDuplicateWarning: options.silentDuplicateWarnings,
     });
   }

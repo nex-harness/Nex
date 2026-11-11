@@ -25,7 +25,9 @@ async function collectLiveMcpServers(
   await runtime.initializeMcp(traceContext);
   const statuses = await runtime.mcpPort.status();
   const snapshot = runtime.mcpStartupPromise ? await runtime.mcpStartupPromise : undefined;
-  const registeredToolNames = new Set(runtime.getTools().map((tool) => tool.name));
+  // 读 registry 而非 getTools()：deferred MCP 工具尚未进 declared set，但仍可经 ToolSearch 调用，
+  // 不能因此把整个 server 算成不可用。
+  const registeredToolNames = { has: (name: string) => runtime.getToolRegistry().has(name) };
   // 与 turn-loop 的 provider 工具过滤保持完全相同的“完整工具名”语义；
   // 带参数的执行规则不会把整个工具从 provider 工具表移除，不能在 reminder 侧扩大解释。
   const turnDisallowedToolNames = new Set(toolDisallowlist ?? []);

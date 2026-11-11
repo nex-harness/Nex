@@ -12,6 +12,7 @@ import {
   TID_SETTINGS_NATIVE_SEARCH_SWITCH,
   TID_SETTINGS_TOOL_SEARCH_SELECT,
   TID_SETTINGS_TOOL_SEARCH_OPTION,
+  TID_SETTINGS_CODEMODE_SWITCH,
 } from "@nex/shared/test-ids";
 import { useState, useCallback, useEffect } from "react";
 import type { IPlatformService } from "@nex/shared";
@@ -149,6 +150,7 @@ export function GeneralSectionContent({
   toolSearchMode = "off",
   onToolSearchModeChange,
   nativeSearchEnhancementsEnabled,
+  codemodeEnabled = false,
   httpProxy = "",
   httpProxyNoProxy = "",
   httpProxyCaCertPath = "",
@@ -177,6 +179,7 @@ export function GeneralSectionContent({
   onTerminalFontFamilyChange = async () => {},
   onIntegratedTerminalShellChange = async () => {},
   onNativeSearchEnhancementsEnabledChange,
+  onCodemodeEnabledChange,
   onHttpProxyChange = async () => {},
   onHttpProxyNoProxyChange = async () => {},
   onHttpProxyCaCertPathChange = async () => {},
@@ -215,6 +218,7 @@ export function GeneralSectionContent({
   toolSearchMode?: AppToolSearchMode;
   onToolSearchModeChange: (mode: AppToolSearchMode) => Promise<void>;
   nativeSearchEnhancementsEnabled: boolean;
+  codemodeEnabled?: boolean;
   httpProxy?: string;
   httpProxyNoProxy?: string;
   httpProxyCaCertPath?: string;
@@ -252,6 +256,7 @@ export function GeneralSectionContent({
   onTerminalFontFamilyChange: (fontFamily: string) => Promise<void>;
   onIntegratedTerminalShellChange?: (selection: IntegratedTerminalShellSelection) => Promise<void>;
   onNativeSearchEnhancementsEnabledChange: (enabled: boolean) => Promise<void>;
+  onCodemodeEnabledChange: (enabled: boolean) => Promise<void>;
   onHttpProxyChange?: (httpProxy: string) => Promise<void>;
   onHttpProxyNoProxyChange?: (noProxy: string) => Promise<void>;
   onHttpProxyCaCertPathChange?: (caCertPath: string) => Promise<void>;
@@ -579,6 +584,20 @@ export function GeneralSectionContent({
               data-testid={TID_SETTINGS_NATIVE_SEARCH_SWITCH}
               onCheckedChange={(checked) => {
                 void onNativeSearchEnhancementsEnabledChange(checked);
+              }}
+            />
+          }
+        />
+        <SettingsRow
+          label={intl.formatMessage({ id: "settings.codemode" })}
+          description={intl.formatMessage({ id: "settings.codemodeDescription" })}
+          control={
+            <Switch
+              aria-label={intl.formatMessage({ id: "settings.codemode" })}
+              checked={codemodeEnabled}
+              data-testid={TID_SETTINGS_CODEMODE_SWITCH}
+              onCheckedChange={(checked) => {
+                void onCodemodeEnabledChange(checked);
               }}
             />
           }

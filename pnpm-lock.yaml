@@ -492,6 +492,9 @@ importers:
       meriyah:
         specifier: ^7.1.1
         version: 7.1.2
+      quickjs-wasi:
+        specifier: 3.6.2
+        version: 3.6.2
       unbash:
         specifier: 4.0.1
         version: 4.0.1
@@ -11129,6 +11132,9 @@ packages:
 
   quickjs-wasi@2.2.0:
     resolution: {integrity: sha512-zQxXmQMrEoD3S+jQdYsloq4qAuaxKFHZj6hHqOYGwB2iQZH+q9e/lf5zQPXCKOk0WJuAjzRFbO4KwHIp2D05Iw==}
+
+  quickjs-wasi@3.6.2:
+    resolution: {integrity: sha512-FCqGtGOrMgzUiIrMNMA2YnsOxCNwo31dzqXvclXUC6xeT35NJLKXQJsvbeCTjvoFAwZgEAPg8U6+KAPDGXn8Mg==}
 
   radix-ui@1.4.3:
     resolution: {integrity: sha512-aWizCQiyeAenIdUbqEpXgRA1ya65P13NKn/W8rWkcN0OPkRDxdBVLWnIEDsS2RpwCK2nobI7oMUSmexzTDyAmA==}
@@ -23268,6 +23274,8 @@ snapshots:
   quick-lru@5.1.1: {}
 
   quickjs-wasi@2.2.0: {}
+
+  quickjs-wasi@3.6.2: {}
 
   radix-ui@1.4.3(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:

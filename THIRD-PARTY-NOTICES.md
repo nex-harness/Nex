@@ -1882,6 +1882,10 @@ Original copyright, license and NOTICE text is retained below. Identical text is
 
 - quickjs-wasi@2.2.0 — MIT
 
+- quickjs-wasi@3.6.2 — MIT
+
+- quickjs-wasi@3.6.2 — MIT
+
 - radix-ui@1.4.3 — MIT
 
 - range-parser@1.2.1 — MIT
@@ -2399,6 +2403,10 @@ The original import revisions of copied components are not recorded in the curre
 - Fig autocomplete registry (MIT): apps/zcode-cli/packages/core/src/tool/handlers/generated/bash-command-registry.ts. License reference: https://raw.githubusercontent.com/withfig/autocomplete/aef52acff84c45edde61ae610cc2c964802b9a38/LICENSE. Original import revision: not recorded.
 
 - Material Icon Theme (MIT): packages/desktop/src/renderer/public/material-icons, packages/web/public/material-icons. License reference: https://raw.githubusercontent.com/material-extensions/vscode-material-icon-theme/cb1dfb6d9cb73b15681a93939983d75dbba7bf5b/LICENSE. Original import revision: not recorded.
+
+- pi-codemode (MIT): apps/nex-cli/packages/core/src/codemode. License reference: https://raw.githubusercontent.com/earendil-works/pi/d78dc83d633229d12f8b79631384c4c2717c399f/LICENSE. Original import revision: d78dc83d633229d12f8b79631384c4c2717c399f.
+
+- pi-codemode (MIT): apps/nex-cli/packages/core/src/codemode. License reference: https://raw.githubusercontent.com/earendil-works/pi/d78dc83d633229d12f8b79631384c4c2717c399f/LICENSE. Original import revision: d78dc83d633229d12f8b79631384c4c2717c399f.
 
 - agent-browser skills (including dogfood and electron) (Apache-2.0): .agents/skills/agent-browser, .agents/skills/dogfood, .agents/skills/electron. License reference: https://raw.githubusercontent.com/vercel-labs/agent-browser/99c732c18810494593ead9dd96ab6f5f0c78b729/LICENSE. Original import revision: not recorded.
 
@@ -44235,6 +44243,62 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *  This file is part of Mbed TLS (https://tls.mbed.org)
  */
 
+````
+
+### Notice 0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48
+
+- pi-codemode: https://raw.githubusercontent.com/earendil-works/pi/d78dc83d633229d12f8b79631384c4c2717c399f/LICENSE
+
+````text
+MIT License
+
+Copyright (c) 2025 Mario Zechner
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+````
+
+### Notice 0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48
+
+- pi-codemode: https://raw.githubusercontent.com/earendil-works/pi/d78dc83d633229d12f8b79631384c4c2717c399f/LICENSE
+
+````text
+MIT License
+
+Copyright (c) 2025 Mario Zechner
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ````
 
 ## Native search tools

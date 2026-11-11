@@ -1,3 +1,4 @@
+import { TOOL_SEARCH_NAME, DEFERRED_TOOL_CALL_NAME } from "@nex/contracts";
 import { resolveToolSearchMode } from "../../tool/search/exposure.js";
 import type {
   CollaborationMode,
@@ -142,7 +143,7 @@ export function getTools(this: AgentRuntimeInternal, model?: Model): ModelToolCo
   return this.cachedTools
     .filter(
       (tool) =>
-        (tool.name !== "ToolSearch" && tool.name !== "DeferredToolCall") ||
+        (tool.name !== TOOL_SEARCH_NAME && tool.name !== DEFERRED_TOOL_CALL_NAME) ||
         !model ||
         resolveToolSearchMode(model, this.config.toolSearch?.mode) !== "off",
     )

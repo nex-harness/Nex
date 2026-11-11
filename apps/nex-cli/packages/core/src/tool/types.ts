@@ -63,10 +63,14 @@ import type {
   PersistedReadFileStateMetadata,
   PersistedReadFileStateTool,
 } from "./read-file-state-metadata.js";
+import type { ToolSearchDocument } from "./tool-search-index.js";
+import type { NestedToolsPort } from "./nested/types.js";
 
 // -----------------------------------------------
 // Tool Metadata
 // -----------------------------------------------
+
+export type ToolExposure = "direct" | "deferred" | "hidden";
 
 export interface ToolMetadata {
   shouldDefer?: boolean;
@@ -86,6 +90,12 @@ export interface ToolMetadata {
   riskLevel: RiskLevel;
   needsApproval: boolean;
   providerVisible?: boolean;
+  /**
+   * 工具对模型请求的曝光档位（docs/specs/codemode.md P1）。缺席即 `direct`。
+   * `deferred`：存在且可调用，但 schema 要等 ToolSearch 命中后才进请求；
+   * `hidden`：registry 视其为不存在，既不声明也不可调用。
+   */
+  exposure?: ToolExposure;
   /**
    * 声明该工具是“成功即终止 turn”的终态工具：一旦返回成功结果，executor 就在该结果上挂
    * turnControl 终止当前 turn。这是工具的内在能力声明（像 concurrentSafe/destructive），
@@ -140,6 +150,8 @@ export interface BackgroundTaskControlPort {
 
 export interface ToolExecutionContext {
   toolSearch?: ToolSearchExecutionContext;
+  /** deferred 工具的检索文档；ToolSearch / Codemode 脚本的 searchTools 读它。 */
+  deferredToolCatalog?: () => readonly ToolSearchDocument[];
   toolCallId: string;
   /**
    * 当前 Tool 的实时观测写入器。Handler 只能通过窄接口写事实，不能接触原始 OTel Span。
@@ -190,6 +202,8 @@ export interface ToolExecutionContext {
   dynamicWorkflowSnippetPort?: DynamicWorkflowSnippetPort;
   /** 模型目录端口；缺席则 ListModels 报能力缺席，CreateWorkflow 的 subagent_model 被拒。 */
   modelCatalogPort?: ModelCatalogPort;
+  /** codemode 脚本的嵌套调用入口；由 executor 提供，调用仍走统一 executor。 */
+  nestedTools?: NestedToolsPort;
   runtimeTaskRegistry?: RuntimeTaskRegistry;
   readFileState?: ReadFileStateMap;
   recordReadFileStateMetadata?: (metadata: PersistedReadFileStateMetadata) => void;
