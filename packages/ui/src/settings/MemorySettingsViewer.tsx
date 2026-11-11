@@ -1,5 +1,9 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import type { ProjectMemoryWorkspaceSummary } from "@nex/services";
+import type {
+  IMemoryService,
+  ProjectMemoryFileSummary,
+  ProjectMemoryWorkspaceSummary,
+} from "@nex/services";
 import {
   TID_SETTINGS_MEMORY_COUNT,
   TID_SETTINGS_MEMORY_FILE,
@@ -18,6 +22,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { FileDisplayIcon, resolveFileDisplayDescriptor } from "@/lib/fileDisplay.js";
+import { MemoryPreviewDialog } from "@/settings/MemoryPreviewDialog.js";
 import { PluginScopeMenu } from "@/settings/PluginScopeMenu.js";
 import { PluginSearchEmptyState } from "@/settings/PluginInstallEmptyState.js";
 import { SettingsSearchInput } from "@/settings/SettingsSearchInput.js";
@@ -34,6 +39,7 @@ export function MemorySettingsViewer({
   workspaces,
   onRefresh,
   onScopeKeyChange,
+  memoryService,
 }: {
   catalogError: string | null;
   catalogState: MemoryViewerLoadingState;
@@ -41,9 +47,16 @@ export function MemorySettingsViewer({
   workspaces: ProjectMemoryWorkspaceSummary[];
   onRefresh: () => Promise<void>;
   onScopeKeyChange: (workspaceId: string) => void;
+  /** 预览弹窗读取正文用的本地 Host 服务（与 catalog 同一来源）。 */
+  memoryService: Pick<IMemoryService, "readProjectMemoryFile">;
 }) {
   const { intl, locale } = useNexIntl();
   const [searchQuery, setSearchQuery] = useState("");
+  const [previewTarget, setPreviewTarget] = useState<{
+    workspaceId: string;
+    workspaceLabel: string;
+    file: ProjectMemoryFileSummary;
+  } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -155,9 +168,21 @@ export function MemorySettingsViewer({
               <Fragment key={file.name}>
                 {index > 0 ? <div className="h-px bg-border/50" aria-hidden="true" /> : null}
                 <div className="flex min-w-0 items-center hover:bg-hover">
-                  <div
+                  <button
+                    type="button"
                     data-testid={testId(TID_SETTINGS_MEMORY_FILE, file.name)}
-                    className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
+                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-4 py-3 text-left"
+                    onClick={
+                      selectedWorkspace
+                        ? () => {
+                            setPreviewTarget({
+                              workspaceId: selectedWorkspace.id,
+                              workspaceLabel: selectedWorkspace.label,
+                              file,
+                            });
+                          }
+                        : undefined
+                    }
                   >
                     <span
                       data-testid={testId(TID_SETTINGS_MEMORY_FILE_ICON, file.name)}
@@ -188,7 +213,7 @@ export function MemorySettingsViewer({
                         })}
                       </span>
                     </span>
-                  </div>
+                  </button>
                   <span
                     data-testid={testId(TID_SETTINGS_MEMORY_FILE_EDITOR_ACTIONS, file.name)}
                     className="mr-3 shrink-0"
@@ -201,6 +226,13 @@ export function MemorySettingsViewer({
           </div>
         </>
       )}
+      <MemoryPreviewDialog
+        memoryService={memoryService}
+        target={previewTarget}
+        onOpenChange={(open) => {
+          if (!open) setPreviewTarget(null);
+        }}
+      />
     </section>
   );
 }

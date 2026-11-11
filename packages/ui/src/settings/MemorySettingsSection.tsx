@@ -9,7 +9,7 @@ import {
 } from "@/settings/MemorySettingsViewer.js";
 import { SettingsGroupCard, SettingsRow } from "@/settings/SettingsPageParts.js";
 
-type MemoryCatalogService = Pick<IMemoryService, "listProjectMemories">;
+type MemoryCatalogService = Pick<IMemoryService, "listProjectMemories" | "readProjectMemoryFile">;
 
 function normalizeWorkspaceDisplayName(value: string): string {
   const slug = value
@@ -182,6 +182,7 @@ export function MemorySettingsSection({
           workspaces={displayWorkspaces}
           onRefresh={handleRefresh}
           onScopeKeyChange={setSelectedWorkspaceId}
+          memoryService={memoryService}
         />
       )}
     </div>

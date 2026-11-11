@@ -468,6 +468,10 @@ export const TID_SETTINGS_MEMORY_FILE_UPDATED_AT = "settings-memory-file-updated
 export const TID_SETTINGS_MEMORY_FILE_EDITOR_ACTIONS = "settings-memory-file-editor-actions";
 /** Memory 原始 Markdown 预览 */
 export const TID_SETTINGS_MEMORY_PREVIEW = "settings-memory-preview";
+/** Memory 文件预览侧边面板（动态后缀为文件名） */
+export const TID_SETTINGS_MEMORY_FILE_PREVIEW = "settings-memory-file-preview";
+/** Memory 文件预览面板重试按钮 */
+export const TID_SETTINGS_MEMORY_FILE_PREVIEW_RETRY = "settings-memory-file-preview-retry";
 /** 常规设置中的 AskUserQuestion 自动继续开关 */
 export const TID_SETTINGS_ASK_USER_QUESTION_AUTO_RESOLUTION_SWITCH =
   "settings-ask-user-question-auto-resolution-switch";

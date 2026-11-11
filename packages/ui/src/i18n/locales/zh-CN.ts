@@ -3189,6 +3189,10 @@ const zhCN: Record<string, string> = {
   "settings.memory.viewer.refresh": "刷新",
   "settings.memory.viewer.loading": "正在加载记忆…",
   "settings.memory.viewer.empty": "暂无已保存的工作区记忆",
+  "settings.memory.preview.loading": "正在加载记忆文件…",
+  "settings.memory.preview.tooLarge":
+    "记忆文件过大，无法预览。请在桌面端用编辑器打开查看。",
+  "settings.memory.preview.serviceUnavailable": "记忆服务当前不可用。",
   "settings.memory.viewer.workspaces": "工作区",
   "settings.memory.viewer.files": "文件",
   "settings.memory.viewer.searchPlaceholder": "搜索记忆文件…",
