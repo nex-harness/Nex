@@ -444,4 +444,6 @@ export interface AppSettings {
   };
   /** 设置页里的临时 endpoint override；正式/测试默认 base url 由 NEX_BASE_URL env 管理。 */
   nexEndpointOrigin?: string;
+  /** 桌面宠物偏好（docs/specs/desktop-pets.md）。 */
+  pet?: import("./pets/index.js").PetSettings;
 }

@@ -27,6 +27,7 @@ import {
   registerLocalMediaPreviewScheme,
 } from "./localMediaPreviewProtocol.js";
 import { createDesktopBrowserScreenshotSurfaceCoordinator } from "./browserView/browserScreenshotSurfaceCoordinatorWiring.js";
+import { createPetWindowController, registerPetWindowActionHandler } from "./pets/petWindow.js";
 import { EMBEDDED_BROWSER_PARTITION } from "./browserDataManager.js";
 import { EmbeddedBrowserJavaScriptDialogController } from "./embeddedBrowserJavaScriptDialog.js";
 import {
@@ -37,10 +38,13 @@ import {
   app,
   BrowserWindow,
   dialog,
+  globalShortcut,
   ipcMain,
+  Menu,
   MessageChannelMain,
   nativeImage,
   protocol,
+  screen,
   session,
   shell,
   webContents,
@@ -63,6 +67,7 @@ import {
 } from "@nex/services/node";
 import {
   desktopMenuMessageIds,
+  getDesktopMenuMessage,
   type Locale,
   type AppSettings,
   type appSettingsPatchSchema,
@@ -80,6 +85,8 @@ import {
   type UpdateStatePayload,
   HostMessageTypes,
   InternalChannels,
+  mergePetPlacement,
+  mergePetSettings,
 } from "@nex/shared";
 import { logger, webRemoteControlRelayLogger } from "./logger.js";
 import { markMainLaunchAppReady } from "./desktopLaunchMarks.js";
@@ -962,6 +969,91 @@ function focusForceUpdateGateWindow() {
   gateWindow.focus();
 }
 
+// 桌面宠物悬浮窗（单例）：位置持久化走 main 侧 setting.json，聚焦走 primary coordinator。
+// 回调惰性引用 primaryWindowCoordinator（声明在后），只在用户点击时才解引用，无 TDZ 问题。
+// 宠物窗只设置窗口层级（floating + skipTransformProcessType），不触碰 Dock / 激活策略：
+// 2.0 的 Dock 可见性唯一所有者是 desktopDockVisibility（docs/specs/desktop-pets.md）。
+let petWindowController: ReturnType<typeof createPetWindowController> | null = null;
+function getPetWindowController() {
+  if (!petWindowController) {
+    petWindowController = createPetWindowController({
+      logger,
+      BrowserWindow,
+      screen,
+      app,
+      globalShortcut,
+      preloadPath: join(import.meta.dirname, "../preload/petWindow.cjs"),
+      rendererDir: join(import.meta.dirname, "../renderer"),
+      rendererDevUrl: process.env["ELECTRON_RENDERER_URL"],
+      onPlacementPersist: (placement) => {
+        // 与设置页共用 mergePetSettings，避免互相抹掉对方字段。
+        void mainSettingService
+          .get()
+          .then((settings) => {
+            const pet = mergePetPlacement(settings.pet, placement);
+            // 没有宠物设置时不写：落点持久化不能顺手创建/关闭宠物。
+            return pet ? mainSettingService.update({ pet }) : undefined;
+          })
+          .catch((error: unknown) => {
+            logger.warn(
+              `[pets] 悬浮窗位置持久化失败: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          });
+      },
+    });
+  }
+  return petWindowController;
+}
+
+/** 宠物右键菜单：隐藏（关闭宠物开关）/ 设置（打开主窗口的宠物设置）。 */
+function showPetContextMenu() {
+  logger.info("[pets] 弹出右键菜单");
+  const label = (id: (typeof desktopMenuMessageIds)[keyof typeof desktopMenuMessageIds]) =>
+    getDesktopMenuMessage(currentApplicationLocale, id);
+  const menu = Menu.buildFromTemplate([
+    {
+      label: label(desktopMenuMessageIds.petHide),
+      click: () => {
+        // 与设置页开关同一份 setting.json；落盘后广播让主窗口 renderer 刷新，
+        // 否则 renderer 里旧的 enabled=true 会在下一次状态推送时把宠物重新建出来。
+        void mainSettingService
+          .get()
+          .then((settings) =>
+            mainSettingService.update({
+              pet: mergePetSettings(settings.pet, { enabled: false }),
+            }),
+          )
+          .then(() => {
+            petWindowController?.destroy();
+            for (const win of getApplicationWindowsExcludingCuaIndicator()) {
+              if (!win.isDestroyed()) win.webContents.send(PlatformChannels.SettingsChanged);
+            }
+          })
+          .catch((error: unknown) => {
+            logger.warn(
+              `[pets] 隐藏宠物失败: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          });
+      },
+    },
+    {
+      label: label(desktopMenuMessageIds.petSettings),
+      click: () => {
+        void primaryWindowCoordinator.ensurePrimaryWindow("pet-window-settings").then(() => {
+          for (const win of getMainApplicationWindows()) {
+            if (!win.isDestroyed()) {
+              win.webContents.send(PlatformChannels.OpenSettingsSection, "pets");
+            }
+          }
+        });
+      },
+    },
+  ]);
+  const controller = petWindowController;
+  if (controller) controller.popupMenu(menu);
+  else menu.popup();
+}
+
 const primaryWindowCoordinator = createPrimaryWindowCoordinator({
   listWindows: getApplicationWindowsExcludingCuaIndicator,
   resolveStartupWindowBootstrap: () => {
@@ -1102,6 +1194,10 @@ async function prepareAppQuit(reason: string, kind: AppShutdownKind = "normal"):
   markForceQuit(reason);
   windowsCuaOperationIndicator.dispose();
   browserScreenshotSurfaceCoordinator.dispose();
+  // 宠物悬浮窗随应用退出销毁（关闭窗口不退出时它仍留在桌面上，但真退出要收干净，
+  // 同时注销 on-demand 全局快捷键）。
+  petWindowController?.destroy();
+  petWindowController = null;
 
   const cronSchedulerToDispose = cronScheduler;
   cronScheduler = null;
@@ -1538,7 +1634,11 @@ function resolveFocusedDesktopZoomLevel(): number {
 
 function getApplicationWindowsExcludingCuaIndicator(): BrowserWindow[] {
   return BrowserWindow.getAllWindows().filter(
-    (win) => !win.isDestroyed() && !windowsCuaOperationIndicator.ownsWindow(win),
+    (win) =>
+      !win.isDestroyed() &&
+      !windowsCuaOperationIndicator.ownsWindow(win) &&
+      // 宠物悬浮窗不算应用窗口：主窗口全关后它留在桌面上，不阻塞 window-all-closed / 退出清理。
+      !(petWindowController?.ownsWindow(win) ?? false),
   );
 }
 
@@ -2192,6 +2292,17 @@ app.whenReady().then(async () => {
     });
   }
 
+  // 宠物悬浮窗动作通道（点击聚焦主窗口 / 右键菜单 / 拖拽），docs/specs/desktop-pets.md。
+  registerPetWindowActionHandler({
+    logger,
+    ipcMain,
+    focusPrimaryWindow: () => {
+      void primaryWindowCoordinator.ensurePrimaryWindow("pet-window-click");
+    },
+    showContextMenu: showPetContextMenu,
+    getPetWindowController: () => petWindowController,
+  });
+
   registerPlatformIpcHandlers({
     fetchHelpConfig: readHelpConfig,
     logger,
@@ -2298,6 +2409,7 @@ app.whenReady().then(async () => {
       void webRemoteControlManager.restorePreviouslyEnabled(windowId, workspaces);
     },
     syncAppSettings: syncImmediateAppSettings,
+    syncPetState: (state) => getPetWindowController().syncState(state),
     // 设置页置灰查询：monitor 带 stale 缓存，装完 AppIndicator 扩展重开设置页即可刷新。
     // 设置页置灰查询：先确保托盘实例就绪（用户装扩展后首次查询会补建），再返回合并了
     // trayReady 的最终能力，避免设置页显示可开启但关窗实际走确认退出的不一致（CR-01）。

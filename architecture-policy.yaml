@@ -37,6 +37,22 @@ modules:
     layers: {domain: domain, app: app, adapters: adapters}
     layerOrder: [domain, app, adapters]
     owner: desktop-settings
+  # pets：桌面宠物目录（~/.nex/pets/）扫描与校验；docs/specs/desktop-pets.md
+  - id: pets
+    roots: [packages/services/src/pets]
+    managed: true
+    requires: [shared, services]
+    publicEntrypoints: [packages/services/src/pets/contract.ts]
+    layers: {adapters: .}
+    owner: desktop-settings
+  # pets-shared：宠物格式契约（帧网格、manifest、物理、设置、窗口动作）；docs/specs/desktop-pets.md
+  - id: pets-shared
+    roots: [packages/shared/src/pets]
+    managed: true
+    requires: []
+    publicEntrypoints: [packages/shared/src/pets/index.ts]
+    layers: {contract: .}
+    owner: desktop-settings
   - id: client
     roots: [packages/client/src]
     managed: false
@@ -1182,7 +1198,35 @@ modules:
       - packages/desktop/src/main/browser-local-preview/contract.ts
     layers:
       adapters: .
-    owner: desktop
+
+  # pets-ui：宠物运行时与设置分区（docs/specs/desktop-pets.md）
+  - id: pets-ui
+    roots:
+      - packages/ui/src/pets
+      - packages/ui/src/settings/PetsSettingsSection.tsx
+    managed: true
+    requires:
+      - services
+      - shared
+      - ui
+    publicEntrypoints:
+      - packages/ui/src/pets/index.ts
+      - packages/ui/src/pets/contract.ts
+    layers:
+      ui: .
+    owner: desktop-settings
+  # pets-desktop：宠物悬浮窗控制器、布局、preload 与独立 renderer（docs/specs/desktop-pets.md）
+  - id: pets-desktop
+    roots:
+      - packages/desktop/src/main/pets
+      - packages/desktop/src/preload/petWindow.ts
+      - packages/desktop/src/renderer/pets
+    managed: true
+    requires: [shared, ui, pets-ui]
+    publicEntrypoints:
+      - packages/desktop/src/main/pets/petWindow.ts
+    layers: {adapters: .}
+    owner: desktop-settings
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。

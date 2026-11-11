@@ -125,6 +125,19 @@ const remoteWorkspaceTargetSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
+const petSettingsSchema = z.object({
+  enabled: z.boolean(),
+  petId: z.string().nullable(),
+  anchor: z.enum(["bottom-right", "bottom-left", "top-right", "top-left"]).optional(),
+  windowPosition: z.object({ x: z.number(), y: z.number() }).optional(),
+  windowDisplayId: z.number().int().optional(),
+  windowSnapZone: z
+    .enum(["top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"])
+    .optional(),
+  size: z.number().int().min(80).max(224).optional(),
+  visibility: z.enum(["always", "on-demand"]).optional(),
+});
+
 const appWorkspaceSessionEntrySchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("local"),
@@ -582,6 +595,7 @@ const appSettingsObjectSchema = z.object({
   webRemoteControlExternalRelayDevice: webRemoteControlExternalRelayDeviceSchema.optional(),
   webRemoteControlLastEnabledContext: webRemoteControlLastEnabledContextSchema.optional(),
   nexEndpointOrigin: nexEndpointOriginSchema.optional(),
+  pet: petSettingsSchema.optional(),
 });
 
 export const appSettingsSchema = z.preprocess(
@@ -695,4 +709,5 @@ export const appSettingsPatchSchema = z.object({
   webRemoteControlExternalRelayDevice: webRemoteControlExternalRelayDeviceSchema.optional(),
   webRemoteControlLastEnabledContext: webRemoteControlLastEnabledContextSchema.optional(),
   nexEndpointOrigin: nexEndpointOriginSchema.optional(),
+  pet: petSettingsSchema.optional(),
 });

@@ -167,6 +167,8 @@ declare global {
       syncActiveTaskSession(sessionId: string | null): void;
       /** 同步需要 main 进程即时感知的应用设置 */
       syncAppSettings?(patch: Partial<AppSettings>): void;
+      /** 同步桌面宠物悬浮窗状态（null = 销毁/隐藏）；docs/specs/desktop-pets.md */
+      syncPetState?(state: import("@nex/shared").PetWindowState | null): void;
       /** 查询关闭驻留托盘能力（Linux 置灰判断；spec：docs/desktop/linux-close-to-tray.md） */
       getCloseToTrayCapability?(): Promise<import("@nex/shared").DesktopCloseToTrayCapability>;
       /** 注册 main 进程要求聚焦指定 workspace tab 的回调，返回 disposer */
@@ -242,6 +244,8 @@ declare global {
       onOpenWorkspace?(handler: () => void): () => void;
       /** 注册 main 进程通过 deep link 直接打开本地工作区目录的回调，返回 disposer */
       onOpenWorkspacePath?(handler: (path: string) => void): () => void;
+      /** 注册 main 进程要求打开指定设置分区的回调（宠物右键「设置」），返回 disposer */
+      onOpenSettingsSection?(handler: (section: string) => void): () => void;
       /** 注册窗口全屏状态变化回调，返回 disposer */
       onWindowFullscreenChanged(handler: (isFullscreen: boolean) => void): () => void;
       /** 读取窗口最大化状态与系统原生圆角能力 */
