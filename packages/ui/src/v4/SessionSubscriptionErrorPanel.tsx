@@ -7,16 +7,12 @@ import { useNexIntl } from "@/i18n/IntlProvider.js";
 
 export interface SessionSubscriptionErrorPanelProps {
   error: string;
-  sessionId: string;
-  workspacePath: string;
   onReconnect: () => void;
   reconnectLabel?: string;
 }
 
 export function SessionSubscriptionErrorPanel({
   error,
-  sessionId,
-  workspacePath,
   onReconnect,
   reconnectLabel,
 }: SessionSubscriptionErrorPanelProps) {

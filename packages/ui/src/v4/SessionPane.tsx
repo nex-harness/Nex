@@ -165,7 +165,6 @@ import { SessionSubscriptionErrorPanel } from "@/v4/SessionSubscriptionErrorPane
 import { ConversationTimeline } from "@/v4/ConversationTimeline.js";
 import type { ConversationLatestTurnSummary } from "@/v4/conversationTimelineLiveTail.js";
 import { ConversationBottomDockTransition } from "@/v4/ConversationBottomDockTransition.js";
-import { buildConversationTurnRenderUnits } from "@/v4/conversationTurnRenderUnits.js";
 import { SessionPluginReferenceIconBoundary } from "@/v4/SessionPluginReferenceIconProvider.js";
 import {
   resolveConversationStatusPanelVariant,
@@ -602,7 +601,7 @@ export function SessionPane({
     nexSessionService,
     nexTaskService,
   } = useServices();
-  const { intl, locale } = useNexIntl();
+  const { intl } = useNexIntl();
   const slashCommands = useSlashCommands(workspacePath, workspaceIdentity);
   const baseWorkspaceServices = useBaseWorkspaceServices();
   const composerClientNamespace = useComposerClientNamespace();
@@ -4830,8 +4829,6 @@ export function SessionPane({
           {errored && remoteAvailable ? (
             <SessionSubscriptionErrorPanel
               error={state.lastError ?? intl.formatMessage({ id: "chat.error.connectionLost" })}
-              sessionId={sessionId}
-              workspacePath={workspacePath}
               onReconnect={handleRetrySubscribe}
               reconnectLabel={
                 state.lifecycle?.state === "faulted"

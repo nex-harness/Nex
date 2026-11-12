@@ -1,7 +1,7 @@
-# 移除 ZCode/Z.ai 账号登录与会话分享（2.0）
+# 移除 ZCode/Z.ai 账号登录、会话分享与工单反馈（2.0）
 
 状态：实现中。范围：`apps/nex-cli`（OAuth/Coding Plan 登录与 `/login`、`/logout`）、
-`packages/{shared,services,client,ui,desktop,web,nex-server-cli}`（会话分享发布/导入/落地页）、
+`packages/{shared,services,client,ui,desktop,web,nex-server-cli}`（会话分享发布/导入/落地页、内置工单反馈）、
 `packages/{web-share,share-ui}`（独立分享站点）、Highspeed 推广分享卡。
 
 ## 问题
@@ -14,8 +14,12 @@
 2. **会话分享**：旁路 `conversation-share` 服务把会话发布到 `zcode.z.ai/cn/share`，桌面/Main/CLI
    通过 `nex://share/import` 和 `nex:share-import` IPC 导入回本地，另有 `web-share` 独立站点与
    Highspeed 推广卡把 `zcode.z.ai` 链接复制到剪贴板。
+3. **工单反馈**：应用内 `feedback` 服务把问题提交到 ZCode 托管的工单系统（`config/default.json`
+   的 `feedback_url` 指向飞书表单），桌面 Main / Web 平台按远端配置决定打开内置对话框还是外链表单；
+   UI 还包含工单列表、附件上传、日志归档上传等完整链路。
 
-产品决定（最终）：「不再有任何与 ZCode 相关的登录或分享，全部移除。」
+产品决定（最终）：「不再有任何与 ZCode 相关的登录或分享，全部移除。」以及
+「应用内工单反馈也移除，Help → Feedback 改为打开 GitHub Issues。」
 
 ## 产品规则
 
@@ -61,6 +65,29 @@
 | Web              | `packages/web/src/share/**` 与 `main.tsx` 的 `/cn/share`、`/share` 路由分发；`packages/web-share`、`packages/share-ui` 两个包                                                                                                                                                                                                                                                                                                                                                    |
 | Highspeed 推广   | `HighspeedShareNoticeCard` / `HighspeedShareDialog`、`highspeedShare.ts`、`highspeedShareDiagnostics.ts`、`highspeedToastClaims.ts`、`global-notice/**`、`assets/highspeed/**`、组尾与左下角的分享入口；`chat.highspeed.share*`、`globalNotice.highspeed.*` i18n                                                                                                                                                                                                                 |
 
+### 工单反馈
+
+| 区域              | 移除内容                                                                                                                                                                                                                                                                                                                                                              |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| services          | `feedback/**`（`feedbackService`、`feedbackHttpClient`、`feedbackLocalTicketStore`、`feedbackLogArchive`、`compactLogArchive`、`feedback.ts`）、`IFeedbackService` 描述符、`createUnsupportedConversationShareService` 外的 DI 注册与 accessor 字段、`index.ts` / `node.ts` 导出、`getFeedbackRootDir` / `getFeedbackAttachmentDir` / `getFeedbackLogArchiveDir` 路径 |
+| shared            | `feedback.ts` 工单类型与 schema、`feedbackPrivacy.ts`、`ServiceChannels.Feedback`、`OpenFeedbackDialog` / `OpenTicketsPanel` IPC 频道、`FeedbackLogArchiveRequest` / `FeedbackLogArchiveResult` host 通道与 zod 校验、`feedback_url` / `feedback_use_external_form` / `feedback_api_base` 配置读取                                                                    |
+| desktop main/host | Host 的反馈服务注册、反馈日志归档委托（`createFullFeedbackLogArchiveViaMain`、`pendingFeedbackLogArchiveRequests`、Main 侧 `createFeedbackLogArchiveFromExportLogs`）、`FeedbackLogArchive*` host 消息处理；`exportLogs`（Help → Export Logs）保持可用                                                                                                                |
+| desktop bridge    | preload 的 `onOpenFeedbackDialog` / `onOpenTicketsPanel`、`desktopPlatform` 对应实现、`desktopCommandHandlers` 的飞书表单分支                                                                                                                                                                                                                                         |
+| UI                | `packages/ui/src/feedback/**`（反馈中心、工单列表/详情、提交表单、附件上传、后台提交指示、截图选择、草稿与提交任务）、`FeedbackHost`、`feedbackStore` 及其在任务菜单、错误横幅、远程连接失败面板、Quick Pick 中的提交入口、`errorFeedbackDraft` / `taskFeedbackDraft`、`TID_FEEDBACK_LOGS_OPT_IN` test id                                                             |
+| Web               | `createWebPlatform` 的 `resolveFeedbackUrl`，改为直接打开 GitHub Issues                                                                                                                                                                                                                                                                                               |
+| 配置              | `config/default.json` 的 `feedback_url` / `feedback_use_external_form`                                                                                                                                                                                                                                                                                                |
+| E2E               | `feedback-upload-privacy.test.ts`、`help-client-config` 的 HC-03 反馈弹窗用例、相关 fixture 字段                                                                                                                                                                                                                                                                      |
+
+### 反馈入口替换
+
+- 新增唯一常量 `NEX_GITHUB_ISSUES_NEW_URL = "https://github.com/nex-harness/Nex/issues/new"`
+  （`packages/shared/src/productLinks.ts`）。
+- Desktop `DesktopCommandIds.OpenFeedback` → `shell.openExternal(NEX_GITHUB_ISSUES_NEW_URL)`；
+  Web `IPlatformService.openFeedback` → `window.open(..., "noopener,noreferrer")`。
+- Help 菜单与错误横幅、远程连接失败面板的反馈按钮都走同一常量；i18n 文案改为「Report on GitHub /
+  在 GitHub 反馈」，不再暗示内置工单与"我的反馈"。
+- 本地既存的工单/附件/日志归档目录（`<dataRoot>/feedback/**`）保留在磁盘上不再读取，也不删除。
+
 ### 随移除变为无引用的端点常量
 
 `packages/shared/src/nexEndpoint.ts`：`webShareCallbackUrl`、`nexPlanOpenAiBaseUrl`、
@@ -105,6 +132,8 @@ Z.ai OAuth origin/client id 解析与 `buildRuntimeZaiOAuthUrl`、Z.ai 业务域
 - Web 远控入口不再要求登录态：`WebRemoteControlEntry` 不再通过 `auth` 端口判断登录；设备列表与
   配对改用 relay 自身的设备凭据流程（relay 侧另行处理）。
 - assistant 数据里的 `source: "sharedContext"` 历史导入记录不再被解析为分享导入。
+- 本地已存在的工单与附件目录（`<dataRoot>/feedback/**`）不再被读取或清理，等于只读遗留数据；
+  旧 `feedback_url` 远端/本地配置键被忽略。
 
 ## 验收
 
@@ -113,7 +142,10 @@ Z.ai OAuth origin/client id 解析与 `buildRuntimeZaiOAuthUrl`、Z.ai 业务域
 3. `apps/nex-cli`：`pnpm --dir apps/nex-cli run typecheck` 通过；改动的包 `pnpm exec vitest run tests` 通过。
 4. `git grep`（排除 `*.md`、`docs/`、`node_modules`、lockfile）不再出现
    `ConversationShare`、`conversation-share`、`nex:share-import`、`ShareImport`、`cn/share`、
-   `cli-oauth`、`coding-plan-api-key` 登录换证解析器、`bigmodel-oauth`、`HighspeedShare`。
+   `cli-oauth`、`coding-plan-api-key` 登录换证解析器、`bigmodel-oauth`、`HighspeedShare`、
+   `IFeedbackService`、`FeedbackHost`、`feedback_url`。
 5. CLI 交互：`nex login` 报「未知命令」；TUI 没有登录选择面板，`/login` 走未知命令提示；模型不可用时
    提交不再被登录门阻断。
 6. Desktop 冷启动/二次实例传入 `nex://share/import?code=x` 时窗口正常打开、无导入动作、无报错。
+7. Desktop Help → Feedback（菜单命令 `openFeedback`）与 Web 反馈入口都只在系统浏览器打开
+   `https://github.com/nex-harness/Nex/issues/new`；Help → Export Logs 仍能打包并定位日志。

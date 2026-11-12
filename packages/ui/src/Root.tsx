@@ -51,7 +51,6 @@ import { CodingPlanUpgradeDialogProvider } from "@/settings/CodingPlanUpgradeDia
 import { RewardsProvider } from "@/rewards/RewardsProvider.js";
 import { setDefaultFileDisplayBasePath } from "@/lib/fileDisplay.js";
 import {
-  isProviderStartupSyncPending,
   shouldBlockRootRender,
   shouldShowRootStartupLoading,
   shouldOpenFallbackWorkspaceAfterCreate,
@@ -101,7 +100,6 @@ import {
 import { useCodeCommentPreviewStore } from "@/store/codeCommentPreviewStore.js";
 import { MarketingTouchProvider } from "@/components/marketing-touch/MarketingTouchProvider.js";
 import { RootStartupLoading } from "@/root/RootStartupLoading.js";
-import { resolveProviderAvailabilityState } from "@/lib/modelProviderAvailability.js";
 import { ensureProviderFamilyDomainMigration } from "@/lib/providerFamilyDomainMigration.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import { CLOSE_ACTIVE_CONTEXT_REQUEST_EVENT } from "@/lib/closeActiveContext.js";
@@ -230,11 +228,7 @@ function RootInner({
     nexAgentService: services.nexAgentService,
     codingPlanSubscriptionService: services.codingPlanSubscriptionService,
   });
-  const [providerFamilyDomainMigrationComplete, setProviderFamilyDomainMigrationComplete] =
-    useState(false);
   const rootModelSelectionRead = useModelSelectionServiceView(services.modelSelectionService);
-  const rootModelSelectionView =
-    rootModelSelectionRead.state.status === "ready" ? rootModelSelectionRead.state.view : null;
   const rootModelSelectionErrorNode =
     rootModelSelectionRead.state.status === "error" ? (
       <div className="fixed right-4 bottom-4 z-50 flex max-w-sm items-center gap-3 rounded-lg border border-destructive/30 bg-surface-raised px-3 py-2 text-ui-base text-foreground shadow-lg">
@@ -488,7 +482,6 @@ function RootInner({
         });
       } finally {
         if (!disposed) {
-          setProviderFamilyDomainMigrationComplete(true);
           try {
             await refreshAppSettings();
             await refreshProviderState();
@@ -509,14 +502,6 @@ function RootInner({
   const shouldPreferDirectoryBrowser = Boolean(preferDirectoryBrowser);
   const supportsEmbeddedBrowser = explicitSupportsEmbeddedBrowser ?? Boolean(isDesktop);
   const isResolvingStartupAuthState = false;
-  const rootProviderAvailability = resolveProviderAvailabilityState({
-    modelSelectionView: rootModelSelectionView,
-  });
-  const providerStartupSyncPending = isProviderStartupSyncPending({
-    providerFamilyDomainMigrationComplete,
-    modelSelectionViewHydrated:
-      rootProviderAvailability.hydrated || rootModelSelectionRead.state.status === "error",
-  });
   const isWebRemoteControlRoot = Boolean(webRemoteControlWorkspaceSwitcher);
   // Nex 无账号体系：启动时不再强制 provider 登录（登录入口随账号能力一并移除）。
   const canRestoreWorkspaceSession = !isResolvingStartupAuthState;

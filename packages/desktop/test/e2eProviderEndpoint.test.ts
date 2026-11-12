@@ -13,14 +13,13 @@ vi.mock("#e2e/helpers/request-security-edition/index", () => ({
 
 const liveTeam = "conversation-session-r3-live-bigmodel-team.test.ts";
 const ordinary = "conversation-session-v4-sendnow.test.ts";
-const liveShare = "conversation-session-share-ssh-artifact.test.ts";
 
 afterEach(() => {
   requestSecurityEnv.current = {};
 });
 
 describe("E2E provider endpoint ownership", () => {
-  it.each([liveTeam, liveShare])("生产账号统一使用可沿 SSH 传递的生产环境：%s", (spec) => {
+  it.each([liveTeam])("生产账号统一使用可沿 SSH 传递的生产环境：%s", (spec) => {
     const env = {
       NEX_ENV: "test",
       ...getE2EProviderEndpointEnv([spec], "deepseek", "replay"),
@@ -42,18 +41,6 @@ describe("E2E provider endpoint ownership", () => {
     });
     expect(shouldUseProductionE2EProviderEndpoint([ordinary], "example-preset", "capture")).toBe(
       true,
-    );
-  });
-  it("SSH share 的真实账号与分享 API 使用同一生产环境", () => {
-    expect(shouldUseProductionE2EProviderEndpoint([liveShare], "deepseek", "replay")).toBe(true);
-  });
-
-  it.each([
-    [liveShare, ordinary],
-    [liveShare, liveTeam],
-  ])("真实 share 必须独立运行：%j", (...specs) => {
-    expect(() => shouldUseProductionE2EProviderEndpoint(specs, "deepseek", "replay")).toThrow(
-      "独立运行",
     );
   });
   it.each([

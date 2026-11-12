@@ -1220,6 +1220,14 @@ global:
   acceptedUpstreamSnapshot: scripts/architecture/upstream-snapshot.json
 
 exceptions:
+  - id: remove-zcode-login-share-product-link
+    rule: unmanaged-new-file
+    paths: [packages/shared/src/productLinks.ts]
+    reason: 新增一个公开问题反馈链接常量（Help → Feedback 指向 GitHub Issues），除该常量外不引入新的模块边界；后续若要收口全部产品链接再单独 adopt shared 模块。
+  - id: remove-zcode-login-share-marketing-touch-edit
+    rule: unmanaged-new-file
+    paths: [packages/ui/src/components/marketing-touch/MarketingTouchProvider.tsx]
+    reason: 已准入的营销触达 Provider 只删去登录态依赖（账号体系移除后营销实例不再按用户身份重建），控制器、副作用时机与模块边界不变；接管整个 marketing-touch 目录需要单独 refactor。
   - id: session-features-attribution-header-edit
     rule: unmanaged-new-file
     paths: [apps/nex-cli/packages/adapters/src/model/runner-attribution.ts]

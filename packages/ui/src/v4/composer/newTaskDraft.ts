@@ -1,11 +1,8 @@
 import type { ModelSelectionView } from "@nex/services";
 import { readComposerRecent, resolveDraftInitialModelSelection } from "@/lib/composerRecent.js";
 import {
-  readV4ComposerDraft,
   type V4ComposerDraft,
   type ComposerScope,
-  resolveComposerScope,
-  readComposerWorkspaceScope,
 } from "@/v4/composer/composerDraftStore.js";
 
 /** 普通新任务初始化；保留 Recent 原意图，由公共 View 解析有效选择。 */

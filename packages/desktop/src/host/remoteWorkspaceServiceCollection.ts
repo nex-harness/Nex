@@ -48,7 +48,6 @@ import {
   assertRemoteWorkspaceRpcContract,
 } from "./remoteWorkspaceRpcContract.js";
 import {
-  createServiceLogger,
   createLegacySingleRootProjectService,
   createRemoteProjectService,
 } from "@nex/services/node";

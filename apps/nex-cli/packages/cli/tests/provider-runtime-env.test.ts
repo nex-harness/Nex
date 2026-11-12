@@ -63,24 +63,6 @@ test("resolves the development Nex Built-in Config and shared Personal Config", 
   );
   const activeFilePath = prepared[NEX_BUILTIN_PROVIDER_CONFIG_FILE_ENV];
 
-  const loginPrepared = await prepareCliProviderRuntimeEnv({
-    argv: ["login"],
-    dataBaseDir: join(root, "home"),
-    entrypoint,
-    env: {},
-    appVersion: "test-version",
-    platform: "test-platform",
-  });
-  assert.equal(loginPrepared[NEX_BUILTIN_PROVIDER_CONFIG_FILE_ENV], activeFilePath);
-  const logoutPrepared = await prepareCliProviderRuntimeEnv({
-    argv: ["logout"],
-    dataBaseDir: join(root, "home"),
-    entrypoint,
-    env: {},
-    appVersion: "test-version",
-    platform: "test-platform",
-  });
-  assert.equal(logoutPrepared[NEX_BUILTIN_PROVIDER_CONFIG_FILE_ENV], activeFilePath);
   // 临时目录本身可能经过软链接（macOS 的 /tmp、/var），随包配置报告的是真实路径。
   assert.equal(
     prepared.NEX_BUILTIN_PROVIDER_BUNDLED_CONFIG_FILE,

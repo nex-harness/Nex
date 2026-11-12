@@ -32,11 +32,6 @@ const CODING_PLAN_TEAM_SPEC_MARKERS = [
   // 模拟登录态访问线上账号接口会触发 401 弹窗，遮挡 Logo 的真实 hover 和截图。
   "settings-ui-polish.test.ts",
   "side-pane-tabs-responsive-interactions.test.ts",
-  "conversation-session-share-tool-presentation.test.ts",
-  // 发布入口要求登录；遗漏此用例会播种匿名账号，连分享按钮都无法展示。
-  "conversation-session-share-publish-import.test.ts",
-  // 分享浮窗仅测 Desktop 交互，账号与套餐旁路请求必须留在本地。
-  "conversation-session-share-popover.test.ts",
   "conversation-session-start-plan-independent.test.ts",
   // 创建埋点回归复用本地账号控制面，避免初始化/发送访问真实套餐与登录服务。
   "conversation-session-create-telemetry.test.ts",

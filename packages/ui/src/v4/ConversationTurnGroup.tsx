@@ -1,4 +1,3 @@
-import { useShallow } from "zustand/react/shallow";
 import { BotTopicPreparation } from "@/v4/BotTopicPreparation.js";
 import { useBotTopicInterruption } from "@/v4/botGroupDeliveryContext.js";
 import { ConnectedBotGroupDeliveryAction } from "@/v4/BotGroupDeliveryAction.js";
@@ -11,7 +10,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  useSyncExternalStore,
 } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import {
@@ -36,7 +34,6 @@ import type {
 import { ChatLoading } from "@/components/ai-elements/chat-loading.js";
 import { ChatApiRetryStatus } from "@/chat-input-toolbar/display.js";
 import { cn } from "@/components/lib/utils.js";
-import { Button } from "@/components/ui/button.js";
 import { MessageActions } from "@/components/ai-elements/message.js";
 import {
   Collapsible,
@@ -51,11 +48,7 @@ import {
   type CronCreateAutomationSummary,
 } from "@/ToolCallBlocks/renderers/cron-create.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
-import {
-  getHighspeedTurnByCommandId,
-  getHighspeedTurnDependencies,
-  subscribeHighspeedTurns,
-} from "@/highspeed/highspeedTurnStore.js";
+import { getHighspeedTurnByCommandId } from "@/highspeed/highspeedTurnStore.js";
 import type { AssistantPreviewCard } from "@/lib/assistantPreviewCards.js";
 import { useAssistantCodeCommentFeatureEnabled } from "@/AssistantCodeCommentFeatureProvider.js";
 import {
@@ -1208,12 +1201,6 @@ function ConversationTurnGroupImpl({
   const { intl } = useNexIntl();
   const visibleUserRows = useMemo(() => unit.visibleUserInputs, [unit.visibleUserInputs]);
   const sourceCommandId = unit.header?.sourceCommandId ?? visibleUserRows[0]?.sourceCommandId;
-  const selectHighspeed = useShallow(getHighspeedTurnDependencies);
-  const highspeedState = useSyncExternalStore(
-    subscribeHighspeedTurns,
-    () => selectHighspeed(sourceCommandId),
-    () => selectHighspeed(sourceCommandId),
-  );
   const highspeedTurn = getHighspeedTurnByCommandId(sourceCommandId);
   // Bug 根因：历史标识过去只依赖 Renderer 内存；卡过期或冷恢复后记录不可用，
   // 即使 transcript 已持久化 highspeed metadata，也会把 accelerated output 渲染成普通工时。

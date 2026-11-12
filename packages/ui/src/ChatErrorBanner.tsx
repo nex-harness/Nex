@@ -177,11 +177,9 @@ export function ChatErrorBanner({
   onOpenUpgrade,
   modelConfigTarget = "local",
   onReconnect,
-  remoteKind,
 }: {
   error: NexUiError;
   onReconnect?: () => void;
-  remoteKind?: string;
   onRetry?: () => void;
   retryLabel?: string;
   retryDisabled?: boolean;

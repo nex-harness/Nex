@@ -10,7 +10,6 @@ import {
   CircleHelpIcon,
   CopyIcon,
   DownloadIcon,
-  LightbulbIcon,
   InfoIcon,
   MessageSquareIcon,
   UsersIcon,

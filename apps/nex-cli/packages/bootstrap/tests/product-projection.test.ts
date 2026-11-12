@@ -8110,21 +8110,6 @@ describe("config 种子（R-19）", () => {
     });
   });
 
-  it("分享上下文导入种子只写只读来源元数据，不生成可见对话行", () => {
-    const projection = new ProductProjection("session-1", "epoch-1");
-    const before = projection.getSnapshot();
-
-    projection.seedSharedContextImport({ title: "筛选近一年收益前10%的偏股混合基金" });
-
-    const snapshot = projection.getSnapshot();
-    expect(snapshot.sharedContextImport).toEqual({
-      title: "筛选近一年收益前10%的偏股混合基金",
-    });
-    expect(snapshot.rows.window).toEqual([]);
-    expect(snapshot.revision).toBe(before.revision);
-    expect(snapshot.seq).toBe(before.seq);
-    expect(() => conversationSnapshotSchema.parse(snapshot)).not.toThrow();
-  });
 });
 
 // ── 16-timeline-authority-plan P2：productTurn 切分 / goalVerify 身份与落位 ──
