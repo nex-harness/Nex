@@ -70,9 +70,7 @@ const modelView = {
   ],
 };
 async function boundaryControls() {
-  const local = new contracts.ServiceCollection()
-    .register(contracts.IFeedbackService, { getDeviceSnapshot: async () => ({ owner: "window" }) })
-    .register(contracts.IGenUiService, {
+  const local = new contracts.ServiceCollection().register(contracts.IGenUiService, {
       listState: async () => [],
       setState: async () => "written",
       prepareSandbox: async () => "sandbox",
@@ -83,9 +81,6 @@ async function boundaryControls() {
     const client = new ChannelClient(cp);
     try {
       exposeWindowHostAttachmentServices({ server, services: local, clientMode: mode });
-      assert.deepEqual(await client.getChannel("feedback").call("getDeviceSnapshot", []), {
-        owner: "window",
-      });
       assert.deepEqual(await client.getChannel("gen-ui").call("listState", [{}]), []);
       for (const method of ["setState", "prepareSandbox"]) {
         const call = client.getChannel("gen-ui").call(method, [{}]);
@@ -105,11 +100,11 @@ async function boundaryControls() {
     });
     if (beforeConnect) adapter.dispose();
     const services = connectViaProtocol(adapter.protocol, { signal: adapter.signal });
-    const rejected = assert.rejects(services.feedbackService.getDeviceSnapshot(), /disposed/);
+    const rejected = assert.rejects(services.genUiService.listState({}), /disposed/);
     adapter.dispose();
     adapter.dispose();
     await rejected;
-    await assert.rejects(services.feedbackService.getDeviceSnapshot(), /disposed/);
+    await assert.rejects(services.genUiService.listState({}), /disposed/);
   }
   // 同 bridge 的正常 RPC、replay 与终结后晚到响应对照；只用受控释放，不改变产品计时器。
   let left, right, finish;
@@ -133,10 +128,10 @@ async function boundaryControls() {
   });
   const server = new ChannelServer(right.protocol, "MRS04");
   server.registerChannel(
-    "feedback",
+    "gen-ui",
     ProxyChannel.fromService({
-      getDeviceSnapshot: async () => ({ owner: "window" }),
-      create: () =>
+      listState: async () => [],
+      prepareSandbox: () =>
         new Promise((done) => {
           finish = done;
           entered();
@@ -145,16 +140,16 @@ async function boundaryControls() {
   );
   try {
     const services = connectViaProtocol(left.protocol, { signal: left.signal });
-    assert.deepEqual(await services.feedbackService.getDeviceSnapshot(), { owner: "window" });
+    assert.deepEqual(await services.genUiService.listState({}), []);
     left.replayUnacknowledged();
     assert.equal(left.signal.aborted, false);
-    const rejected = assert.rejects(services.feedbackService.create({}), /disposed/);
+    const rejected = assert.rejects(services.genUiService.prepareSandbox({}), /disposed/);
     await requestEntered;
     left.markDegraded("MRS04-terminal");
     left.markDegraded("MRS04-duplicate");
-    finish({ id: "late" });
+    finish("sandbox");
     await rejected;
-    await assert.rejects(services.feedbackService.getDeviceSnapshot(), /disposed/);
+    await assert.rejects(services.genUiService.listState({}), /disposed/);
   } finally {
     left.dispose();
     right.dispose();
@@ -214,7 +209,7 @@ async function scenario({ width, theme, locale, remote }) {
     label: "E2E_MRS",
     ...(remote ? { remoteSessionId: "mrs-source-session", connectionState: "connected" } : {}),
   };
-  const traffic = { feedback: [], genUi: [], commands: [], opens: [], errors: [] };
+  const traffic = { genUi: [], commands: [], opens: [], errors: [] };
   const bridges = new Map();
   let socketRef,
     currentBridge,
@@ -222,13 +217,6 @@ async function scenario({ width, theme, locale, remote }) {
     heldRead,
     snapshots = new Map();
   const send = (socket, payload) => socket.send(JSON.stringify({ type: "data", payload }));
-  const baseFeedback = {
-    getDeviceSnapshot: async () => ({ appVersion: "3.16.3", deviceMid: "E2E_CONTROLLER" }),
-    create: async (input) => {
-      traffic.feedback.push(input);
-      return { id: `E2E_MRS_${traffic.feedback.length}` };
-    },
-  };
   const baseGenUi = {
     listState: async (scope) => {
       traffic.genUi.push(scope);
@@ -356,9 +344,7 @@ async function scenario({ width, theme, locale, remote }) {
                   ProxyChannel.toService(channelClient.getChannel(descriptor.channelName)),
                 );
             }
-            local
-              .register(contracts.IFeedbackService, baseFeedback)
-              .register(contracts.IGenUiService, baseGenUi);
+            local.register(contracts.IGenUiService, baseGenUi);
             const services = remote
               ? createServerRemoteWorkspaceServiceCollection({
                   clientConfigService: accessor.clientConfigService,
@@ -427,22 +413,6 @@ async function scenario({ width, theme, locale, remote }) {
     // 通过真实项目/任务入口打开已有会话，禁用引导由隔离服务判定。
     await page.getByText("E2E_MRS_TASK", { exact: true }).first().click();
     await hydrate();
-    // 只用产品 store 打开表单；提交按钮、输入、RPC 和后台 job 都走真实代码。
-    await page.evaluate(async (root) => {
-      const { useFeedbackStore } = await import(
-        `${"/@fs"}${root}/packages/ui/src/feedback/feedbackStore.ts`
-      );
-      useFeedbackStore
-        .getState()
-        .openSubmit({ description: "E2E_MRS_FEEDBACK", includeLogs: false });
-    }, root);
-    await page
-      .getByRole("button", { name: /^(提交反馈|Submit feedback|提交|Submit)$/ })
-      .last()
-      .click();
-    await assertEventually(() => traffic.feedback.length === 1);
-    assert.equal(traffic.feedback[0].device.deviceMid, "E2E_CONTROLLER");
-    await page.keyboard.press("Escape");
     const input = page
       .getByTestId(TID_V4_COMPOSER_INPUT)
       .locator('[contenteditable="true"]')
@@ -481,7 +451,7 @@ async function scenario({ width, theme, locale, remote }) {
     await assertEventually(() => traffic.commands.length === commandCount + 1);
     assert.equal(traffic.commands.at(-1).payload.text.includes("E2E_MRS_PENDING"), true);
     assert.equal(
-      traffic.errors.some((e) => /Channel name '(feedback|gen-ui)' timed out/.test(e)),
+      traffic.errors.some((e) => /Channel name 'gen-ui' timed out/.test(e)),
       false,
     );
     await page.screenshot({ path: resolve(artifacts, `${prefix}.png`) });

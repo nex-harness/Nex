@@ -49,14 +49,11 @@ export const zhCN: NexCopy = {
   --workflow-mode <mode>  prompt/TUI 的动态工作流：disabled、onDemand 或 alwaysOn（默认 disabled）
   -c, --continue        恢复当前目录最近的 session
   --json           在支持的命令中输出机器可读 JSON
-  --no-browser     不打开浏览器，只打印 OAuth URL
   --no-color       禁用 ANSI 颜色
   --verbose        打印更多诊断信息
 
 Slash Commands:
   /help [command]       显示 slash command 帮助
-  /login                使用 Z.AI OAuth 登录
-  /logout               删除共享的 Z.AI 登录凭据
   /compact [instructions]  压缩当前对话
   /expert [status|resume|stop|<task>]  运行或管理 expert workflow
   /dwf [list|cancel|resume]  列出、取消或恢复 dynamic workflow run

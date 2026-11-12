@@ -49,14 +49,11 @@ Options:
   --workflow-mode <mode>  Dynamic workflows for prompts/TUI: disabled, onDemand, or alwaysOn (default: disabled)
   -c, --continue        Resume the latest session for the current directory
   --json           Print machine-readable JSON where supported
-  --no-browser     Print the OAuth URL without opening a browser
   --no-color       Disable ANSI colors
   --verbose        Print extra diagnostic detail
 
 Slash Commands:
   /help [command]       Show slash command help
-  /login                Choose Z.AI or BigModel browser login
-  /logout               Remove the shared Z.AI login credentials
   /compact [instructions]  Compact the current conversation
   /expert [status|resume|stop|<task>]  Run or manage the expert workflow
   /dwf [list|cancel|resume]  List, cancel, or resume dynamic workflow runs
