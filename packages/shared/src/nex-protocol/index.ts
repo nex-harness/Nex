@@ -1134,45 +1134,16 @@ export const nexSessionImportMessageSchema = z
   .strict();
 export type NexSessionImportMessage = z.infer<typeof nexSessionImportMessageSchema>;
 
-export const nexSessionImportHistorySchema = z.discriminatedUnion("source", [
-  z
-    .object({
-      source: z.literal("claudeCode"),
-      title: z.string().optional(),
-      createdAt: timestampMsSchema.optional(),
-      updatedAt: timestampMsSchema.optional(),
-      messages: z.array(nexSessionImportMessageSchema).min(1),
-    })
-    .strict(),
-  z
-    .object({
-      source: z.literal("sharedContext"),
-      title: z.string().trim().min(1),
-      createdAt: timestampMsSchema.optional(),
-      markdown: z.string().min(1),
-      provenance: z
-        .object({
-          shareId: z.string().trim().min(1),
-          contextId: z.string().trim().min(1).optional(),
-          shareUrl: z.string().url().optional(),
-          status: z.enum(["pending", "reserved", "attached", "discarded"]).optional(),
-          projectionSha256: z.string().regex(/^[0-9a-f]{64}$/u),
-          artifactSetSha256: z.string().regex(/^[0-9a-f]{64}$/u),
-          formatterVersion: z.literal(1),
-          markdownSha256: z.string().regex(/^[0-9a-f]{64}$/u),
-          installedArtifacts: z.array(
-            z
-              .object({
-                artifactId: z.string().trim().min(1),
-                workspaceRelativePath: z.string().trim().min(1),
-              })
-              .strict(),
-          ),
-        })
-        .strict(),
-    })
-    .strict(),
-]);
+/** 会话历史导入目前只支持 Claude Code transcript。 */
+export const nexSessionImportHistorySchema = z
+  .object({
+    source: z.literal("claudeCode"),
+    title: z.string().optional(),
+    createdAt: timestampMsSchema.optional(),
+    updatedAt: timestampMsSchema.optional(),
+    messages: z.array(nexSessionImportMessageSchema).min(1),
+  })
+  .strict();
 export type NexSessionImportHistory = z.infer<typeof nexSessionImportHistorySchema>;
 
 export const nexThoughtLevelOptionSchema = z

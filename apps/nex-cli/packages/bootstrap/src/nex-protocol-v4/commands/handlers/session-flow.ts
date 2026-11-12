@@ -243,7 +243,6 @@ async function sendText(
         ? { fallbackReasonCode: "guide.attachmentsUnsupported" }
         : {}),
       attachmentRefs: payload.attachments,
-      sharedContextRefs: payload.context_refs,
       ...(payload.source ? { source: payload.source } : {}),
     });
     started = await startPromptTurn(host, record, {
@@ -256,7 +255,6 @@ async function sendText(
       // 修复原因：原来抢占后标成 user_steer，模型看到"在当前轮继续"的提示；MCS 关时这段提示
       // 还并入上一次请求已发出的 tool_result，改写了那次请求写入的缓存。
       intent,
-      ...(payload.context_refs ? { sharedContextRefs: payload.context_refs } : {}),
       ...turnBackgroundAttributionOf(payload),
       ...(payload.botDeliveryTarget ? { botDeliveryTarget: payload.botDeliveryTarget } : {}),
       toolDisallowlist: payload.toolDisallowlist,

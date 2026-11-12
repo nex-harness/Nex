@@ -8,7 +8,6 @@ import {
   type TurnFileChangeSummary,
   type TurnId,
 } from "@nex/contracts";
-import type { ConversationSnapshot } from "@nex/shared/nex-protocol-v4";
 import {
   goalVerificationEntriesFromSessionEntries,
   synthesizeEventsFromMessages,
@@ -19,8 +18,6 @@ export interface ConversationMaterializationSource {
   goalVerificationEntries: HydratedGoalVerificationEntry[];
   memoryEvents: SessionEvent[];
   messages: MessageWithParts[];
-  /** shared_context 正文仍是 provider-only；这里只下发脱敏的 handover metadata。 */
-  sharedContextImport?: ConversationSnapshot["sharedContextImport"];
   /** 只有成功读取 session_target 后才存在；显式 null 也是持久 authority。 */
   target?: SessionGoal | null;
 }
@@ -81,41 +78,10 @@ export async function loadPersistedConversationMaterialization(input: {
     rewindKeptMessageIds: session?.revert?.keptMessageIDs,
     rewindTargetMessageId: session?.revert?.targetMessageID,
   });
-  const sharedContextMessage = messages.find(
-    (message) =>
-      message.info.role === "user" &&
-      message.info.source === "shared_context" &&
-      message.info.semantics?.origin === "import" &&
-      message.info.semantics?.kind === "shared_context",
-  );
-  const sharedContextEntry = entries.find((entry) => entry.type === "v4/shared_context_import");
-  const sharedContextData =
-    sharedContextEntry?.data && typeof sharedContextEntry.data === "object"
-      ? (sharedContextEntry.data as Record<string, unknown>)
-      : undefined;
-  const contextId =
-    typeof sharedContextData?.contextId === "string" ? sharedContextData.contextId : undefined;
-  const shareUrl =
-    typeof sharedContextData?.shareUrl === "string" ? sharedContextData.shareUrl : undefined;
-  const status = sharedContextData?.status;
-  const sharedContextImport =
-    sharedContextMessage && session?.title?.trim()
-      ? contextId &&
-        shareUrl &&
-        ["pending", "reserved", "attached", "discarded"].includes(String(status))
-        ? {
-            contextId,
-            title: session.title.trim(),
-            shareUrl,
-            status: status as "pending" | "reserved" | "attached" | "discarded",
-          }
-        : { title: session.title.trim() }
-      : undefined;
   return {
     goalVerificationEntries: goalVerificationEntriesFromSessionEntries(entries),
     memoryEvents: [...input.memoryEvents],
     messages,
-    ...(sharedContextImport ? { sharedContextImport } : {}),
     target,
   };
 }

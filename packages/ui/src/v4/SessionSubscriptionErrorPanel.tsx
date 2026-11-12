@@ -1,52 +1,27 @@
+import { NEX_GITHUB_ISSUES_NEW_URL } from "@nex/shared";
+import { usePlatform } from "@/hooks/usePlatform.js";
 import { useCallback } from "react";
 import { TID_V4_RETRY_SUBSCRIBE } from "@nex/shared/test-ids";
 import { Button } from "@/components/ui/button.js";
-import { toast } from "@/components/ui/toast.js";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
-import { buildErrorFeedbackDescription } from "@/lib/errorFeedbackDraft.js";
 
 export interface SessionSubscriptionErrorPanelProps {
   error: string;
-  sessionId: string;
-  workspacePath: string;
   onReconnect: () => void;
   reconnectLabel?: string;
 }
 
 export function SessionSubscriptionErrorPanel({
   error,
-  sessionId,
-  workspacePath,
   onReconnect,
   reconnectLabel,
 }: SessionSubscriptionErrorPanelProps) {
   const { intl } = useNexIntl();
-  const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
-  const handleOpenFeedback = useCallback(async () => {
-    openFeedbackSubmit({
-      title: error.slice(0, 80),
-      type: "bug",
-      module: "Agent任务执行失败",
-      severity: "P2-中",
-      includeLogs: true,
-      description: buildErrorFeedbackDescription({
-        message: error,
-        contextLines: [
-          intl.formatMessage({ id: "feedback.submit.template.section.taskInfo" }),
-          intl.formatMessage({ id: "feedback.submit.template.section.taskId" }, { id: sessionId }),
-          intl.formatMessage(
-            { id: "feedback.submit.template.section.taskWorkspace" },
-            { path: workspacePath },
-          ),
-        ],
-        formatMessage: (id: string, values?: Record<string, string>) =>
-          intl.formatMessage({ id }, values),
-      }),
-      screenshots: [],
-    });
-    toast(intl.formatMessage({ id: "chat.error.feedbackOpened" }));
-  }, [error, intl, openFeedbackSubmit, sessionId, workspacePath]);
+  const platform = usePlatform();
+  const handleOpenFeedback = useCallback(() => {
+    // 产品决定：不再内置工单系统，反馈入口打开 GitHub Issues 新建页。
+    platform.openExternal(NEX_GITHUB_ISSUES_NEW_URL);
+  }, [platform]);
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-ui-base">

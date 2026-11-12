@@ -508,34 +508,6 @@ describe("cold conversation three-source merge", () => {
     expect(readTarget).toHaveBeenCalledWith({ sessionID: "s1" });
   });
 
-  it("识别 shared_context transcript 并带出导入会话标题", async () => {
-    const context = userMessage("shared-context", "# imported", 1_000, "shared-context-turn");
-    context.info.synthetic = true;
-    context.info.source = "shared_context";
-    context.info.visibility = "model-only";
-    context.info.semantics = {
-      origin: "import",
-      kind: "shared_context",
-      source: "conversation_share",
-      uiVisibility: "hidden",
-      providerVisibility: "visible",
-      transcriptVisibility: "visible",
-    };
-
-    const loaded = await loadPersistedConversationMaterialization({
-      memoryEvents: [],
-      sessionId: "s1",
-      store: {
-        getSession: async () => ({ title: "导入的分享标题" }),
-        messages: async () => [context],
-        readTarget: async () => null,
-      },
-    });
-
-    // 分享导入已使用统一 metadata；冷恢复仍须保留标题，不能要求废弃的平铺字段。
-    expect(loaded.sharedContextImport).toEqual({ title: "导入的分享标题" });
-  });
-
   it("keeps an explicitly persisted null target as durable authority", async () => {
     const loaded = await loadPersistedConversationMaterialization({
       memoryEvents: [],

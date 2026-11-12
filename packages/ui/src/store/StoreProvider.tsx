@@ -20,19 +20,15 @@ export const StoreContext = createContext<NexStore | null>(null);
 
 export function StoreProvider({
   broadcastService,
-  initialIsRestoringOAuthSession = false,
   children,
 }: {
   broadcastService: IBroadcastService;
-  initialIsRestoringOAuthSession?: boolean;
   children: ReactNode;
 }) {
   // 只在首次渲染时创建 store，避免 HMR 重复订阅
   const storeRef = useRef<NexStore | null>(null);
   if (!storeRef.current) {
-    storeRef.current = createNexStore(broadcastService, {
-      initialIsRestoringOAuthSession,
-    });
+    storeRef.current = createNexStore(broadcastService);
   }
 
   return <StoreContext.Provider value={storeRef.current}>{children}</StoreContext.Provider>;

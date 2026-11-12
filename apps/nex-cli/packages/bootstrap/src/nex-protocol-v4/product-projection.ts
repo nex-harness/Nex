@@ -662,36 +662,6 @@ export class ProductProjection {
     }
   }
 
-  /**
-   * 导入分享上下文的来源只读种子。
-   *
-   * shared_context 是 provider-only message，不应物化为用户气泡；来源标记通过
-   * snapshot additive 字段下发，供 Desktop 在打开新会话后显示持久提示。该字段
-   * 不属于 conversation rows，也不递增 revision/seq，避免伪造一轮对话。
-   */
-  seedSharedContextImport(
-    source: ConversationSnapshot["sharedContextImport"] | null | undefined,
-  ): void {
-    const title = source?.title.trim();
-    if (!title) return;
-    if (
-      this.snapshot.sharedContextImport?.title === title &&
-      (source as { contextId?: string }).contextId ===
-        (this.snapshot.sharedContextImport as { contextId?: string }).contextId &&
-      (source as { status?: string }).status ===
-        (this.snapshot.sharedContextImport as { status?: string }).status
-    ) {
-      return;
-    }
-    this.snapshot = {
-      ...this.snapshot,
-      sharedContextImport: {
-        ...source,
-        title,
-      },
-    };
-  }
-
   seedUsage(seed: SessionUsageSeed): void {
     const current = this.snapshot.usage;
     const currentContextWindow = current.contextWindow;
@@ -2094,22 +2064,6 @@ export class ProductProjection {
     // success；子 Agent 的真实终态随后只作为 model-only task-notification 开新轮。
     // V4 过去没有按 tool-use-id 消费这条权威事实，因此 429 后卡片会永久停在 completed。
     const deltas: ConversationDelta[] = this.applyBackgroundTaskNotification(fact);
-    const sharedContextRef = fact.sharedContextRefs?.[0];
-    if (
-      sharedContextRef &&
-      this.snapshot.sharedContextImport &&
-      "contextId" in this.snapshot.sharedContextImport &&
-      this.snapshot.sharedContextImport.contextId === sharedContextRef.context_id &&
-      (this.snapshot.sharedContextImport.status === "pending" ||
-        this.snapshot.sharedContextImport.status === "reserved")
-    ) {
-      const sharedContextImport = {
-        ...this.snapshot.sharedContextImport,
-        status: "attached" as const,
-      };
-      this.snapshot = { ...this.snapshot, sharedContextImport };
-      deltas.push({ op: "state.updated", patch: { sharedContextImport } });
-    }
     // marker 时机：只有当
     // 本轮实际使用的 provider/model 身份与上一轮不同时，才在 turnHeader 之前落
     // modelChange marker。普通首轮 silentInitial 不产 marker；显式 sourceLess 边界
@@ -3773,7 +3727,6 @@ export class ProductProjection {
       modelSelection: payload.intent?.modelSelection ?? existing?.modelSelection,
       mode: payload.intent?.mode ?? existing?.mode,
       planEnabled: payload.intent?.planEnabled ?? existing?.planEnabled,
-      sharedContextRefs: payload.intent?.sharedContextRefs ?? existing?.sharedContextRefs,
       provenance: payload.intent?.provenance ?? existing?.provenance,
       // 排队事件和原地编辑都必须保留可信接入来源，不能在 UI 投影时丢掉发送者。
       ...((payload.intent?.inputOrigin ?? existing?.inputOrigin)

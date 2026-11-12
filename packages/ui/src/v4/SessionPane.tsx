@@ -9,7 +9,6 @@ import {
   createRemoteWorkspaceDisconnectedError,
   getRemoteConnectionFailureCode,
 } from "@/lib/remoteWorkspaceServiceError.js";
-import { buildConversationShareItems } from "@/v4/conversationShareItems.js";
 import { resolveSelectionSideInheritedModel } from "@/lib/selectionSideInheritedModel.js";
 import { useStartPlanRecommendation } from "@/hooks/useStartPlanRecommendation.js";
 import type { SessionCreateSource } from "@nex/shared";
@@ -36,7 +35,6 @@ import {
 } from "@nex/shared";
 import { TID_CHAT_EMPTY, TID_V4_SESSION_PANE, testId } from "@nex/shared/test-ids";
 import type {
-  ConversationShareAccessMode,
   GitChangeSourceId,
   HighspeedCardSnapshot,
   HighspeedPrepareTurnResult,
@@ -62,18 +60,6 @@ import {
   registerPluginUiPaneSession,
   useOpenPluginUi,
 } from "@/plugin-ui/index.js";
-import {
-  getConversationShareErrorDetails,
-  resolveConversationShareFallbackIssueCode,
-  resolveConversationSharePublishErrorMessageId,
-  sanitizeConversationShareWarnings,
-} from "@/lib/conversationShareError.js";
-import { localizeConversationShareUrl } from "@nex/shared";
-import type {
-  ConversationShareAllowedArtifact,
-  ConversationShareTurnPreflightResult,
-  ImportedConversationShare,
-} from "@nex/services";
 import { toast } from "@/components/ui/toast.js";
 import { cn } from "@/components/lib/utils.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
@@ -84,7 +70,6 @@ import { WORKSPACE_FILE_DRAG_MIME } from "@/lib/workspaceFileDrag.js";
 import { buildChatSessionScrollMemoryKey } from "@/lib/chatSessionScrollMemory.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import { useServices } from "@/hooks/useServices.js";
-import { browserGlobalNoticeStore } from "@/global-notice/globalNoticeStore.js";
 import {
   HIGHSPEED_SEND_WAIT_BUDGET_MS,
   prepareHighspeedSendContext,
@@ -96,14 +81,12 @@ import {
 import {
   calculateHighspeedSavedDurationFromMetrics,
 } from "@/highspeed/highspeedSavedTime.js";
-import { buildHighspeedShareNotice } from "@/highspeed/highspeedShare.js";
 import {
   findTurnHeaderBySourceCommandId,
   findUserInputBySourceCommandId,
   listHighspeedInputRows,
 } from "@/highspeed/highspeedConversationRows.js";
 import {
-  claimHighspeedCardAutoShare,
   claimHighspeedHealthyAttempt,
   completeHighspeedTurn,
   discardHighspeedTurn,
@@ -111,13 +94,10 @@ import {
   getHighspeedSessionDependencies,
   hydrateHighspeedTurnsFromTranscript,
   listExpiredHighspeedCardsAwaitingTps,
-  listHighspeedCardAutoShareCandidates,
   listHighspeedTurnsAwaitingMetricsPersistence,
   listPendingHighspeedTurns,
-  markHighspeedCardAutoShared,
   markHighspeedTurnMetricsPersisted,
   recordHighspeedTurn,
-  resolveNextHighspeedAutoShareAt,
   setHighspeedCardTps,
   subscribeHighspeedTurns,
 } from "@/highspeed/highspeedTurnStore.js";
@@ -126,10 +106,6 @@ import {
   claimHighspeedFallbackToast,
   releaseHighspeedCardInvalidation,
 } from "@/highspeed/highspeedToastClaims.js";
-import {
-  collectHighspeedCardShareBlockers,
-  listHighspeedCardsAwaitingAutoShare,
-} from "@/highspeed/highspeedShareDiagnostics.js";
 import { useDynamicWorkflowAvailability } from "@/hooks/useDynamicWorkflowAvailability.js";
 import { resolveWorkflowResumeHandler } from "@/v4/workflowResumeGate.js";
 import {
@@ -170,14 +146,6 @@ import { useSettings } from "@/hooks/useSettingService.js";
 import { useNexStoreWithDefault } from "@/store/StoreProvider.js";
 import { useNexSessionStore } from "@/store/nexSessionStore.js";
 import {
-  DEFAULT_CONVERSATION_SHARE_ACCESS_MODE,
-  DEFAULT_CONVERSATION_SHARE_DOCK_STATE,
-  getConversationShareDockState,
-  getConversationShareSelectedProductTurnIds,
-  useConversationShareSelectionStore,
-  type ConversationShareDisplayWarnings,
-} from "@/store/conversationShareSelectionStore.js";
-import {
   ConversationComposer,
   type ComposerRestoreRequest,
   type ConversationComposerSendOptions,
@@ -196,31 +164,7 @@ import { ConversationStatusPanel } from "@/v4/ConversationStatusPanel.js";
 import { SessionSubscriptionErrorPanel } from "@/v4/SessionSubscriptionErrorPanel.js";
 import { ConversationTimeline } from "@/v4/ConversationTimeline.js";
 import type { ConversationLatestTurnSummary } from "@/v4/conversationTimelineLiveTail.js";
-import { ConversationShareImportNotice } from "@/v4/ConversationShareImportNotice.js";
-import { ConversationShareConfirmationDock } from "@/v4/ConversationShareConfirmationDock.js";
-import { ConversationShareSuccessDock } from "@/v4/ConversationShareSuccessDock.js";
-import {
-  ConversationSharePreflightStatus,
-  type ConversationSharePreflightState,
-} from "@/conversation-share-interaction/ConversationSharePreflightStatus.js";
-import { ConversationShareSelectionPanel } from "@/v4/ConversationShareSelectionPanel.js";
-import { ConversationSharePopover } from "@/conversation-share-interaction/ConversationSharePopover.js";
-import {
-  conversationSharePreflightCacheKey,
-  conversationShareTurnFingerprint,
-  dedupeConversationShareIssues,
-  aggregateConversationShareBlockingIssues,
-  getMissingConversationSharePreflightTurnIds,
-} from "@/v4/conversationSharePreflightCache.js";
-import { createConversationSharePreflightResponseHandlers } from "@/conversation-share-interaction/conversationSharePreflightResponse.js";
-import { scheduleConversationSharePreflightRequest } from "@/conversation-share-interaction/conversationSharePreflightRequest.js";
 import { ConversationBottomDockTransition } from "@/v4/ConversationBottomDockTransition.js";
-import {
-  ensureConversationShareAttempt,
-  retainConversationShareAttemptAfterFailure,
-} from "@/v4/conversationShareAttempt.js";
-import { resolveConversationSelectionTooltipEnabled } from "@/v4/conversationShareModePolicy.js";
-import { buildConversationTurnRenderUnits } from "@/v4/conversationTurnRenderUnits.js";
 import { SessionPluginReferenceIconBoundary } from "@/v4/SessionPluginReferenceIconProvider.js";
 import {
   resolveConversationStatusPanelVariant,
@@ -651,14 +595,13 @@ export function SessionPane({
     fileRewindPreview,
   } = useV4Conversation();
   const {
-    conversationShareService,
     highspeedCardService,
     modelSelectionService,
     usageStatsService,
     nexSessionService,
     nexTaskService,
   } = useServices();
-  const { intl, locale } = useNexIntl();
+  const { intl } = useNexIntl();
   const slashCommands = useSlashCommands(workspacePath, workspaceIdentity);
   const baseWorkspaceServices = useBaseWorkspaceServices();
   const composerClientNamespace = useComposerClientNamespace();
@@ -707,326 +650,6 @@ export function SessionPane({
       (!state.lifecycle || state.lifecycle.state === "ready") &&
       snapshot?.sessionId === sessionId &&
       (!snapshot.runtimeInitialization || snapshot.runtimeInitialization.status === "ready"));
-  const shareDraft = useConversationShareSelectionStore((storeState) =>
-    sessionId ? storeState.drafts[sessionId] : undefined,
-  );
-  const shareDockState = useConversationShareSelectionStore((storeState) =>
-    sessionId ? storeState.dockStates[sessionId] : undefined,
-  );
-  const shareDock = shareDockState ?? DEFAULT_CONVERSATION_SHARE_DOCK_STATE;
-  const shareTitle = shareDock.title ?? snapshot?.meta.title?.trim() ?? sessionId ?? "";
-  const shareDisclosureAccepted = shareDock.disclosureAccepted;
-  const sharePublishing = shareDock.publishing;
-  const shareProgress = shareDock.progress;
-  const shareCompletedArtifacts = shareDock.completedArtifacts;
-  const shareTotalArtifacts = shareDock.totalArtifacts;
-  const publishedShareUrl = shareDock.publishedShareUrl;
-  const shareError = shareDock.error;
-  const shareWarnings = shareDock.warnings;
-  const shareActive = shareDraft?.open === true;
-  // pending 草稿存在即处于范围编辑，避免维护第二套 stage/view 状态。
-  const shareSelectionPanelVisible = shareActive && shareDraft?.pendingExcludedRowIds != null;
-  const closeShare = useConversationShareSelectionStore((value) => value.closeShare);
-  const updateShareDockState = useConversationShareSelectionStore((value) => value.updateDockState);
-  const confirmShareSelection = useConversationShareSelectionStore(
-    (value) => value.confirmSelectionEdit,
-  );
-  const beginShareSelection = useConversationShareSelectionStore(
-    (value) => value.beginSelectionEdit,
-  );
-  const syncAvailableTurns = useConversationShareSelectionStore(
-    (value) => value.syncAvailableTurns,
-  );
-  const toggleShareRow = useConversationShareSelectionStore((value) => value.togglePendingRow);
-  const setAllPendingShareRows = useConversationShareSelectionStore(
-    (value) => value.setAllPendingRowsSelected,
-  );
-  const deselectShareProductTurn = useConversationShareSelectionStore(
-    (value) => value.deselectProductTurn,
-  );
-  const setShareAccessMode = useConversationShareSelectionStore((value) => value.setAccessMode);
-  const cancelShareSelection = useConversationShareSelectionStore(
-    (value) => value.cancelSelectionEdit,
-  );
-  const dismissShareSelectionPanel = useCallback(() => {
-    if (sessionId) cancelShareSelection(sessionId);
-  }, [sessionId, cancelShareSelection]);
-  const pendingShareRowIds = useMemo(
-    () =>
-      new Set(
-        (shareDraft?.availableRowIds ?? []).filter(
-          (id) =>
-            !(shareDraft?.pendingExcludedRowIds ?? shareDraft?.excludedRowIds ?? []).includes(id),
-        ),
-      ),
-    [shareDraft],
-  );
-  const pendingShareTurnCount = useMemo(
-    () =>
-      new Set([...pendingShareRowIds].map((id) => shareDraft?.productTurnIdByRowId[id] ?? id)).size,
-    [pendingShareRowIds, shareDraft],
-  );
-  const shareRenderUnits = useMemo(
-    // 分享未打开时无需目录；原先每个文本 delta 都重复构建全部历史并生成分享摘要。
-    () => (shareActive ? buildConversationTurnRenderUnits(snapshot?.rows.window ?? []) : null),
-    [shareActive, snapshot?.rows.window],
-  );
-  const shareItems = useMemo(
-    () =>
-      shareRenderUnits
-        ? buildConversationShareItems(shareRenderUnits, {
-            assistantEmptyPreview: intl.formatMessage({
-              id: "chat.turnNavigator.emptyAssistant",
-            }),
-            assistantRunningPreview: intl.formatMessage({
-              id: "chat.turnNavigator.runningAssistant",
-            }),
-            userFallbackPreview: intl.formatMessage({
-              id: "chat.turnNavigator.userFallback",
-            }),
-          })
-        : [],
-    [intl, shareRenderUnits],
-  );
-  const eligibleShareItems = useMemo(
-    () => shareItems.filter((item) => !item.isRunning),
-    [shareItems],
-  );
-  useEffect(() => {
-    if (!sessionId || !shareActive) return;
-    const rowsById = new Map((snapshot?.rows.window ?? []).map((row) => [row.rowId, row]));
-    syncAvailableTurns(
-      sessionId,
-      eligibleShareItems.flatMap((item) => {
-        const productTurnId = rowsById.get(item.rowId)?.productTurnId;
-        return productTurnId ? [{ rowId: item.rowId, productTurnId }] : [];
-      }),
-    );
-  }, [eligibleShareItems, sessionId, shareActive, snapshot?.rows.window, syncAvailableTurns]);
-  const selectedShareProductTurnIds = useMemo(
-    () =>
-      sessionId
-        ? getConversationShareSelectedProductTurnIds(
-            useConversationShareSelectionStore.getState(),
-            sessionId,
-          )
-        : [],
-    [sessionId, shareDraft],
-  );
-  const preflightShareProductTurnIds = useMemo(
-    // 选择器预检读取待确认草稿；取消后自动回到已确认范围，不提前提交选择。
-    () =>
-      sessionId
-        ? getConversationShareSelectedProductTurnIds(
-            useConversationShareSelectionStore.getState(),
-            sessionId,
-            "pending",
-          )
-        : [],
-    [sessionId, shareDraft],
-  );
-  const sharePreflightMetaRef = useRef<{
-    revision: number;
-    logEpoch: string;
-    capabilitiesFingerprint: string;
-    supportedArtifactTypes: readonly ConversationShareAllowedArtifact[];
-  }>({
-    revision: 0,
-    logEpoch: "",
-    capabilitiesFingerprint: "",
-    supportedArtifactTypes: [],
-  });
-  const [sharePreflightVersion, setSharePreflightVersion] = useState(0);
-  const selectedShareTurnFingerprints = useMemo(
-    () =>
-      new Map(
-        preflightShareProductTurnIds.map((productTurnId) => [
-          productTurnId,
-          conversationShareTurnFingerprint(
-            snapshot?.rows.window ?? [],
-            productTurnId,
-            workspacePath,
-            {
-              workspaceKey: workspaceIdentity?.trim() || workspacePath,
-              remoteSessionId: remoteSessionId ?? "",
-              sessionId: sessionId ?? "",
-              revision: snapshot?.revision,
-              logEpoch: snapshot?.logEpoch,
-              capabilitiesFingerprint: sharePreflightMetaRef.current.capabilitiesFingerprint,
-            },
-          ),
-        ]),
-      ),
-    [
-      remoteSessionId,
-      preflightShareProductTurnIds,
-      sessionId,
-      sharePreflightVersion,
-      snapshot?.logEpoch,
-      snapshot?.revision,
-      snapshot?.rows.window,
-      workspaceIdentity,
-      workspacePath,
-    ],
-  );
-  const eligibleShareProductTurnIds = useMemo(() => {
-    if (eligibleShareItems.length === 0) return [];
-    const rowsById = new Map((snapshot?.rows.window ?? []).map((row) => [row.rowId, row]));
-    const seen = new Set<string>();
-    return eligibleShareItems.flatMap((item) => {
-      const productTurnId = rowsById.get(item.rowId)?.productTurnId;
-      if (!productTurnId || seen.has(productTurnId)) return [];
-      seen.add(productTurnId);
-      return [productTurnId];
-    });
-  }, [eligibleShareItems, snapshot?.rows.window]);
-  const sharePreflightCacheRef = useRef(new Map<string, ConversationShareTurnPreflightResult>());
-  // 传输类失败会被按 turn 缓存成阻断项，仅靠选择变化无法再次触发 RPC；
-  // 重试 token 变化时清缓存并重新发起，避免一次网络抖动把用户卡死在选择阶段。
-  const [sharePreflightRetryToken, setSharePreflightRetryToken] = useState(0);
-  const sharePreflightScopeKey = `${workspaceIdentity?.trim() || workspacePath}\u0000${remoteSessionId ?? ""}\u0000${sessionId ?? ""}`;
-  const sharePreflightScopeKeyRef = useRef<string | null>(null);
-  const sharePreflightCacheKey = useCallback(
-    (productTurnId: string) =>
-      conversationSharePreflightCacheKey(sharePreflightScopeKey, productTurnId),
-    [sharePreflightScopeKey],
-  );
-  const retrySharePreflight = useCallback(() => {
-    for (const productTurnId of preflightShareProductTurnIds) {
-      sharePreflightCacheRef.current.delete(sharePreflightCacheKey(productTurnId));
-    }
-    setSharePreflightRetryToken((token) => token + 1);
-    setSharePreflightVersion((version) => version + 1);
-  }, [preflightShareProductTurnIds, sharePreflightCacheKey]);
-  const shareHydratedSessionRef = useRef<string | null>(null);
-  const sharePreflight = useMemo<ConversationSharePreflightState>(() => {
-    if (!shareActive || !sessionId || compactForRemoteControl) {
-      return { status: "idle" };
-    }
-    if (preflightShareProductTurnIds.length === 0) {
-      return { status: "idle" };
-    }
-    const entries = preflightShareProductTurnIds.map((productTurnId) => {
-      const entry = sharePreflightCacheRef.current.get(sharePreflightCacheKey(productTurnId));
-      return entry?.turnFingerprint === selectedShareTurnFingerprints.get(productTurnId)
-        ? entry
-        : undefined;
-    });
-    if (entries.some((entry) => entry === undefined)) {
-      return { status: "checking" };
-    }
-    const resolvedEntries = entries.filter(
-      (entry): entry is ConversationShareTurnPreflightResult => entry !== undefined,
-    );
-    return {
-      status: "ready",
-      ...sharePreflightMetaRef.current,
-      blockingIssues: aggregateConversationShareBlockingIssues(resolvedEntries),
-      skippableWarnings: dedupeConversationShareIssues(
-        resolvedEntries.flatMap((entry) => entry.skippableWarnings),
-      ),
-      deferredIssues: dedupeConversationShareIssues(
-        resolvedEntries.flatMap((entry) => entry.deferredIssues),
-      ),
-      turnResults: resolvedEntries,
-    };
-  }, [
-    compactForRemoteControl,
-    sessionId,
-    preflightShareProductTurnIds,
-    selectedShareTurnFingerprints,
-    sharePreflightCacheKey,
-    shareActive,
-    sharePreflightVersion,
-  ]);
-
-  useEffect(() => {
-    if (sharePreflightScopeKeyRef.current === sharePreflightScopeKey) return;
-    sharePreflightScopeKeyRef.current = sharePreflightScopeKey;
-    sharePreflightCacheRef.current.clear();
-    sharePreflightMetaRef.current = {
-      revision: 0,
-      logEpoch: "",
-      capabilitiesFingerprint: "",
-      supportedArtifactTypes: [],
-    };
-    setSharePreflightVersion((version) => version + 1);
-  }, [sharePreflightScopeKey]);
-
-  useEffect(() => {
-    if (shareActive && sessionId) return;
-    sharePreflightCacheRef.current.clear();
-    sharePreflightMetaRef.current = {
-      revision: 0,
-      logEpoch: "",
-      capabilitiesFingerprint: "",
-      supportedArtifactTypes: [],
-    };
-    setSharePreflightVersion((version) => version + 1);
-  }, [sessionId, shareActive]);
-
-  useEffect(() => {
-    // 预检结果按 turn 缓存：选择/取消只重新聚合当前选中项，只有首次加入或 turn fingerprint
-    // 变化才触发 RPC；发布阶段仍走独立的权威 stat/read/SHA 校验，不能把这里的缓存当成最终事实。
-    const requestScopeKey = sharePreflightScopeKey;
-    if (
-      !shareActive ||
-      !sessionId ||
-      compactForRemoteControl ||
-      preflightShareProductTurnIds.length === 0
-    ) {
-      return undefined;
-    }
-    const missingProductTurnIds = getMissingConversationSharePreflightTurnIds(
-      sharePreflightScopeKey,
-      preflightShareProductTurnIds,
-      sharePreflightCacheRef.current,
-      selectedShareTurnFingerprints,
-    );
-    if (missingProductTurnIds.length === 0) return undefined;
-    const requestRows = snapshot?.rows.window ?? [];
-    return scheduleConversationSharePreflightRequest({
-      request: () =>
-        conversationShareService.preflight({
-          workspacePath,
-          ...(workspaceIdentity ? { workspaceIdentity } : {}),
-          ...(remoteSessionId ? { remoteSessionId } : {}),
-          sessionId,
-          selection: {
-            kind: "productTurns",
-            productTurnIds: missingProductTurnIds,
-          },
-        }),
-      ...createConversationSharePreflightResponseHandlers({
-        sessionId,
-        workspacePath,
-        workspaceIdentity,
-        remoteSessionId,
-        missingProductTurnIds,
-        requestRows,
-        selectedShareTurnFingerprints,
-        sharePreflightCacheRef,
-        sharePreflightMetaRef,
-        sharePreflightCacheKey,
-        isCurrent: () => shareActive && requestScopeKey === sharePreflightScopeKeyRef.current,
-        onUpdated: () => setSharePreflightVersion((version) => version + 1),
-      }),
-    });
-  }, [
-    compactForRemoteControl,
-    conversationShareService,
-    remoteSessionId,
-    preflightShareProductTurnIds,
-    selectedShareTurnFingerprints,
-    sharePreflightCacheKey,
-    sharePreflightRetryToken,
-    sharePreflightScopeKey,
-    sessionId,
-    shareActive,
-    snapshot?.rows.window,
-    workspaceIdentity,
-    workspacePath,
-  ]);
   const sessionLeaseReady = lease?.sessionId === sessionId;
   const mobilePlanInteractionReconcileTimersRef = useRef(
     new Map<string, ReturnType<typeof setTimeout>>(),
@@ -1149,7 +772,6 @@ export function SessionPane({
     () => selectHighspeed(sessionId),
     () => selectHighspeed(sessionId),
   );
-  const [highspeedAutoShareClock, refreshHighspeedAutoShareClock] = useState(0);
   const dispatchCommandRef = useRef<
     | ((
         type: CommandType,
@@ -1287,37 +909,6 @@ export function SessionPane({
     };
   }, [activeHighspeedCard]);
   useEffect(() => {
-    if (!sessionId) return;
-    const nextAutoShareAt = resolveNextHighspeedAutoShareAt(sessionId);
-    if (nextAutoShareAt === null) return;
-    const delayMs = Math.max(0, nextAutoShareAt - Date.now()) + 20;
-    // Bug 根因：旧逻辑以 Turn 完成为分享时钟，第一轮结束就发布卡片；这里改由整张卡
-    // 的 expiresAt 唤醒聚合流程，卡到期时若仍有 Turn 运行，则等待其完成事件再次触发。
-    const timer = window.setTimeout(
-      () => refreshHighspeedAutoShareClock((revision) => revision + 1),
-      delayMs,
-    );
-    return () => window.clearTimeout(timer);
-  }, [highspeedState, sessionId]);
-  useEffect(() => {
-    if (!sessionId) return;
-    // Bug 根因（2026-08-31）：到期唤醒依赖 renderer setTimeout；窗口隐藏/被遮挡时页面被
-    // Chromium 冻结，定时器停摆，卡级 TPS 采样与完成态持久化停在原地，footer 查看按钮
-    // 一直置灰，直到用户再发一条消息才被 store 版本号变化救活（违反 spec 9.3「到期边界
-    // 由会话时间时钟触发重渲染，不要求用户再发送一条消息」）。回到窗口时立即补一次
-    // 时钟；聚合链路各入口均有 claim/幂等保护，重复触发无副作用。
-    const refreshFromWindowWake = () => {
-      if (document.visibilityState === "hidden") return;
-      refreshHighspeedAutoShareClock((revision) => revision + 1);
-    };
-    document.addEventListener("visibilitychange", refreshFromWindowWake);
-    window.addEventListener("focus", refreshFromWindowWake);
-    return () => {
-      document.removeEventListener("visibilitychange", refreshFromWindowWake);
-      window.removeEventListener("focus", refreshFromWindowWake);
-    };
-  }, [refreshHighspeedAutoShareClock, sessionId]);
-  useEffect(() => {
     if (!sessionId || snapshot?.sessionId !== sessionId) return;
     const terminalStates = new Set(["completedSuccess", "completedInterrupted", "failed"]);
     const partition = getConversationRowsPartition(snapshot.rows.window);
@@ -1431,7 +1022,6 @@ export function SessionPane({
           highspeedTps,
         );
         highspeedMetricsInFlightRef.current.add(record.sourceCommandId);
-        let metricsPersisted = false;
         void dispatch(
           "setHighspeedMetrics",
           {
@@ -1465,7 +1055,6 @@ export function SessionPane({
               return;
             }
             markHighspeedTurnMetricsPersisted(record.sourceCommandId, savedDurationMs);
-            metricsPersisted = true;
           })
           .catch((error) => {
             logger.warn("[highspeed] 完成态统计持久化失败", {
@@ -1475,39 +1064,11 @@ export function SessionPane({
           })
           .finally(() => {
             highspeedMetricsInFlightRef.current.delete(record.sourceCommandId);
-            // Bug 根因：持久化 ACK 触发的 store 更新可能先于 in-flight 清理被 React 消费，
-            // 导致本轮重算被跳过；ACK 成功后显式唤醒一次，避免必须发送下一条 prompt。
-            if (metricsPersisted) {
-              refreshHighspeedAutoShareClock((revision) => revision + 1);
-            }
           });
       }
     }
 
-    for (const candidate of listHighspeedCardAutoShareCandidates(sessionId)) {
-      if (candidate.expiresAt > autoShareNow) continue;
-      // Bug 根因：失败后只清理 in-flight 会让后续 snapshot 重复触发自动分享，最终打到 429。
-      if (!claimHighspeedCardAutoShare(candidate.cardId, autoShareNow)) continue;
-      // 分享卡片改为客户端生成，不再请求后端 share 接口；到期后直接把本地统计发布到左下角。
-      browserGlobalNoticeStore?.publish(
-        buildHighspeedShareNotice({ cardId: candidate.cardId, metrics: candidate.metrics }),
-      );
-      markHighspeedCardAutoShared(candidate.cardId);
-    }
-
-    // 诊断（debug，随 snapshot 高频触发）：卡已到期、从未尝试分享、但也没进候选时，
-    // 直接输出阻塞原因。2026-08-31 左下角分享卡停留在旧卡 36 分钟无任何日志可查，
-    // 根因就是这些门禁此前全部静默跳过。
-    for (const cardId of listHighspeedCardsAwaitingAutoShare(sessionId, autoShareNow)) {
-      const blockers = collectHighspeedCardShareBlockers(cardId);
-      if (blockers.length > 0) {
-        logger.debug("[highspeed] 卡已到期但未进入自动分享，阻塞原因", {
-          cardId,
-          blockers,
-        });
-      }
-    }
-  }, [highspeedAutoShareClock, highspeedCardService, highspeedState, sessionId, snapshot]);
+  }, [highspeedCardService, highspeedState, sessionId, snapshot]);
   const workspaceConfigOptions = useNexSessionStore(
     (store) => store.getWorkspaceState(workspacePath, workspaceIdentity).configOptions,
   );
@@ -1573,9 +1134,6 @@ export function SessionPane({
   }, [sessionId, snapshot?.logEpoch, workspaceKey]);
   const composerTextInsertRequest = useNexSessionStore(
     (store) => store.getWorkspaceState(workspacePath, workspaceIdentity).composerTextInsertRequest,
-  );
-  const timelineBottomRequest = useNexSessionStore(
-    (store) => store.getWorkspaceState(workspacePath, workspaceIdentity).timelineBottomRequest,
   );
   const draftRuntimeInvalidationVersion = useNexSessionStore(
     (store) =>
@@ -3519,7 +3077,6 @@ export function SessionPane({
       const heldQueueDisposition = options?.heldQueueDisposition;
       const expectedHeldQueueItemIds = options?.expectedHeldQueueItemIds;
       const readyAttachments = options?.attachments ?? [];
-      const sharedContextRefs = options?.sharedContextRefs;
       const contextAttachmentCount = options?.contextAttachmentCount ?? 0;
       const slashCommand = parseV4VisibleSlashCommand(text, readyAttachments, {
         contextAttachmentCount,
@@ -3684,7 +3241,6 @@ export function SessionPane({
             : {}),
           ...(heldQueueDisposition ? { heldQueueDisposition } : {}),
           ...(expectedHeldQueueItemIds ? { expectedHeldQueueItemIds } : {}),
-          ...(sharedContextRefs?.length ? { context_refs: sharedContextRefs } : {}),
           ...(options?.source ? { source: options.source } : {}),
           ...highspeed.override,
         },
@@ -4615,17 +4171,6 @@ export function SessionPane({
   }, [lease, snapshot?.logEpoch]);
 
   useEffect(() => {
-    if (!shareActive || !sessionId || !hasOlderRows(snapshot)) return;
-    const key = `${sessionId}:${snapshot?.logEpoch ?? "unknown"}`;
-    if (shareHydratedSessionRef.current === key) return;
-    shareHydratedSessionRef.current = key;
-    void handleLoadAllOlder().catch((error) => {
-      shareHydratedSessionRef.current = null;
-      logger.warn("[conversation-share] 补齐分享目录失败", { error });
-    });
-  }, [handleLoadAllOlder, sessionId, shareActive, snapshot]);
-
-  useEffect(() => {
     if (
       !sessionId ||
       !lease?.store ||
@@ -4675,112 +4220,6 @@ export function SessionPane({
     !isDraft && (lease === null || sessionLeaseReady) && snapshot?.sessionId === sessionId
       ? snapshot
       : null;
-  const shareHandoverContext =
-    snapshot?.sharedContextImport && "contextId" in snapshot.sharedContextImport
-      ? snapshot.sharedContextImport
-      : null;
-  // 导入的分享对话：读取落盘的公开 rows 用于会话顶部的只读块。
-  // 分享页可能过期或未上线，所以只读本地副本，不回源。
-  const [importedShare, setImportedShare] = useState<ImportedConversationShare | null>(null);
-  const importedShareContextId =
-    shareHandoverContext && shareHandoverContext.status !== "discarded"
-      ? shareHandoverContext.contextId
-      : null;
-  useEffect(() => {
-    if (!importedShareContextId || compactForRemoteControl) {
-      setImportedShare(null);
-      return;
-    }
-    let disposed = false;
-    void conversationShareService
-      .getImportedConversation({
-        workspacePath,
-        contextId: importedShareContextId,
-      })
-      .then((imported) => {
-        if (disposed) return;
-        setImportedShare(imported);
-      })
-      .catch((error: unknown) => {
-        if (disposed) return;
-        // 只读块是增强，读不到就不渲染，不打断会话。
-        logger.warn("[conversation-share] 读取导入的分享对话失败", { error });
-        setImportedShare(null);
-      });
-    return () => {
-      disposed = true;
-    };
-  }, [compactForRemoteControl, conversationShareService, importedShareContextId, workspacePath]);
-  // normalizeConversationShareMarkdown 在 artifactNames 里找不到匹配名字时，会把正文里的
-  // 文件引用替换成空字符串（直接删掉）。不接这份映射，只读块里的文件引用会静默消失。
-  const importedShareArtifactNames = useMemo(
-    () =>
-      new Map(
-        (importedShare?.artifacts ?? []).map((artifact) => [
-          artifact.artifactId,
-          artifact.displayName,
-        ]),
-      ),
-    [importedShare],
-  );
-  const importedShareArtifactWorkspaceRelativePaths = useMemo(() => {
-    const entries: Array<[string, string]> = [];
-    for (const artifact of importedShare?.artifacts ?? []) {
-      if (artifact.workspaceRelativePath) {
-        entries.push([artifact.artifactId, artifact.workspaceRelativePath]);
-      }
-    }
-    return new Map(entries);
-  }, [importedShare]);
-  useLayoutEffect(() => {
-    if (
-      compactForRemoteControl ||
-      !timelineBottomRequest ||
-      timelineBottomRequest.taskId !== sessionId ||
-      !importedShare ||
-      importedShare.contextId !== importedShareContextId
-    ) {
-      return;
-    }
-    // 分享块是异步挂载的；请求保留到目标 task 与本地副本都就绪，再在布局稳定后消费。
-    const scrollToBottom = () => {
-      const action = timelineScrollToBottomRef.current;
-      if (!action) return false;
-      action();
-      return true;
-    };
-    let secondFrame: number | null = null;
-    const firstFrame = window.requestAnimationFrame(() => {
-      scrollToBottom();
-      secondFrame = window.requestAnimationFrame(() => {
-        if (!scrollToBottom()) return;
-        useNexSessionStore
-          .getState()
-          .clearTimelineBottomRequest(
-            workspacePath,
-            timelineBottomRequest.requestId,
-            workspaceIdentity,
-          );
-      });
-    });
-    return () => {
-      window.cancelAnimationFrame(firstFrame);
-      if (secondFrame !== null) window.cancelAnimationFrame(secondFrame);
-    };
-  }, [
-    compactForRemoteControl,
-    importedShare,
-    importedShareContextId,
-    sessionId,
-    timelineBottomRequest,
-    workspaceIdentity,
-    workspacePath,
-  ]);
-  const handleOpenImportedShareUrl = useCallback(() => {
-    if (!shareHandoverContext || !onOpenBrowserUrl) return;
-    // 持久化的是规范 /cn/share/ 路径；展示/打开时才按界面语言本地化。
-    onOpenBrowserUrl(localizeConversationShareUrl(shareHandoverContext.shareUrl, locale));
-  }, [locale, onOpenBrowserUrl, shareHandoverContext]);
   const initialDraftConfigForDiagnostics = isDraft ? resolveInitialDraftConfig() : undefined;
   // CLI V4 projection 是 running/count/manifest 的唯一权威；renderer 不再在 spawn
   // 事件后另发查询拼接第二份状态，避免并发 child 的 in-flight refresh 丢更新。
@@ -4990,298 +4429,8 @@ export function SessionPane({
     openSettingsTab();
   }, [openSettingsTab]);
 
-  const handleConfirmShareDisclosure = useCallback(async () => {
-    if (!sessionId || !shareDraft || sharePublishing) return;
-    const productTurnIds = getConversationShareSelectedProductTurnIds(
-      useConversationShareSelectionStore.getState(),
-      sessionId,
-    );
-    if (productTurnIds.length === 0 || !shareTitle.trim()) return;
-    const attemptKey = JSON.stringify({
-      title: shareTitle.trim(),
-      accessMode: shareDraft.accessMode,
-      productTurnIds,
-      revision: snapshot?.revision ?? null,
-      logEpoch: snapshot?.logEpoch ?? null,
-    });
-    const shareAttempt = ensureConversationShareAttempt(
-      getConversationShareDockState(useConversationShareSelectionStore.getState(), sessionId)
-        .attempt,
-      attemptKey,
-      sessionId,
-      { randomUUID: () => globalThis.crypto?.randomUUID?.() },
-    );
-    const operationId = `share-operation-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
-    let activePhase = "collecting";
-    let collectedWarnings: ConversationShareDisplayWarnings | null = null;
-    const progressSubscription = conversationShareService.onDynamicPublishProgress(operationId)((
-      progress,
-    ) => {
-      activePhase = progress.phase;
-      updateShareDockState(sessionId, {
-        progress: progress.phase === "complete" ? "checking" : progress.phase,
-        completedArtifacts: progress.completedArtifacts,
-        totalArtifacts: progress.totalArtifacts,
-      });
-      const warnings = sanitizeConversationShareWarnings(progress.warnings);
-      if (warnings.length > 0) {
-        collectedWarnings = {
-          issues: warnings,
-          issueCount: warnings.length,
-          ...(progress.omittedWarningCount
-            ? { omittedIssueCount: progress.omittedWarningCount }
-            : {}),
-        };
-      }
-    });
-    updateShareDockState(sessionId, {
-      attempt: shareAttempt,
-      publishing: true,
-      progress: "collecting",
-      completedArtifacts: 0,
-      totalArtifacts: 0,
-      publishedShareUrl: null,
-      error: null,
-      warnings: null,
-    });
-    try {
-      const share = await conversationShareService.publish(
-        {
-          workspacePath,
-          ...(workspaceIdentity ? { workspaceIdentity } : {}),
-          ...(remoteSessionId ? { remoteSessionId } : {}),
-          sessionId,
-          title: shareTitle.trim(),
-          accessMode: shareDraft.accessMode,
-          selection: { kind: "productTurns", productTurnIds },
-          clientRequestId: shareAttempt.clientRequestId,
-          disclosureAcceptedAt: shareAttempt.disclosureAcceptedAt,
-          locale,
-        },
-        operationId,
-      );
-      const warnings = collectedWarnings as ConversationShareDisplayWarnings | null;
-      updateShareDockState(sessionId, {
-        publishedShareUrl: share.share_url,
-        warnings,
-      });
-      // collectedWarnings 只在 progress 回调里赋值，TS 的控制流分析看不到跨闭包写入，
-      // 会把它收窄成 null，这里显式还原真实类型。
-      if (warnings) {
-        toast(
-          intl.formatMessage(
-            { id: "conversationShare.publishSucceededWithSkips" },
-            { count: warnings.issueCount },
-          ),
-        );
-      } else {
-        toast(intl.formatMessage({ id: "conversationShare.publishSucceeded" }));
-      }
-    } catch (error) {
-      const details = getConversationShareErrorDetails(error);
-      // 401 等传输错误通常没有服务端 issues，不能再降级成 collecting 阶段的通用文案。
-      const resolvedMessageId = resolveConversationSharePublishErrorMessageId(error);
-      const messageId =
-        resolvedMessageId === "conversationShare.publishFailed" ? undefined : resolvedMessageId;
-      updateShareDockState(sessionId, {
-        attempt: retainConversationShareAttemptAfterFailure(shareAttempt, details.code),
-        error:
-          details.issues && details.issues.length > 0
-            ? {
-                issues: details.issues,
-                issueCount: details.issueCount ?? details.issues.length,
-                omittedIssueCount: details.omittedIssueCount,
-                requestId: details.requestId,
-                clientRequestId: details.clientRequestId,
-                operationId,
-                status: details.status,
-                code: details.code,
-                rejection: details.rejection,
-              }
-            : {
-                issues: [
-                  {
-                    code: resolveConversationShareFallbackIssueCode(details),
-                    scope: "transport",
-                    phase: activePhase as "collecting" | "uploading" | "checking" | "complete",
-                  },
-                ],
-                issueCount: 1,
-                requestId: details.requestId,
-                clientRequestId: details.clientRequestId,
-                operationId,
-                status: details.status,
-                code: details.code,
-                rejection: details.rejection,
-                messageId,
-              },
-      });
-      logger.warn("[conversation-share] 会话发布失败", {
-        sessionId,
-        operationId,
-        phase: activePhase,
-        accessMode: shareDraft.accessMode,
-        selectedProductTurnCount: productTurnIds.length,
-        remoteWorkspace: Boolean(workspaceIdentity || remoteSessionId),
-        errorName: details.name,
-        kind: details.kind,
-        ...(details.reasonCode === undefined ? {} : { reasonCode: details.reasonCode }),
-        ...(details.diagnostics === undefined ? {} : { diagnostics: details.diagnostics }),
-        ...(details.status === undefined ? {} : { status: details.status }),
-        ...(details.code === undefined ? {} : { code: details.code }),
-        ...(details.rejection ? { rejection: details.rejection } : {}),
-        ...(details.requestId === undefined ? {} : { requestId: details.requestId }),
-      });
-    } finally {
-      progressSubscription.dispose();
-      updateShareDockState(sessionId, { publishing: false });
-    }
-  }, [
-    conversationShareService,
-    intl,
-    remoteSessionId,
-    sessionId,
-    shareDraft,
-    sharePublishing,
-    shareTitle,
-    snapshot?.logEpoch,
-    snapshot?.revision,
-    updateShareDockState,
-    workspaceIdentity,
-    workspacePath,
-  ]);
-
-  const handleCopyPublishedShare = useCallback(async () => {
-    if (!publishedShareUrl || !navigator.clipboard?.writeText) return false;
-    try {
-      await navigator.clipboard.writeText(publishedShareUrl);
-      toast(intl.formatMessage({ id: "conversationShare.copySucceeded" }));
-      return true;
-    } catch {
-      toast(intl.formatMessage({ id: "conversationShare.copyFailed" }));
-      return false;
-    }
-  }, [intl, publishedShareUrl]);
-
-  const handleOpenPublishedShare = useCallback(() => {
-    if (!publishedShareUrl || !onOpenBrowserUrl) return;
-    // 服务端保存规范 /cn/share/ 路径；打开时再按当前界面语言切换落地页路径。
-    onOpenBrowserUrl(localizeConversationShareUrl(publishedShareUrl, locale));
-  }, [locale, onOpenBrowserUrl, publishedShareUrl]);
-
-  const handleCopyShareRequestId = useCallback(() => {
-    const requestId = shareError?.requestId;
-    if (!requestId || !navigator.clipboard?.writeText) {
-      toast(intl.formatMessage({ id: "conversationShare.copyFailed" }));
-      return;
-    }
-    void navigator.clipboard.writeText(requestId).then(
-      () => toast(intl.formatMessage({ id: "conversationShare.copySucceeded" })),
-      () => toast(intl.formatMessage({ id: "conversationShare.copyFailed" })),
-    );
-  }, [intl, shareError?.requestId]);
-
-  const handleShareCancel = useCallback(() => {
-    if (sharePublishing || !sessionId) return;
-    closeShare(sessionId);
-  }, [closeShare, sessionId, sharePublishing]);
-
-  const handleConfirmShareSelection = useCallback(() => {
-    if (!sharePublishing && sessionId) confirmShareSelection(sessionId);
-  }, [confirmShareSelection, sessionId, sharePublishing]);
-
-  const handleDismissShareError = useCallback(() => {
-    if (sessionId) updateShareDockState(sessionId, { error: null });
-  }, [sessionId, updateShareDockState]);
-  const handleDismissShareWarnings = useCallback(() => {
-    if (sessionId) updateShareDockState(sessionId, { warnings: null });
-  }, [sessionId, updateShareDockState]);
-
-  const handleDeselectShareTurn = useCallback(
-    (productTurnId: string) => {
-      if (!sessionId || !productTurnId) return;
-      // 按 product turn 身份整轮移除：service 的 issue 已带 productTurnId，
-      // 不再用 turnOrdinal 索引 UI 的 per-query 列表（两套编号会错位）。
-      deselectShareProductTurn(sessionId, productTurnId);
-    },
-    [deselectShareProductTurn, sessionId],
-  );
-
-  const handleShareTitleChange = useCallback(
-    (value: string) => {
-      if (!sessionId) return;
-      updateShareDockState(sessionId, {
-        title: value,
-        disclosureAccepted: false,
-        publishedShareUrl: null,
-        error: null,
-        warnings: null,
-      });
-    },
-    [sessionId, updateShareDockState],
-  );
-
-  const handleShareAccessModeChange = useCallback(
-    (accessMode: ConversationShareAccessMode) => {
-      if (!sessionId) return;
-      setShareAccessMode(sessionId, accessMode);
-      updateShareDockState(sessionId, {
-        disclosureAccepted: false,
-        publishedShareUrl: null,
-        error: null,
-        warnings: null,
-      });
-    },
-    [sessionId, setShareAccessMode, updateShareDockState],
-  );
-
-  // 内联回调会让 memo 确认 Dock 每次重渲染；依赖当前 session，避免切换后写回旧会话。
-  const handleShareDisclosureAcceptedChange = useCallback(
-    (accepted: boolean) => {
-      if (sessionId) {
-        updateShareDockState(sessionId, { disclosureAccepted: accepted });
-      }
-    },
-    [sessionId, updateShareDockState],
-  );
-
-  const handleEditShareSelection = useCallback(() => {
-    if (sharePublishing || publishedShareUrl || !sessionId) return;
-    updateShareDockState(sessionId, { error: null });
-    beginShareSelection(sessionId);
-  }, [beginShareSelection, publishedShareUrl, sessionId, sharePublishing, updateShareDockState]);
-
-  const handleShareConfirm = useCallback(() => {
-    if (
-      !shareDisclosureAccepted ||
-      shareSelectionPanelVisible ||
-      sharePreflight.status !== "ready" ||
-      sharePreflight.blockingIssues.length > 0
-    )
-      return;
-    void handleConfirmShareDisclosure();
-  }, [
-    handleConfirmShareDisclosure,
-    shareDisclosureAccepted,
-    shareSelectionPanelVisible,
-    sharePreflight,
-  ]);
-
-  const handleShareSelectionToggle = useCallback(
-    (rowId: number) => {
-      if (sessionId) toggleShareRow(sessionId, rowId);
-    },
-    [sessionId, toggleShareRow],
-  );
-
-  const handleShareSelectionInspect = useCallback(
-    (target: { unitIndex: number; rowId: number }) => {
-      timelineScrollToQueryRef.current?.(target);
-    },
-    [],
-  );
-
   const recoverableCommand = recoverableCommands[0] ?? null;
+  const pendingGuideProjection = snapshot ? projectPendingGuideQueue(snapshot.queue) : null;
   const handleDismissPendingRecovery = useCallback(() => {
     if (!recoverableCommand) return;
     pendingCommandRegistry.dismissRecovery(
@@ -5434,77 +4583,6 @@ export function SessionPane({
       onDropTargetControllerChange={handleDropTargetControllerChange}
     />
   );
-  const sharePreflightContent = useMemo(
-    () => (
-      <ConversationSharePreflightStatus
-        preflight={sharePreflight}
-        onDeselectTurn={handleDeselectShareTurn}
-        onRetryPreflight={retrySharePreflight}
-      />
-    ),
-    [sharePreflight, handleDeselectShareTurn, retrySharePreflight],
-  );
-  const handleSelectAllShareRows = useCallback(
-    (selected: boolean) => {
-      if (sessionId) setAllPendingShareRows(sessionId, selected);
-    },
-    [sessionId, setAllPendingShareRows],
-  );
-  const pendingGuideProjection = snapshot ? projectPendingGuideQueue(snapshot.queue) : null;
-  const sharePopoverContent =
-    readOnly || !sessionId ? null : publishedShareUrl ? (
-      <ConversationShareSuccessDock
-        url={publishedShareUrl}
-        title={shareTitle}
-        warnings={shareWarnings}
-        onOpen={handleOpenPublishedShare}
-        onCopy={handleCopyPublishedShare}
-        onDismiss={handleShareCancel}
-      />
-    ) : (
-      <ConversationShareConfirmationDock
-        preflightChecking={
-          sharePreflight.status === "checking" ||
-          sharePreflight.status === "stale" ||
-          (sharePreflight.status === "idle" && preflightShareProductTurnIds.length > 0)
-        }
-        selectionEditing={shareSelectionPanelVisible}
-        publishDisabled={
-          sharePreflight.status !== "ready" || sharePreflight.blockingIssues.length > 0
-        }
-        preflightContent={sharePreflightContent}
-        selectedCount={selectedShareProductTurnIds.length}
-        totalCount={eligibleShareProductTurnIds.length}
-        title={shareTitle}
-        accessMode={shareDraft?.accessMode ?? DEFAULT_CONVERSATION_SHARE_ACCESS_MODE}
-        progressLabel={intl.formatMessage({
-          id:
-            shareProgress === "uploading"
-              ? "conversationShare.progress.uploading"
-              : shareProgress === "checking"
-                ? "conversationShare.progress.checking"
-                : "conversationShare.progress.collecting",
-        })}
-        progressPhase={shareProgress}
-        completedArtifacts={shareCompletedArtifacts}
-        totalArtifacts={shareTotalArtifacts}
-        pending={sharePublishing}
-        error={shareError}
-        warnings={shareWarnings}
-        onDismissError={handleDismissShareError}
-        onDismissWarnings={handleDismissShareWarnings}
-        onCopyRequestId={handleCopyShareRequestId}
-        onDeselectTurn={handleDeselectShareTurn}
-        onTitleChange={handleShareTitleChange}
-        onAccessModeChange={handleShareAccessModeChange}
-        disclosureAccepted={shareDisclosureAccepted}
-        onDisclosureAcceptedChange={handleShareDisclosureAcceptedChange}
-        onCancel={handleShareCancel}
-        onEditSelection={handleEditShareSelection}
-        onConfirm={handleShareConfirm}
-      />
-    );
-  // 目录失效仍禁止输入；将宿主已有原因放回原输入区，不在 pane 内探测或恢复目录。
   const conversationBottomDockContent = readOnly ? (
     readOnlyReason ? (
       <div
@@ -5663,31 +4741,6 @@ export function SessionPane({
             compactForRemoteControl && "min-w-0",
           )}
         >
-          {sessionId && !compactForRemoteControl ? (
-            <ConversationSharePopover
-              key={sessionId}
-              sessionId={sessionId}
-              open={shareActive}
-              publishing={sharePublishing}
-              selecting={shareSelectionPanelVisible}
-              onClose={handleShareCancel}
-              onCancelSelection={dismissShareSelectionPanel}
-            >
-              {sharePopoverContent}
-            </ConversationSharePopover>
-          ) : null}
-          <ConversationShareSelectionPanel
-            visible={shareSelectionPanelVisible}
-            items={shareItems}
-            selectedRowIds={pendingShareRowIds}
-            selectedCount={pendingShareTurnCount}
-            preflight={sharePreflight}
-            onSelectAllChange={handleSelectAllShareRows}
-            onToggle={handleShareSelectionToggle}
-            onInspect={handleShareSelectionInspect}
-            onConfirm={handleConfirmShareSelection}
-            onCancel={dismissShareSelectionPanel}
-          />
           {!isDraft ? (
             <ConversationStatusPanel
               workspacePath={workspacePath}
@@ -5776,8 +4829,6 @@ export function SessionPane({
           {errored && remoteAvailable ? (
             <SessionSubscriptionErrorPanel
               error={state.lastError ?? intl.formatMessage({ id: "chat.error.connectionLost" })}
-              sessionId={sessionId}
-              workspacePath={workspacePath}
               onReconnect={handleRetrySubscribe}
               reconnectLabel={
                 state.lifecycle?.state === "faulted"
@@ -5802,7 +4853,6 @@ export function SessionPane({
                   compactForRemoteControl={compactForRemoteControl}
                   scrollToBottomActionRef={timelineScrollToBottomRef}
                   scrollToQueryActionRef={timelineScrollToQueryRef}
-                  selectionPanelLayoutContainerRef={conversationLayoutContainerRef}
                   rows={timelineSnapshot?.rows.window ?? []}
                   pendingGuides={timelineSnapshot ? pendingGuideProjection?.pendingGuides : []}
                   apiRetry={timelineSnapshot?.control.apiRetry ?? null}
@@ -5824,31 +4874,6 @@ export function SessionPane({
                   onLoadAllOlder={handleLoadAllOlder}
                   turnNavigatorDirectoryRevision={state.turnNavigatorDirectoryRevision}
                   bottomDock={conversationBottomDock}
-                  hideTurnNavigator={shareSelectionPanelVisible && !compactForRemoteControl}
-                  backgroundScrollLocked={false}
-                  headerSlot={
-                    // unsupportedRowCount 也要开这个门：整份副本的行都被本 build 跳过时
-                    // rows 为空，但只读块必须留下来显示「需要更新 Nex」，不能整块消失。
-                    importedShare &&
-                    (importedShare.rows.length > 0 || importedShare.unsupportedRowCount > 0) ? (
-                      <ConversationShareImportNotice
-                        rows={importedShare.rows}
-                        contentBlocks={importedShare.contentBlocks}
-                        unsupportedRowCount={importedShare.unsupportedRowCount}
-                        artifactNames={importedShareArtifactNames}
-                        artifactWorkspaceRelativePaths={importedShareArtifactWorkspaceRelativePaths}
-                        workspacePath={workspacePath}
-                        {...(workspaceIdentity ? { workspaceIdentity } : {})}
-                        {...(remoteSessionId ? { workspaceRemoteSessionId: remoteSessionId } : {})}
-                        locale={locale}
-                        theme={theme}
-                        codePreviewSettings={codePreviewSettings}
-                        onOpenShareUrl={onOpenBrowserUrl ? handleOpenImportedShareUrl : undefined}
-                        onOpenFileLink={onOpenFileLink}
-                        onOpenCodeViewer={onOpenCodeViewer}
-                      />
-                    ) : null
-                  }
                   emptyState={
                     !remoteAvailable ? (
                       <div className="p-6 text-center text-ui-base text-foreground-subtle">
@@ -5897,10 +4922,7 @@ export function SessionPane({
                     !selectionSideChat &&
                     !isMobileTextInputViewport
                       ? {
-                          enabled: resolveConversationSelectionTooltipEnabled({
-                            selectionActionsEnabled: focused && !blockingInteractionId,
-                            partialShareActive: shareActive,
-                          }),
+                          enabled: focused && !blockingInteractionId,
                           sideActionDisabled: selectionSideActionBlocked,
                           onAddToCurrentTask: handleAddSelectionToCurrentTask,
                           onAskInSideChat: handleOpenSelectionSideConversation,

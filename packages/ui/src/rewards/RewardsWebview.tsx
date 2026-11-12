@@ -8,7 +8,6 @@ import {
   NEX_ENV,
   type RewardsContext,
 } from "@nex/shared";
-import { useServices } from "@/hooks/useServices.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { useNexStore } from "@/store/StoreProvider.js";
@@ -18,11 +17,9 @@ import { Button } from "@/components/ui/button.js";
 import { EmbeddedWebsiteHeader } from "@/components/EmbeddedWebsiteHeader.js";
 
 export function RewardsWebview({ onClose }: { onClose: () => void }) {
-  const { credentialService } = useServices();
   const platform = usePlatform();
   const { intl, locale } = useNexIntl();
   const themePreference = useNexStore((s) => s.theme);
-  const userId = useNexStore((s) => s.user?.id ?? null);
   const [systemDark, setSystemDark] = useState(
     () => matchMedia("(prefers-color-scheme: dark)").matches,
   );
@@ -57,71 +54,29 @@ export function RewardsWebview({ onClose }: { onClose: () => void }) {
   const cleanup = useRef<(() => void) | null>(null);
   const generation = useRef(0);
   const ready = useRef(false);
-  const injectedIdentity = useRef<string | null | undefined>(undefined);
-  const authSnapshot = useRef({ fingerprint: "", revision: 0 });
-  const latest = useRef({ theme, locale, userId });
-  // 读取后的身份比较覆盖 React effect 尚未执行的窗口，不能让旧账号写入新页面。
-  latest.current = { theme, locale, userId };
+  const authRevision = useRef(0);
+  const latest = useRef({ theme, locale });
+  latest.current = { theme, locale };
   const [error, setError] = useState(false);
   const [navigation, setNavigation] = useState({ loading: true, back: false, forward: false });
   const inject = useCallback(async () => {
     const element = view.current;
     if (!element || !ready.current) return;
     const epoch = ++generation.current;
-    const identity = latest.current.userId;
     try {
       const href = element.getURL();
       if (!isTrustedRewardsUrl(href, policy)) return;
-      if (injectedIdentity.current !== identity) {
-        // 切账号不能等异步凭据读取完才清旧账号，先撤销当前页面登录态。
-        await element.executeJavaScript(
-          createRewardsInjectionScript(
-            {
-              theme: latest.current.theme,
-              locale: latest.current.locale,
-              auth: {
-                status: "anonymous",
-                provider: null,
-                revision: ++authSnapshot.current.revision,
-              },
-            },
-            {},
-            href,
-          ),
-        );
-        injectedIdentity.current = identity;
-      }
-      // Nex 无账号体系：不再读取 OAuth 当前 provider。
-      const provider: "zai" | "bigmodel" | null = null;
-      const [oauth, jwt] = provider
-        ? await Promise.all([
-            credentialService.load(`oauth:${provider}:access_token`),
-            credentialService.load("nexjwttoken"),
-          ])
-        : [null, null];
-      if (
-        view.current !== element ||
-        epoch !== generation.current ||
-        latest.current.userId !== identity ||
-        !ready.current ||
-        element.getURL() !== href
-      )
-        return;
-      const fingerprint = JSON.stringify([identity, provider, oauth, jwt]);
-      if (authSnapshot.current.fingerprint !== fingerprint) {
-        authSnapshot.current.fingerprint = fingerprint;
-        ++authSnapshot.current.revision;
-      }
+      // Nex 无账号体系：邀请页恒为匿名，只注入主题与语言。
       const snapshot: RewardsContext = {
         theme: latest.current.theme,
         locale: latest.current.locale,
         auth: {
-          provider,
-          status: identity && (oauth || jwt) ? "ready" : "anonymous",
-          revision: authSnapshot.current.revision,
+          provider: null,
+          status: "anonymous",
+          revision: ++authRevision.current,
         },
       };
-      await element.executeJavaScript(createRewardsInjectionScript(snapshot, { oauth, jwt }, href));
+      await element.executeJavaScript(createRewardsInjectionScript(snapshot, href));
       if (epoch === generation.current) setError(false);
     } catch {
       if (epoch === generation.current) {
@@ -129,12 +84,12 @@ export function RewardsWebview({ onClose }: { onClose: () => void }) {
         logger.warn("[rewards] context injection failed");
       }
     }
-  }, [credentialService, policy.dev, policy.e2e]);
+  }, [policy.dev, policy.e2e]);
   const injectRef = useRef(inject);
   injectRef.current = inject;
   useEffect(() => {
     void inject();
-  }, [inject, locale, theme, userId]);
+  }, [inject, locale, theme]);
   const attach = useCallback((element: ElectronWebviewTag | null) => {
     cleanup.current?.();
     view.current = element;
@@ -182,10 +137,9 @@ export function RewardsWebview({ onClose }: { onClose: () => void }) {
                   auth: {
                     status: "anonymous",
                     provider: null,
-                    revision: ++authSnapshot.current.revision,
+                    revision: ++authRevision.current,
                   },
                 },
-                {},
                 element.getURL(),
               ),
             )
@@ -220,7 +174,6 @@ export function RewardsWebview({ onClose }: { onClose: () => void }) {
               locale,
               auth: { status: "anonymous", provider: null, revision: generation.current },
             },
-            {},
             element.getURL(),
           ),
         );

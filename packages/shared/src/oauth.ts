@@ -57,24 +57,3 @@ export type OAuthProviderId =
   | typeof BIGMODEL_PROVIDER_ID
   | typeof ZAI_PROVIDER_ID
   | (string & { readonly __oauthProviderBrand?: never });
-
-/** 登录归因参数：来自官网中转页或投放链接（Nex 无账号体系后仅保留遥测参数结构）。 */
-export interface OAuthLoginAttribution {
-  channel_id?: string;
-  utm_source?: string;
-  utm_campaign?: string;
-}
-
-/** 用户资料形状；Nex 无账号体系后仍被 UI 类型边界引用（恒为 null）。 */
-export interface UserInfo {
-  id: string;
-  username: string;
-  displayName: string;
-  avatarUrl?: string;
-}
-
-/** 缓存会话恢复结果；Nex 无账号体系后恒为 signed-out。 */
-export type OAuthCachedSessionRestoreResult =
-  | { status: "authenticated"; userInfo: UserInfo }
-  | { status: "signed-out" }
-  | { status: "reauthentication-required"; reason: "jwt-expired" };

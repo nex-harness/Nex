@@ -98,14 +98,13 @@ export * from "./nex-session-visible-content.js";
 export * from "./official-mcp-auth.js";
 export * from "./official-mcp-tool-error.js";
 export * from "./conversation-message-projection-policy.js";
-export * from "./conversation-share.js";
-export * from "./conversation-share-content.js";
 export * from "./conversation-preview-artifacts.js";
 export * from "./nex-session-task-status.js";
 export * from "./nex-session-content-profile.js";
 export * from "./nex-tool-projection-memory.js";
 export * from "./nex-slash-command-help.js";
 export * from "./nexEndpoint.js";
+export * from "./productLinks.js";
 export * from "./nex-source-headers.js";
 export * from "./nex-agent-policy.js";
 export * from "./nex-media-policy.js";
@@ -131,7 +130,6 @@ export * from "./pets/index.js";
 export * from "./storage.js";
 export * from "./oauth.js";
 export * from "./desktopMenu.js";
-export * from "./feedback.js";
 export * from "./e2e-test-bridge.js";
 export * from "./remoteAppConfig.js";
 export * from "./helpAppConfig.js";
@@ -324,7 +322,6 @@ export * from "./marketingTouch.js";
 export * from "./rewardsEmbedded.js";
 export * from "./rewardsBridge.js";
 export * from "./session-debug.js";
-export { redactFeedbackText } from "./feedbackPrivacy.js";
 export { API_KEY_USAGE_SCENE, type ApiKeyCreationUsageScene } from "./api-key-usage-scene.js";
 export {
   projectAccessTokenFingerprint,
@@ -350,4 +347,3 @@ export {
 } from "./request-security-edition/policy.js";
 export * from "./request-security-edition/verification-policy.js";
 
-export * from "./conversation-share-tool-presentation.js";

@@ -1,7 +1,6 @@
 import type { HighspeedCardSnapshot, HighspeedMessageMeta } from "@nex/shared";
 import { planHighspeedTranscriptHydration } from "@/highspeed/highspeedTurnHydration.js";
 import { calculateHighspeedSavedDurationMs } from "@/highspeed/highspeedSavedTime.js";
-import { isHighspeedShareEligible } from "@/highspeed/highspeedShare.js";
 
 export interface HighspeedTranscriptRow {
   sourceCommandId?: string;
@@ -20,10 +19,6 @@ export interface HighspeedTurnMetrics {
   savedDurationMs?: number;
 }
 
-export interface HighspeedShareMetrics extends HighspeedTurnMetrics {
-  highspeedTps: number;
-}
-
 export interface HighspeedTurnRecord {
   sessionId: string;
   sourceCommandId: string;
@@ -32,14 +27,6 @@ export interface HighspeedTurnRecord {
   completedAt?: number;
   metrics?: HighspeedTurnMetrics;
   metricsPersistedAt?: number;
-  autoShareAttemptedAt?: number;
-  autoSharedAt?: number;
-}
-
-export interface HighspeedCardAutoShareCandidate {
-  cardId: string;
-  expiresAt: number;
-  metrics: HighspeedShareMetrics;
 }
 
 const MAX_RECORDS = 300;
@@ -201,46 +188,6 @@ export function markHighspeedTurnMetricsPersisted(
   if (changed) publishChange();
 }
 
-export function markHighspeedCardAutoShared(cardId: string, autoSharedAt = Date.now()): void {
-  let changed = false;
-  records = records.map((record) => {
-    if (record.card.cardId !== cardId || record.autoSharedAt !== undefined) return record;
-    changed = true;
-    return { ...record, autoSharedAt };
-  });
-  if (changed) publishChange();
-}
-
-export function claimHighspeedCardAutoShare(
-  cardId: string,
-  attemptedAt = Date.now(),
-): HighspeedTurnRecord[] | null {
-  const cardRecords = listHighspeedTurnsByCard(cardId);
-  const metrics = aggregateHighspeedCardMetrics(cardId);
-  if (
-    cardRecords.length === 0 ||
-    metrics.outputTokens <= 0 ||
-    cardRecords.some(
-      (record) =>
-        !record.metrics ||
-        record.metrics.regularTps <= 0 ||
-        record.metricsPersistedAt === undefined ||
-        record.autoShareAttemptedAt !== undefined ||
-        record.autoSharedAt !== undefined ||
-        record.card.expiresAt > attemptedAt,
-    )
-  ) {
-    return null;
-  }
-  const claimed = cardRecords.map((record) => ({ ...record, autoShareAttemptedAt: attemptedAt }));
-  const claimedByCommandId = new Map(
-    claimed.map((record) => [record.sourceCommandId, record] as const),
-  );
-  records = records.map((record) => claimedByCommandId.get(record.sourceCommandId) ?? record);
-  publishChange();
-  return claimed;
-}
-
 export function getHighspeedTurnByCommandId(
   sourceCommandId: string | undefined,
 ): HighspeedTurnRecord | null {
@@ -248,7 +195,7 @@ export function getHighspeedTurnByCommandId(
   return records.find((record) => record.sourceCommandId === sourceCommandId) ?? null;
 }
 
-export function listHighspeedTurnsByCard(cardId: string): HighspeedTurnRecord[] {
+function listHighspeedTurnsByCard(cardId: string): HighspeedTurnRecord[] {
   return records.filter((record) => record.card.cardId === cardId);
 }
 
@@ -289,51 +236,6 @@ export function listHighspeedTurnsAwaitingMetricsPersistence(
   );
 }
 
-export function listHighspeedCardAutoShareCandidates(
-  sessionId: string,
-): HighspeedCardAutoShareCandidate[] {
-  const sessionRecords = listHighspeedTurnsBySession(sessionId);
-  const cardIds = [...new Set(sessionRecords.map((record) => record.card.cardId))];
-  return cardIds.flatMap((cardId) => {
-    const cardRecords = sessionRecords.filter((record) => record.card.cardId === cardId);
-    if (
-      cardRecords.some(
-        (record) =>
-          !record.metrics ||
-          record.metrics.regularTps <= 0 ||
-          record.metricsPersistedAt === undefined ||
-          record.autoShareAttemptedAt !== undefined ||
-          record.autoSharedAt !== undefined,
-      )
-    ) {
-      return [];
-    }
-    const metrics = aggregateHighspeedCardMetrics(cardId);
-    // Bug 原因：零输出卡过去仍会进入自动分享，build request 再把 token_usage 强制成 1，
-    // 既违背“没有生成内容不展示/分享”的产品语义，也会向后端写入虚假 usage。
-    if (metrics.outputTokens <= 0) return [];
-    // 未达标（总体加速倍率 ≤1.2x）不发布左下角分享卡：发布门禁与「查看」按钮门禁同口径，
-    // 否则会出现「卡弹出来却没有查看按钮」的半残态（spec §9）。诊断 blocker below-min-speedup
-    // 与此保持一致，避免达标判定漂移或静默丢卡。
-    if (!isHighspeedShareEligible(metrics)) return [];
-    return [
-      {
-        cardId,
-        expiresAt: Math.max(...cardRecords.map((record) => record.card.expiresAt)),
-        metrics,
-      },
-    ];
-  });
-}
-
-export function resolveNextHighspeedAutoShareAt(sessionId: string): number | null {
-  const sessionRecords = listHighspeedTurnsBySession(sessionId).filter(
-    (record) => record.autoShareAttemptedAt === undefined && record.autoSharedAt === undefined,
-  );
-  if (sessionRecords.length === 0) return null;
-  return Math.min(...sessionRecords.map((record) => record.card.expiresAt));
-}
-
 export function subscribeHighspeedTurns(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -369,7 +271,7 @@ export function getHighspeedTurnDependencies(
   return highspeedCardDependencies(new Set(record ? [record.card.cardId] : []));
 }
 
-export function aggregateHighspeedCardMetrics(cardId: string): HighspeedShareMetrics {
+export function aggregateHighspeedCardMetrics(cardId: string): HighspeedTurnMetrics {
   const records = listHighspeedTurnsByCard(cardId).filter(
     (record): record is HighspeedTurnRecord & { metrics: HighspeedTurnMetrics } =>
       record.metrics !== undefined,

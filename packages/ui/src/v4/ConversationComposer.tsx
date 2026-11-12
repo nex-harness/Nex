@@ -7,7 +7,6 @@ import { ComposerSubmissionPendingContext } from "@/project-sidebar/index.js";
 /* oxlint-disable eslint(max-lines) -- composer 集中收口输入区 wiring（附件/草稿/历史/mention），拆分会打散收口粒度。 */
 import { useRemoteProjectReconnect } from "@/hooks/RemoteProjectPresentationContext.js";
 import { useOptionalRemoteWorkspaceController } from "@/remote/useRemoteWorkspaceController.js";
-import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
 import { useRemoteConversationAvailable } from "@/v4/RemoteConversationAvailability.js";
 import { formatConversationWorkDuration } from "@/v4/conversationWorkDuration.js";
 /**
@@ -204,7 +203,6 @@ import {
   subscribeComposerSubmissionSettled,
   trackUnsettledComposerSubmission,
 } from "@/v4/composer/composerSubmissionSettlement.js";
-import { resolveAttachableShareContext } from "@/lib/conversationShareContext.js";
 
 const MODEL_SELECTION_LOADING_STATE: ModelSelectionState = { status: "loading" };
 
@@ -225,7 +223,6 @@ export interface ConversationComposerSendOptions {
   requestedDelivery?: "startNow" | "queue" | "guide";
   /** 提交命令创建后由 Composer 订阅权威 projection，覆盖 ACK 丢失后的收口。 */
   onCommandCreated?: (commandId: string) => void;
-  sharedContextRefs?: Array<{ kind: "shared_context_import"; context_id: string }>;
   /** 插件 UI 代发：随 sendText 持久化，用户消息卡片显示"来自插件 X"。 */
   source?: import("@nex/shared/nex-protocol-v4").ConversationInputSource;
 }
@@ -625,14 +622,6 @@ function ConversationComposerImpl({
   const remoteAvailable = useRemoteConversationAvailable();
   const remoteController = useOptionalRemoteWorkspaceController();
   const reconnectProject = useRemoteProjectReconnect();
-  const remoteKind = useOptionalTabStore((state) =>
-    state.tabs.find(
-      (tab) =>
-        tab.kind === "workspace" &&
-        (tab.workspaceIdentity?.trim() || tab.workspacePath) ===
-          (workspaceIdentity?.trim() || workspacePath),
-    ),
-  );
   const [targetSelectionPending, setTargetSelectionPending] = useState(false);
   const targetSelectionPendingRef = useRef(false);
   const updateTargetSelectionPending = useCallback((pending: boolean) => {
@@ -725,11 +714,6 @@ function ConversationComposerImpl({
   const pendingRef = useRef(false);
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
-  // 这条线断过一次：composer 原本读一个平行的 sharedContextImport prop，而 SessionPane 从没
-  // 传过它（全仓 `sharedContextImport=` 零命中），于是首条消息永远不带 sharedContextRefs。
-  // 现在从必然拿到的 snapshot 推导，理由与边界见 resolveAttachableShareContext。
-  const activeShareContext = resolveAttachableShareContext(snapshot?.sharedContextImport);
-  const pendingShareContext = activeShareContext?.status === "pending" ? activeShareContext : null;
   const inputApiRef = useRef<LexicalChatInputHandle | null>(null);
   const commandResolutionCleanupsRef = useRef(new Set<() => void>());
   const isMobileTextInputViewport = useIsMobileTextInputViewport();
@@ -1353,8 +1337,7 @@ function ConversationComposerImpl({
     hasWebElementContexts ||
     hasPptxElementReferences ||
     hasConversationSelectionReferences ||
-    hasPluginUiContexts ||
-    Boolean(pendingShareContext);
+    hasPluginUiContexts;
   const hasComposerDraftContent =
     textPresence.raw ||
     hasAttachments ||
@@ -1362,8 +1345,7 @@ function ConversationComposerImpl({
     hasWebElementContexts ||
     hasPptxElementReferences ||
     hasConversationSelectionReferences ||
-    hasPluginUiContexts ||
-    Boolean(pendingShareContext);
+    hasPluginUiContexts;
   useEffect(() => {
     onDraftStateChange?.({
       hasContent: hasComposerDraftContent,
@@ -1387,8 +1369,7 @@ function ConversationComposerImpl({
     !hasWebElementContexts &&
     !hasPptxElementReferences &&
     !hasConversationSelectionReferences &&
-    !hasPluginUiContexts &&
-    !pendingShareContext;
+    !hasPluginUiContexts;
   const canReload = recoveryAllowed && reloadText && remoteAvailable;
   const canSend =
     !disabled &&
@@ -1424,7 +1405,6 @@ function ConversationComposerImpl({
       const hasPendingPptxElementReferences = currentPptxElementReferences.length > 0;
       const currentConversationSelections = conversationSelectionReferences;
       const hasPendingConversationSelections = currentConversationSelections.length > 0;
-      const submittedShareContext = pendingShareContext;
       // /reload 是本地操作，在模型配置、队列和消息历史处理之前截获；参数和附件不发给模型。
       if (/^\/reload(?:\s|$)/.test(trimmed)) {
         if (
@@ -1472,8 +1452,7 @@ function ConversationComposerImpl({
           !hasPendingWebElementContexts &&
           !hasPendingPptxElementReferences &&
           !hasPendingConversationSelections &&
-          !hasPendingPluginUiContexts &&
-          !submittedShareContext) ||
+          !hasPendingPluginUiContexts) ||
         pendingRef.current ||
         targetSelectionPendingRef.current ||
         !remoteAvailable ||
@@ -1620,11 +1599,6 @@ function ConversationComposerImpl({
         }
         // 外部上下文不走协议附件；按 selection -> code comment -> web -> PPTX 的固定尾块顺序
         // 序列化，历史 user row 才能按相反顺序无损解析并隐藏内部 prompt block。
-        //
-        // 分享 handover 不在这里序列化：share URL 块纯粹是 renderer 自产自销（CLI/shared
-        // 里没有任何东西解析它），唯一作用是驱动一个已被产品裁掉的 chip，代价却是把一个
-        // share URL 塞进发给模型的正文。模型侧内容由隐藏的 shared_context 消息经
-        // inputIntent.sharedContextRefs 注入，与正文无关。
         const promptText = serializeComposerPromptContexts(trimmed, {
           codeComments: currentCodeCommentContexts,
           conversationSelections: [],
@@ -1639,7 +1613,7 @@ function ConversationComposerImpl({
             webElements: currentWebElementContexts,
             pptxElements: currentPptxElementReferences,
             pluginUiContexts: currentPluginUiContexts,
-          }) + (submittedShareContext ? 1 : 0);
+          });
         if (trimmed) {
           promptHistoryBeforeSend = readPromptHistoryEntries(workspacePath);
           promptHistoryAfterAppend = appendPromptHistoryEntry(promptHistoryBeforeSend, trimmed);
@@ -1686,16 +1660,6 @@ function ConversationComposerImpl({
           ...(expectedHeldQueueItemIds ? { expectedHeldQueueItemIds } : {}),
           ...(readyAttachmentRefs.length > 0 ? { attachments: readyAttachmentRefs } : {}),
           ...(contextAttachmentCount > 0 ? { contextAttachmentCount } : {}),
-          ...(submittedShareContext
-            ? {
-                sharedContextRefs: [
-                  {
-                    kind: "shared_context_import" as const,
-                    context_id: submittedShareContext.contextId,
-                  },
-                ],
-              }
-            : {}),
         });
         if (sendResult === "blocked") {
           // 产品 guard 是一次正常拒绝，不应借异常路径表达；回滚发送前暂记的 history，
@@ -1750,7 +1714,6 @@ function ConversationComposerImpl({
       getCodeCommentContexts,
       modelSelectionView,
       onSendText,
-      pendingShareContext,
       persistDraftNow,
       provider,
       removeCodeCommentContext,
@@ -2312,7 +2275,6 @@ function ConversationComposerImpl({
     removePluginUiContext,
     removePptxElementReference,
     conversationSelectionReferences,
-    pendingShareContext,
     webElementContexts,
     pluginUiContexts,
     pptxElementReferences,
@@ -2581,9 +2543,6 @@ function ConversationComposerImpl({
         <div className="mb-6 w-full shrink-0">
           <ChatErrorBanner
             error={visibleError}
-            remoteKind={
-              remoteKind?.kind === "workspace" ? remoteKind.remoteTarget?.kind : undefined
-            }
             onReconnect={
               reconnectProject || remoteController
                 ? () => {

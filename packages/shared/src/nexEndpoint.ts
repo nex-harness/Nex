@@ -5,13 +5,6 @@ export const TEST_NEX_ENDPOINT_ORIGIN = "https://zcode.z.ai";
 export const CODING_PLAN_LOCAL_WEBVIEW_ORIGIN = "http://localhost:3000";
 export const DEFAULT_BIGMODEL_API_ORIGIN = "https://bigmodel.cn";
 export const TEST_BIGMODEL_API_ORIGIN = "https://bigmodel.cn";
-export const DEFAULT_ZAI_OAUTH_ORIGIN = "https://chat.z.ai";
-export const TEST_ZAI_OAUTH_ORIGIN = "https://chat.z.ai";
-export const DEFAULT_ZAI_BUSINESS_BASE_URL = "https://api.z.ai";
-export const TEST_ZAI_BUSINESS_BASE_URL = "https://api.z.ai";
-export const DEFAULT_ZAI_OAUTH_CLIENT_ID = "client_P8X5CMWmlaRO9gyO-KSqtg";
-export const TEST_ZAI_OAUTH_CLIENT_ID = "client_P8X5CMWmlaRO9gyO-KSqtg";
-export const DEFAULT_WEB_REMOTE_CONTROL_RELAY_WS_URL = "wss://zcode.z.ai/api/v1/remote/ws2";
 export const WEB_REMOTE_CONTROL_V4_MIN_APP_VERSION = "3.4.0";
 
 export interface BuildNexEndpointUrlsOptions {
@@ -65,12 +58,7 @@ export interface NexEndpointUrls {
   apiBaseUrl: string;
   remoteUrl: string;
   webRemoteCallbackUrl: string;
-  webShareCallbackUrl: string;
   relayWsUrl: string;
-  nexPlanOpenAiBaseUrl: string;
-  nexPlanAnthropicBaseUrl: string;
-  nexPlanBillingCurrentUrl: string;
-  nexPlanBillingBalanceUrl: string;
 }
 
 export interface RuntimeNexEndpointEnv {
@@ -90,33 +78,7 @@ export interface RuntimeBigModelApiEnv {
   BIGMODEL_PRODUCTION_API_BASE_URL?: string;
 }
 
-export interface RuntimeZaiEndpointEnv {
-  [key: string]: string | undefined;
-  NEX_ENV?: string;
-  ZAI_OAUTH_ORIGIN?: string;
-  ZAI_TEST_OAUTH_ORIGIN?: string;
-  ZAI_PRODUCTION_OAUTH_ORIGIN?: string;
-  ZAI_BUSINESS_BASE_URL?: string;
-  ZAI_TEST_BUSINESS_BASE_URL?: string;
-  ZAI_PRODUCTION_BUSINESS_BASE_URL?: string;
-  ZAI_OAUTH_CLIENT_ID?: string;
-  ZAI_TEST_OAUTH_CLIENT_ID?: string;
-  ZAI_PRODUCTION_OAUTH_CLIENT_ID?: string;
-  ZAI_OAUTH_APP_ID?: string;
-}
-
-export interface RuntimeProductEndpointEnv
-  extends RuntimeNexEndpointEnv, RuntimeBigModelApiEnv, RuntimeZaiEndpointEnv {}
-
-export interface RuntimeProductEndpointConfig {
-  nexEnv: NexEnv;
-  nexEndpointOrigin: string;
-  nexEndpointUrls: NexEndpointUrls;
-  zaiOAuthOrigin: string;
-  zaiBusinessBaseUrl: string;
-  zaiOAuthClientId: string;
-  bigModelApiOrigin: string;
-}
+export interface RuntimeProductEndpointEnv extends RuntimeNexEndpointEnv, RuntimeBigModelApiEnv {}
 
 function readRuntimeEnvValue(
   env: Record<string, string | undefined>,
@@ -124,15 +86,6 @@ function readRuntimeEnvValue(
 ): string | undefined {
   const value = env[key]?.trim();
   return value ? value : undefined;
-}
-
-function readRuntimeNexEnvScopedValue(
-  env: Record<string, string | undefined>,
-  nexEnv: NexEnv,
-  testKey: string,
-  productionKey: string,
-): string | undefined {
-  return readRuntimeEnvValue(env, nexEnv === "production" ? productionKey : testKey);
 }
 
 export function normalizeNexEndpointOrigin(value: string): string {
@@ -268,96 +221,8 @@ export function buildBigModelApiUrl(env: RuntimeBigModelApiEnv = {}, path: strin
   return `${resolveBigModelApiOrigin(env)}${normalizedPath}`;
 }
 
-export function buildBigModelCodingPlanPersonalManageUrl(env: RuntimeBigModelApiEnv = {}): string {
-  // 修复原因：BigModel Coding Plan 管理页要跟随 NEX_ENV；
-  // 测试环境如果继续写死 bigmodel.cn，会把测试账号带到生产套餐页。
-  return buildBigModelApiUrl(env, "/coding-plan/personal/overview");
-}
-
 export function buildBigModelCodingPlanTeamManageUrl(env: RuntimeBigModelApiEnv = {}): string {
   return buildBigModelApiUrl(env, "/coding-plan/team/plans");
-}
-
-export function resolveZaiOAuthOrigin(env: RuntimeZaiEndpointEnv = {}): string {
-  const nexEnv = resolveRuntimeNexEnv(env);
-  const scopedOrigin = readRuntimeNexEnvScopedValue(
-    env,
-    nexEnv,
-    "ZAI_TEST_OAUTH_ORIGIN",
-    "ZAI_PRODUCTION_OAUTH_ORIGIN",
-  );
-  const fallbackOrigin =
-    nexEnv === "production" ? DEFAULT_ZAI_OAUTH_ORIGIN : TEST_ZAI_OAUTH_ORIGIN;
-
-  return normalizeNexEndpointOrigin(
-    readRuntimeEnvValue(env, "ZAI_OAUTH_ORIGIN") ?? scopedOrigin ?? fallbackOrigin,
-  );
-}
-
-export function resolveZaiBusinessBaseUrl(env: RuntimeZaiEndpointEnv = {}): string {
-  const nexEnv = resolveRuntimeNexEnv(env);
-  const scopedOrigin = readRuntimeNexEnvScopedValue(
-    env,
-    nexEnv,
-    "ZAI_TEST_BUSINESS_BASE_URL",
-    "ZAI_PRODUCTION_BUSINESS_BASE_URL",
-  );
-  const fallbackOrigin =
-    nexEnv === "production" ? DEFAULT_ZAI_BUSINESS_BASE_URL : TEST_ZAI_BUSINESS_BASE_URL;
-
-  return normalizeNexEndpointOrigin(
-    readRuntimeEnvValue(env, "ZAI_BUSINESS_BASE_URL") ?? scopedOrigin ?? fallbackOrigin,
-  );
-}
-
-export function resolveZaiOAuthClientId(env: RuntimeZaiEndpointEnv = {}): string {
-  const nexEnv = resolveRuntimeNexEnv(env);
-  const scopedClientId = readRuntimeNexEnvScopedValue(
-    env,
-    nexEnv,
-    "ZAI_TEST_OAUTH_CLIENT_ID",
-    "ZAI_PRODUCTION_OAUTH_CLIENT_ID",
-  );
-  const fallbackClientId =
-    nexEnv === "production" ? DEFAULT_ZAI_OAUTH_CLIENT_ID : TEST_ZAI_OAUTH_CLIENT_ID;
-
-  return (
-    readRuntimeEnvValue(env, "ZAI_OAUTH_CLIENT_ID") ??
-    scopedClientId ??
-    readRuntimeEnvValue(env, "ZAI_OAUTH_APP_ID") ??
-    fallbackClientId
-  );
-}
-
-export function buildZaiOAuthUrl(origin: string, path: string): string {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${normalizeNexEndpointOrigin(origin)}${normalizedPath}`;
-}
-
-export function buildRuntimeZaiOAuthUrl(env: RuntimeZaiEndpointEnv = {}, path: string): string {
-  return buildZaiOAuthUrl(resolveZaiOAuthOrigin(env), path);
-}
-
-export function buildRuntimeZaiBusinessUrl(env: RuntimeZaiEndpointEnv = {}, path: string): string {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${resolveZaiBusinessBaseUrl(env)}${normalizedPath}`;
-}
-
-export function resolveRuntimeProductEndpointConfig(
-  env: RuntimeProductEndpointEnv = {},
-): RuntimeProductEndpointConfig {
-  const nexEnv = resolveRuntimeNexEnv(env);
-  const nexEndpointOrigin = resolveRuntimeNexEndpointOrigin(env);
-
-  return {
-    nexEnv,
-    nexEndpointOrigin,
-    nexEndpointUrls: buildNexEndpointUrls(nexEndpointOrigin),
-    zaiOAuthOrigin: resolveZaiOAuthOrigin(env),
-    zaiBusinessBaseUrl: resolveZaiBusinessBaseUrl(env),
-    zaiOAuthClientId: resolveZaiOAuthClientId(env),
-    bigModelApiOrigin: resolveBigModelApiOrigin(env),
-  };
 }
 
 export function buildNexEndpointUrls(
@@ -376,12 +241,7 @@ export function buildNexEndpointUrls(
     apiBaseUrl: `${normalizedOrigin}/api/v1`,
     remoteUrl: `${normalizedOrigin}/remote/${remoteVersion}`,
     webRemoteCallbackUrl: `${normalizedOrigin}/remote/v4`,
-    webShareCallbackUrl: `${normalizedOrigin}/cn/share/callback`,
     relayWsUrl: `${wsOrigin}/api/v1/remote/ws2`,
-    nexPlanOpenAiBaseUrl: `${normalizedOrigin}/api/v1/nex-plan`,
-    nexPlanAnthropicBaseUrl: `${normalizedOrigin}/api/v1/nex-plan/anthropic`,
-    nexPlanBillingCurrentUrl: `${normalizedOrigin}/api/v1/nex-plan/billing/current`,
-    nexPlanBillingBalanceUrl: `${normalizedOrigin}/api/v1/nex-plan/billing/balance`,
   };
 }
 

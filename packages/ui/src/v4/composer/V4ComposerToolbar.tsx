@@ -82,7 +82,6 @@ import {
   composerConnectionKey,
   chooseConnectionModel,
 } from "@/lib/composerPlanGroups.js";
-import { useNexStoreWithDefault } from "@/store/StoreProvider.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import {
   useUsageEntitlement,
@@ -625,9 +624,8 @@ function V4ComposerModelControlsImpl({
     resolveModelProviderFamilySpecByProviderId(effectiveConfig?.provider ?? "")?.id ??
     sharedSettings?.providerFamilyDomain ??
     "bigmodel";
-  const user = useNexStoreWithDefault((state) => state.user, undefined);
+  // Nex 无账号体系：连接鉴权只看 Provider 访问模式与账号状态，不依赖登录用户。
   const connectionAuthenticated =
-    user !== null &&
     Boolean(
       providerSettingsView?.providers.some(
         (p) =>
@@ -654,10 +652,9 @@ function V4ComposerModelControlsImpl({
         : undefined) ?? [],
     [connectionAuthenticated, enterpriseProducts.snapshot?.productList],
   );
-  const authSessionSeq = useNexStoreWithDefault((state) => state.authSessionSeq, 0);
   const teamUsageScope = useMemo(
     () => ({}),
-    [baseServices, connectionFamily, user?.id, authSessionSeq],
+    [baseServices, connectionFamily],
   );
   const contextTeamUsageSourceCacheRef = useRef<{
     scope: object;

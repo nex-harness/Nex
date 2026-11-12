@@ -42,7 +42,6 @@ export async function handleModelCommand(
       mode: deps.getMode?.(),
       model: result.model,
       modelOptions: options,
-      loginRequired: false,
       response: `Model switched to ${result.model} (${selection.options!.reasoningLevel}).${persistenceWarning}`,
       thoughtLevel: result.thoughtLevel ?? app.getThoughtLevel?.(),
     };

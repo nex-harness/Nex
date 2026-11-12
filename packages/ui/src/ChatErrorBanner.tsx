@@ -9,6 +9,7 @@ import { CodingPlanEntryButton } from "@/settings/CodingPlanEntryButton.js";
  */
 import { useState } from "react";
 import {
+  NEX_GITHUB_ISSUES_NEW_URL,
   MEDIA_BUDGET_CURRENT_ATTACHMENT_TOO_LARGE_ERROR_CODE,
   MEDIA_BUDGET_CURRENT_IMAGE_TOO_LARGE_ERROR_CODE,
   MEDIA_BUDGET_CURRENT_VIDEO_TOO_LARGE_ERROR_CODE,
@@ -20,6 +21,7 @@ import {
 } from "@nex/shared/test-ids";
 import { AnchorIcon, CopyIcon, InfoIcon, RocketIcon, SettingsIcon, X } from "lucide-react";
 import { useNexIntl } from "./i18n/IntlProvider.js";
+import { usePlatform } from "@/hooks/usePlatform.js";
 import type { IntlInstance } from "./i18n/IntlProvider.js";
 import { Button } from "./components/ui/button.js";
 import {
@@ -31,9 +33,7 @@ import {
 } from "./components/ui/dialog.js";
 import { cn } from "./components/lib/utils.js";
 import { toast } from "./components/ui/toast.js";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { getProviderBusinessErrorMessageId } from "@/lib/providerBusinessError.js";
-import { buildErrorFeedbackDescription } from "@/lib/errorFeedbackDraft.js";
 import {
   isSuspiciousEmptyModelResultMessage,
   resolveOffPeakTicketExpiredBusinessCode,
@@ -177,11 +177,9 @@ export function ChatErrorBanner({
   onOpenUpgrade,
   modelConfigTarget = "local",
   onReconnect,
-  remoteKind,
 }: {
   error: NexUiError;
   onReconnect?: () => void;
-  remoteKind?: string;
   onRetry?: () => void;
   retryLabel?: string;
   retryDisabled?: boolean;
@@ -191,7 +189,7 @@ export function ChatErrorBanner({
   modelConfigTarget?: ChatErrorBannerModelConfigTarget;
 }) {
   const { intl } = useNexIntl();
-  const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
+  const platform = usePlatform();
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const actionButtonClassName = "shrink-0";
   const requestConfigError = Boolean(resolveRequestSecurityErrorMessageId(error));
@@ -208,29 +206,9 @@ export function ChatErrorBanner({
     return null;
   }
 
-  const handleOpenFeedback = async () => {
-    openFeedbackSubmit({
-      title: localizedErrorMessage.slice(0, 80),
-      type: "bug",
-      module: remoteConnectionFailure
-        ? remoteKind === "ssh"
-          ? "SSH连接失败"
-          : remoteKind === "wsl"
-            ? "WSL连接失败"
-            : "其它"
-        : "模型调用报错",
-      severity: "P2-中",
-      includeLogs: true,
-      description: buildErrorFeedbackDescription({
-        message: localizedErrorMessage,
-        detail: error.detail,
-        traceId: error.traceId,
-        formatMessage: (id: string, values?: Record<string, string>) =>
-          intl.formatMessage({ id }, values),
-      }),
-      screenshots: [],
-    });
-    toast(intl.formatMessage({ id: "chat.error.feedbackOpened" }));
+  const handleOpenFeedback = () => {
+    // 产品决定：不再内置工单系统，错误横幅的反馈入口打开 GitHub Issues 新建页。
+    platform.openExternal(NEX_GITHUB_ISSUES_NEW_URL);
   };
 
   const handleCopyError = async () => {
@@ -390,9 +368,7 @@ export function ChatErrorBanner({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => {
-              void handleOpenFeedback();
-            }}
+            onClick={handleOpenFeedback}
             // ChatErrorBanner 这里之前混用了原生 button，导致按钮体系、焦点态和禁用态都绕开了设计系统。
             // 统一收口到 Button 组件后，错误横幅里的所有操作按钮才能保持同一套交互和主题表现。
             className={cn(actionButtonClassName)}
@@ -444,14 +420,14 @@ function buildErrorCopyText({
   formatMessage: (id: string, values?: Record<string, string>) => string;
 }) {
   return [
-    formatMessage("feedback.submit.template.section.copyErrorHeading"),
+    formatMessage("chat.error.copyTemplateHeading"),
     "",
-    formatMessage("feedback.submit.template.section.errorSummary"),
+    formatMessage("chat.error.copyTemplateSummary"),
     message,
     "",
-    traceId ? formatMessage("feedback.submit.template.section.errorTraceId", { traceId }) : null,
+    traceId ? formatMessage("chat.error.copyTemplateTraceId", { traceId }) : null,
     detail
-      ? ["", formatMessage("feedback.submit.template.section.errorDetail"), detail].join("\n")
+      ? ["", formatMessage("chat.error.copyTemplateDetail"), detail].join("\n")
       : null,
   ]
     .filter((line): line is string => line != null)

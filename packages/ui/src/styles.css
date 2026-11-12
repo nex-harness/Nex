@@ -5,7 +5,6 @@
 @import "@xterm/xterm/css/xterm.css";
 @import "katex/dist/katex.min.css";
 @import "./highspeed/highspeed-activation.css";
-@import "./highspeed/highspeed-share.css";
 @import "./nativeMediaControls.css";
 @source "../../../node_modules/streamdown/dist/*.js"; /* 感觉这行也是不好使呢*/
 

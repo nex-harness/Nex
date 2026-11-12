@@ -17,9 +17,6 @@ export function WorkspaceSettingsLayer({
   onOpenWorkspace,
   onOpenRemoteWorkspace,
   allowOpenWorkspace,
-  onLogin,
-  onLogout,
-  user,
 }: WorkspaceSettingsLayerProps) {
   useEffect(() => {
     logger.info("[Root] settings layer mounted");
@@ -44,9 +41,6 @@ export function WorkspaceSettingsLayer({
             onOpenWorkspace={onOpenWorkspace}
             onOpenRemoteWorkspace={onOpenRemoteWorkspace}
             allowOpenWorkspace={allowOpenWorkspace}
-            onLogin={onLogin}
-            onLogout={onLogout}
-            user={user}
           />
         </ServiceProvider>
       ) : (
@@ -62,9 +56,6 @@ export function WorkspaceSettingsLayer({
           onOpenWorkspace={onOpenWorkspace}
           onOpenRemoteWorkspace={onOpenRemoteWorkspace}
           allowOpenWorkspace={allowOpenWorkspace}
-          onLogin={onLogin}
-          onLogout={onLogout}
-          user={user}
         />
       )}
     </div>

@@ -98,8 +98,6 @@ const pendingOpenWorkspacePaths: string[] = [];
 const openSettingsSectionCallbacks = new Set<(section: string) => void>();
 // 主窗口冷启动时 main 可能先于 React 订阅投递；先缓冲再在订阅建立后回放。
 const pendingOpenSettingsSections: string[] = [];
-const shareImportCallbacks = new Set<(payload: { shareCode: string }) => void>();
-const pendingShareImports: { shareCode: string }[] = [];
 const MACOS_WINDOW_CONTROLS_BASE_LEFT_PADDING_PX = 96;
 const WINDOWS_WINDOW_CONTROLS_BASE_RIGHT_PADDING_PX = 136;
 const WINDOWS_TITLE_BAR_HEIGHT_PX = 48;
@@ -194,14 +192,6 @@ ipcRenderer.on(PlatformChannels.OpenSettingsSection, (_event: unknown, section: 
     return;
   }
   for (const callback of openSettingsSectionCallbacks) callback(section);
-});
-
-ipcRenderer.on(PlatformChannels.ShareImport, (_event: unknown, payload: { shareCode: string }) => {
-  if (shareImportCallbacks.size === 0) {
-    pendingShareImports.push(payload);
-    return;
-  }
-  for (const callback of shareImportCallbacks) callback(payload);
 });
 
 function updateRendererProcessTitle(): void {
@@ -636,16 +626,6 @@ contextBridge.exposeInMainWorld("nex", {
     }
     return () => openSettingsSectionCallbacks.delete(callback);
   },
-  onOpenFeedbackDialog: (callback: () => void): (() => void) => {
-    const handler = () => callback();
-    ipcRenderer.on(PlatformChannels.OpenFeedbackDialog, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.OpenFeedbackDialog, handler);
-  },
-  onOpenTicketsPanel: (callback: () => void): (() => void) => {
-    const handler = () => callback();
-    ipcRenderer.on(PlatformChannels.OpenTicketsPanel, handler);
-    return () => ipcRenderer.removeListener(PlatformChannels.OpenTicketsPanel, handler);
-  },
   /** 注册窗口全屏状态变化回调，返回 disposer */
   onWindowFullscreenChanged: (callback: (isFullscreen: boolean) => void): (() => void) => {
     const handler = (_event: unknown, isFullscreen: boolean) => callback(isFullscreen);
@@ -733,14 +713,6 @@ contextBridge.exposeInMainWorld("nex", {
     const handler = (_event: unknown, url: string) => callback(url);
     ipcRenderer.on(PlatformChannels.PaymentCallback, handler);
     return () => ipcRenderer.removeListener(PlatformChannels.PaymentCallback, handler);
-  },
-  onShareImport: (callback: (payload: { shareCode: string }) => void): (() => void) => {
-    shareImportCallbacks.add(callback);
-    while (pendingShareImports.length > 0) {
-      const payload = pendingShareImports.shift();
-      if (payload) callback(payload);
-    }
-    return () => shareImportCallbacks.delete(callback);
   },
   /** 通知 main process renderer 已就绪 */
   notifyRendererReady: () => ipcRenderer.send(PlatformChannels.RendererReady),

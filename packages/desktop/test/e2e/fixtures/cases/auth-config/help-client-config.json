@@ -28,13 +28,6 @@
       "syntheticReason": "受控 loopback HTTP 服务验证帮助配置，不调用真实后台或模型 provider"
     },
     {
-      "id": "HC-03",
-      "classification": "synthetic",
-      "method": "GET",
-      "path": "/api/v1/client/configs",
-      "syntheticReason": "受控 loopback HTTP 服务验证帮助配置，不调用真实后台或模型 provider"
-    },
-    {
       "id": "HC-04-http",
       "classification": "synthetic",
       "method": "GET",

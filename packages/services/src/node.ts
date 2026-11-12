@@ -120,9 +120,6 @@ export {
   getAppConfigDir,
   getExportLogStageDir,
   getExportLogDir,
-  getFeedbackRootDir,
-  getFeedbackAttachmentDir,
-  getFeedbackLogArchiveDir,
   getGitCheckpointIndexRootDir,
   copyDataDirectory,
   validateDataBaseDirTarget,
@@ -254,14 +251,7 @@ export { createHooksService } from "./hooks/hooksService.js";
 export { createMemoryService } from "./memory/memoryService.js";
 export { createOutputStyleService } from "./output-style/outputStyleService.js";
 export { createSettingsSyncService } from "./settings-sync/settingsSyncService.js";
-export { createFeedbackDiagnosticArchive } from "./feedback/feedbackLogArchive.js";
-export { createFeedbackService } from "./feedback/feedbackService.js";
-export type { CreateFeedbackServiceOptions } from "./feedback/feedbackService.js";
 export { createLocalPromptAttachmentTransferService } from "./prompt-attachment-transfer/promptAttachmentTransferService.js";
-export {
-  createLocalConversationShareArtifactSource,
-  createRemoteConversationShareArtifactSource,
-} from "./conversation-share/conversationShareArtifactSource.js";
 export { createNodeApiClient, NodeApiClient } from "./providers/api/nodeApiClient.js";
 export {
   createHostApiNetworkTransport,
@@ -311,17 +301,6 @@ import { INexTaskService } from "./session/nexTaskService.js";
 import { INexAgentService } from "./nex-agent/nexAgent.js";
 import type { CuaOperationStateReporter } from "./nex-agent/cuaOperationTurnTracker.js";
 import { INexSessionService } from "./nex-session/nexSession.js";
-import {
-  createUnsupportedConversationShareService,
-  IConversationShareService,
-  type IConversationShareService as IConversationShareServiceType,
-} from "./conversation-share/conversationShare.js";
-import {
-  ConversationShareService,
-  conversationShareConnectionScopeFactory,
-} from "./conversation-share/conversationShareService.js";
-import { createLocalConversationShareArtifactSource } from "./conversation-share/conversationShareArtifactSource.js";
-import { ConversationShareHttpClient } from "./conversation-share/conversationShareHttpClient.js";
 import { IBotsService } from "./bots/bots.js";
 import { IFileWatcherService } from "./fileWatcher/fileWatcher.js";
 import { ISourceServerWorkspaceService } from "./source-server-workspace/sourceServerWorkspace.js";
@@ -343,7 +322,6 @@ import { IHooksService } from "./hooks/hooks.js";
 import { IMemoryService } from "./memory/memory.js";
 import { IOutputStyleService } from "./output-style/outputStyle.js";
 import { ISettingsSyncService } from "./settings-sync/settingsSync.js";
-import { IFeedbackService } from "./feedback/feedback.js";
 import { IPromptAttachmentTransferService } from "./prompt-attachment-transfer/promptAttachmentTransfer.js";
 import { createFileService } from "./file/fileService.js";
 import { createMediaPreviewService } from "./media-preview/mediaPreview.js";
@@ -428,10 +406,6 @@ import { createHooksService } from "./hooks/hooksService.js";
 import { createMemoryService } from "./memory/memoryService.js";
 import { createOutputStyleService } from "./output-style/outputStyleService.js";
 import { createSettingsSyncService } from "./settings-sync/settingsSyncService.js";
-import {
-  createFeedbackService,
-  type CreateFeedbackServiceOptions,
-} from "./feedback/feedbackService.js";
 import { createLocalPromptAttachmentTransferService } from "./prompt-attachment-transfer/promptAttachmentTransferService.js";
 import { createNodeApiClient } from "./providers/api/nodeApiClient.js";
 import {
@@ -498,7 +472,6 @@ import { resolveBrokerSocketPath } from "@nex/nex-cua/broker/socketPath";
 import {
   DEFAULT_NEX_MODEL_CONTEXT_BUDGET_STRATEGY,
   formatLogPrefix,
-  isCredentialDecryptError,
   type ServiceAuthorityMode,
   resolveRuntimeNexEndpointOrigin,
   type BrowserBackendDescriptor,
@@ -515,14 +488,6 @@ import {
   NEX_ENV,
   buildRuntimeNexApiUrl,
 } from "@nex/shared";
-
-// 这些 conversation-share 实现依赖 Node 文件系统；仅通过 @nex/services/node 暴露，
-// 防止 browser-safe 根入口把 node:* 依赖带进 renderer。
-export {
-  ConversationShareService,
-  ConversationShareHttpClient,
-  conversationShareConnectionScopeFactory,
-};
 
 import { createPluginUiAccountBindings } from "./plugin-ui-bridge/instanceAccounts.js";
 interface ServiceWithDisposeAll {
@@ -1071,9 +1036,6 @@ export function createLocalServices(options: {
   forwardDynamicWorkflowUserMode?: (mode: DynamicWorkflowMode | undefined) => void;
   /** Desktop Host 请求 Main 登记已校验的插件 UI HTML，换取沙箱句柄。 */
   registerPluginSandbox?: (input: PluginSandboxRegisterInput) => Promise<PluginSandboxHandle>;
-  feedback?: Partial<
-    Omit<CreateFeedbackServiceOptions, "apiClient" | "credentialService" | "oauthService">
-  >;
   processLifecycleReporter?: RuntimeProcessLifecycleReporter;
   taskRuntimeReporter?: RuntimeTaskReporter;
   /** workspace 文件搜索默认使用内置过滤器；后续规则来源只需在 Host 装配时注入最终实现。 */
@@ -1186,14 +1148,8 @@ export function createLocalServices(options: {
     resolveRuntimeNexEndpointOrigin(process.env, {
       overrideOrigin: (await settingService.get()).nexEndpointOrigin,
     });
-  let invalidatePluginUiAccounts: (() => void) | undefined;
-  // Nex 无账号体系：凭据变更不再触发 OAuth 派生刷新或账号 Provider 失效。
-  const credentialService = createCredentialService({
-    onDidMutate: ({ key }) => {
-      if (key === "oauth:active_provider" || /^oauth:[^:]+:user_info$/.test(key))
-        invalidatePluginUiAccounts?.();
-    },
-  });
+  // Nex 无账号体系：凭据变更不再触发账号 Provider 失效。
+  const credentialService = createCredentialService({});
   const broadcastService = createBroadcastService(options?.parentPort ?? null);
   const gitCheckpointService = createGitCheckpointService();
   const hostApiNetworkTransport =
@@ -1359,7 +1315,6 @@ export function createLocalServices(options: {
     open: (params) => nexAgentService.openMcpUiInstance(params),
     close: (params) => nexAgentService.closeMcpUiInstance(params),
   });
-  invalidatePluginUiAccounts = () => pluginUiAccounts.invalidate();
   const pluginUiBridgeService = createPluginUiBridgeService({
     openInstance: (params) => pluginUiAccounts.open(params),
     closeInstance: (params) => pluginUiAccounts.close(params),
@@ -2262,24 +2217,6 @@ export function createLocalServices(options: {
     authorizeLocalMediaPreviewPath: options?.authorizeLocalMediaPreviewPath,
     createLocalMediaPreviewUrl: buildLocalMediaPreviewUrl,
   });
-  const conversationShareClient = new ConversationShareHttpClient({
-    // 分享运行时始终走真实 API；测试/Mock 场景应在 service 单测或 Web fixture 中显式注入，
-    // 不能让开发环境默认生成仅存在于进程内存的 mock-share 链接。
-    apiClient,
-    baseUrl: buildRuntimeNexApiUrl(process.env, "/api/v1"),
-    // Nex 无账号体系：分享上传不再附带 OAuth 派生的账号 token。
-    tokenProvider: async (): Promise<string | null> => null,
-  });
-  const conversationShareService: IConversationShareServiceType = isDesktopAttachedRemote
-    ? createUnsupportedConversationShareService({
-        message: "Conversation publishing is not available for remote workspaces",
-      })
-    : new ConversationShareService({
-        nexAgentService,
-        nexSessionService,
-        client: conversationShareClient,
-        artifactSource: createLocalConversationShareArtifactSource(),
-      });
   // 注册链上的懒工厂（如 OffPeak）会各自创建 tasks-index sqlite repo；先收集到本数组，
   // services 集合建好后在 return 前统一登记进 sharedSqliteRepos 侧表
   const sqliteReposToClose: Array<{ close(): void }> = [];
@@ -2323,7 +2260,6 @@ export function createLocalServices(options: {
     .register(IRemoteProjectService, remoteProjectService)
     .register(ICuaPermissionService, cuaPermissionService)
     .register(ICuaPipSessionService, cuaPipSessionService)
-    .register(IConversationShareService, conversationShareService)
     .register(
       IBotsService,
       createBotsService({
@@ -2403,13 +2339,6 @@ export function createLocalServices(options: {
     .register(IMemoryService, createMemoryService())
     .register(IOutputStyleService, createOutputStyleService())
     .register(ISettingsSyncService, createSettingsSyncService({ settingService }))
-    .register(
-      IFeedbackService,
-      createFeedbackService({
-        ...options?.feedback,
-        apiClient,
-      }),
-    )
     .register(IPromptAttachmentTransferService, createLocalPromptAttachmentTransferService());
 
   // 即使初始配置关闭也必须登记 lifecycle disposer：terminal fence 需要早于任意延迟 setting/acquire
@@ -2476,83 +2405,6 @@ export function createLocalServices(options: {
   sqliteReposToClose.push(taskIndexRepo);
   sharedSqliteRepos.set(services, sqliteReposToClose);
   return services;
-}
-
-export function createTelemetryUserIdLoader(
-  credentialService: Pick<ICredentialService, "load">,
-): () => Promise<string> {
-  const log = createServiceLogger("telemetry-user-id");
-  return async () => {
-    try {
-      const activeProvider = (await credentialService.load("oauth:active_provider"))?.trim() ?? "";
-      if (!activeProvider) {
-        return "";
-      }
-
-      const rawUserInfo = await credentialService.load(`oauth:${activeProvider}:user_info`);
-      return readTelemetryOAuthUserId(rawUserInfo);
-    } catch (error) {
-      if (!isCredentialDecryptError(error)) {
-        throw error;
-      }
-
-      // Bugfix: telemetry 只是只读 userId 上报入口，不能抢在 host OAuthService 前
-      // 对损坏凭据做半套清理；否则会漏掉派生模型 provider key 的 logout 收口。
-      log.warn(undefined, "skip telemetry user id: OAuth credential decrypt failed", error);
-      return "";
-    }
-  };
-}
-
-/** 仅给同一事件账号返回当前 Nex JWT；不缓存、不修改登录凭据。 */
-export function createTelemetryAuthorizationLoader(
-  credentialService: Pick<ICredentialService, "load">,
-): (userId: string) => Promise<string | null> {
-  return async (userId) => {
-    if (!userId) return null;
-    try {
-      const provider = (await credentialService.load("oauth:active_provider"))?.trim();
-      if (provider !== "zai" && provider !== "bigmodel") return null;
-      const readUserId = async () =>
-        readTelemetryOAuthUserId(await credentialService.load(`oauth:${provider}:user_info`));
-      if ((await readUserId()) !== userId) return null;
-      const jwt = (await credentialService.load("nexjwttoken"))?.trim();
-      // 退出/切账号可能发生在异步读取期间；禁止将旧身份的 token 附到其他账号事件上。
-      if (
-        (await credentialService.load("oauth:active_provider"))?.trim() !== provider ||
-        (await readUserId()) !== userId
-      )
-        return null;
-      return jwt && /^[\x21-\x7e]+$/.test(jwt) ? `Bearer ${jwt}` : null;
-    } catch {
-      return null;
-    }
-  };
-}
-
-export function createTelemetryMarketingParamsLoader(
-  _credentialService: ICredentialService,
-): () => Promise<import("@nex/shared").OAuthLoginAttribution | null> {
-  // Nex 无账号体系：登录归因不再写入凭据，遥测侧固定无归因。
-  return async () => null;
-}
-
-function readTelemetryOAuthUserId(rawUserInfo: string | null): string {
-  if (!rawUserInfo) {
-    return "";
-  }
-
-  try {
-    const parsed = JSON.parse(rawUserInfo) as {
-      id?: unknown;
-      user_id?: unknown;
-    };
-    const id = typeof parsed.id === "string" ? parsed.id : "";
-    const userId = typeof parsed.user_id === "string" ? parsed.user_id : "";
-    return id.trim() || userId.trim();
-  } catch {
-    return "";
-  }
 }
 
 export function disposeServiceResources(services: ServiceCollection): void {
@@ -2735,5 +2587,4 @@ export async function createServerHostServices(options: {
   return { services, workspaceIdentityMapper, migrationFailedPathCount };
 }
 
-export { scopeConversationShareServiceForAttachment } from "./conversation-share/conversationShareConnectionScope.js";
 export { localRuntimeNetworkCapture } from "./nex-agent/localRuntimeNetworkCapture.js";

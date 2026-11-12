@@ -95,7 +95,6 @@ test("console isolation never captures ordinary CLI output or mistakes flag valu
     ["-p", "tui"],
     ["--target", "tui"],
     ["--cwd", "tui", "login"],
-    ["login", "bigmodel", "--no-browser"],
     ["app-server", "--stdio"],
     ["agent-server", "--stdio"],
     ["tui", "--invalid-option"],

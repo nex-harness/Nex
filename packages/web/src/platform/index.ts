@@ -1,18 +1,15 @@
 import {
+  NEX_GITHUB_ISSUES_NEW_URL,
   type IPlatformService,
   type RemoteTarget,
   type WebRemoteControlStatus,
 } from "@nex/shared";
 import { playTaskNotificationSound } from "@nex/ui";
-import { resolveWebCommunityUrl, resolveWebHelpConfig } from "#src/communityUrl.js";
+import { resolveWebCommunityUrl } from "#src/communityUrl.js";
 import { createWebTaskNotifier, type BrowserNotificationApi } from "#src/webTaskNotifier.js";
 import type { WebRemoteControlPlatformProxy } from "#src/platform/contract.js";
 import { saveBrowserFile } from "#src/platform/saveBrowserFile.js";
 export type { WebRemoteControlPlatformProxy } from "#src/platform/contract.js";
-
-async function resolveFeedbackUrl(): Promise<string | undefined> {
-  return (await resolveWebHelpConfig()).feedback_url;
-}
 
 export function createWebPlatform(options?: {
   externalWebRemoteControlProxy?: WebRemoteControlPlatformProxy;
@@ -122,11 +119,8 @@ export function createWebPlatform(options?: {
       window.open(url, "_blank", "noopener,noreferrer");
     },
     openFeedback: async () => {
-      const feedbackUrl = await resolveFeedbackUrl();
-      if (!feedbackUrl) {
-        return;
-      }
-      window.open(feedbackUrl, "_blank", "noopener,noreferrer");
+      // 产品决定：不再内置工单系统，统一打开 GitHub Issues 新建页。
+      window.open(NEX_GITHUB_ISSUES_NEW_URL, "_blank", "noopener,noreferrer");
     },
     openCommunity: async () => {
       const locale = document.documentElement.lang === "en-US" ? "en-US" : "zh-CN";
@@ -144,7 +138,6 @@ export function createWebPlatform(options?: {
       Promise.resolve({ success: false, error: "Not supported in web mode" }),
     openExternalFile: () => Promise.resolve({ success: false, error: "Not supported in web mode" }),
     onPaymentCallback: () => () => {},
-    onShareImport: () => () => {},
     notifyRendererReady: () => {},
     showTaskNotification: taskNotifier.show,
     getTaskNotificationPermission: taskNotifier.getPermission,

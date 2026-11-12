@@ -1,4 +1,3 @@
-import { createConversationShareMockRoute } from "./test/e2e/helpers/conversation-share-mock-route.js";
 import {
   loadToolSearchResponses,
   toolSearchResponseStage,
@@ -1270,9 +1269,7 @@ async function startCodingPlanTeamMockIfNeeded(specs: string[] = []) {
     path: string;
     query: Record<string, string>;
   }> = [];
-  const shareMockRoute = createConversationShareMockRoute();
   codingPlanTeamMockServer = createServer(async (request, response) => {
-    if (await shareMockRoute(request, response)) return;
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
     if (url.pathname === "/__e2e/coding-plan/case-mode" && request.method === "POST") {
       presentation = undefined;

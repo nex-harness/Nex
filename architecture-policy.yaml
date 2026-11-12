@@ -806,28 +806,6 @@ modules:
     layers:
       adapters: .
     owner: conversation
-  # conversation-share-interaction：由 architecture:adopt 登记
-  - id: conversation-share-interaction
-    roots:
-      - packages/ui/src/conversation-share-interaction
-    managed: true
-    requires:
-      - services
-      - shared
-      - ui
-    publicEntrypoints:
-      - packages/ui/src/conversation-share-interaction/index.ts
-      - packages/ui/src/conversation-share-interaction/contract.ts
-      - packages/ui/src/conversation-share-interaction/ConversationSharePopover.tsx
-      - packages/ui/src/conversation-share-interaction/ConversationSharePreflightStatus.tsx
-      - packages/ui/src/conversation-share-interaction/conversationSharePopoverActions.ts
-      - packages/ui/src/conversation-share-interaction/conversationSharePreflightRequest.ts
-      - packages/ui/src/conversation-share-interaction/conversationSharePreflightResponse.ts
-    layers:
-      contract: contract.ts
-      ui: .
-    owner: conversation
-
   # workspace-plugin-preview：由 architecture:adopt 登记
   - id: workspace-plugin-preview
     roots:
@@ -1242,6 +1220,14 @@ global:
   acceptedUpstreamSnapshot: scripts/architecture/upstream-snapshot.json
 
 exceptions:
+  - id: remove-zcode-login-share-product-link
+    rule: unmanaged-new-file
+    paths: [packages/shared/src/productLinks.ts]
+    reason: 新增一个公开问题反馈链接常量（Help → Feedback 指向 GitHub Issues），除该常量外不引入新的模块边界；后续若要收口全部产品链接再单独 adopt shared 模块。
+  - id: remove-zcode-login-share-marketing-touch-edit
+    rule: unmanaged-new-file
+    paths: [packages/ui/src/components/marketing-touch/MarketingTouchProvider.tsx]
+    reason: 已准入的营销触达 Provider 只删去登录态依赖（账号体系移除后营销实例不再按用户身份重建），控制器、副作用时机与模块边界不变；接管整个 marketing-touch 目录需要单独 refactor。
   - id: session-features-attribution-header-edit
     rule: unmanaged-new-file
     paths: [apps/nex-cli/packages/adapters/src/model/runner-attribution.ts]
@@ -1440,13 +1426,6 @@ exceptions:
   - id: workflow-share-unmanaged-new-files
     rule: unmanaged-new-file
     paths:
-      - packages/services/src/conversation-share/conversationShareInlineImages.ts
-      - packages/services/src/conversation-share/conversationShareWorkflowSnapshot.ts
-      - packages/shared/src/conversation-share-content.ts
-      - packages/shared/src/conversation-share-tool-presentation.ts
-      - packages/ui/src/v4/ConversationShareContent.tsx
-      - packages/ui/src/v4/ConversationShareWorkflow.tsx
-      - packages/ui/src/v4/conversationShareItems.ts
       - packages/ui/src/ToolCallBlocks/ToolPresentation.tsx
       - packages/ui/src/ToolCallBlocks/presentationCapabilities.tsx
       - packages/ui/src/ToolCallBlocks/renderers/list-models.tsx
@@ -1456,7 +1435,7 @@ exceptions:
       - packages/ui/src/chat-input-toolbar/thoughtLevelLabels.ts
       - packages/ui/src/components/workflow-timeline/subagent-model-label.ts
       - packages/desktop/src/main/fileApplications.ts
-    reason: Feature-branch files admitted path-exact; adopting conversation-share, tool presentation or renderer directories needs a separate module boundary refactor (same pattern as settings-machine-unmanaged-edit).
+    reason: Feature-branch files admitted path-exact; adopting the tool presentation or renderer directories needs a separate module boundary refactor (same pattern as settings-machine-unmanaged-edit).
   - id: workflow-notifications-unmanaged-files
     rule: unmanaged-new-file
     paths:

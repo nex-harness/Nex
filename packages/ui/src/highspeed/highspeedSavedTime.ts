@@ -51,8 +51,8 @@ export function calculateHighspeedSavedDurationMs(params: {
   }
   // Bug 根因：此前把卡级 TPS 直接当成整轮耗时，工具调用时间也被错误地按模型速度缩短。
   // 工具占 20% 且不变，只有模型推理的 80% 按 Highspeed 倍率缩短。
-  const highspeedShare = 0.2 + 0.8 / modelSpeedup;
-  const estimatedRegularDurationMs = params.durationMs / highspeedShare;
+  const highspeedFraction = 0.2 + 0.8 / modelSpeedup;
+  const estimatedRegularDurationMs = params.durationMs / highspeedFraction;
   return Math.max(0, Math.round(estimatedRegularDurationMs - params.durationMs));
 }
 

@@ -186,18 +186,6 @@ export function getExportLogDir(): string {
   return join(getNexDataRootDir(), "export-log");
 }
 
-export function getFeedbackRootDir(): string {
-  return join(getNexDataRootDir(), "feedback");
-}
-
-export function getFeedbackAttachmentDir(): string {
-  return join(getFeedbackRootDir(), "attachments");
-}
-
-export function getFeedbackLogArchiveDir(): string {
-  return join(getFeedbackRootDir(), "logs");
-}
-
 export function getGitCheckpointIndexRootDir(): string {
   return join(getNexDataRootDir(), "git-checkpoint-index");
 }

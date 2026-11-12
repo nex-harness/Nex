@@ -24,16 +24,6 @@ describe("Coding Plan E2E mock env", () => {
       expect(isOffPeakTeamPlanSpec(["./test/e2e/off-peak-create-manage.test.ts"])).toBe(false);
     },
   );
-  it.each(["", "manual-review/pending/"])(
-    "分享发布用例在 %s 路径提供登录态和本地分享 API",
-    (directory) => {
-      expect(
-        shouldPrepareCodingPlanTeamMock([
-          `./test/e2e/conversation-session/${directory}conversation-session-share-publish-import.test.ts`,
-        ]),
-      ).toBe(true);
-    },
-  );
   it("网页 mock 分配新端口后不能复用父构建，源码证据也必须标记重新构建", () => {
     expect(shouldReuseDesktopE2EBuild({})).toBe(false);
     expect(shouldReuseDesktopE2EBuild({ NEX_E2E_SKIP_BUILD: "1" })).toBe(true);

@@ -8,7 +8,6 @@ import type {
 import type { IUsageStatsService } from "@nex/services";
 import { useOptionalBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useStableAccountAccess } from "@/hooks/useStableAccountAccess.js";
-import { useNexStoreWithDefault } from "@/store/StoreProvider.js";
 import { logger } from "@/logger.js";
 import {
   readCachedUsageEntitlementSnapshot,
@@ -169,16 +168,11 @@ export function useUsageEntitlementWithService(
   const allowDisabledPreferredProvider = options.allowDisabledPreferredProvider === true;
   const requirePreferredProvider = options.requirePreferredProvider === true;
   const allowEnvApiKey = options.allowEnvApiKey;
-  const authScope = useNexStoreWithDefault(
-    (store) => (store.user ? `${store.user.id}:${store.authSessionSeq}` : "signed-out"),
-    "unscoped",
-  );
-  const enabled =
-    (options.enabled ?? true) && Boolean(usageStatsService) && authScope !== "signed-out";
+  // Nex 无账号体系：权益快照按 Provider/连接范围隔离，不再按登录身份隔离。
+  const enabled = (options.enabled ?? true) && Boolean(usageStatsService);
   const suppliedCacheKey = options.cacheKey?.trim() ?? "";
-  const freshnessCacheKey =
-    authScope === "unscoped" ? suppliedCacheKey : `${suppliedCacheKey}:auth:${authScope}`;
-  // 保留空 cacheKey 的不落盘合同；账号隔离仍适用于共享请求和快照。
+  const freshnessCacheKey = suppliedCacheKey;
+  // 保留空 cacheKey 的不落盘合同。
   const cacheKey = suppliedCacheKey ? freshnessCacheKey : "";
   const refreshOnMount = options.refreshOnMount ?? false;
   const mountRefreshReason = options.mountRefreshReason ?? "initial";

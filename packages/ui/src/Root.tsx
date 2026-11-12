@@ -51,7 +51,6 @@ import { CodingPlanUpgradeDialogProvider } from "@/settings/CodingPlanUpgradeDia
 import { RewardsProvider } from "@/rewards/RewardsProvider.js";
 import { setDefaultFileDisplayBasePath } from "@/lib/fileDisplay.js";
 import {
-  isProviderStartupSyncPending,
   shouldBlockRootRender,
   shouldShowRootStartupLoading,
   shouldOpenFallbackWorkspaceAfterCreate,
@@ -101,7 +100,6 @@ import {
 import { useCodeCommentPreviewStore } from "@/store/codeCommentPreviewStore.js";
 import { MarketingTouchProvider } from "@/components/marketing-touch/MarketingTouchProvider.js";
 import { RootStartupLoading } from "@/root/RootStartupLoading.js";
-import { resolveProviderAvailabilityState } from "@/lib/modelProviderAvailability.js";
 import { ensureProviderFamilyDomainMigration } from "@/lib/providerFamilyDomainMigration.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import { CLOSE_ACTIVE_CONTEXT_REQUEST_EVENT } from "@/lib/closeActiveContext.js";
@@ -216,11 +214,7 @@ function RootInner({
     management: services.sourceServerManagementService,
   });
   const theme = useNexStore((state) => state.theme);
-  const user = useNexStore((state) => state.user);
-  const isRestoringOAuthSession = useNexStore((state) => state.isRestoringOAuthSession);
-  useWebRemoteControlAuthSync(platform, null, user?.id, isRestoringOAuthSession);
-  const setUser = useNexStore((state) => state.setUser);
-  const setOAuthError = useNexStore((state) => state.setOAuthError);
+  useWebRemoteControlAuthSync(platform);
   const {
     settings: appSettings,
     refresh: refreshAppSettings,
@@ -234,11 +228,7 @@ function RootInner({
     nexAgentService: services.nexAgentService,
     codingPlanSubscriptionService: services.codingPlanSubscriptionService,
   });
-  const [providerFamilyDomainMigrationComplete, setProviderFamilyDomainMigrationComplete] =
-    useState(false);
   const rootModelSelectionRead = useModelSelectionServiceView(services.modelSelectionService);
-  const rootModelSelectionView =
-    rootModelSelectionRead.state.status === "ready" ? rootModelSelectionRead.state.view : null;
   const rootModelSelectionErrorNode =
     rootModelSelectionRead.state.status === "error" ? (
       <div className="fixed right-4 bottom-4 z-50 flex max-w-sm items-center gap-3 rounded-lg border border-destructive/30 bg-surface-raised px-3 py-2 text-ui-base text-foreground shadow-lg">
@@ -492,7 +482,6 @@ function RootInner({
         });
       } finally {
         if (!disposed) {
-          setProviderFamilyDomainMigrationComplete(true);
           try {
             await refreshAppSettings();
             await refreshProviderState();
@@ -512,15 +501,7 @@ function RootInner({
 
   const shouldPreferDirectoryBrowser = Boolean(preferDirectoryBrowser);
   const supportsEmbeddedBrowser = explicitSupportsEmbeddedBrowser ?? Boolean(isDesktop);
-  const isResolvingStartupAuthState = isRestoringOAuthSession;
-  const rootProviderAvailability = resolveProviderAvailabilityState({
-    modelSelectionView: rootModelSelectionView,
-  });
-  const providerStartupSyncPending = isProviderStartupSyncPending({
-    providerFamilyDomainMigrationComplete,
-    modelSelectionViewHydrated:
-      rootProviderAvailability.hydrated || rootModelSelectionRead.state.status === "error",
-  });
+  const isResolvingStartupAuthState = false;
   const isWebRemoteControlRoot = Boolean(webRemoteControlWorkspaceSwitcher);
   // Nex 无账号体系：启动时不再强制 provider 登录（登录入口随账号能力一并移除）。
   const canRestoreWorkspaceSession = !isResolvingStartupAuthState;
@@ -584,7 +565,6 @@ function RootInner({
     setWorkspaceActionError,
     startDraftInWorkspace,
     startNewTaskFromActiveWorkspace,
-    handleLogout,
     handleSelectProject,
     handleSelectConversationWorkspace,
     handleResolveConversationWorkspace,
@@ -608,10 +588,7 @@ function RootInner({
     openDirectoryBrowser: handleOpenDirectoryBrowser,
     refreshProviderState,
     updateAppSettings,
-    setOAuthError,
-    setUser,
     onProviderFamilyDomainClearedAfterLogout: () => {},
-    userId: user?.id,
     onOpenRemoteConnection: allowRemoteWorkspace ? handleOpenRemoteConnection : undefined,
     openRemoteProjectWorkspace: openPreparedRemoteProjectWorkspace,
     openMobileProjectDraft: webRemoteControlWorkspaceSwitcher?.openProjectDraft,
@@ -893,7 +870,6 @@ function RootInner({
     webRemoteControlFeatureEnabled,
     hasCompletedFullTabRestore: hasCompletedFullRestore,
     intl,
-    isRestoringOAuthSession: isResolvingStartupAuthState || providerStartupSyncPending,
   });
 
   useEffect(() => {
@@ -1072,8 +1048,6 @@ function RootInner({
     );
   }, [isSettingsTabActive, workspaceShellPath]);
 
-  // Nex 无账号体系：登录入口与 WelcomeScreen 已移除。
-  const handleOpenLoginEntry = useCallback(() => {}, []);
   const remoteProjectIntentEpoch = useRef(0);
   const [remoteProjectSelection, setRemoteProjectSelection] = useState<{
     host: RemoteProjectHost;
@@ -1297,9 +1271,6 @@ function RootInner({
     onCreateTask: handleCreateTask,
     onOpenWorkspace: handleOpenWorkspace,
     allowOpenWorkspace,
-    onLogin: !user ? handleOpenLoginEntry : undefined,
-    onLogout: user ? handleLogout : undefined,
-    user,
   };
 
   if (isStartupRenderBlocked) {
@@ -1402,7 +1373,6 @@ function RootInner({
             >
               <RootWorkspaceContent
                 workspaceScopedServices={workspaceScopedServices}
-                baseFeedbackService={services.feedbackService}
                 workspaceShellPath={workspaceShellPath}
                 workspaceIdentity={workspaceShellIdentity}
                 workspaceRemoteSessionId={workspaceShellRemoteSessionId}
@@ -1424,9 +1394,6 @@ function RootInner({
                 remoteWorkspaceSessions={remoteWorkspaceSessions}
                 allowRemoteWorkspace={allowRemoteWorkspace}
                 handleBackFromSettings={handleBackFromSettings}
-                handleLogout={user ? handleLogout : undefined}
-                onLogin={!user ? handleOpenLoginEntry : undefined}
-                user={user}
                 reconnectingRemoteWorkspaceKeys={reconnectingRemoteWorkspaceKeys}
                 remoteWorkspaceRecoveryByWorkspaceKey={remoteWorkspaceRecoveryByWorkspaceKey}
                 remoteWorkspaceErrorByWorkspaceKey={remoteWorkspaceErrorByWorkspaceKey}

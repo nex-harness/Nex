@@ -1,7 +1,6 @@
 import { requestSecurityEndpointEnv } from "./request-security-edition/index.js";
 
 const LIVE_TEAM_SPEC = "conversation-session-r3-live-bigmodel-team.test.ts";
-const LIVE_SHARE_SPEC = "conversation-session-share-ssh-artifact.test.ts";
 const PRODUCTION_E2E_PROVIDER_CONFIG_ORIGIN = "https://zcode.z.ai";
 
 export function getE2EProviderEndpointEnv(
@@ -32,14 +31,12 @@ export function shouldUseProductionE2EProviderEndpoint(
 
 function isProductionAccountRun(specs: readonly string[]): boolean {
   const names = specs.map((spec) => spec.replaceAll("\\", "/").split("/").at(-1));
-  const liveSpec = names.find((name) => name === LIVE_TEAM_SPEC || name === LIVE_SHARE_SPEC);
+  const liveSpec = names.find((name) => name === LIVE_TEAM_SPEC);
   if (!liveSpec) return false;
-  // 根因：live-team / SSH share 导入生产 JWT，默认测试域的 401 会清理 OAuth 并遮挡后续交互。
+  // 根因：live-team 导入生产 JWT，默认测试域的 401 会清理 OAuth 并遮挡后续交互。
   // 生产控制面属于这个独立用例，不能扩散到同一 launcher 的其他 spec。
   if (!names.every((name) => name === liveSpec)) {
-    throw new Error(
-      `${liveSpec === LIVE_TEAM_SPEC ? "live-team" : "live-share"} 必须独立运行，不能与其他 spec 共用生产控制面`,
-    );
+    throw new Error("live-team 必须独立运行，不能与其他 spec 共用生产控制面");
   }
   return true;
 }

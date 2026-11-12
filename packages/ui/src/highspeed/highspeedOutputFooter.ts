@@ -1,10 +1,10 @@
 import type { HighspeedMessageMeta } from "@nex/shared";
 import { calculateHighspeedSavedDurationMs } from "@/highspeed/highspeedSavedTime.js";
-import type { HighspeedShareMetrics } from "@/highspeed/highspeedTurnStore.js";
+import type { HighspeedTurnMetrics } from "@/highspeed/highspeedTurnStore.js";
 
 export interface HighspeedOutputFooterTarget {
   cardId: string;
-  metrics: HighspeedShareMetrics;
+  metrics: HighspeedTurnMetrics;
 }
 
 /** 由 footer 收口逻辑写回渲染单元的标记字段，宿主类型只需声明这两个可选字段。 */
@@ -90,7 +90,7 @@ function resolveHighspeedOutputFooters(
 
 function aggregatePersistedHighspeedMetrics(
   metas: readonly HighspeedMessageMeta[],
-): HighspeedShareMetrics | null {
+): HighspeedTurnMetrics | null {
   if (
     metas.length === 0 ||
     metas.some(

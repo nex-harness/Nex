@@ -33,7 +33,6 @@ export function resolveTuiStartupLocale({
     workingDirectory,
   });
 
-  // login-required startup renders local TUI panels before NexApp
-  // exists, so the CLI boundary must resolve persisted ui.locale itself.
+  // TUI 启动时 NexApp 可能尚未就绪，CLI 边界自己解析持久化的 ui.locale。
   return resolveLocale(configResult.config.ui.locale, options.detectedLocale);
 }

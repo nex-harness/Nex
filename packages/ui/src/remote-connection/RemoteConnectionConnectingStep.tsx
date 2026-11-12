@@ -1,4 +1,4 @@
-import { redactFeedbackText } from "@nex/shared";
+import { NEX_GITHUB_ISSUES_NEW_URL } from "@nex/shared";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { RemotePasswordInput } from "@/remote-connection/RemotePasswordInput.js";
 import {
@@ -31,7 +31,6 @@ import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import type { RemoteConnectionLogEntry } from "@/hooks/useRemoteConnectionLogs.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import {
   formatRemoteLinkRailTarget,
   formatRemoteLinkRailDevice,
@@ -326,7 +325,6 @@ export function RemoteConnectionConnectingStep({
   const { intl } = useNexIntl();
   const credentialInputId = useId();
   const platform = usePlatform();
-  const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
   const logContainerRef = useRef<HTMLDivElement | null>(null);
   const shouldFollowLatestLogRef = useRef(true);
   const latestLogId = logs.at(-1)?.id;
@@ -437,22 +435,9 @@ export function RemoteConnectionConnectingStep({
     }
   }, [logs.length, latestLogId, latestLogTimestamp]);
 
-  const handleOpenFeedback = async () => {
-    // 入口草稿曾显式关闭日志，覆盖表单默认值，导致连接反馈只有正文而没有诊断附件。
-    // 新反馈统一默认开启，用户仍可在表单中取消勾选；正文保留脱敏连接日志。
-    openFeedbackSubmit({
-      title:
-        errorMessage.slice(0, 80) ||
-        intl.formatMessage({ id: "feedback.submit.template.section.remoteConnectFailed" }),
-      type: "bug",
-      module: kind === "ssh" ? "SSH连接失败" : kind === "wsl" ? "WSL连接失败" : "Agent任务执行失败",
-      severity: "P2-中",
-      includeLogs: true,
-      description: buildRemoteConnectionFeedbackDescription(errorMessage, logs, (id, values) =>
-        intl.formatMessage({ id }, values),
-      ),
-      screenshots: [],
-    });
+  const handleOpenFeedback = () => {
+    // 产品决定：不再内置工单系统，反馈入口打开 GitHub Issues 新建页。
+    platform.openExternal(NEX_GITHUB_ISSUES_NEW_URL);
   };
 
   const installPanel = installConfirmation ? (
@@ -666,9 +651,7 @@ export function RemoteConnectionConnectingStep({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => {
-              void handleOpenFeedback();
-            }}
+            onClick={handleOpenFeedback}
           >
             {intl.formatMessage({ id: "remoteConnection.feedback" })}
           </Button>
@@ -1060,27 +1043,3 @@ function formatInstallTarget(target: RemoteTarget): string {
   return target.url;
 }
 
-function buildRemoteConnectionFeedbackDescription(
-  errorMessage: string,
-  logs: RemoteConnectionLogEntry[],
-  formatMessage: (id: string, values?: Record<string, string>) => string,
-) {
-  const logText = logs
-    .slice(-30)
-    .map((entry) => `${entry.timestamp} [${entry.level.toUpperCase()}] ${entry.message}`)
-    .join("\n");
-  return redactFeedbackText(
-    [
-      formatMessage("feedback.submit.template.section.remoteHeading"),
-      "",
-      formatMessage("feedback.submit.template.section.errorSummary"),
-      errorMessage || formatMessage("feedback.submit.template.section.notProvided"),
-      "",
-      formatMessage("feedback.submit.template.section.remoteLog"),
-      logText || formatMessage("feedback.submit.template.section.remoteLogEmpty"),
-      "",
-      formatMessage("feedback.submit.template.section.remoteEnvironment"),
-      formatMessage("feedback.submit.template.section.supplement"),
-    ].join("\n"),
-  );
-}

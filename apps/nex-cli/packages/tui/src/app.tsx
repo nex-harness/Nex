@@ -53,7 +53,6 @@ export function TuiApp({
 }: TuiAppProps): React.ReactElement {
   // Startup sentinels are diagnostics, not user-visible transcript messages.
   const initialResult = options.initialResult;
-  const initialLoginRequired = initialResult?.loginRequired ?? options.loginRequired ?? false;
   const initialLocale = options.locale ?? "en-US";
   const initialCopy = getNexCopy(initialLocale).tui;
   useTuiThemeSync(options);
@@ -74,10 +73,8 @@ export function TuiApp({
   const [lastEvent, setLastEvent] = useState("idle");
   const [lastError, setLastError] = useState<string | undefined>();
   const copy = useMemo(() => getNexCopy(locale), [locale]);
-  const [loginRequired, setLoginRequired] = useState(initialLoginRequired);
   const [status, setStatus] = useState(
-    initialResult?.selection?.prompt ??
-      (initialLoginRequired ? initialCopy.loginRequired.status : initialCopy.status.ready),
+    initialResult?.selection?.prompt ?? initialCopy.status.ready,
   );
   const [statusDetails, setStatusDetails] = useState<string[]>([]);
   const [traceId, setTraceId] = useState<string | undefined>();
@@ -168,7 +165,7 @@ export function TuiApp({
   );
 
   const applyResult = useTuiApplyResult({
-    fallback: { locale, loginRequired, mode, model },
+    fallback: { locale, mode, model },
     modifiedFileToolCallIds: modifiedFileToolCallIdsRef.current,
     setActiveTurnId,
     setCacheStats,
@@ -177,7 +174,6 @@ export function TuiApp({
     setLastEvent,
     setLiveModelText,
     setLocale,
-    setLoginRequired,
     setMessages,
     setMode,
     setModel,
@@ -382,7 +378,6 @@ export function TuiApp({
     inputCursorToEndVersion,
     lastError,
     lastEvent,
-    loginRequired,
     liveModelText,
     mode,
     model,

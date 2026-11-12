@@ -135,21 +135,6 @@ function clientApply(
   store.seq = frame.toSeq;
 }
 
-describe("分享导入来源种子", () => {
-  it("在 publisher 快照中保留来源提示且不产生 conversation delta", () => {
-    const publisher = new ConversationTopicPublisher("session-1", "epoch-1");
-    const before = publisher.getSnapshot();
-
-    publisher.seedSharedContextImport({ title: "导入的分享" });
-
-    const snapshot = publisher.getSnapshot();
-    expect(snapshot.sharedContextImport).toEqual({ title: "导入的分享" });
-    expect(snapshot.revision).toBe(before.revision);
-    expect(snapshot.seq).toBe(before.seq);
-    expect(snapshot.rows.window).toEqual([]);
-  });
-});
-
 describe("subscribe(base) 裁决矩阵", () => {
   function publisherWith(events: readonly SessionEvent[], retention?: number) {
     const publisher = new ConversationTopicPublisher("session-1", "epoch-1", {

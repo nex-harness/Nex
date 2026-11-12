@@ -318,12 +318,7 @@ export class ConversationTopicPublisher {
   }
 
   /** 分享导入提示是静态只读元数据，不进入 delta/revision；可在 hydration 后幂等补种。 */
-  seedSharedContextImport(
-    source: ConversationSnapshot["sharedContextImport"] | null | undefined,
-  ): void {
-    this.projection.seedSharedContextImport(source);
-    this.wireSnapshotBytesUpperBound = this.measureWireSnapshotBytes(this.getWireSnapshot());
-  }
+
 
   /** usage 种子注入：冷恢复用持久化 token 水位覆盖 transcript 合成的 0 占位。 */
   seedUsage(seed: SessionUsageSeed): void {

@@ -145,7 +145,7 @@ export async function submitDuringActiveTurn(input: {
   input.setDraftValue("");
   const compactCommand =
     input.draftAttachments.length === 0 ? compactCommandFromText(input.text) : undefined;
-  const localUserMessage = createLocalUserMessage(redactSensitivePromptForTranscript(input.text));
+  const localUserMessage = createLocalUserMessage(input.text);
   try {
     input.setStatus("Queueing input...");
     const result = await input.options.sendInput(
@@ -248,7 +248,7 @@ export async function submitIdleTurn(input: {
   } else {
     input.setMessages((current) => [
       ...current,
-      { content: redactSensitivePromptForTranscript(input.text), role: "user" },
+      { content: input.text, role: "user" },
     ]);
   }
 
@@ -290,15 +290,6 @@ function createLocalUserMessage(content: string): Message & { id: string } {
   };
 }
 
-export function redactSensitivePromptForTranscript(text: string): string {
-  const trimmed = text.trim();
-  const match =
-    /^\/login\s+(zai-coding-plan-api-key|bigmodel-coding-plan-api-key)(?:\s+([\s\S]+))?$/u.exec(
-      trimmed,
-    );
-  if (!match?.[2]?.trim()) return text;
-  return `/login ${match[1]} <redacted>`;
-}
 
 function insertLocalUserMessageAt(
   messages: Message[],
