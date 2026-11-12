@@ -774,9 +774,9 @@ describe("stageRelease", () => {
       "browser-use",
       "document-skills",
       "ios-simulator",
+      "nex-guide",
       "restore-legacy-sessions",
       "skill-creator",
-      "nex-guide",
     ]);
     expect(manifest.components?.some((component) => component.id === "official-plugins")).toBe(
       true,
