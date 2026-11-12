@@ -22,8 +22,6 @@ before(async () => {
         load(id) {
           if (id.endsWith("/hooks/usePlatform.tsx"))
             return "export const usePlatform=()=>({executeDesktopCommand:async()=>{}});";
-          if (id.endsWith("/rewards/RewardsProvider.tsx"))
-            return "export const useOpenRewards=()=>()=>{};";
           if (id.endsWith("/shortcuts/useShortcutBindings.ts"))
             return 'export const useShortcutCommandLabel=()=>"";';
           if (id.endsWith("/store/StoreProvider.tsx"))
