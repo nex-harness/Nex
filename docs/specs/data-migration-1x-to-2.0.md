@@ -269,10 +269,21 @@ identity 伪造共享关系。
 | **`builtin:bigmodel-coding-plan`、`builtin:bigmodel-start-plan`**    | **1.x 里各有一个 API Key，不会被带到 2.0**：导入器对 `builtin:*`（除按量 API 两项）整体跳过       |
 
 最后一行是**设计内的结果，不是 bug**：2.0 已移除账号、Coding Plan 订阅和内置 Provider（`8a05ec06`），
-2.0 的模板里只有 `zai-api` 与 `bigmodel-api` 两个可以填个人 Key 的位置。但对用户的含义是：
-**这两个 BigModel 套餐 Key 升级后不会自动出现，需要在 2.0 里重新填写**（或把对应 Provider 作为自定义
-Provider 手动添加）。如果这些 Key 是用户自己粘贴的、而不是登录账号换来的，那么这是一次可见的配置丢失，
-是否要让导入器把它们迁成自定义 Provider，需要产品决定，本次未改。
+2.0 的模板里只有 `zai-api` 与 `bigmodel-api` 两个可以填个人 Key 的位置。
+
+进一步核对这两个 Provider 在真实 1.x 配置里的状态（只看结构，不打印 Key）后，"可见的配置丢失"这个判断需要收窄：
+
+- 两者在 1.x 里都是 `enabled: false`，且系统标记 `systemDisabledReason: "coding_plan_not_entitled"`（套餐未开通），
+  也就是用户当时并没有在使用它们。
+- `builtin:bigmodel-start-plan` 的端点是 `zcode.z.ai/api/v1/zcode-plan/anthropic`，即已决定移除的 ZCode 托管网关；
+  `builtin:bigmodel-coding-plan` 的端点是 `open.bigmodel.cn/api/anthropic`。
+- 旧 `config.json` 在升级后原样保留（用于回滚），Key 没有被删除，只是 2.0 的个人配置里没有对应条目。
+- 从数据本身无法判断 Key 是账号登录换来的，还是用户用 `/login …-api-key <key>` 手动粘贴的。
+
+因此**没有**让导入器自动把它们迁成已启用的自定义 Provider：那会复活一个系统判定未开通的 Provider，
+并把 Key 指向一个要移除的网关。可选方案（待产品决定）：(a) 保持现状，用户需要时在 2.0 手动添加；
+(b) 只对 `open.bigmodel.cn` 的 `bigmodel-coding-plan` 迁成**默认停用**的自定义 Provider，保留 Key，不自动启用；
+`start-plan` 仍不迁。
 
 仍然没有覆盖：迁移加载态（迁移太快没有截到）、强杀续跑、签名与公证后的安装体验、
 Windows/Linux。
