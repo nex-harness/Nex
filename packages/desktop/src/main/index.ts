@@ -98,7 +98,6 @@ import {
   initAutoUpdater,
   onAutoUpdaterStateChanged,
   refreshAutoUpdaterReleaseChannel,
-  resolveUpdateFeedSourceFromStartupConfig,
   syncAutoUpdaterStateToWindow,
   syncPostUpdateReleaseNotesToWindow,
   syncReadyUpdateToWindow,
@@ -1130,7 +1129,7 @@ function syncImmediateAppSettings(patch: ReturnType<typeof appSettingsPatchSchem
 
   if (typeof patch.receivePreviewUpdates === "boolean") {
     // receivePreviewUpdates 由 renderer host 写入 setting.json。
-    // main 进程的自动更新器不会订阅 host 设置变化，必须借 syncAppSettings 这条即时通道刷新 manifest channel。
+    // main 进程的自动更新器不会订阅 host 设置变化，必须借 syncAppSettings 这条即时通道刷新 release channel。
     refreshAutoUpdaterReleaseChannel(
       patch.receivePreviewUpdates,
       "settings receivePreviewUpdates changed",
@@ -2220,12 +2219,6 @@ app.whenReady().then(async () => {
     },
     settingService: mainSettingService,
     locale: currentApplicationLocale,
-    deviceMid,
-    resolveEndpointOrigin: resolveCurrentNexEndpointOrigin,
-    updateFeedSource: resolveUpdateFeedSourceFromStartupConfig({
-      argv: process.argv,
-      env: process.env,
-    }),
   });
 
   if (process.platform === "darwin" || process.platform === "win32") {
