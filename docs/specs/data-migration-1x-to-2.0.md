@@ -189,16 +189,16 @@ identity 伪造共享关系。
 即 1.2.2 时期的任务库）与一份 2026-07-20 的更早快照（176 个任务）。两者都只拷贝到临时目录；
 `setting.json` 也是拷贝。运行的是 `migrateApplicationStorage` 本身，不是模拟。
 
-| 验收项                          | 结果                                                                                                              |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 1 任务条数不变、生成迁移前快照 | 通过：390 → 390，176 → 176；`backup/` 下生成 `tasks_index-*` 与 `tasks_schema-*`                                   |
-| 2 项目数、recentProjects        | 通过（数据层）：投影出 18 个项目；`recentProjects` 10 项保留。侧栏实际渲染**未验证**                              |
-| 3 幂等                          | 通过：第二次执行后任务数不变，两次都 `backupSkipped=false`                                                        |
-| 4 迁移中途强杀后续跑            | **未验证**                                                                                                        |
-| 5 迁移失败时旧库可读与重试入口  | **未验证**                                                                                                        |
-| 6 `tasks` 与 `deleted=0` 行数   | 通过：任务数一致；任务组 8、成员 21、排序 301 条全部保留；`PRAGMA integrity_check` 为 ok                          |
-| 迁移日志                        | `tasks_schema_migration` 升到 0001–0004、0006；`schema_migration` 升到 0005–0010                                  |
-| `pnpm verify:data-migration`    | 通过（合成数据：Local/Server、CLI 正文、Provider 与模型配置、备份、幂等）                                         |
+| 验收项                         | 结果                                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------------------------- |
+| 1 任务条数不变、生成迁移前快照 | 通过：390 → 390，176 → 176；`backup/` 下生成 `tasks_index-*` 与 `tasks_schema-*`         |
+| 2 项目数、recentProjects       | 通过（数据层）：投影出 18 个项目；`recentProjects` 10 项保留。侧栏实际渲染**未验证**     |
+| 3 幂等                         | 通过：第二次执行后任务数不变，两次都 `backupSkipped=false`                               |
+| 4 迁移中途强杀后续跑           | **未验证**                                                                               |
+| 5 迁移失败时旧库可读与重试入口 | **未验证**                                                                               |
+| 6 `tasks` 与 `deleted=0` 行数  | 通过：任务数一致；任务组 8、成员 21、排序 301 条全部保留；`PRAGMA integrity_check` 为 ok |
+| 迁移日志                       | `tasks_schema_migration` 升到 0001–0004、0006；`schema_migration` 升到 0005–0010         |
+| `pnpm verify:data-migration`   | 通过（合成数据：Local/Server、CLI 正文、Provider 与模型配置、备份、幂等）                |
 
 没有覆盖的部分：
 
@@ -214,15 +214,15 @@ identity 伪造共享关系。
 真实 CLI 对话库的一致性拷贝（`.backup`，673 个会话、118,557 条消息，约 1.4 GB）。启动参数：
 `env -i HOME=… NEX_DATA_BASE_DIR=… NEX_DESKTOP_USER_DATA_DIR=… NEX_DESKTOP_HOME_DIR=…`，调试端口 9333。
 
-| 检查项                         | 结果                                                                                                         |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| 应用能否启动                   | 通过：窗口创建、`dom-ready`、本地服务就绪；渲染进程 0 个未捕获异常                                           |
-| 任务库迁移                     | 通过：升级到 `schema_migration` 0005–0010，任务 390 → 391、项目 18、任务组 8                                 |
-| 侧栏                           | 通过：置顶会话 8 条、18 个项目及各自会话按预期渲染（截图核对），无迁移失败页                                 |
-| 历史对话正文                   | 通过：点开一条置顶会话，正文（用户消息、工具结果、表格、代码块）与右侧进度面板完整渲染，输入框可用          |
-| 1.x Provider 导入              | 部分通过：输入区显示了模型 `deepseek-v4-flash`；Provider 数量与凭据是否逐项一致**未核对**                    |
-| 迁移加载态与失败重试页         | **未验证**（这次迁移很快，没有观察到加载态）                                                                 |
-| 迁移中途强杀、磁盘满           | **未验证**                                                                                                   |
+| 检查项                 | 结果                                                                                               |
+| ---------------------- | -------------------------------------------------------------------------------------------------- |
+| 应用能否启动           | 通过：窗口创建、`dom-ready`、本地服务就绪；渲染进程 0 个未捕获异常                                 |
+| 任务库迁移             | 通过：升级到 `schema_migration` 0005–0010，任务 390 → 391、项目 18、任务组 8                       |
+| 侧栏                   | 通过：置顶会话 8 条、18 个项目及各自会话按预期渲染（截图核对），无迁移失败页                       |
+| 历史对话正文           | 通过：点开一条置顶会话，正文（用户消息、工具结果、表格、代码块）与右侧进度面板完整渲染，输入框可用 |
+| 1.x Provider 导入      | 部分通过：输入区显示了模型 `deepseek-v4-flash`；Provider 数量与凭据是否逐项一致**未核对**          |
+| 迁移加载态与失败重试页 | **未验证**（这次迁移很快，没有观察到加载态）                                                       |
+| 迁移中途强杀、磁盘满   | **未验证**                                                                                         |
 
 #### 验收 5：迁移失败与重试（已验证，2026-11-12）
 
@@ -261,12 +261,12 @@ identity 伪造共享关系。
 用真实 `~/.nex/v2/config.json`（7 个 Provider）拷贝出来，跑 2.0 的 `ProviderConfigRuntime` 一次性导入，
 逐项比对；凭据只比较哈希，不打印。真实的 `config.json` 与 `provider_config.json` 未被修改。
 
-| 1.x Provider                                                         | 导入结果                                                                                         |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 自定义 OpenAI 兼容 Provider（14 个模型，有 API Key）                 | 通过：Provider、14 个模型 ID、API Key、每个模型的 contextWindow 都一致，没有虚构默认模型选择     |
-| `builtin:bigmodel`、`builtin:zai`（按量 API）                        | 1.x 里这两项本来没有 Key，导入后也没有，一致                                                     |
-| `builtin:zai-coding-plan`、`builtin:zai-start-plan`                  | 1.x 没有 Key；按设计由 Built-in 配置重建，不进入个人配置                                         |
-| **`builtin:bigmodel-coding-plan`、`builtin:bigmodel-start-plan`**    | **1.x 里各有一个 API Key，不会被带到 2.0**：导入器对 `builtin:*`（除按量 API 两项）整体跳过       |
+| 1.x Provider                                                      | 导入结果                                                                                     |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 自定义 OpenAI 兼容 Provider（14 个模型，有 API Key）              | 通过：Provider、14 个模型 ID、API Key、每个模型的 contextWindow 都一致，没有虚构默认模型选择 |
+| `builtin:bigmodel`、`builtin:zai`（按量 API）                     | 1.x 里这两项本来没有 Key，导入后也没有，一致                                                 |
+| `builtin:zai-coding-plan`、`builtin:zai-start-plan`               | 1.x 没有 Key；按设计由 Built-in 配置重建，不进入个人配置                                     |
+| **`builtin:bigmodel-coding-plan`、`builtin:bigmodel-start-plan`** | **1.x 里各有一个 API Key，不会被带到 2.0**：导入器对 `builtin:*`（除按量 API 两项）整体跳过  |
 
 最后一行是**设计内的结果，不是 bug**：2.0 已移除账号、Coding Plan 订阅和内置 Provider（`8a05ec06`），
 2.0 的模板里只有 `zai-api` 与 `bigmodel-api` 两个可以填个人 Key 的位置。
@@ -290,15 +290,15 @@ identity 伪造共享关系。
 快照用 `sqlite3 -readonly … ".backup"` 取得（源库有活跃写入者，源文件未被修改），`PRAGMA quick_check` 为 ok，
 `schema_migration` 已到 `0024_session_database_identity`。每张表的行数：
 
-| 表                          | 行数    | 表                         | 行数   |
-| --------------------------- | ------- | -------------------------- | ------ |
-| `session`                   | 674     | `message`                  | 118,678 |
-| `part`                      | 415,082 | `session_entry`            | 8,963  |
-| `session_input`             | 2,883   | `session_target`           | 39     |
-| `todo`                      | 1,936   | `input_history`            | 100    |
-| `model_usage`               | 56,120  | `tool_usage`               | 64,462 |
-| `turn_usage`                | 1,273   | `local_setting`            | 12     |
-| `dwf_*`、`workflow_*`、`permission`、`session_task_link`、`nex_database_identity` | 0 | | |
+| 表                                                                                | 行数    | 表               | 行数    |
+| --------------------------------------------------------------------------------- | ------- | ---------------- | ------- |
+| `session`                                                                         | 674     | `message`        | 118,678 |
+| `part`                                                                            | 415,082 | `session_entry`  | 8,963   |
+| `session_input`                                                                   | 2,883   | `session_target` | 39      |
+| `todo`                                                                            | 1,936   | `input_history`  | 100     |
+| `model_usage`                                                                     | 56,120  | `tool_usage`     | 64,462  |
+| `turn_usage`                                                                      | 1,273   | `local_setting`  | 12      |
+| `dwf_*`、`workflow_*`、`permission`、`session_task_link`、`nex_database_identity` | 0       |                  |         |
 
 引用完整性：没有孤儿 `message`（缺 session）、没有孤儿 `part`（缺 message）、没有缺 session 的 `session_entry`；
 没有零消息的会话；没有软删除会话。
@@ -330,3 +330,26 @@ identity 伪造共享关系。
 
 仍然没有覆盖：迁移加载态（迁移太快没有截到）、迁移表写到一半时的强杀、签名与公证后的安装体验、
 Windows/Linux。
+
+### 桌面端从 1.2.2 形态数据启动的闭环验证（2026-11-13，隔离数据目录）
+
+对象：`/Applications/Nex.app`（2.0.0，未签名）。数据目录 `~/.nex-v2`：真实 `~/.nex` 的副本（SQLite 用 `.backup`
+取一致性快照），其中任务库按 1.2.2 的 `schema-v1.ts` 重建，数据取自 2.0 首次迁移前的备份（390 个任务、
+8 个任务组），只带 `0001`–`0003` 迁移记录；`setting.json` 的 `lastWorkspaceSession` 为 18 个工作区。
+启动时 `HOME`、`NEX_DATA_BASE_DIR`、`NEX_DESKTOP_USER_DATA_DIR` 全部指向隔离目录（`NEX_DATA_BASE_DIR` 是放 `.nex`
+的上一级目录，不是 `.nex` 本身；写错会在 `.nex/.nex` 下新建空数据目录）。
+
+结果：迁移到 `schema_migration` 0010；18 个项目；357 个任务归入项目，6 个本机任务和 30 个远端（`ssh` Host）任务
+未归入项目（未逐条核对）；侧栏出现 Pinned 与 Projects；点开此前报 `project.host-mismatch` 的会话，正文正常渲染，
+日志里该错误 0 次。
+
+三个会让验证失真的坑：
+
+1. **迁移只按启动时 `setting.json` 的 `lastWorkspaceSession` 建项目**（`migrate-projects.ts` 有意如此，不从任务目录猜）。
+   设置里该清单为空时，迁移记账后不会补建，所有任务都是未归类，只出现在 Tasks 里。
+2. **桌面主进程的命令行只显示 `Nex`**。用 `pgrep -f '…/MacOS/Nex$'` 判断"是否在运行"会恒为假；必须用 `pgrep -x Nex`。
+   还原数据前有旧实例在运行，它会把空设置写回去。
+3. 任务库里的 `host_id` 取决于首次运行的是桌面还是 server：开发期被 `remote:server:…` 写过的库，
+   在桌面本地 Host 下会报 `project.host-mismatch`。这是开发数据的遗留状态，1.2.2 升级路径不会出现。
+
+仍未验证：真实 1.2.2 安装包产生的原始数据目录；签名与公证后的安装体验；18 个项目逐一点开。
