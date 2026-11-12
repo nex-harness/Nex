@@ -246,5 +246,23 @@ identity 伪造共享关系。
 （GPU/Dawn 缓存、Local Storage 日志、Cookies 等，1.2.2 也使用该目录）。`~/.nex` 本身未被它修改。
 此后全部使用 `env -i` 加 `NEX_DESKTOP_USER_DATA_DIR` / `NEX_DESKTOP_HOME_DIR` 完整隔离。
 
-仍然没有覆盖：真实 Provider 凭据逐项核对、迁移加载态与失败重试页、强杀续跑、签名与公证后的安装体验、
+### 真实 1.x Provider 配置的导入核对（2026-11-12，`config.json` 的副本，隔离目录）
+
+用真实 `~/.nex/v2/config.json`（7 个 Provider）拷贝出来，跑 2.0 的 `ProviderConfigRuntime` 一次性导入，
+逐项比对；凭据只比较哈希，不打印。真实的 `config.json` 与 `provider_config.json` 未被修改。
+
+| 1.x Provider                                                         | 导入结果                                                                                         |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 自定义 OpenAI 兼容 Provider（14 个模型，有 API Key）                 | 通过：Provider、14 个模型 ID、API Key、每个模型的 contextWindow 都一致，没有虚构默认模型选择     |
+| `builtin:bigmodel`、`builtin:zai`（按量 API）                        | 1.x 里这两项本来没有 Key，导入后也没有，一致                                                     |
+| `builtin:zai-coding-plan`、`builtin:zai-start-plan`                  | 1.x 没有 Key；按设计由 Built-in 配置重建，不进入个人配置                                         |
+| **`builtin:bigmodel-coding-plan`、`builtin:bigmodel-start-plan`**    | **1.x 里各有一个 API Key，不会被带到 2.0**：导入器对 `builtin:*`（除按量 API 两项）整体跳过       |
+
+最后一行是**设计内的结果，不是 bug**：2.0 已移除账号、Coding Plan 订阅和内置 Provider（`8a05ec06`），
+2.0 的模板里只有 `zai-api` 与 `bigmodel-api` 两个可以填个人 Key 的位置。但对用户的含义是：
+**这两个 BigModel 套餐 Key 升级后不会自动出现，需要在 2.0 里重新填写**（或把对应 Provider 作为自定义
+Provider 手动添加）。如果这些 Key 是用户自己粘贴的、而不是登录账号换来的，那么这是一次可见的配置丢失，
+是否要让导入器把它们迁成自定义 Provider，需要产品决定，本次未改。
+
+仍然没有覆盖：迁移加载态与失败重试页、强杀续跑、签名与公证后的安装体验、
 Windows/Linux。
