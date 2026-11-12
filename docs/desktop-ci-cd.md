@@ -245,8 +245,8 @@ rpm Requires 在 electron-builder 默认集（gtk3、nss、libnotify、libXScrnS
 - `OSS_CONFIG_FILE`：可选，控制每组 OSS 目标调用 `ossutil` 时使用的配置文件。支持单值复用，或配置为与 `CDN_DOMAIN` 等长的逗号列表；为空时使用 runner 默认 ossutil 配置。新旧 OSS AK/SK 或 region 不一致时，应把 AK/SK 和 region 写入对应配置文件，并按 `CDN_DOMAIN` 顺序配置文件路径。
 - `CDN_PRELOAD_PROFILE` / `ALIYUN_CDN_PROFILE`：可选，控制 `cdn-preload.sh` 调用阿里云 CDN OpenAPI 时使用的 aliyun CLI profile。`CDN_PRELOAD_PROFILE` 优先级更高；支持单值复用，或配置为与 `CDN_DOMAIN` 等长的逗号列表。预热脚本不显式传 `--region`，region 由对应 profile 或 aliyun CLI 默认配置决定，避免覆盖多账号迁移时每个 profile 自带的 endpoint 配置。
 - `CDN_PRELOAD_DOMAINS`：历史兼容变量；当前 upload/preload 链路不再读取，新 OSS/CDN 迁移通过 `CDN_DOMAIN` 列表展开预热域名。
-- `NEX_UPDATE_FEED_URL`：仅限未打包开发态的可选诊断变量，用完整服务端 manifest 接口 URL 覆盖默认更新检查接口；打包应用忽略该变量及 `--nex-update-feed-url` 启动参数，继续使用既有服务端 manifest 入口。开发态覆盖时仍会写入当前 `platform` / `device_mid` / `channel` 查询参数和对应 header，不切换到旧 generic feed。
-- Windows 签名与换证：更新授权依赖官方 HTTPS 清单，下载文件须通过清单哈希和有效 Authenticode 签名校验；不按历史发布者 DN 限制新签名者，也不需要用户预装换证过渡版。包内 `publisherName` 仅用于激活自定义校验并保留签名诊断信息，详见[Windows 更新信任边界与换证](desktop/auto-update-service-manifest.md#windows-更新信任边界与换证)。
+- `NEX_UPDATE_FEED_URL` / `--nex-update-feed-url` 已删除：2.0 客户端只走 GitHub Releases，不接受自定义更新源。
+- Windows 签名与换证：更新授权依赖官方 HTTPS 清单，下载文件须通过清单哈希和有效 Authenticode 签名校验；不按历史发布者 DN 限制新签名者，也不需要用户预装换证过渡版。包内 `publisherName` 仅用于激活自定义校验并保留签名诊断信息，详见[Windows 更新信任边界](desktop/auto-update-service-manifest.md#windows-更新信任边界)。
 - `NEX_ENV`：可选，`production` 打正式包，`test` 打测试包。测试包文件名会追加 `_TEST`，构建产物飞书通知会把环境标识放进卡片标题；测试环境标题背景色使用红色，正式环境使用默认蓝色。`publish-release.sh` 会拒绝 `NEX_ENV=test` 调用正式 release API。
 - `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID`：macOS notarytool 公证凭据
 - `APPLE_SIGNING_IDENTITY` 或 `CSC_NAME`：macOS 签名身份

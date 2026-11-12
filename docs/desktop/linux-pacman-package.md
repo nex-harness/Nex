@@ -37,14 +37,14 @@ AppImage deb     rpm     pacman (.pkg.tar.zst)
 ZCT-2100231841920471040：3.12.1 在 Ubuntu deb 安装形态下载 3.12.2 时，旧过滤器删除 deb，只留下 AppImage；DebUpdater 找不到文件，读取 `fileInfo.info` 抛错。旧约定“Linux 仅 AppImage 支持自动更新”错误，现予以替换。
 
 - macOS、Windows、Linux 各安装形态均沿用 electron-updater 的下载、校验和安装流程；Linux 不再统一删除 deb/rpm/pacman。
-- 当前 updater 实例是安装类型的唯一真源；ManifestUpdateProvider 只为 Linux 更新器选择同类型产物，不另读 package-type、不维护第二份平台状态。AppImageUpdater 对应 `.AppImage`，DebUpdater 对应 `.deb`，RpmUpdater 对应 `.rpm`，PacmanUpdater 对应 `.pkg.tar.zst`（兼容 `.pacman`）。
+- 当前 updater 实例是安装类型的唯一真源；electron-updater 的 github provider 按安装类型从 Release 的 channel yml 解析同类型产物，不另读 package-type、不维护第二份平台状态。AppImageUpdater 对应 `.AppImage`，DebUpdater 对应 `.deb`，RpmUpdater 对应 `.rpm`，PacmanUpdater 对应 `.pkg.tar.zst`（兼容 `.pacman`）。
 - 清单缺少当前安装类型时，在解析边界明确失败，禁止 updater 的 fallback 误选其他格式。缺少包是发布不完整，不等于该安装方式不支持更新。
 - URL 按 pathname 判定后缀，支持绝对/相对地址、查询参数及大小写；保留真实下载 URL 与校验值。
 - PacmanUpdater 仍按旧 `.pacman` 后缀生成缓存路径，`.pkg.tar.zst` 的 `info.url` 使用实际文件名，避免把完整 URL 拼入缓存路径；网络下载 URL 不变。
 - macOS/Windows 保持原清单解析语义，下载器负责选 zip/exe；不改变更新通道、下载时序、权限、安装命令、UI 或手机远控链路。
 
 ```text
-服务端完整清单 → 当前 updater 实例决定安装类型 → 同类型文件 → 下载/校验 → 原平台安装器
+GitHub Release channel yml → 当前 updater 实例决定安装类型 → 同类型文件 → 下载/校验 → 原平台安装器
                                              └─ 缺少同类型包：明确失败，不跨格式回退
 ```
 

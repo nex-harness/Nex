@@ -14,7 +14,7 @@
 本次只迁移打包工具链，不改变产品更新行为：
 
 - 不启用 electron-builder 27、`store-asar`、多 Range 下载或新的 NSIS toolset。
-- 不改变更新通道、服务 manifest、自定义 Provider、下载与安装状态机。
+- 不改变更新通道、GitHub Releases provider、下载与安装状态机。
 - 不改变签名、公证、发布目录和差分更新策略。
 - 不删除现有 `app.asar` 依赖补齐、NSIS 模板 patch、DMG 容量和签名 workaround。
 - 不改写 Electron 44 升级规格的历史验收边界。
@@ -26,7 +26,7 @@ package.json 精确版本
   -> pnpm lockfile
   -> electron-builder 生成安装包、blockmap 和更新清单
   -> 既有签名、公证、收集和发布链
-  -> ManifestUpdateProvider
+  -> electron-updater github provider（nex-harness/Nex Releases）
   -> electron-updater 下载、校验和安装
 ```
 
