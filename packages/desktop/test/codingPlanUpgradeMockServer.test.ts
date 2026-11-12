@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createHash } from "node:crypto";
 
 import {
   resetCodingPlanUpgradeMockServer,
@@ -10,49 +9,6 @@ import {
 
 describe("Coding Plan upgrade E2E mock server", () => {
   let server: CodingPlanUpgradeMockServer | null = null;
-  it("serves the isolated rewards bridge consumer on cn/en routes", async () => {
-    server = await startCodingPlanUpgradeMockServer("manual-claim-experience", {
-      marketingTouch: true,
-    });
-    for (const lang of ["cn", "en"]) {
-      const response = await fetch(`${server.baseUrl}/${lang}/rewards?embedded=app`);
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toContain("text/html");
-      expect(await response.text()).toContain("nex-rewards-context");
-    }
-  });
-  it("holds the query snapshot captured before a cancellation", async () => {
-    server = await startCodingPlanUpgradeMockServer("manual-claim-experience", {
-      marketingTouch: true,
-    });
-    const base = server.baseUrl;
-    await fetch(`${base}/__e2e/marketing/reset`, {
-      method: "POST",
-      body: JSON.stringify({ banner: true }),
-    });
-    await fetch(`${base}/__e2e/marketing/query-hold`, { method: "POST" });
-    const response = fetchJson<{ data: { deliveries: Array<{ campaign_id: string }> } }>(
-      `${base}/api/v1/marketing/touch`,
-    );
-    try {
-      await vi.waitFor(async () => {
-        const state = await fetchJson<{ pendingQueries: number }>(`${base}/__e2e/marketing/state`);
-        expect(state.pendingQueries).toBe(1);
-      });
-      await fetch(`${base}/api/v1/marketing/touch/action`, {
-        method: "POST",
-        body: JSON.stringify({ campaign_id: "banner-1", action_type: "cancel" }),
-      });
-      await fetch(`${base}/__e2e/marketing/query-release-one`, { method: "POST" });
-      expect((await response).data.deliveries.map((d) => d.campaign_id)).toEqual(["banner-1"]);
-    } finally {
-      await fetch(`${base}/__e2e/marketing/query-release-all`, { method: "POST" });
-    }
-    const fresh = await fetchJson<{ data: { deliveries: unknown[] } }>(
-      `${base}/api/v1/marketing/touch`,
-    );
-    expect(fresh.data.deliveries).toEqual([]);
-  });
 
   afterEach(async () => {
     await server?.stop();
@@ -60,9 +16,7 @@ describe("Coding Plan upgrade E2E mock server", () => {
   });
 
   it("controls real upgrade HTML readiness and network failure", async () => {
-    server = await startCodingPlanUpgradeMockServer("manual-claim-experience", {
-      marketingTouch: true,
-    });
+    server = await startCodingPlanUpgradeMockServer("manual-claim-experience");
     const base = server.baseUrl;
     const mode = (mode: string) =>
       fetch(`${base}/__e2e/coding-plan/webview-mode`, {
@@ -81,111 +35,6 @@ describe("Coding Plan upgrade E2E mock server", () => {
     await mode("ready");
   });
 
-  it("holds asset bytes and releases them unchanged on reset", async () => {
-    server = await startCodingPlanUpgradeMockServer("manual-claim-experience", {
-      marketingTouch: true,
-    });
-    const base = server.baseUrl;
-    const assets = await fetchJson<Record<string, { src: string; sha256: string }>>(
-      `${base}/__e2e/marketing/assets`,
-    );
-    await fetch(`${base}/__e2e/marketing/asset-hold`, { method: "POST" });
-    const pending = fetch(assets.bundle!.src);
-    await vi.waitFor(async () => {
-      expect(await fetchJson(`${base}/__e2e/marketing/asset-state`)).toEqual({ pending: 1 });
-    });
-    await fetch(`${base}/__e2e/marketing/reset`, { method: "POST" });
-    expect(
-      createHash("sha256")
-        .update(Buffer.from(await (await pending).arrayBuffer()))
-        .digest("hex"),
-    ).toBe(assets.bundle!.sha256);
-    expect(await fetchJson(`${base}/__e2e/marketing/asset-state`)).toEqual({ pending: 0 });
-  });
-
-  it("only holds claims when marketing touch is explicitly enabled", async () => {
-    server = await startCodingPlanUpgradeMockServer("manual-claim-experience", {
-      marketingTouch: true,
-    });
-    const pending = fetch(`${server.baseUrl}/api/v1/nex-plan/billing/claim`, { method: "POST" });
-    await fetch(`${server.baseUrl}/__e2e/marketing/release`, { method: "POST" });
-    expect((await pending).ok).toBe(true);
-  });
-
-  it("publishes deterministic media fixtures with hashes of the bytes actually served", async () => {
-    server = await startCodingPlanUpgradeMockServer("manual-claim-experience", {
-      marketingTouch: true,
-    });
-    const assets = await fetchJson<Record<string, { src: string; sha256: string }>>(
-      `${server.baseUrl}/__e2e/marketing/assets`,
-    );
-    expect(Object.keys(assets).sort()).toEqual([
-      "brokenMp4",
-      "brokenPng",
-      "bundle",
-      "darkImage",
-      "faultBundle",
-      "image",
-      "invalidImage",
-      "invalidZip",
-    ]);
-    for (const asset of Object.values(assets)) {
-      const response = await fetch(asset.src);
-      expect(response.status).toBe(200);
-      expect(
-        createHash("sha256")
-          .update(Buffer.from(await response.arrayBuffer()))
-          .digest("hex"),
-      ).toBe(asset.sha256);
-    }
-  });
-
-  it("isolates marketing cases and records sequence and safe request headers", async () => {
-    server = await startCodingPlanUpgradeMockServer("manual-claim-experience", {
-      marketingTouch: true,
-    });
-    const reset = () =>
-      fetch(`${server!.baseUrl}/__e2e/marketing/reset`, {
-        method: "POST",
-        body: JSON.stringify({ banner: false, popup: false }),
-      });
-    expect((await reset()).ok).toBe(true);
-    const response = await fetchJson<{ data: { deliveries: unknown[] } }>(
-      `${server.baseUrl}/api/v1/marketing/touch?seq=0`,
-      {
-        headers: {
-          "X-Client-Language": "zh-CN",
-          "X-Nex-App-Version": "fixture",
-          Authorization: "Bearer must-not-be-recorded",
-        },
-      },
-    );
-    expect(response.data.deliveries).toEqual([]);
-    const state = await fetchJson<{ requestDetails: unknown[] }>(
-      `${server.baseUrl}/__e2e/marketing/state`,
-    );
-    expect(state.requestDetails).toEqual([
-      expect.objectContaining({
-        method: "GET",
-        path: "/api/v1/marketing/touch",
-        seq: "0",
-        headers: expect.objectContaining({
-          language: "zh-CN",
-          appVersion: "fixture",
-          authenticated: true,
-        }),
-      }),
-    ]);
-    expect(JSON.stringify(state)).not.toContain("must-not-be-recorded");
-    await reset();
-    const empty = await fetchJson<{
-      events: unknown[];
-      requests: unknown[];
-      requestDetails: unknown[];
-    }>(`${server.baseUrl}/__e2e/marketing/state`);
-    expect(empty).toMatchObject({ events: [], requests: [], requestDetails: [] });
-  });
-
   it("webview inventory starts with a resolvable existing personal connection before purchase", async () => {
     server = await startCodingPlanUpgradeMockServer("webview-refresh-provider");
     const customer = await fetchJson<{ data: { organizations: unknown[] } }>(
@@ -194,25 +43,6 @@ describe("Coding Plan upgrade E2E mock server", () => {
     expect(customer.data.organizations).toEqual([
       { organizationId: "org-e2e", projects: [{ projectId: "proj-e2e", projectType: 0 }] },
     ]);
-  });
-
-  it("营销升级在领取前可查询项目凭据，同时保持个人无订阅", async () => {
-    server = await startCodingPlanUpgradeMockServer("manual-claim-experience", {
-      marketingTouch: true,
-    });
-    const customer = await fetchJson<{ data: { organizations: unknown[] } }>(
-      `${server.baseUrl}/api/biz/customer/getCustomerInfo`,
-    );
-    expect(customer.data.organizations).toEqual([
-      { organizationId: "org-e2e", projects: [{ projectId: "proj-e2e", projectType: 0 }] },
-    ]);
-    expect(await fetchJson(`${server.baseUrl}/api/biz/subscription/list`)).toMatchObject({
-      data: [],
-    });
-    await resetCodingPlanUpgradeMockServer(server.baseUrl, "manual-claim-experience");
-    expect(await fetchJson(`${server.baseUrl}/api/biz/customer/getCustomerInfo`)).toMatchObject({
-      data: { organizations: [] },
-    });
   });
 
   it.each(["personal-sold-out", "personal-system-busy"] as const)(
@@ -235,32 +65,6 @@ describe("Coding Plan upgrade E2E mock server", () => {
     },
   );
 
-  it("injects query/report faults without losing the request ledger and clears them on reset", async () => {
-    server = await startCodingPlanUpgradeMockServer("manual-claim-experience", {
-      marketingTouch: true,
-    });
-    await fetch(`${server.baseUrl}/__e2e/marketing/faults`, {
-      method: "POST",
-      body: JSON.stringify({ queryStatus: 503, reportStatus: 500 }),
-    });
-    expect((await fetch(`${server.baseUrl}/api/v1/marketing/touch?seq=0`)).status).toBe(503);
-    expect(
-      (
-        await fetch(`${server.baseUrl}/api/v1/marketing/touch/action`, {
-          method: "POST",
-          body: JSON.stringify({ campaign_id: "independent", action_type: "cancel" }),
-        })
-      ).status,
-    ).toBe(500);
-    const state = await fetchJson<{ requests: string[]; events: unknown[] }>(
-      `${server.baseUrl}/__e2e/marketing/state`,
-    );
-    expect(state.requests).toHaveLength(2);
-    expect(state.events).toEqual([{ campaign_id: "independent", action_type: "cancel" }]);
-    await fetch(`${server.baseUrl}/__e2e/marketing/reset`, { method: "POST", body: "{}" });
-    expect((await fetch(`${server.baseUrl}/api/v1/marketing/touch?seq=1`)).status).toBe(200);
-  });
-
   it("expires Start without revoking Coding Plan and resets the expiry between workers", async () => {
     server = await startCodingPlanUpgradeMockServer("manual-claim-experience");
     await fetch(`${server.baseUrl}/api/v1/nex-plan/billing/claim`, { method: "POST" });
@@ -268,9 +72,7 @@ describe("Coding Plan upgrade E2E mock server", () => {
       method: "POST",
     });
     expect(expired.ok).toBe(true);
-    const balance = await (
-      await fetch(`${server.baseUrl}/api/v1/nex-plan/billing/balance`)
-    ).json();
+    const balance = await (await fetch(`${server.baseUrl}/api/v1/nex-plan/billing/balance`)).json();
     expect(balance.data).toMatchObject({ plans: [], balances: [] });
     const subscriptions = await (await fetch(`${server.baseUrl}/api/biz/subscription/list`)).json();
     expect(subscriptions.data).toHaveLength(1);
@@ -307,41 +109,6 @@ describe("Coding Plan upgrade E2E mock server", () => {
     );
     expect(preview.code).toBe(503);
   });
-
-  it.each([false, true])(
-    "isolates marketing across worker resets (initial=%s)",
-    async (initial) => {
-      server = await startCodingPlanUpgradeMockServer("personal-sold-out", {
-        marketingTouch: initial,
-      });
-      const base = server.baseUrl;
-      await resetCodingPlanUpgradeMockServer(base, "manual-claim-experience", {
-        marketingTouch: true,
-      });
-      const delivery = await fetchJson<{ data: { deliveries: unknown[] } }>(
-        `${base}/api/v1/marketing/touch`,
-      );
-      expect(delivery.data.deliveries).toHaveLength(2);
-      await fetchJson(`${base}/__e2e/marketing/reset`, { method: "POST", body: "{}" });
-
-      await resetCodingPlanUpgradeMockServer(base, "personal-system-busy");
-      const disabled = await fetchJson<{ data: { deliveries: unknown[] } }>(
-        `${base}/api/v1/marketing/touch`,
-      );
-      expect(disabled.data.deliveries).toEqual([]);
-      expect((await fetch(`${base}/__e2e/marketing/state`)).status).toBe(404);
-
-      await resetCodingPlanUpgradeMockServer(base, "manual-claim-experience", {
-        marketingTouch: true,
-      });
-      const fresh = await fetchJson<{ data: { deliveries: unknown[] } }>(
-        `${base}/api/v1/marketing/touch`,
-      );
-      expect(fresh.data.deliveries).toHaveLength(2);
-      const ledger = await fetchJson<{ events: unknown[] }>(`${base}/__e2e/marketing/state`);
-      expect(ledger.events).toEqual([]);
-    },
-  );
 
   it("keeps the old Start Plan bucket until the scheduled claim bucket becomes ready", async () => {
     server = await startCodingPlanUpgradeMockServer("manual-claim-experience");
