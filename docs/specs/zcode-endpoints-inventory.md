@@ -13,7 +13,7 @@
 | D 远控中继           | **暂时保留**，等加远控功能时再改                                                      | 不动                                         |
 | E 插件市场 / CDN     | **暂时保留**                                                                          | 不动                                         |
 | F 反馈               | 整块移除；入口改为在浏览器打开 GitHub issue                                           | 进行中（并入 `feat/remove-zcode-login-share`） |
-| F 其余（配置、场景、营销、Rewards、Coding Plan 订阅） | 未决，本轮不动；登录移除后其中依赖账号的部分会变成空转，待清理 | 未决                                         |
+| F 其余（配置、场景、营销、Rewards、Coding Plan 订阅） | 配置/场景/订阅保留；营销触达与 Rewards 已整体移除（`docs/specs/remove-rewards-marketing-touch.md`） | 已完成                                       |
 | G 帮助 / 文档 / 社区 | 未决；其中"反馈"链接随 F 一起改为 GitHub issue                                        | 部分                                         |
 | H 遥测               | 已无上报；三个无调用方的加载函数随登录移除一并清理                                    | 进行中                                       |
 
@@ -103,14 +103,14 @@
 | `services/src/coding-plan-subscription/codingPlanSubscriptionService.ts:16,47-54`  | `<origin>/api/v1/client/configs`                                                                      | 启动、创建会话                         |
 | `services/src/client-config/clientConfigService.ts:69-74`                          | `<origin>/api/v1/client/configs?app_version&platform`                                                 | 插件商店排序、推荐、漏洞上报链接       |
 | `services/src/feedback/feedbackService.ts:33-38` + `feedbackHttpClient.ts`         | `<origin>/api/v1/feedback/ticket`、`/feedback/attachment/upload-credential`                           | 用户提交/查看反馈（带 `X-Device-Mid`） |
-| `services/src/marketing-touch/marketingTouchService.ts:52-77`                      | `GET /api/v1/marketing/touch`、`POST /api/v1/marketing/touch/action`                                  | 营销弹窗查询/确认                      |
-| `shared/src/rewardsEmbedded.ts:24,54`                                              | `https://zcode.z.ai`（测试与生产分支相同）                                                            | 打开 Rewards 页面                      |
+| （已移除）`services/src/marketing-touch/marketingTouchService.ts`                  | `GET /api/v1/marketing/touch`、`POST /api/v1/marketing/touch/action`                                  | 营销触达已移除，不再是外部依赖          |
+| （已移除）`shared/src/rewardsEmbedded.ts`                                          | `https://zcode.z.ai`                                                                                  | Rewards 邀请页已移除                   |
 | `shared/src/model-provider-family.ts:35,40,45`、`nexEndpoint.ts:271-279`           | `https://z.ai/manage-apikey/subscription`、`bigmodel.cn/coding-plan/team/plans`                       | 点击订阅管理链接                       |
 | `services/src/model-provider/legacyNexConfigProviderReader.ts:64-91`               | `https://open.bigmodel.cn/api/anthropic`                                                              | 1.x 配置迁移（保留）                   |
 | `desktop/src/main/desktopMainIpcRemote.ts:100`、`desktopWindowChrome.ts:57`        | `api.z.ai`（路径 `/api/pay/paypal/`）                                                                 | 在内嵌 webview 里完成 Coding Plan 付款 |
 | `apps/nex-cli/packages/nex-site-plugin/src/server/main.ts:27`                      | `<origin>/api/v1/sites/*`                                                                             | 站点插件面板操作                       |
 
-已知瑕疵：`CODING_PLAN_ZAI_PAYPAL_RELAY_HOSTS` 集合里 `"api.z.ai"` 写了两次，疑似漏掉另一个域名（未确认原意）。`rewardsEmbedded.ts` 的测试分支与生产分支相同。
+已知瑕疵：`CODING_PLAN_ZAI_PAYPAL_RELAY_HOSTS` 集合里 `"api.z.ai"` 写了两次，疑似漏掉另一个域名（未确认原意）。
 
 ### G 帮助 / 文档 / 社区 / 反馈
 

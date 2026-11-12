@@ -249,8 +249,6 @@ Desktop Renderer 使用不同的 instrumentation/source-map 粒度，不能直�
 
 # 2026-09-10 迁移说明
 
-2026-09-12 更新：用户确认营销 E2E 转正，当前正式路径为 `ui-shell/marketing-touch-delivery.test.ts`、`ui-shell/marketing-touch-entitlement.test.ts`、`ui-shell/marketing-touch-anonymous.test.ts`。下文 pending 说明保留为迁移历史，最新执行证据见 `marketing-touch-e2e-implementation.md`。
+2026-11-12 更新：营销触达与 Rewards 已整体移除（见 `docs/specs/remove-rewards-marketing-touch.md`），Start Plan 投放 Banner、结果弹窗与对应 E2E 随之下线。本文以下内容全部为历史覆盖记录，不代表当前行为。
 
-本文以下内容为旧 Banner/preview 流程的历史覆盖记录，不再作为当前 Sidebar 契约。当前语义及 MTC 验收矩阵见 `docs/marketing-touch-client.md`。
-
-旧 `start-plan-manual-claim-experience.test.ts` 已拆迁为 `ui-shell/manual-review/pending/marketing-touch-delivery.test.ts` 与 `marketing-touch-entitlement.test.ts`：移除本地关闭确认、claim 结果生成分享按钮、preview 30 秒重显等已退休行为；保留真实 Banner/领取/上报和相邻权益刷新、Start/Individual/Subagent 选择联动。新路径未获人工确认前保持 pending，不自动晋升正式套件。旧 Banner 组件及专属单测现已删除；Hero 独立测试继续保留。
+（历史）旧 `start-plan-manual-claim-experience.test.ts` 已拆迁为 `ui-shell/manual-review/pending/marketing-touch-delivery.test.ts` 与 `marketing-touch-entitlement.test.ts`，这些文件随后随营销触达一并删除：移除本地关闭确认、claim 结果生成分享按钮、preview 30 秒重显等已退休行为；保留真实 Banner/领取/上报和相邻权益刷新、Start/Individual/Subagent 选择联动。新路径未获人工确认前保持 pending，不自动晋升正式套件。旧 Banner 组件及专属单测现已删除；Hero 独立测试继续保留。

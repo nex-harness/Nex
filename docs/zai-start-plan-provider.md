@@ -332,8 +332,7 @@ idle -> checking-auth -> verifying -> claiming -> success-dialog -> refreshing -
   `weekend-plan-hero.html` 资源，并通过 `CloudDialogHero` 在仅启用 `allow-scripts` 的 sandbox
   iframe 中加载。资源只通过带实例 ID 的 `postMessage` 接收主题、语言、减少动态效果和本次权益
   数据，不得访问 Renderer DOM、Node、preload 或业务 Service。当前阶段不请求真实云端内容；
-  mock 资源 URL 由 Vite 打包生成。真实云端接入、资源签名和缓存契约见
-  `docs/cloud-content-dialog.md`。
+  mock 资源 URL 由 Vite 打包生成。
   失败弹窗使用标准 `AlertDialogContent`、Header、Title、Description、Footer 与 Action，
   只显示失败标题、按业务码本地化的失败说明和确认按钮；不得渲染状态图标、关闭按钮、Hero、
   Ticket、星空、Replay、分享文本或图片操作，也不得增加专属尺寸、居中布局或自定义按钮外形。

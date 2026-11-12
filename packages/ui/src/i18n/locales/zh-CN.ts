@@ -588,8 +588,6 @@ const zhCN: Record<string, string> = {
   "settings.modelProvider.connectionSwitchFailed": "切换套餐失败，原连接未更改。请重试。",
   "settings.modelProvider.connectionUnavailable": "原连接方式已不可用，请重新选择。",
   "settings.modelProvider.navigationUnavailable": "要查看的供应商不可用，请选择其他供应商。",
-  "marketingTouch.uncertain":
-    "暂时无法确认操作结果，请稍后查看权益。为避免重复提交，本轮不再重试。",
   "workspace.context.lastActivity": "最近活动 {time}",
   "bots.privateDelivery.retry": "重新发送回复",
   "bots.privateDelivery.retryHint": "将以文本重新发送完整回复，可能重复已收到的内容。",

@@ -702,7 +702,9 @@ Figma 节点：`6079:8738`。
 - 卡级 healthy 失败或返回零值时，最后一轮完成后最多补查一次；仍失败可复用该卡此前成功采样的卡级 TPS。没有任何有效正数或历史消息缺少完成态字段时不展示节省时间，禁止回退固定 TPS。
 - 状态行使用 `icon/purple` 文本与 32% 弱分隔线；左侧工作时长保持 `text-ui-base`，右侧节省时间与 tag 使用 `text-ui-sm`。窄屏允许状态行换行，不能裁掉核心信息。
 
-### 9.5 与领 token 营销 Banner 的共享槽位优先级
+### 9.5 与领 token 营销 Banner 的共享槽位优先级（已退休）
+
+> 2026-11-12：营销触达与 Rewards 已整体移除（`docs/specs/remove-rewards-marketing-touch.md`），下方共享槽位与 `marketingTouchController` 仲裁不再存在；本节仅保留为历史设计记录。
 
 左下角侧栏底部只保留**一个活动展示槽位**，由 Highspeed 分享卡（全局通知 `highspeed-share`）与「领 token」营销 Banner（`resource_position === "banner"`，动作 `claim_nex_plan`）共用。两者同时命中时**折叠为同一位置、领 token 优先覆盖在上**；只有领 token Banner 消失或被关闭后，同一位置才展示 Highspeed 分享卡。
 

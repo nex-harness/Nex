@@ -49,7 +49,7 @@ Avoid:
 
 ### Full-page desktop overlays
 
-Login, Coding Plan upgrade, and Rewards surfaces must keep minimize, maximize/restore,
+Login and Coding Plan upgrade surfaces must keep minimize, maximize/restore,
 and close-window controls reachable at the top right on Windows and Linux. Reuse
 `DesktopWindowControls` and the existing platform CSS variants. Keep the controls
 outside scrolling content and above page decoration, with a non-draggable hit area.
