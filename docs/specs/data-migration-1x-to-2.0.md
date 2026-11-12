@@ -224,20 +224,27 @@ identity 伪造共享关系。
 | 迁移加载态与失败重试页         | **未验证**（这次迁移很快，没有观察到加载态）                                                                 |
 | 迁移中途强杀、磁盘满           | **未验证**                                                                                                   |
 
-冒烟中发现、尚未修复的问题（不影响启动，但会影响迁移质量）：
+冒烟中的两个告警，核实后的结论（第一次记录写成了"未修复问题"，那是错的，已更正）：
 
-1. **`首次 sessions-index 基线补齐 task index 失败`**：`ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE
-   constraint`（`TaskIndexRepo.writeRecord`，8 个里失败 2 个）。迁移日志同时写着"历史 task ID 存在冲突，
-   host/task 索引暂用非唯一索引"：1.2.2 数据里有同一个 `task_id` 出现在两个 workspace 的情况（该备份里有多个
-   重复 ID），升级后唯一索引被降级为非唯一，而 `writeRecord` 仍用 `ON CONFLICT(host_id, task_id)` 写入，
-   于是这类任务写不进去。需要单独修复，并补重复 ID 数据的验收用例。
-2. 启动时多出一个没有标题、创建时间为 1970 的任务行（`sess_05ce3dfa…`，任务数 391）；
-   同时日志有 `读取 task index meta_json 非法 taskId=sess_05ce3dfa…`。它在 CLI 对话库里没有对应会话，
-   看起来是 `writeRecord` 失败后留下的占位行。与上一条是同一类问题，修复后需要确认不再产生。
-3. 第一次启动我只传了 `--user-data-dir`，没有清掉 shell 里继承的 `NEX_AGENT_SERVER_COMMAND` 等变量，
-   应用因此报 `Storage preparation failed: unsupported_runtime`。这是测试环境污染，不是产品缺陷；
-   但该次启动误写了真实 `~/Library/Application Support/Nex/session/` 下的 Chromium 缓存文件
-   （GPU/Dawn 缓存、Local Storage 日志、Cookies 等，1.2.2 也使用该目录）。`~/.nex` 本身未被它修改。
+1. **`ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint`（8 个里失败 2 个）**：**夹具伪像，不是产品缺陷。**
+   第一次用的是 2.0 迁移前自动留下的 `tasks_index` 备份，它只是数据导出，没有 1.2.2 `tasks` 表的
+   `PRIMARY KEY (workspace_key, task_id)`。用 1.2.2 的真实 DDL（`v1.2.2:…/schema-v1.ts`）重建同一份数据
+   （390 个任务、8 个任务组，没有行被真实主键拒绝）后，再次冷启动打包应用，该告警 0 次；
+   迁移后 `tasks` 仍保留主键。迁移里"历史 task ID 存在冲突，host/task 索引暂用非唯一索引"的提示仍会出现
+   （1.2.2 数据里有 27 个 `task_id` 同时出现在两个 workspace），这是设计内的降级，不影响写入。
+2. **多出的空任务行与 `meta_json 非法`**：第二次冷启动仍多出 2 行。
+   - `sess_c3acf936…`：有标题和时间，在 CLI 对话库里确有对应会话——是 sessions-index 基线补齐的正常结果。
+   - `sess_bc1bc371…`：标题为空、创建时间为 0（显示为 1970）、`meta_json` 为 `{}`，CLI 对话库里**没有**这个会话。
+     日志显示它来自渲染进程恢复"上次打开的会话"（`lastWorkspaceSession`，取自我拷贝的现行 `setting.json`），
+     而这份旧任务库里没有该会话，应用于是为它创建了空行并报 `meta_json 非法`。
+     这是"现行设置 + 旧库"混搭造成的；真正的 1.2.2 设置不会指向 2.0 才产生的会话。
+     但它也说明：**恢复一个不存在的会话时，应用会留下一条空任务行**。是否要在产品层拦截，尚未决定。
+
+另：第一次启动我只传了 `--user-data-dir`，没有清掉 shell 里继承的 `NEX_AGENT_SERVER_COMMAND` 等变量，
+应用因此报 `Storage preparation failed: unsupported_runtime`。这是测试环境污染，不是产品缺陷；
+但该次启动误写了真实 `~/Library/Application Support/Nex/session/` 下的 Chromium 缓存文件
+（GPU/Dawn 缓存、Local Storage 日志、Cookies 等，1.2.2 也使用该目录）。`~/.nex` 本身未被它修改。
+此后全部使用 `env -i` 加 `NEX_DESKTOP_USER_DATA_DIR` / `NEX_DESKTOP_HOME_DIR` 完整隔离。
 
 仍然没有覆盖：真实 Provider 凭据逐项核对、迁移加载态与失败重试页、强杀续跑、签名与公证后的安装体验、
 Windows/Linux。
