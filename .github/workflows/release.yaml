@@ -141,9 +141,12 @@ jobs:
 
       # The notarized/stapled artifacts must replace the copies uploaded by
       # electron-builder before it finished notarization.
-      # 该步骤要求 tag 对应的 Release 已经存在。旧 fork 依赖 electron-builder 的 github
-      # provider 在 "Package and publish" 阶段创建 Release；2.0 基线的 provider 仍是
-      # generic 占位，所以启用签名前必须先决定发布通道（改 provider 或先手动建 Release）。
+      # 该步骤用 `gh release upload --clobber` 覆盖同名资产，要求 tag 对应的 Release 已经存在：
+      # 前一步 electron-builder（`--publish always`，github provider）会创建它。
+      # electron-builder 对不存在的 Release 默认创建 draft；同一个 tag 上 release-server.yaml
+      # 的 softprops/action-gh-release 随后会把同一个 Release 发布出来（含服务端压缩包）。
+      # 两个工作流都只在 v* tag 上运行，所以一个 tag 对应一个同时包含桌面端与服务端的 Release，
+      # 与 1.2.3 的资产清单一致。
       - name: Refresh release assets after notarization
         if: vars.NEX_ENABLE_MAC_SIGN == '1'
         working-directory: packages/desktop

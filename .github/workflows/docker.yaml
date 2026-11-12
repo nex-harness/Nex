@@ -7,16 +7,13 @@
 #
 # 产物（tag v1.0.2 为例）：
 #   ghcr.io/nex-harness/nex-server:1.0.2 / :latest
-# 镜像只有两层产物（SEA 二进制 + web/dist），没有可缓存的编译层，所以不再使用 GHA 层缓存。
+# 镜像只装配产物（`pnpm --filter @nex/server-cli stage` 的 server-cli 发行目录 + web/dist），
+# 没有可缓存的编译层，所以不使用 GHA 层缓存。镜像内由 nginx 对外托管 Web 并向回环上的 Core
+# 注入 ingress token（docs/specs/docker-single-image.md）；Core 自带的浏览器登录
+# （docs/specs/server-web-login.md）目前不在镜像里启用。
 #
 # 首次发布后建议把 package 的可见性改为 public（GitHub → Packages →
 # Package settings → Danger Zone），部署机即可免登录拉取。
-#
-# !!! 2.0 基线前置条件未满足 !!!
-# 本工作流依赖 packages/server/scripts/build-sea.mjs（SEA 单二进制发行管线）和
-# packages/server/packaging/（install.sh、systemd unit、launchd plist）。两者随旧 fork 的
-# SEA 发行改造引入，尚未迁移到 2.0 基线，因此 "Build SEA binary" 与 "Stage Docker context"
-# 两步在当前分支必定失败。迁移 SEA 管线之前不要启用本工作流的自动触发。
 name: Docker images (ghcr)
 
 on:

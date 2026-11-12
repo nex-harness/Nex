@@ -6,28 +6,23 @@
 #     alpha-<shortsha> (one release per main build, kept for rollback)
 #   - v* tag push -> versioned assets on that tag's release
 #
-# Artifacts (binary + packaging/: install.sh, systemd unit, launchd plist +
-# web static assets). The suffix distinguishes a build of main (<shortsha>, kept
-# per-commit for rollback) from a released version (<version>, the pushed tag):
+# Artifacts (the staged server-cli release: bin/nex + runtime/ + manifest.json, plus
+# web/ with the matching web build). The suffix distinguishes a build of main
+# (<shortsha>, kept per-commit for rollback) from a released version (<version>, the
+# pushed tag):
 #   nex-server-darwin-arm64-<version|shortsha>.tar.gz
 #   nex-server-linux-x64-<version|shortsha>.tar.gz
 #   nex-server-linux-arm64-<version|shortsha>.tar.gz
 #
-# The tarball also carries the matching web build (packages/web/dist). The
-# installer deploys it next to the data dir and points NEX_WEB_STATIC_ROOT at
-# it, so a bare-metal server install serves a version-aligned web UI from the
-# same process — no separate web service, no drift between binary and UI.
+# The tarball also carries the matching web build (packages/web/dist) under web/.
+# 2.0 的 Server Core 可以自己托管它，不需要前置代理：
+#   tar -xzf nex-server-<target>-<label>.tar.gz -C nex-server && cd nex-server
+#   ./bin/nex serve --daemon --web-root "$PWD/web" --port 3030   # 浏览器登录，见 docs/specs/server-web-login.md
+#   ./bin/nex web-token                                          # 打印登录令牌
+# 非回环监听（--host 0.0.0.0）会自动启用登录；对公网暴露请放在 TLS 反代之后。
 #
 # The Node version used for the build must match the license entry recorded in
-# third-party/runtime/sources.json (currently 24.14.0); CI pins it via setup-node.
-#
-# !!! 2.0 基线前置条件未满足 !!!
-# 本工作流依赖以下仅存在于旧 fork main 的产物，2.0 基线尚未迁移：
-#   - packages/server/scripts/build-sea.mjs（SEA 单二进制构建）
-#   - packages/server/scripts/sea-pty-assets.mjs
-#   - packages/server/src/seaEntry.ts
-#   - packages/server/packaging/{install.sh,nex-server.service,com.nex.server.plist}
-# 在补齐上述文件之前，"Build SEA binary" 与 "Package one-step install tarball" 两步必定失败。
+# third-party/runtime/sources.json (24.14.0); CI pins it via setup-node.
 name: Server binaries (SEA)
 
 on:
@@ -110,8 +105,7 @@ jobs:
         run: |
           mkdir -p bundle
           cp -R nex-server-${{ matrix.target }}/. bundle/
-          # Matching web build: the shipped layout does not bundle UI assets,
-          # so tarball consumers serve web/dist through their own front proxy.
+          # Matching web build, served by `nex serve --web-root <dir>/web`.
           mkdir -p bundle/web
           cp -r ../../../web/dist/. bundle/web/
           tar -czf nex-server-${{ matrix.target }}-${{ steps.meta.outputs.label }}.tar.gz -C bundle .
@@ -152,10 +146,14 @@ jobs:
         run: |
           shortsha="${GITHUB_SHA::7}"
           tag="alpha-${shortsha}"
-          notes="Alpha build of the server SEA binaries at commit ${GITHUB_SHA}. One-step install: extract the tarball for your platform and run \`sudo ./packaging/install.sh --binary ./nex-server-<target>\`."
+          notes="Alpha build of the Nex server at commit ${GITHUB_SHA}. Extract the tarball for your platform and run \`./bin/nex serve --daemon --web-root \"\$PWD/web\" --port 3030\`, then \`./bin/nex web-token\` for the browser login token."
+          # --prerelease --latest=false: 桌面端自动更新读取 GitHub 的 releases/latest；
+          # 服务端 alpha 不含 latest-mac.yml，一旦被标为 Latest，所有桌面稳定通道的更新检查都会失败。
           gh release create "$tag" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Nex server (${tag})" \
+            --prerelease \
+            --latest=false \
             --notes "$notes" \
             dist/nex-server-*-${shortsha}.tar.gz
