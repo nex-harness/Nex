@@ -105,19 +105,12 @@ const REQUIRED_ASAR_RUNTIME_MODULES = [
   // 这里把 undici 和其他兜底依赖一样强制注入 app.asar，避免用户在已安装应用里主进程直接崩溃。
   "undici",
   // node-forge 一直只写在 bundle.mjs 的校验名单里，靠 electron-builder 自己打进 app.asar；
-  // 这与 yauzl 漏 pend 是同一类隐患——校验要求的模块必须有人负责补齐。node-forge 无子依赖，
-  // 已在产物里时 afterPack 扫描会跳过它，不改变现有打包结果。
+  // 校验要求的模块必须有人负责补齐。node-forge 无子依赖，已在产物里时 afterPack 扫描会跳过它。
   "node-forge",
   // 2.7.0 起 services 新增反馈日志压缩链路并引入 yazl；2.6.0 没有这条启动期依赖，
   // pnpm hoisted 布局下 yazl 可能进了 app.asar，但子依赖 buffer-crc32 没有稳定随包进入产物；
   // 这里显式以 yazl 作为闭包根注入，让递归依赖收集把 ZIP 打包链路所需依赖一起补齐。
   "yazl",
-  // yauzl 成为 desktop/services 的直接生产依赖后，pnpm list --prod 会把顶层 yauzl 节点
-  // 去重成没有子依赖的空节点；electron-builder 的 pnpm collector 以先登记的空节点为准，
-  // 跳过后面带完整子树的那个，于是 app.asar 里有 yauzl 却没有它的运行时依赖 pend，
-  // 要到 bundle 校验阶段才报「缺少运行时依赖 pend」。这里以 yauzl 作为闭包根注入，
-  // 与 bundle.mjs 的校验名单保持一致，让递归依赖收集把 pend 一起补进产物。
-  "yauzl",
   // Bugfix: 飞书 SDK 被 desktop main/host 外置后，安装包运行时必须能从 app.asar 解析到它。
   // 这里显式注入 scoped 包，避免开发态正常、生产包启动时才报 Cannot find module。
   "@larksuiteoapi/node-sdk",

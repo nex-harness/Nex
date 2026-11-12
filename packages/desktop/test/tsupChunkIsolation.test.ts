@@ -43,9 +43,6 @@ function getDefines(configName: string): Record<string, string> {
 }
 
 describe("desktop tsup chunk isolation", () => {
-  it("ZIP 解包器应外置，避免 Electron ESM 启动时动态 require fs 崩溃", () => {
-    for (const name of ["main", "host", "scheduler"]) expect(getExternal(name)).toContain("yauzl");
-  });
   it("main 构建应将 chunk 输出到 main 子目录，避免覆盖 host 构建产物", () => {
     expect(getChunkNames("main")).toBe("main/chunk-[hash]");
   });
