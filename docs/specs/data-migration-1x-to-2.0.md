@@ -285,5 +285,33 @@ identity 伪造共享关系。
 (b) 只对 `open.bigmodel.cn` 的 `bigmodel-coding-plan` 迁成**默认停用**的自定义 Provider，保留 Key，不自动启用；
 `start-plan` 仍不迁。
 
+### CLI 对话库逐表全量核对（2026-11-12，真实 `~/.nex/cli/db/db.sqlite` 的一致性快照，只读）
+
+快照用 `sqlite3 -readonly … ".backup"` 取得（源库有活跃写入者，源文件未被修改），`PRAGMA quick_check` 为 ok，
+`schema_migration` 已到 `0024_session_database_identity`。每张表的行数：
+
+| 表                          | 行数    | 表                         | 行数   |
+| --------------------------- | ------- | -------------------------- | ------ |
+| `session`                   | 674     | `message`                  | 118,678 |
+| `part`                      | 415,082 | `session_entry`            | 8,963  |
+| `session_input`             | 2,883   | `session_target`           | 39     |
+| `todo`                      | 1,936   | `input_history`            | 100    |
+| `model_usage`               | 56,120  | `tool_usage`               | 64,462 |
+| `turn_usage`                | 1,273   | `local_setting`            | 12     |
+| `dwf_*`、`workflow_*`、`permission`、`session_task_link`、`nex_database_identity` | 0 | | |
+
+引用完整性：没有孤儿 `message`（缺 session）、没有孤儿 `part`（缺 message）、没有缺 session 的 `session_entry`；
+没有零消息的会话；没有软删除会话。
+
+与任务索引对应（1.2.2 时期的任务索引，迁移前备份）：
+
+- 任务索引里 363 个不同的 `task_id`（390 行，其中 27 个 ID 出现在两个 workspace），**363 个在 CLI 库里都有会话**，没有缺失。
+- CLI 库里 311 个会话没有任务索引行：286 个是子代理子会话、4 个是划词侧聊，其余 21 个是顶层会话，
+  **这 21 个全部创建于 2.0 首次迁移之后**（2.0 开发与本次会话期间产生），迁移前的顶层会话没有一个遗漏。
+- 当前真实任务索引（开发版 2.0 已使用）里有 2 个任务行在 CLI 库里没有会话（标题为 "Nex"，是上文所述的占位行），
+  不属于 1.2.2 时期数据。
+
+这一节验证的是"对话数据在，且和任务索引一一对应"，不等于逐条消息内容比对；消息正文是否被改写，没有逐条哈希对比。
+
 仍然没有覆盖：迁移加载态（迁移太快没有截到）、强杀续跑、签名与公证后的安装体验、
 Windows/Linux。
