@@ -74,7 +74,10 @@ pnpm bundle:desktop -- win arm64
 ```bash
 NEX_TARGET_OS=linux NEX_TARGET_ARCH=x64 pnpm bundle:desktop
 
-正式发版打包不再注入可配置的 generic update feed。新版客户端运行时使用服务端 manifest provider；`electron-builder` 的 generic `publish.url` 只保留本地占位。打包应用通过既有 endpoint 解析更新检查接口，忽略 `NEX_UPDATE_FEED_URL` 和 `--nex-update-feed-url`；只有未打包开发态可以通过这两个入口覆盖完整 manifest URL。
+正式发版打包不再注入可配置的 generic update feed。客户端运行时使用 electron-updater 内置 github provider，
+读取 `nex-harness/Nex` 的 GitHub Release 资产（`latest-mac.yml` / `latest.yml` / `latest-linux.yml`）；
+`electron-builder` 的 `publish` 块使用同一坐标。打包应用不接受任何自定义更新源参数，
+`NEX_UPDATE_FEED_URL` / `--nex-update-feed-url` 已随服务端 manifest provider 删除。
 ```
 
 ## 预检查

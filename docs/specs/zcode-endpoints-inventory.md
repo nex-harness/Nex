@@ -63,14 +63,12 @@
 
 | 位置                                                                  | 地址                                                                            | 触发                  |
 | --------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------- |
-| `desktop/src/main/manifestUpdateProvider.ts:22,77-86,185-197,250`     | `https://zcode.z.ai/api/v1/releases/electron/manifest`                          | 启动 / 菜单检查更新   |
-| `desktop/src/main/autoUpdater.ts:837-866`                             | 同上 origin；打包版会把其它 origin 重映射回默认                                 | 同上                  |
-| `desktop/src/main/forceUpdateGuard.ts:45-53,184-190`                  | `https://zcode.z.ai/api/v1/client/configs`；手动更新打开 `/cn` 或 `/en` 页面    | **打包版生产环境，启动时、主窗口之前** |
+| `desktop/src/main/autoUpdater.ts`（`applyGitHubUpdateProvider`）      | GitHub Releases：`github.com/nex-harness/Nex`（`latest*.yml` 资产）             | 启动 / 菜单检查更新   |
 | `desktop/src/main/remoteCdn.ts:5-9`                                   | `https://cdn.codegeex.cn/nex/electron/releases`（国内）、`https://cdn-zcode.z.ai/nex/electron/releases`（海外） | 远程 SSH 工作区下载运行时资产 |
 | `desktop/src/main/desktopRuntimeEnv.ts:227-236,298-326`               | `NEX_REMOTE_ASSET_CDN_BASE_URL`（`.env.example` 示例指向 cdn-zcode.z.ai）       | 构造 Host 环境        |
 | `desktop/electron-builder.config.js:978-987`                          | 发布提供方 `github`（`nex-harness/Nex`）                                        | 打包发布              |
 
-注意：`electron-builder` 的发布源已经是 GitHub，但应用内的更新清单仍然指向 `zcode.z.ai`，两者并不一致，这是更新能力的最大风险点。
+注意：应用内更新与 `electron-builder` 发布源现在一致，都指向 GitHub Releases（`nex-harness/Nex`）；强制升级 gate 与 `/api/v1/client/configs` 启动检查已删除（docs/specs/desktop-updates-github.md）。
 
 ### D 远程控制中继 / 设备配对
 
@@ -155,5 +153,5 @@
 
 - 分享：服务和 RPC 通道都已注册，但头部"分享"按钮要求 `user` 非空，而 2.0 里没有任何代码给 `user` 赋值，所以桌面用户看不到入口；打开分享链接（深链/网页）仍然会请求 `zcode.z.ai`。
 - 登录：桌面端无登录；CLI `login`/`logout` 仍然完整可用，并且会访问 `zcode.z.ai`、`api.z.ai`、`bigmodel.cn`。
-- 更新：打包版启动时会先请求 `zcode.z.ai/api/v1/client/configs` 做强制更新检查（`forceUpdateGuard.ts`，超时 10 秒，响应上限 1 MiB）。请求失败、超时或返回非 2xx 时只记一条 warn 并**跳过校验，应用照常启动**，所以该域名不可用不会阻止启动，只会让启动最多多等 10 秒；反过来，如果该域名仍然在线并返回要求强更的配置，会阻止创建主窗口。
+- 更新：打包版的自动更新只走 GitHub Releases（`nex-harness/Nex`），不再请求 `zcode.z.ai` 的更新 manifest 或客户端配置，也没有启动期强制升级检查。
 - 不是 ZCode 的外部依赖：飞书、Discord、GitHub 发布、`cdn.codegeex.cn`（智谱 CDN，但不是 z.ai 域名）。

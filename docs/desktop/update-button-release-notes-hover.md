@@ -13,17 +13,17 @@
 
 ## 设计
 
-CI 收集桌面产物时继续保留 electron-updater 兼容的 `releaseName` / `releaseNotes` 字段，同时在 update YAML 中追加 `releaseNotesByLocale`。该字段包含 `zh-CN` 与 `en-US` 的标题和 Markdown，供新版本客户端直接从 `update-downloaded` 事件 payload 读取。
-
-main 进程在 `update-available` 时就把多语言 release notes 规范化为 `PostUpdateReleaseNotesPayload.releaseNotesByLocale`，并随 `update-available` / `download-progress` 状态广播给 renderer；下载完成后继续随 `update-downloaded` 状态广播，并持久化给安装后弹窗使用。旧的 `onUpdateReady(version)` 事件只保留兼容用途，按钮展示详细内容以 `UpdateStatePayload.releaseNotes` 为准。
-
-main 进程会把 electron-updater 当前读取到的 manifest 作为 `zh-CN` 内容；需要补齐英文说明时，会用同一个服务端 manifest 接口再次拉取并合并为 `en-US` 内容。补充请求沿用当前 `platform` / `device_mid` / `channel` 查询参数和 `X-Platform` / `X-Release-Channel` / `X-Device-Mid` header。这个补充读取只影响 release notes payload，不参与版本判断、下载 URL 解析或安装包校验，避免改变自动更新主流程。
+electron-updater 从 GitHub Release 的 channel YAML（`releaseName` / `releaseNotes`）或 Release body 读取说明。
+main 进程在 `update-available` 时把 release notes 规范化为 `PostUpdateReleaseNotesPayload`（`title` / `markdown` / 可选 `releaseDate`），
+并随 `update-available` / `download-progress` 状态广播给 renderer；下载完成后继续随 `update-downloaded` 状态广播，
+并持久化给安装后弹窗使用。旧的 `onUpdateReady(version)` 事件只保留兼容用途，按钮展示详细内容以
+`UpdateStatePayload.releaseNotes` 为准。GitHub provider 不提供多语言字段，`releaseNotesByLocale` 保持缺省，
+UI 按当前语言回退到默认 `markdown`。
 
 UI 层复用现有 tooltip 与 Markdown 渲染能力：没有 release notes 时保持原来的短 tooltip；有 release notes 时，hover 下载中按钮或更新按钮展示一个紧凑的浮层，标题固定显示当前语言下的 `v{version} 更新日志` / `v{version} Release Notes`，标题下方仅显示按当前语言格式化后的 feed `releaseDate` 日期，不额外加“更新日期”或 “Release date” 前缀，正文渲染对应 Markdown。若当前语言没有对应内容，则回退到 payload 的默认 Markdown。按钮可见短文案、aria label、确认弹窗与下载中提示都走 i18n。
 
 ## 验证
 
-- YAML 注入测试覆盖 `releaseNotesByLocale`。
 - 自动更新 main 进程测试覆盖 `update-available`、`download-progress`、`update-downloaded` 状态携带 release notes。
-- UI 单测覆盖 hover tooltip 按当前 locale 选择中文/英文 Markdown。
-- main 进程测试覆盖默认 feed 与英文 sibling feed 合并后随状态广播给 renderer。
+- UI 单测覆盖 hover tooltip 在缺少 `releaseNotesByLocale` 时回退到默认 Markdown。
+- 真实 GitHub Release 的 release notes 内容解析只在打包环境手工验证（CI 目前只发布 macOS）。
