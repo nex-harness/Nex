@@ -972,11 +972,12 @@ export default {
     // Nex 的唯一发布与自动更新通道：GitHub Releases。
     // electron-builder 产出 latest-mac.yml / latest.yml / latest-linux.yml 并随安装包
     // 上传到 release，客户端 electron-updater 的 github provider 直接消费。
-    // 保留 useMultipleRangeRequest=false：CDN 对多 Range 返回错误的 Content-Type，
-    // electron-updater 会因此退回 300MB+ 全量包。
+    // 不能在这里写 useMultipleRangeRequest：它只存在于 generic 发布器的 schema，
+    // electron-builder 26 会因此拒绝整份配置，打包在加载配置阶段就失败。
+    // GitHub provider 在 electron-updater 内部已固定 isUseMultipleRangeRequest=false，
+    // 不会向 GitHub 的存储后端发多 Range 请求，无需再声明。
     provider: "github",
     owner: "nex-harness",
     repo: "Nex",
-    useMultipleRangeRequest: false,
   },
 };
