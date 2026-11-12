@@ -45,9 +45,8 @@ export function WorkspaceTerminalToggleButton({
         )}
         aria-label={label}
         disabled={Boolean(disabledReason)}
-        onClick={() =>
-          onToggleTerminal
-        }
+        // 修复原因：之前只返回回调引用，点击不会切换终端面板，也没有任何错误提示。
+        onClick={() => onToggleTerminal()}
       >
         <SquareTerminalIcon className="size-4" />
       </Button>

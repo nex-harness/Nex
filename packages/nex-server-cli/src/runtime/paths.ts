@@ -15,6 +15,9 @@ export interface ServerLayout {
   readonly stableBinDir: string;
   readonly statusFile: string;
   readonly ingressTokenFile: string;
+  readonly webAccessTokenFile: string;
+  readonly webSessionsFile: string;
+  readonly serveConfigFile: string;
   readonly lockFile: string;
   readonly controlEndpoint: string;
   readonly serviceDir: string;
@@ -44,6 +47,9 @@ export function resolveServerLayout(serverRoot = getDefaultServerDataRoot()): Se
     stableBinDir: join(root, "bin"),
     statusFile: join(runDir, "status.json"),
     ingressTokenFile: join(runDir, "ingress-token"),
+    webAccessTokenFile: join(root, "web-access-token"),
+    webSessionsFile: join(root, "web-sessions.json"),
+    serveConfigFile: join(root, "serve-config.json"),
     lockFile: join(runDir, "server.lock"),
     controlEndpoint:
       process.platform === "win32"
@@ -85,6 +91,11 @@ export async function resolveCanonicalServerLayout(
 
 function inferDataBaseDir(serverRoot: string): string {
   const parent = dirname(serverRoot);
+  if (basename(serverRoot) === ".nex") {
+    // Bug 原因：显式 <base>/.nex 曾被当成 base 本身，Supervisor/Core 再追加 .nex/v2，
+    // 读取嵌套空库而忽略同级已有 tasks-index 和 setting.json。安装根与数据 base 必须分开。
+    return parent;
+  }
   if (basename(serverRoot) === "server" && basename(parent) === ".nex") {
     return dirname(parent);
   }

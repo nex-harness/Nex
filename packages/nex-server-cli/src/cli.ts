@@ -52,6 +52,18 @@ import {
   unregisterLegacyServiceForRoot,
 } from "./runtime/serviceInstallation.js";
 import { ProxyStdioError, runProxyStdio } from "./server-core/proxyStdio.js";
+import {
+  clearServeConfig,
+  parseServeFlags,
+  readServeConfig,
+  resolveServeOptions,
+  writeServeConfig,
+} from "./server-core/serveConfig.js";
+import {
+  readOrCreateWebAccessTokenFile,
+  rotateWebAccessTokenFile,
+  WEB_ACCESS_TOKEN_ENV,
+} from "./server-core/webAccessToken.js";
 
 export interface CliIO {
   stdout?: { write(value: string): void };
@@ -134,7 +146,7 @@ export async function runServerCli(
     // 同一物理 data-root 的符号链接别名会派生不同 control endpoint 和 OS service
     // identity。生命周期命令统一在 IO 前收敛 root，避免第二个 Supervisor 绕过探测重复注册。
     const layout =
-      ["serve", "status", "stop", "restart", "update", "uninstall"].includes(command) ||
+      ["serve", "status", "stop", "restart", "update", "uninstall", "web-token"].includes(command) ||
       proxyStdioRequested ||
       migrateRetryRequested
         ? await resolveCanonicalServerLayout(parsed.layout.serverRoot)
@@ -169,6 +181,8 @@ export async function runServerCli(
     switch (command) {
       case "serve":
         return await runServe(parsed.argv.slice(1), io, json, layout, runtimeOptions);
+      case "web-token":
+        return await runWebToken(parsed.argv.slice(1), io, json, layout);
       case "stop":
         // Bug 原因：runControl 不接收 argv，`stop --wait` 曾被当成 ack 型 stop 立即返回，
         // 桌面端会在远端仍持锁时报告“已停止”。--wait 必须走统一的停止等待。
@@ -275,13 +289,63 @@ function parseServerCliArguments(argv: readonly string[]): {
   };
 }
 
-async function runServe(
+async function runWebToken(
   args: readonly string[],
+  io: CliIO,
+  json: boolean,
+  layout: ReturnType<typeof resolveServerLayout>,
+): Promise<number> {
+  const unknown = args.filter((arg) => arg !== "--rotate" && arg !== "--json");
+  if (unknown.length) throw new Error(`Unknown web-token argument: ${unknown[0]}`);
+  const rotate = args.includes("--rotate");
+  if (process.env[WEB_ACCESS_TOKEN_ENV]?.trim()) {
+    // 环境变量优先于文件，这里打印文件值会让用户拿到一个实际不生效的 token。
+    throw new Error(`${WEB_ACCESS_TOKEN_ENV} is set in this environment and overrides the token file`);
+  }
+  const token = rotate
+    ? await rotateWebAccessTokenFile(layout)
+    : await readOrCreateWebAccessTokenFile(layout);
+  const running = await readControlStatus(layout, 500);
+  const needsRestart =
+    rotate && Boolean(running && (running.state === "ready" || running.state === "starting"));
+  if (json) stdout(io, { token, rotated: rotate, restartRequired: needsRestart });
+  else {
+    stdout(io, token);
+    if (needsRestart) {
+      stderr(io, "Token rotated. Run `nex restart` to apply it; existing browser sessions will end.");
+    }
+  }
+  return 0;
+}
+
+function describeServeAccess(status: ServerStatus, webRoot: string | undefined): string | undefined {
+  if (!webRoot || !status.host || !status.port) return undefined;
+  const host = status.host === "::1" ? "[::1]" : status.host;
+  return `Web UI: http://${host}:${status.port}/  (sign in with the token from \`nex web-token\`; use a TLS proxy before exposing it to the internet)`;
+}
+
+async function runServe(
+  rawArgs: readonly string[],
   io: CliIO,
   json: boolean,
   layout: ReturnType<typeof resolveServerLayout>,
   runtimeOptions: ServerCliRuntimeOptions,
 ): Promise<number> {
+  const flags = parseServeFlags(rawArgs);
+  if (flags.patch || flags.clear) {
+    // Core 只在启动时读取监听/托管参数；对运行中的 Server 改配置却不重启会让用户以为已生效。
+    const running = await readControlStatus(layout, 500);
+    if (running && (running.state === "ready" || running.state === "starting")) {
+      throw new Error(
+        "Nex Server is already running; stop it or run `nex restart` after changing serve options",
+      );
+    }
+    if (flags.clear) await clearServeConfig(layout);
+    else if (flags.patch) {
+      await writeServeConfig(layout, { ...(await readServeConfig(layout)), ...flags.patch });
+    }
+  }
+  const args = flags.rest;
   const daemonRequested = args.includes("--daemon");
   const supervisorProcess = args.includes("--supervisor");
   if (shouldRegisterService(daemonRequested, supervisorProcess)) {
@@ -420,7 +484,11 @@ async function runServe(
     }
     // 回退原因只属于本次启动结果，不写入 status.json。
     if (json) stdout(io, serviceFallbackReason ? { ...started, serviceFallbackReason } : started);
-    else stdout(io, `Nex Server ${started.state} at ${started.host ?? ""}:${started.port ?? ""}`);
+    else {
+      stdout(io, `Nex Server ${started.state} at ${started.host ?? ""}:${started.port ?? ""}`);
+      const access = describeServeAccess(started, (await resolveServeOptions(layout)).webRoot);
+      if (access) stdout(io, access);
+    }
     process.stdin.pause();
     process.stdin.destroy();
     return 0;
@@ -495,7 +563,11 @@ async function runServe(
     throw error;
   }
   if (json) stdout(io, status);
-  else stdout(io, `Nex Server ${status.state} at ${status.host ?? ""}:${status.port ?? ""}`);
+  else {
+    stdout(io, `Nex Server ${status.state} at ${status.host ?? ""}:${status.port ?? ""}`);
+    const access = describeServeAccess(status, (await resolveServeOptions(layout)).webRoot);
+    if (access) stdout(io, access);
+  }
   await new Promise<void>((resolve) => {
     foregroundStopped = resolve;
     if (!daemon) {

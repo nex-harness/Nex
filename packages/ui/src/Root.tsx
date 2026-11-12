@@ -138,12 +138,10 @@ export function Root(props: RootProps) {
           services={props.services}
           composerClientNamespace={props.composerClientNamespace}
           terminalOwnerId={props.terminalOwnerId}
+          directServerConnection={props.directServerConnection}
         >
           <PlatformProvider platform={props.platform}>
-            <StoreProvider
-              broadcastService={props.services.broadcastService}
-              initialIsRestoringOAuthSession
-            >
+            <StoreProvider broadcastService={props.services.broadcastService}>
               <TabStoreProvider>
                 <ProjectDirectoryProvider isDesktop={props.isDesktop}>
                   <DiffsWorkerPoolProvider>
@@ -639,7 +637,10 @@ function RootInner({
         .getWorkspaceState(workspacePath, workspaceIdentity).activeTaskId;
       if (!isDesktop || !restoreSelection || !selectedTask) {
         if (projectId !== undefined)
-          logger.info("[Root] 按原项目初始化远程草稿", { workspaceIdentity, projectId });
+          logger.info("[Root] 按原项目初始化远程草稿", {
+            workspaceIdentity,
+            projectId,
+          });
         startDraftInWorkspace(workspacePath, workspaceIdentity, { projectId });
       }
     },
@@ -956,8 +957,7 @@ function RootInner({
   );
 
   const canEnterNativeThemeSyncSurface = Boolean(
-    !isStartupRenderBlocked &&
-    (workspaceShellPath || isSettingsTabActive),
+    !isStartupRenderBlocked && (workspaceShellPath || isSettingsTabActive),
   );
 
   useEffect(() => {
@@ -1179,7 +1179,10 @@ function RootInner({
     // 改选新连接只清除原项目恢复意图；从设置进入仍须独立完成设备管理。
     setRemoteConnectionOpenPreference((current) =>
       current?.completion === "device-management"
-        ? { completion: "device-management", returnTarget: current.returnTarget }
+        ? {
+            completion: "device-management",
+            returnTarget: current.returnTarget,
+          }
         : null,
     );
   }, []);

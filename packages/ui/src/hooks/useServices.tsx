@@ -9,6 +9,11 @@ import type { IServiceAccessor } from "@nex/services";
 const ServiceContext = createContext<IServiceAccessor | null>(null);
 const ComposerClientNamespaceContext = createContext("desktop");
 const TerminalOwnerContext = createContext<string | undefined>(undefined);
+const DirectServerConnectionContext = createContext(false);
+
+export function useIsDirectServerConnection(): boolean {
+  return useContext(DirectServerConnectionContext);
+}
 
 export function useTerminalOwnerId(): string | undefined {
   return useContext(TerminalOwnerContext);
@@ -24,18 +29,28 @@ export function ServiceProvider({
   children,
   composerClientNamespace,
   terminalOwnerId,
+  directServerConnection,
 }: {
   services: IServiceAccessor;
   children: ReactNode;
   composerClientNamespace?: string;
   terminalOwnerId?: string;
+  /** 此 accessor 已直连目标 Core；workspaceIdentity 不再代表缺失的桌面 attachment。 */
+  directServerConnection?: boolean;
 }) {
   const inheritedNamespace = useComposerClientNamespace();
   const inheritedTerminalOwner = useTerminalOwnerId();
+  const inheritedDirectServerConnection = useIsDirectServerConnection();
   return (
     <ComposerClientNamespaceContext.Provider value={composerClientNamespace ?? inheritedNamespace}>
       <TerminalOwnerContext.Provider value={terminalOwnerId ?? inheritedTerminalOwner}>
-        <ServiceContext.Provider value={services}>{children}</ServiceContext.Provider>
+        <ServiceContext.Provider value={services}>
+          <DirectServerConnectionContext.Provider
+            value={directServerConnection ?? inheritedDirectServerConnection}
+          >
+            {children}
+          </DirectServerConnectionContext.Provider>
+        </ServiceContext.Provider>
       </TerminalOwnerContext.Provider>
     </ComposerClientNamespaceContext.Provider>
   );

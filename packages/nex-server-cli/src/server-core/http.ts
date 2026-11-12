@@ -4,7 +4,7 @@ import { hostname } from "node:os";
 import { resolveServerOsUser } from "@nex/shared/node";
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { WebSocket } from "ws";
 import type { WebSocketServer } from "ws";
 import {
@@ -24,6 +24,7 @@ import {
   IProviderProvisioningTargetService,
   INexAgentService,
   IConversationShareService,
+  IProjectService,
   ServiceCollection,
 } from "@nex/services";
 import {
@@ -36,12 +37,16 @@ import {
   SERVER_REMOTE_PROTOCOL_VERSION,
   TOPIC_RESOURCE_RELAY_CHANNEL,
   serverRemoteInfoOutputSchema,
+  buildServerRemoteWorkspaceIdentity,
   NEX_COMPATIBILITY_MANIFEST,
   NEX_RPC_HOST_CAPABILITY_HEADER,
   NEX_VERSION,
   type ServerRemoteInfo,
 } from "@nex/shared";
 import { createHostCapabilityStore, type HostCapabilityStore } from "./hostCapability.js";
+import { isLoopbackHost } from "./serveConfig.js";
+import { createStaticWebHandler } from "./staticWeb.js";
+import { createWebAuth } from "./webAuth.js";
 
 export interface CoreHttpServer {
   host: string;
@@ -67,11 +72,6 @@ async function closeWebSocketServer(wss: WebSocketServer): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     wss.close((error?: Error) => (error ? reject(error) : resolve()));
   });
-}
-
-function isLoopbackHost(host: string): boolean {
-  const normalized = host.trim().toLowerCase();
-  return normalized === "127.0.0.1" || normalized === "::1" || normalized === "localhost";
 }
 
 function wrapWebSocket(ws: WebSocket): ISocket {
@@ -206,24 +206,66 @@ export async function createCoreHttpServer(
     hostCapabilityStore?: HostCapabilityStore;
     workspaceIdentityMapper?: SourceServerWorkspaceIdentityMapper;
     topicResourcePeers?: TopicResourcePeers;
+    /** 浏览器登录（docs/specs/server-web-login.md）；缺省时保持仅 ingress token 的旧行为。 */
+    webLogin?: { token: string; sessionsFilePath: string };
+    /** 已校验含 index.html 的 Web UI 构建目录；提供时必须同时提供 webLogin。 */
+    webRoot?: string;
   } = {},
 ): Promise<CoreHttpServer> {
   const app = new Hono();
-  const { injectWebSocket, upgradeWebSocket, wss } = createNodeWebSocket({ app });
+  const { injectWebSocket, upgradeWebSocket, wss } = createNodeWebSocket({
+    app,
+  });
   const host = options.host ?? "127.0.0.1";
-  if (!isLoopbackHost(host)) {
-    // R2 当前只有本机/SSH 隧道入口，Core 尚未接入 token middleware；对外监听必须 fail-closed。
+  if (!isLoopbackHost(host) && !options.webLogin) {
+    // 对外监听必须有浏览器登录；ingress token 只适合本机/SSH 隧道/可信反代这类程序化入口。
     throw new Error(
       `Non-loopback host ${host} requires authentication before the server can listen`,
     );
   }
+  if (options.webRoot && !options.webLogin) {
+    throw new Error("Hosting the web UI requires web login to be enabled");
+  }
   const ingressToken = options.ingressToken?.trim();
+  const serverId = options.serverId ?? hostname() ?? "nex-server";
+  const projects = await services.get(IProjectService).readProjects();
+  const projectWorkspaces = projects
+    .filter((project) => !project.deleted)
+    .map((project) => {
+      const path =
+        project.roots.find((root) => root.isPrimary)?.rootPath ?? project.roots[0]?.rootPath;
+      if (!path) return undefined;
+      return {
+        path,
+        label: project.name,
+        workspaceIdentity: buildServerRemoteWorkspaceIdentity({
+          serverId,
+          workspacePath: path,
+        }),
+      };
+    })
+    .filter((workspace) => workspace !== undefined);
+  // Bug 原因：Core 自 R2 起固定返回空 workspaces；升级已经恢复的项目明明在 SQLite 中，
+  // Web 却没有初始目录，Root 又未允许兜底创建，最终整页空白。这里复用项目服务声明可打开目录；
+  // 不把它们反向导入桌面 settings，避免历史任务恢复出的项目复活已移除的入口。
+  const fallbackPath = process.env.NEX_SERVER_WORKSPACE?.trim() || process.cwd();
+  const workspaces = projectWorkspaces.length
+    ? projectWorkspaces
+    : [
+        {
+          path: fallbackPath,
+          workspaceIdentity: buildServerRemoteWorkspaceIdentity({
+            serverId,
+            workspacePath: fallbackPath,
+          }),
+        },
+      ];
   const info: ServerRemoteInfo = serverRemoteInfoOutputSchema.parse({
-    serverId: options.serverId ?? hostname() ?? "nex-server",
+    serverId,
     version: NEX_VERSION,
     protocolVersion: SERVER_REMOTE_PROTOCOL_VERSION,
     authRequired: Boolean(ingressToken),
-    workspaces: [],
+    workspaces,
     compatibility: NEX_COMPATIBILITY_MANIFEST,
     migration: { failedPathCount: options.migrationFailedPathCount ?? 0 },
     identity: { osUser: resolveServerOsUser(), hostname: hostname() },
@@ -238,38 +280,50 @@ export async function createCoreHttpServer(
   // 裸 Set 无法落实 expiresAt，未消费的 capability 会一直有效并持续累积。
   // 使用与 packages/server 兼容的 TTL 一次性 store，使有效期和消费语义与返回信息一致。
   const capabilities = options.hostCapabilityStore ?? createHostCapabilityStore();
-  app.use("*", async (context, next) => {
-    if (!ingressToken) {
-      await next();
-      return;
-    }
+  const hasValidIngressToken = (context: Context): boolean => {
+    if (!ingressToken) return false;
     const authorization = context.req.header("authorization");
     const bearerToken = authorization?.startsWith("Bearer ")
       ? authorization.slice("Bearer ".length).trim()
       : undefined;
     const queryToken = new URL(context.req.url).searchParams.get("token")?.trim();
     const candidate = bearerToken || queryToken;
-    const authenticated = candidate
-      ? (() => {
-          const expected = Buffer.from(ingressToken);
-          const received = Buffer.from(candidate);
-          return expected.length === received.length && timingSafeEqual(expected, received);
-        })()
-      : false;
-    if (authenticated) {
-      await next();
-      return;
-    }
-    if (context.req.path === "/api/server-info") {
-      return context.json({
-        version: info.version,
-        protocolVersion: info.protocolVersion,
-        authRequired: true,
-        compatibility: info.compatibility,
-      });
-    }
-    return context.json({ error: "Ingress authentication required" }, 401);
+    if (!candidate) return false;
+    const expected = Buffer.from(ingressToken);
+    const received = Buffer.from(candidate);
+    return expected.length === received.length && timingSafeEqual(expected, received);
+  };
+  const unauthenticatedServerInfo = () => ({
+    version: info.version,
+    protocolVersion: info.protocolVersion,
+    authRequired: true,
+    compatibility: info.compatibility,
   });
+  const webAuth = options.webLogin
+    ? createWebAuth({
+        token: options.webLogin.token,
+        sessionsFilePath: options.webLogin.sessionsFilePath,
+        isIngressAuthenticated: hasValidIngressToken,
+        unauthenticatedServerInfo,
+        logger: { warn: (...args) => log.warn(undefined, ...args) },
+      })
+    : undefined;
+  if (webAuth) {
+    // 页面与 /api/auth/* 不鉴权；/api/*、/ws* 需要会话 Cookie 或 ingress token。
+    app.use("*", webAuth.middleware());
+    webAuth.mountRoutes(app);
+  } else {
+    app.use("*", async (context, next) => {
+      if (!ingressToken || hasValidIngressToken(context)) {
+        await next();
+        return;
+      }
+      if (context.req.path === "/api/server-info") {
+        return context.json(unauthenticatedServerInfo());
+      }
+      return context.json({ error: "Ingress authentication required" }, 401);
+    });
+  }
   app.get("/api/server-info", (context) => context.json(info));
   app.get(
     "/ws",
@@ -306,6 +360,7 @@ export async function createCoreHttpServer(
     })),
   );
   app.post("/api/rpc-host-capability", (context) => context.json(capabilities.issue()));
+  if (options.webRoot) app.get("*", createStaticWebHandler(options.webRoot));
   let resolveListening: (value: { port: number }) => void = () => undefined;
   const listening = new Promise<{ port: number }>((resolve) => {
     resolveListening = resolve;

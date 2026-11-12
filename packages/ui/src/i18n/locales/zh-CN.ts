@@ -3286,6 +3286,17 @@ const zhCN: Record<string, string> = {
   "settings.showDockIcon": "在 Dock 中显示图标",
   "settings.showDockIconDescription":
     "仅 macOS 生效。关闭后 Dock 不再显示 Nex 图标，可通过菜单栏图标打开主窗口。",
+  "webLogin.title": "登录 Nex",
+  "webLogin.description": "输入此服务器的访问令牌。",
+  "webLogin.tokenLabel": "访问令牌",
+  "webLogin.tokenPlaceholder": "粘贴访问令牌",
+  "webLogin.hint": "在服务器上运行 `nex web-token` 查看令牌。",
+  "webLogin.submit": "登录",
+  "webLogin.submitting": "登录中…",
+  "webLogin.error.invalid": "令牌无效，请检查后重试。",
+  "webLogin.error.rateLimited": "尝试次数过多，请 {seconds} 秒后再试。",
+  "webLogin.error.rateLimitedGeneric": "尝试次数过多，请一分钟后再试。",
+  "webLogin.error.network": "无法连接服务器，请重试。",
   "settings.keepAwakeWhileRunning": "保持电脑运行",
   "settings.keepAwakeWhileRunningDescription":
     "打开后阻止系统因空闲进入休眠（仍可手动睡眠/合盖休眠）。桌面端全局生效。",

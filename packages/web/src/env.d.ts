@@ -15,6 +15,7 @@ interface ImportMetaEnv {
   readonly VITE_NEX_BASE_URL?: string;
   readonly VITE_NEX_ENDPOINT_ORIGIN?: string;
   readonly VITE_NEX_WEB_REMOTE_CONTROL_RELAY_WS_URL?: string;
+  readonly VITE_NEX_E2E_STORE_BRIDGE?: string;
 }
 
 interface ImportMeta {

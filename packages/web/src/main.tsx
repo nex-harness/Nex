@@ -33,6 +33,14 @@ import {
   ConversationShareLandingStatus,
 } from "./share/ConversationShareLandingPage.js";
 import { INERT_WEB_AUTH_PORT } from "./web-remote-control/webAuthPort.js";
+import { WebLoginPage } from "./WebLoginPage.js";
+import {
+  WEB_LOGIN_PATH,
+  decideWebAuthGate,
+  fetchWebAuthSession,
+  resolveWebAuthAfterDisconnect,
+  sanitizeNextPath,
+} from "./webAuthSession.js";
 import {
   ConversationSharePreviewClient,
   resolveConversationShareRouteLocale,
@@ -178,7 +186,10 @@ async function markOpenedWebRemoteControlBridgeTaskRead({
 
 function resolveWebThemePreference(defaultTheme: Theme = WEB_REMOTE_CONTROL_DEFAULT_THEME): Theme {
   const saved = localStorage.getItem("nex-theme");
-  return resolveWebRemoteControlInitialTheme({ storedTheme: saved, defaultTheme });
+  return resolveWebRemoteControlInitialTheme({
+    storedTheme: saved,
+    defaultTheme,
+  });
 }
 
 // 初始化主题：默认 Zai dark，后续由 useTheme hook 接管
@@ -303,7 +314,9 @@ async function renderConversationSharePage(): Promise<void> {
     ? new (
         await import("./share/mockConversationSharePreviewClient.js")
       ).MockConversationSharePreviewClient()
-    : new ConversationSharePreviewClient({ baseUrl: `${endpointOrigin}/api/v1` });
+    : new ConversationSharePreviewClient({
+        baseUrl: `${endpointOrigin}/api/v1`,
+      });
   const getMockToken = () =>
     mockMode && window.sessionStorage.getItem("nex:share:mock-auth") === "owner"
       ? "mock-owner-token"
@@ -337,8 +350,22 @@ const webRemoteControlStorage: Pick<Storage, "getItem" | "setItem"> = {
   setItem: (key, value) => window.localStorage.setItem(key, value),
 };
 
+const webRemoteControlAuth = (() => {
+  if (import.meta.env.VITE_NEX_E2E_STORE_BRIDGE !== "1") return INERT_WEB_AUTH_PORT;
+  const relayOrigin = new URL(window.location.origin);
+  if (!["127.0.0.1", "localhost", "::1"].includes(relayOrigin.hostname)) return INERT_WEB_AUTH_PORT;
+  // 隔离验收允许显式注入受控 Relay 凭据；生产与跨域 Relay 不读取 localStorage。
+  const token = window.localStorage.getItem("nexjwttoken")?.trim() || null;
+  if (!token) return INERT_WEB_AUTH_PORT;
+  return {
+    ...INERT_WEB_AUTH_PORT,
+    getNexJwtToken: () => token,
+    getActiveAccount: () => ({ provider: "zai" as const, displayName: "Nex E2E" }),
+  };
+})();
+
 const remoteEntry = new WebRemoteControlEntry({
-  auth: INERT_WEB_AUTH_PORT,
+  auth: webRemoteControlAuth,
   getHref: () => window.location.href,
   replaceHref: (href) => window.history.replaceState(window.history.state, "", href),
   storage: webRemoteControlStorage,
@@ -412,6 +439,7 @@ async function resolveWebBootstrap(): Promise<WebBootstrapResult> {
       ...(workspace?.workspaceIdentity
         ? { initialWorkspaceIdentity: workspace.workspaceIdentity }
         : {}),
+      allowOpenWorkspace: true,
     };
   } catch {
     return { wsUrl };
@@ -677,7 +705,10 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
     skillsService: createEmptyHomeOnlyService<RootServices["skillsService"]>({
       list: async () => ({
         skills: [],
-        capability: { userScopeAvailable: false, userScopeReason: "desktop_only" },
+        capability: {
+          userScopeAvailable: false,
+          userScopeReason: "desktop_only",
+        },
         diagnostics: [],
       }),
       buildPromptContext: async ({ prompt }: { prompt: string }) => ({
@@ -711,7 +742,10 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
         commands: [],
         userCommands: [],
         pluginCommands: [],
-        capability: { userScopeAvailable: false, userScopeReason: "desktop_only" },
+        capability: {
+          userScopeAvailable: false,
+          userScopeReason: "desktop_only",
+        },
       }),
       setCommandEnabled: async () => undefined,
     }),
@@ -737,7 +771,9 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
 }
 
 function resolveExternalRelayWsUrl(): string {
-  return resolveWebRemoteControlRelayWsUrl({ endpointOrigin: window.location.origin });
+  return resolveWebRemoteControlRelayWsUrl({
+    endpointOrigin: window.location.origin,
+  });
 }
 
 function isZhLocale(): boolean {
@@ -1189,7 +1225,10 @@ async function bootstrapExternalRelayWebRemoteControl(
     onSendReady: () => {
       if (versionGuard.isBlocked()) return;
       taskViewPublisher.flush();
-      replayWebRemoteControlWorkspaceBridgeFrames({ activeRelayProtocol, pendingRelayProtocol });
+      replayWebRemoteControlWorkspaceBridgeFrames({
+        activeRelayProtocol,
+        pendingRelayProtocol,
+      });
     },
     reloadPage: () => {
       window.location.reload();
@@ -1233,11 +1272,11 @@ async function bootstrapExternalRelayWebRemoteControl(
       }
       return result;
     };
-    const request = requestWithRelayRecovery(readCurrentVersion, { recoverTimeout: true }).finally(
-      () => {
-        if (pendingVersionCheck === request) pendingVersionCheck = undefined;
-      },
-    );
+    const request = requestWithRelayRecovery(readCurrentVersion, {
+      recoverTimeout: true,
+    }).finally(() => {
+      if (pendingVersionCheck === request) pendingVersionCheck = undefined;
+    });
     pendingVersionCheck = request;
     return request;
   };
@@ -1382,10 +1421,7 @@ async function bootstrapExternalRelayWebRemoteControl(
         },
         (
           payload,
-        ): payload is Extract<
-          WebRemoteControlAppPayload,
-          { nex_type: "workspace-bridge-ready" }
-        > =>
+        ): payload is Extract<WebRemoteControlAppPayload, { nex_type: "workspace-bridge-ready" }> =>
           payload.nex_type === "workspace-bridge-ready" &&
           payload.bridgeSessionId === bridgeSessionId,
       ),
@@ -1567,7 +1603,10 @@ async function bootstrapExternalRelayWebRemoteControl(
         projectId,
         ...(request.hostId ? { hostId: request.hostId } : {}),
         ...(pendingDraft
-          ? { draftId: pendingDraft.draftId, reuseDraft: Boolean(pendingDraft.workspacePath) }
+          ? {
+              draftId: pendingDraft.draftId,
+              reuseDraft: Boolean(pendingDraft.workspacePath),
+            }
           : {}),
       },
     });
@@ -1703,8 +1742,38 @@ async function bootstrapExternalRelayWebRemoteControl(
     },
   });
   window.addEventListener("beforeunload", disposeConnection, { once: true });
-  connection.signal.addEventListener("abort", disposeConnection, { once: true });
+  connection.signal.addEventListener("abort", disposeConnection, {
+    once: true,
+  });
   transport.start();
+}
+
+/**
+ * 登录门禁（docs/specs/server-web-login.md）：服务器启用了浏览器登录且当前没有有效会话时整页跳到登录页。
+ * 返回 true 表示已发起跳转，调用方应停止后续启动。
+ */
+async function redirectToLoginIfUnauthenticated(): Promise<boolean> {
+  const gate = decideWebAuthGate(await fetchWebAuthSession(), window.location);
+  if (gate.kind !== "redirect") return false;
+  window.location.replace(gate.to);
+  return true;
+}
+
+async function renderWebLoginPage(): Promise<void> {
+  const session = await fetchWebAuthSession();
+  const next = sanitizeNextPath(new URLSearchParams(window.location.search).get("next"));
+  if (!session || !session.authRequired || session.authenticated) {
+    window.location.replace(next);
+    return;
+  }
+  document.title = "Nex - Sign in";
+  root.render(
+    <AppErrorBoundary>
+      <NexIntlProvider>
+        <WebLoginPage nextPath={next} />
+      </NexIntlProvider>
+    </AppErrorBoundary>,
+  );
 }
 
 async function bootstrapWebApp() {
@@ -1718,6 +1787,15 @@ async function bootstrapWebApp() {
 
   if (isWebRemoteControlRoute()) {
     await remoteEntry.start();
+    return;
+  }
+
+  if (window.location.pathname === WEB_LOGIN_PATH) {
+    await renderWebLoginPage();
+    return;
+  }
+
+  if (await redirectToLoginIfUnauthenticated()) {
     return;
   }
 
@@ -1737,8 +1815,22 @@ async function bootstrapWebApp() {
   }
 
   try {
+    let socketOpened = false;
     const services = await connectViaWebSocket(bootstrap.wsUrl, {
-      onClose: () => {},
+      onOpenSocket: () => {
+        socketOpened = true;
+      },
+      // 会话在应用运行中失效（过期、服务端 token 轮换）时回登录页。
+      // 只有服务端明确报告未登录才跳转，普通断线沿用原有处理，不把网络抖动当成登出；
+      // 启动阶段连接失败（socket 从未打开）由下面的 catch 处理。
+      onClose: () => {
+        if (!socketOpened) return;
+        socketOpened = false;
+        void resolveWebAuthAfterDisconnect().then((session) => {
+          const gate = decideWebAuthGate(session, window.location);
+          if (gate.kind === "redirect") window.location.replace(gate.to);
+        });
+      },
     });
     const platform = createWebPlatform();
     document.title = "Nex - Web + Server";
@@ -1752,6 +1844,7 @@ async function bootstrapWebApp() {
           <Root
             services={services}
             platform={platform}
+            directServerConnection
             initialWorkspaceAbsPath={bootstrap.initialWorkspaceAbsPath}
             initialWorkspaceIdentity={bootstrap.initialWorkspaceIdentity}
             initialTaskId={bootstrap.initialTaskId}
@@ -1765,6 +1858,8 @@ async function bootstrapWebApp() {
       </AppErrorBoundary>,
     );
   } catch (error) {
+    // 连接在握手前被拒（401）时同样回到登录页，而不是停在通用启动失败页。
+    if (await redirectToLoginIfUnauthenticated()) return;
     renderWebRemoteControlFailure(
       error && typeof error === "object" && "reason" in error
         ? (error as WebRemoteControlFailure)

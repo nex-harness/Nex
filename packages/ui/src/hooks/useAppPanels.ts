@@ -280,15 +280,6 @@ export function useAppPanels(options: {
     [],
   );
 
-  const revealSidePaneForCurrentOwner = useCallback(() => {
-    setIsSidePaneCollapsed(false);
-    saveTaskSidePaneCollapsedPreference(
-      activeSidePaneMemoryKeyRef.current,
-      sidePaneOwnerIdRef.current,
-      false,
-    );
-  }, []);
-
   const commitSidePaneState = useCallback(
     (updater: (current: WorkspaceSidePaneState | null) => WorkspaceSidePaneState | null) => {
       if (!mountedRef.current) return latestSidePaneMemoryRef.current.sidePaneState;
@@ -316,6 +307,18 @@ export function useAppPanels(options: {
     },
     [currentSidePaneScope],
   );
+
+  const revealSidePaneForCurrentOwner = useCallback(() => {
+    setIsSidePaneCollapsed(false);
+    saveTaskSidePaneCollapsedPreference(
+      activeSidePaneMemoryKeyRef.current,
+      sidePaneOwnerIdRef.current,
+      false,
+    );
+    // Bug 原因：首次打开/远控恢复时 sidePaneState 可能为 null，单纯展开不会创建 new-tab，
+    // 导致右侧 launcher 永远为空。仅在显式展开时补建，末标签关闭仍由 commit 收起。
+    commitSidePaneState((current) => ensureSidePaneTab(current, currentSidePaneScope()));
+  }, [commitSidePaneState, currentSidePaneScope]);
 
   const commitOpenedSidePaneState = useCallback(
     (updater: (current: WorkspaceSidePaneState | null) => WorkspaceSidePaneState | null) => {

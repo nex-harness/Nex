@@ -1,7 +1,11 @@
 import type { IServiceAccessor } from "@nex/services";
 import { Event, ProxyChannel, type IChannel } from "@nex/rpc";
 import { useMemo } from "react";
-import { useOptionalServices, useServices } from "@/hooks/useServices.js";
+import {
+  useOptionalServices,
+  useServices,
+  useIsDirectServerConnection,
+} from "@/hooks/useServices.js";
 import {
   useRemoteWorkspaceSessionStore,
   type RemoteWorkspaceSession,
@@ -57,14 +61,18 @@ export function resolveWorkspaceServicesForTarget(params: {
   baseServices: IServiceAccessor | null;
   sessionsById: Record<string, Pick<RemoteWorkspaceSession, "services">>;
   isRemoteTarget: boolean;
+  /** 普通 Web 的 accessor 已连接目标 Core，不需要 desktop attachment。 */
+  directServerConnection?: boolean;
   /** 无 workspace 的设置 user/server scope 可显式指定 SourceSettingsAttachment。 */
   unscopedServices?: IServiceAccessor;
 }): IServiceAccessor {
   const resolvedServices = params.resolvedRemoteSessionId
     ? (params.sessionsById[params.resolvedRemoteSessionId]?.services ?? null)
-    : params.isRemoteTarget
-      ? getDisconnectedRemoteServices()
-      : (params.unscopedServices ?? params.baseServices);
+    : params.directServerConnection
+      ? (params.unscopedServices ?? params.baseServices ?? params.currentContextServices)
+      : params.isRemoteTarget
+        ? getDisconnectedRemoteServices()
+        : (params.unscopedServices ?? params.baseServices);
 
   if (params.isRemoteTarget && !resolvedServices) {
     return getDisconnectedRemoteServices();
@@ -187,6 +195,7 @@ export function useWorkspaceServicesResolution(
   );
   const isRemoteTarget = options?.forceUnscoped ? false : inferredRemoteTarget;
   const effectiveRemoteSessionId = options?.forceUnscoped ? null : resolvedRemoteSessionId;
+  const directServerConnection = useIsDirectServerConnection();
   const resolvedServices = useRemoteWorkspaceSessionStore((state) =>
     resolveWorkspaceServicesForTarget({
       currentContextServices,
@@ -194,11 +203,12 @@ export function useWorkspaceServicesResolution(
       baseServices: state.baseServices,
       sessionsById: state.sessionsById,
       isRemoteTarget,
+      directServerConnection,
       unscopedServices: options?.unscopedServices,
     }),
   );
   const connectionKind = isRemoteTarget
-    ? effectiveRemoteSessionId
+    ? effectiveRemoteSessionId || directServerConnection
       ? "remote-ready"
       : "remote-waiting"
     : "local-ready";

@@ -31,11 +31,30 @@ export function projectWorkspaceSettings(
         .flatMap((project) => project.roots.map((root) => root.rootPath)),
     ),
   ];
-  const lastWorkspaceSession: PersistedWorkspaceSessionEntry[] = localPaths.map(
-    (workspacePath) => ({ kind: "local", workspacePath, workspacePurpose: "project" }),
-  );
+  const localPathSet = new Set(localPaths);
+  const lastWorkspaceSession: PersistedWorkspaceSessionEntry[] = [
+    // Bug 原因：项目表迁移后，整块替换 lastWorkspaceSession 会丢掉 1.x 保留的 tab 顺序；
+    // 已删除项目又会被过滤旧值的操作重新带回。只保留仍被项目树覆盖的旧条目，再追加新根。
+    ...(settings.lastWorkspaceSession ?? []).filter(
+      (entry) => entry.kind === "local" && localPathSet.has(entry.workspacePath),
+    ),
+    ...localPaths
+      .filter(
+        (workspacePath) =>
+          !settings.lastWorkspaceSession?.some(
+            (entry) => entry.kind === "local" && entry.workspacePath === workspacePath,
+          ),
+      )
+      .map(
+        (workspacePath): PersistedWorkspaceSessionEntry => ({
+          kind: "local",
+          workspacePath,
+          workspacePurpose: "project",
+        }),
+      ),
+  ];
   const hosts = new Map(directory.hosts.map((host) => [host.id, host]));
-  const identityOrder = [...localPaths];
+  const identityOrder = lastWorkspaceSession.map(key);
   const seen = new Set<string>();
   for (const entry of directory.entries) {
     const host = hosts.get(entry.hostId);

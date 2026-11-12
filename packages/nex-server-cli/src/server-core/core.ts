@@ -4,6 +4,7 @@ import {
   disposeServiceResourcesAndWait,
   materializeNexBuiltinProviderConfig,
   getAppConfigDir,
+  setDataBaseDir,
   NEX_BUILTIN_PROVIDER_CONFIG_FILE_ENV,
   createTopicResourcePeers,
 } from "@nex/services/node";
@@ -11,6 +12,9 @@ import { INexAgentService } from "@nex/services";
 import { NEX_APP_VERSION_ENV, NEX_VERSION } from "@nex/shared";
 import { createCoreHttpServer } from "./http.js";
 import { createIngressToken } from "./ingressToken.js";
+import { resolveServeOptions } from "./serveConfig.js";
+import { assertWebRoot } from "./staticWeb.js";
+import { resolveWebAccessToken } from "./webAccessToken.js";
 import { installParentDisconnectHandler } from "./parentDisconnect.js";
 import { resolveCoreServerId } from "./serverIdentity.js";
 import { createTaskActivityTracker } from "./taskActivityTracker.js";
@@ -33,6 +37,12 @@ export async function runServerCore(generation: number): Promise<void> {
     else parentDisconnected = true;
   });
   const layout = resolveServerLayout(process.env.NEX_SERVER_ROOT?.trim());
+  // Bug 原因：自定义 --server-root 是安装目录，不等于应用数据 base；server layout 为隔离
+  // 会把 dataBaseDir 设为 serverRoot。若 Core 再写回 env，task DB 会被读成 <root>/.nex/v2，
+  // 与 Supervisor 传入的真实应用数据根分裂。只采用 Supervisor 已确认的 base，不从安装目录猜测。
+  const dataBaseDir = process.env.NEX_DATA_BASE_DIR?.trim() || layout.dataBaseDir;
+  setDataBaseDir(dataBaseDir);
+  process.env.NEX_DATA_BASE_DIR = dataBaseDir;
   const topicResourcePeers = createTopicResourcePeers();
   const explicitNexBuiltinProviderConfigFilePath =
     process.env[NEX_BUILTIN_PROVIDER_CONFIG_FILE_ENV]?.trim();
@@ -58,11 +68,22 @@ export async function runServerCore(generation: number): Promise<void> {
       sourceServerId,
       nexBuiltinProviderConfigFilePath,
       providerProvisioningTargetEnabled: true,
-    topicResourceRelayChannel: (request) => topicResourcePeers.getChannel(request),
+      topicResourceRelayChannel: (request) => topicResourcePeers.getChannel(request),
     });
   const taskActivityTracker = createTaskActivityTracker(services.getOptional(INexAgentService));
   const ingressToken = await createIngressToken(layout);
+  // 监听/托管参数来自 serve-config.json 与环境变量（docs/specs/server-web-login.md）；
+  // 不带任何参数时保持回环 + 动态端口 + 仅 ingress token 的原行为。
+  const serveOptions = await resolveServeOptions(layout);
+  const webLogin = serveOptions.webLoginEnabled
+    ? { token: (await resolveWebAccessToken(layout)).token, sessionsFilePath: layout.webSessionsFile }
+    : undefined;
+  const webRoot = serveOptions.webRoot ? await assertWebRoot(serveOptions.webRoot) : undefined;
   const http = await createCoreHttpServer(services, {
+    ...(serveOptions.host ? { host: serveOptions.host } : {}),
+    ...(serveOptions.port !== undefined ? { port: serveOptions.port } : {}),
+    ...(webLogin ? { webLogin } : {}),
+    ...(webRoot ? { webRoot } : {}),
     serverId: sourceServerId,
     ingressToken,
     migrationFailedPathCount,

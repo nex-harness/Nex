@@ -7,6 +7,7 @@
  * 所以这里在反代时注入 Authorization —— 与 docker/nginx.conf 的分工一致。
  *
  * 用法：node scripts/serve-web-ui.mjs --web <dist> --core <host:port> --token-file <path> --port 5175
+ * 共享桌面远控时可加 --relay <host:port>，将 /api/v1/remote 转发到同一 Relay。
  */
 import { createServer } from "node:http";
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
@@ -22,11 +23,14 @@ const argOf = (name) => {
 
 const webRoot = resolve(argOf("--web") ?? "packages/web/dist");
 const coreTarget = argOf("--core") ?? "127.0.0.1:65000";
+const relayTarget = argOf("--relay");
 const tokenFile = argOf("--token-file");
 const port = Number(argOf("--port") ?? 5175);
 
 const [coreHost, corePortRaw] = coreTarget.split(":");
 const corePort = Number(corePortRaw);
+const [relayHost, relayPortRaw] = relayTarget?.split(":") ?? [];
+const relayPort = Number(relayPortRaw);
 
 const readToken = () => {
   if (!tokenFile) return undefined;
@@ -72,6 +76,24 @@ const server = createServer((req, res) => {
   const url = req.url ?? "/";
   const isApi = url.startsWith("/api/") || url === "/api";
   const isWs = url.startsWith("/ws");
+  const isRelay = relayTarget && url.startsWith("/api/v1/remote/");
+
+  if (isRelay) {
+    const headers = { ...req.headers, host: `${relayHost}:${relayPort}` };
+    const upstream = httpRequest(
+      { host: relayHost, port: relayPort, path: url, method: req.method, headers },
+      (up) => {
+        res.writeHead(up.statusCode ?? 502, up.headers);
+        up.pipe(res);
+      },
+    );
+    upstream.on("error", (error) => {
+      res.writeHead(502, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: `relay upstream failed: ${error.message}` }));
+    });
+    req.pipe(upstream);
+    return;
+  }
 
   if (isApi) {
     const token = readToken();
@@ -122,14 +144,18 @@ const server = createServer((req, res) => {
 
 server.on("upgrade", (req, socket, head) => {
   const url = req.url ?? "/";
-  if (!url.startsWith("/ws")) {
+  const isRelay = relayTarget && url.startsWith("/api/v1/remote/ws2");
+  if (!url.startsWith("/ws") && !isRelay) {
     socket.destroy();
     return;
   }
-  const token = readToken();
-  const upstream = new WebSocket(`ws://${coreHost}:${corePort}${url}`, {
-    headers: token ? { authorization: `Bearer ${token}` } : {},
-  });
+  const token = isRelay ? undefined : readToken();
+  const upstream = new WebSocket(
+    isRelay ? `ws://${relayHost}:${relayPort}${url}` : `ws://${coreHost}:${corePort}${url}`,
+    {
+      headers: token ? { authorization: `Bearer ${token}` } : {},
+    },
+  );
 
   // 浏览器侧：用 ws 完成握手，再把它的原始 socket 与上游对接。
   wss.handleUpgrade(req, socket, head, (client) => {

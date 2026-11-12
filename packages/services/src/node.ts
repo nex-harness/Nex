@@ -293,10 +293,7 @@ export {
   isValidCronExpr,
 } from "./session/automationCron.js";
 
-import {
-  buildServerRemoteWorkspaceIdentity,
-  remoteHostIdFromWorkspaceIdentity,
-} from "@nex/shared";
+import { buildServerRemoteWorkspaceIdentity, remoteHostIdFromWorkspaceIdentity } from "@nex/shared";
 import { SourceServerWorkspaceAliasRepo } from "./session/sourceServerWorkspaceAliasRepo.js";
 import { SourceServerWorkspaceIdentityMapper } from "./source-server-workspace/sourceServerWorkspaceIdentityChannelServer.js";
 import { ServiceCollection } from "./collection.js";
@@ -579,7 +576,10 @@ interface ManagedCuaHelperHostDispose {
 // 的 WeakMap 侧表登记，dispose 时统一终止（best-effort，不阻断其它资源回收）。
 const managedCuaHelperHosts = new WeakMap<ServiceCollection, ManagedCuaHelperHostDispose>();
 const providerRuntimes = new WeakMap<ServiceCollection, ProviderRuntime>();
-export type { ProviderProvisioningSource, ProviderProvisioningSourceOptions } from "./model-provider/providerProvisioningSource.js";
+export type {
+  ProviderProvisioningSource,
+  ProviderProvisioningSourceOptions,
+} from "./model-provider/providerProvisioningSource.js";
 
 const providerProvisioningSources = new WeakMap<ServiceCollection, ProviderProvisioningSource>();
 const providerProvisioningTriggerDisposers = new WeakMap<
@@ -1242,7 +1242,9 @@ export function createLocalServices(options: {
           return false;
         }
         const hasRow = await hasAnyAgentSessionRow(sessionDbPath);
-        onboardingEvidenceLogger.debug("onboarding 会话证据源已查询", { hasRow });
+        onboardingEvidenceLogger.debug("onboarding 会话证据源已查询", {
+          hasRow,
+        });
         return hasRow;
       },
       resolveLegacyTaskSessionsDir: () => join(resolveAppConfigDir(), "sessions"),
@@ -1272,7 +1274,9 @@ export function createLocalServices(options: {
         }),
     },
     onNexBuiltinRefreshError: (error) => {
-      providerConfigLog.warn(undefined, "Nex Built-in Config 远端刷新失败", { error });
+      providerConfigLog.warn(undefined, "Nex Built-in Config 远端刷新失败", {
+        error,
+      });
     },
     onPersonalConfigRecovery: (event) => {
       providerConfigLog.warn(
@@ -1318,9 +1322,7 @@ export function createLocalServices(options: {
       }
     }),
   ];
-  let providerConnectivityAgentService:
-    | Pick<INexAgentService, "testModelConnectivity">
-    | undefined;
+  let providerConnectivityAgentService: Pick<INexAgentService, "testModelConnectivity"> | undefined;
   const providerRuntime = createProviderRuntimeFromConfigRuntime({
     configRuntime: providerConfigRuntime,
     modelSelectionConfiguredDefaultSource,
@@ -1477,7 +1479,9 @@ export function createLocalServices(options: {
             if (buffer.includes("\n")) {
               try {
                 const nl = buffer.indexOf("\n");
-                const reply = JSON.parse(buffer.slice(0, nl)) as { ok?: boolean };
+                const reply = JSON.parse(buffer.slice(0, nl)) as {
+                  ok?: boolean;
+                };
                 finish(reply.ok === true ? socketPath : null);
               } catch {
                 finish(null);
@@ -1553,7 +1557,10 @@ export function createLocalServices(options: {
       exitLogPath: `${socketPath}.settings.exit.log`,
       ghostCursorOverlay: true,
       ...(isCuaLocalDevelopmentRuntime(process.env)
-        ? { allowUnsignedLauncherLocalDev: true, allowExternalBrokerClientLocalDev: true }
+        ? {
+            allowUnsignedLauncherLocalDev: true,
+            allowExternalBrokerClientLocalDev: true,
+          }
         : {}),
     });
     try {
@@ -1885,11 +1892,17 @@ export function createLocalServices(options: {
       const hostIds = [...new Set(refs.map((task) => task.hostId))];
       const results = await Promise.all(
         hostIds.map(async (hostId) => {
-          const tree = await projectService.readTree({ hostId, includeDeletedTasks: true });
+          const tree = await projectService.readTree({
+            hostId,
+            includeDeletedTasks: true,
+          });
           const facts = new Map(
             [
               ...tree.tasks,
-              ...(tree.deletedTasks ?? []).map((task) => ({ ...task, deleted: true })),
+              ...(tree.deletedTasks ?? []).map((task) => ({
+                ...task,
+                deleted: true,
+              })),
             ].map((task) => [groupTaskKey(task), task]),
           );
           return refs
@@ -1930,11 +1943,18 @@ export function createLocalServices(options: {
         creationCommand: target.creationCommand,
         additionalDirectories: target.additionalDirectories,
       });
-      return { sessionId: prepared.taskId, additionalDirectories: prepared.additionalDirectories };
+      return {
+        sessionId: prepared.taskId,
+        additionalDirectories: prepared.additionalDirectories,
+      };
     },
     resolveSessionDirectories: async (target) =>
-      (await projectService.resolveSessionDirectories({ ...target, taskId: target.sessionId }))
-        .additionalDirectories,
+      (
+        await projectService.resolveSessionDirectories({
+          ...target,
+          taskId: target.sessionId,
+        })
+      ).additionalDirectories,
     ...(modelSelectionReadinessSource ? { modelSelectionReadinessSource } : {}),
     authorizeLocalMediaPreviewPath: options?.authorizeLocalMediaPreviewPath,
     ...offPeakToolWiring,
@@ -2317,7 +2337,10 @@ export function createLocalServices(options: {
         settingService,
         modelSelectionService: providerRuntime.modelSelection,
         remoteWorkspaceService: botRemoteWorkspaceService
-          ? { ...botRemoteWorkspaceService, resolveWorkspace: options?.resolveBotRemoteWorkspace }
+          ? {
+              ...botRemoteWorkspaceService,
+              resolveWorkspace: options?.resolveBotRemoteWorkspace,
+            }
           : undefined,
         // 远端与本地 Bot 都读取所属 Environment 的 Model Selection View。
         // 远端启动期不再轮询旧 Preset，避免重新制造一套模型候选事实。
@@ -2658,7 +2681,10 @@ export async function createServerHostServices(options: {
   providerProvisioningTargetEnabled?: boolean;
 }) {
   const projectStorageHostId = remoteHostIdFromWorkspaceIdentity(
-    buildServerRemoteWorkspaceIdentity({ serverId: options.sourceServerId, workspacePath: "/" }),
+    buildServerRemoteWorkspaceIdentity({
+      serverId: options.sourceServerId,
+      workspacePath: "/",
+    }),
   );
   if (!projectStorageHostId) throw new Error("Invalid Source Server storage identity");
   // Bug 原因：billing/balance 把 X-Device-Mid 当必填，而独立 Server 主机没有 Desktop main 写设备身份，
@@ -2675,9 +2701,18 @@ export async function createServerHostServices(options: {
   await migrateApplicationStorage(await createSettingService().get(), projectStorageHostId);
   const workspaceAliasRepo = new SourceServerWorkspaceAliasRepo();
   const workspaceIdentityMapper = new SourceServerWorkspaceIdentityMapper();
+  for (const [
+    canonicalIdentity,
+    stableIdentity,
+  ] of await workspaceAliasRepo.migrateLegacyServerHosts(options.sourceServerId)) {
+    workspaceIdentityMapper.register({ stableIdentity, canonicalIdentity });
+  }
   const sourceServerWorkspaceService = createSourceServerWorkspaceService(workspaceAliasRepo, {
     defaultWorkspaceIdentity: (workspacePath) =>
-      buildServerRemoteWorkspaceIdentity({ serverId: options.sourceServerId, workspacePath }),
+      buildServerRemoteWorkspaceIdentity({
+        serverId: options.sourceServerId,
+        workspacePath,
+      }),
     onResolved: ({ workspacePath, canonicalWorkspaceKey }) => {
       workspaceIdentityMapper.register({
         stableIdentity: buildServerRemoteWorkspaceIdentity({

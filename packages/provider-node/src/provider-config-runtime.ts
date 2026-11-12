@@ -22,27 +22,20 @@ export interface NodeProviderConfigRuntimeOptions {
   readonly nexBuiltinFilePath: string;
   readonly nexBuiltinActiveFilePath?: string;
   readonly nexBuiltinRemote?: Omit<NexBuiltinRemoteSynchronizerOptions, "source">;
-  readonly nexBuiltinEnvironment?: Omit<
-    EndpointScopedNexBuiltinSourceOptions,
-    "bundledFilePath"
-  >;
+  readonly nexBuiltinEnvironment?: Omit<EndpointScopedNexBuiltinSourceOptions, "bundledFilePath">;
   readonly onNexBuiltinRefreshError?: (error: unknown) => void;
   readonly onPersonalConfigRecovery?: (event: PersonalProviderConfigRecoveryEvent) => void;
   readonly onPersonalConfigPollingError?: (error: unknown) => void;
   readonly personalFilePath: string;
   readonly personalPollingIntervalMs?: number | false;
-  readonly importLegacy?: (
-    nexBuiltin: ProviderConfigLayerSnapshot,
-  ) => Promise<ProviderConfigLayerUpdate | null>;
+  readonly importLegacy?: () => Promise<ProviderConfigLayerUpdate | null>;
   readonly watch?: boolean;
 }
 
 /** 组装一个 Node.js 进程内共享的 Nex Built-in/Personal Config 运行边界。 */
 export class NodeProviderConfigRuntime {
   readonly configService: ProviderConfigService;
-  readonly #nexBuiltinSource:
-    | NodeNexBuiltinProviderConfigSource
-    | EndpointScopedNexBuiltinSource;
+  readonly #nexBuiltinSource: NodeNexBuiltinProviderConfigSource | EndpointScopedNexBuiltinSource;
   readonly #personalRepository: NodePersonalProviderConfigRepository;
   readonly #remoteSynchronizer?: NexBuiltinRemoteSynchronizer;
   readonly #onRemoteRefreshError?: (error: unknown) => void;
@@ -79,7 +72,8 @@ export class NodeProviderConfigRuntime {
       pollingIntervalMs: options.personalPollingIntervalMs,
       ...(options.importLegacy
         ? {
-            importLegacy: async () => options.importLegacy!(await this.#nexBuiltinSource.read()),
+            // Personal 迁移不依赖 Built-in release；二者任一不可用都必须独立保留可读配置。
+            importLegacy: options.importLegacy,
           }
         : {}),
     });

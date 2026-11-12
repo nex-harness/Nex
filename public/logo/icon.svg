@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <title>Nex</title>
+  <!-- 所有应用与安装图标的黑白矢量源；N 轮廓与应用内三笔标志一致。 -->
+  <defs>
+    <linearGradient id="nex-icon-background" x1="512" y1="120" x2="512" y2="904" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#000000" />
+      <stop offset="1" stop-color="#151515" />
+    </linearGradient>
+  </defs>
+  <path d="M296 120H730C844 120 906 181 906 291V727C906 843 848 904 731 904H294C177 904 118 844 118 728V294C118 180 179 120 296 120Z" fill="url(#nex-icon-background)" />
+  <!-- 单色拼接时轻描边覆盖原渐变笔画之间的亚像素缝隙，避免导出后出现黑线。 -->
+  <g stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round">
+  <path d="M263 356C263 333 276 337 286 343C305 355 342 402 399 469V702C399 720 392 729 376 736L290 766C271 772 263 762 263 741Z" fill="#FFFFFF" />
+  <path d="M625 528V327C625 307 632 299 649 291L728 260C750 251 763 262 763 282V645C763 671 741 659 724 638Z" fill="#FFFFFF" />
+  <path d="M263 356V316C263 282 282 262 313 262H389C406 262 415 272 429 288L722 638C741 660 763 673 763 645V707C763 741 743 763 707 763H663C645 763 636 756 623 741L306 369C282 340 264 336 263 356Z" fill="#FFFFFF" />
+  </g>
+</svg>

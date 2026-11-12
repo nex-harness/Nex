@@ -46,6 +46,8 @@ export class ProviderConfigRuntime {
       watch: options.watch,
       ...(options.readLegacyProviders
         ? {
+            // Bug 原因：旧 Personal 导入曾先读取 Built-in release；资源缺失或离线时异常被
+            // Repository 降级为空配置，用户的 Provider/模型因此未落盘。导入只依赖旧 Personal 文件。
             importLegacy: async () =>
               importLegacyPersonalProviderConfig({
                 legacyProviders: await options.readLegacyProviders!(),

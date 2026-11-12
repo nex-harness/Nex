@@ -47,7 +47,9 @@ export interface WebRemoteControlWorkspaceSwitcherApi {
   reconnectWorkspace?(workspaceKey: string): Promise<void>;
   startDraft?(
     workspaceKey: string,
-    options?: { mobileNavigationIntent?: WebRemoteControlMobileNavigationIntent },
+    options?: {
+      mobileNavigationIntent?: WebRemoteControlMobileNavigationIntent;
+    },
   ): Promise<void>;
 }
 
@@ -68,6 +70,8 @@ export interface RootProps {
   initialTaskDraft?: CreateTaskOptions;
   /** 本客户端连接目标的稳定身份，手机跨设备切换必须隔离草稿和 Recent。 */
   composerClientNamespace?: string;
+  /** 已直连 Server 的普通 Web；workspace identity 用于隔离，不触发桌面远程 attachment 等待。 */
+  directServerConnection?: boolean;
   terminalOwnerId?: string;
   /** Electron renderer 传 true，用于启用自绘标题栏 */
   isDesktop?: boolean;

@@ -10,7 +10,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Emitter } from "@nex/rpc";
 import { GEN_UI_OUTPUT_DIRECTORY, GEN_UI_OUTPUT_ROOT_ENV } from "@nex/shared/node";
-import { getAppConfigDir, getNexDataRootDir } from "#src/paths.js";
+import { getAppConfigDir, getNexDataRootDir, getDataBaseDir } from "#src/paths.js";
 import {
   parseNexProcessDiagnostic,
   NEX_AGENT_LIFECYCLE_LOG_MARKER,
@@ -391,8 +391,7 @@ function resolveBundledWorkspaceNexAgentCommand(
 ): NexAgentCommand | null {
   const distEntrypoint = findUpward("apps/nex-cli/packages/cli/dist/nex.cjs");
   if (distEntrypoint) {
-    const useBytecode =
-      process.versions.electron && process.env.NEX_DESKTOP_AGENT_BYTECODE === "1";
+    const useBytecode = process.versions.electron && process.env.NEX_DESKTOP_AGENT_BYTECODE === "1";
     const entrypoint = useBytecode
       ? join(dirname(distEntrypoint), "nex.bytecode.cjs")
       : distEntrypoint;
@@ -1199,6 +1198,12 @@ export class NexAgentProcessManager {
         ...sanitizeNexRuntimeEnv(process.env),
         [NEX_RUNTIME_ENV_KEY]: runtimeEnv,
         ...spawnEnv,
+        // Bug 原因：CLI 默认会话库按 os.homedir() 解析，不看 NEX_DATA_BASE_DIR。
+        // Core/桌面自定义数据根时若只传 base，Agent 会读写真实 home 的另一份会话。
+        // HOME 与 base 同源，配置、正文与 Host 才能共享同一 workspace owner 事实。
+        HOME: getDataBaseDir(),
+        ...(process.platform === "win32" ? { USERPROFILE: getDataBaseDir() } : {}),
+        NEX_SESSION_DB_PATH: join(getDataBaseDir(), ".nex", "cli", "db", "db.sqlite"),
         ...effectiveCommand.env,
         // 生成文件根目录由执行端 Host 唯一决定，保证 Agent 写入与 Host 读取授权一致。
         [GEN_UI_OUTPUT_ROOT_ENV]: join(getAppConfigDir(), GEN_UI_OUTPUT_DIRECTORY),

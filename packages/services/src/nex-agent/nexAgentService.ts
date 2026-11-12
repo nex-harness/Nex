@@ -3,10 +3,7 @@ import {
   getNetworkErrorCodes,
   isNetworkFailure,
 } from "#src/providers/api/networkErrorClassifier.js";
-import {
-  NEX_PROVIDER_CONFIG_NETWORK_ERROR,
-  nexProviderRuntimeHeadersErrorCode,
-} from "@nex/shared";
+import { NEX_PROVIDER_CONFIG_NETWORK_ERROR, nexProviderRuntimeHeadersErrorCode } from "@nex/shared";
 import { isAuxiliarySessionKind } from "@nex/shared";
 import {
   pluginUiToolResultNotificationSchema,
@@ -383,10 +380,7 @@ import { TaskIndexRepo } from "#src/session/taskIndexRepo.js";
 import { NexAgentMcpStatusModeUnsupportedError } from "#src/nex-agent/nexAgentErrors.js";
 import { NexAgentProcessManager } from "./nexAgentProcessManager.js";
 import type { NexAgentProcessManagerOptions } from "./nexAgentProcessManager.js";
-import {
-  NexProtocolRequestTimeoutError,
-  type NexProtocolClient,
-} from "./nexProtocolClient.js";
+import { NexProtocolRequestTimeoutError, type NexProtocolClient } from "./nexProtocolClient.js";
 import { getDataBaseDir } from "../paths.js";
 import {
   collectBrowserAmbientContext,
@@ -1148,13 +1142,11 @@ interface CreateNexAgentServiceBaseOptions extends Omit<
   browserControlExecutor?: BrowserAmbientContextExecutor;
   channelReplyExecutor?: (request: ChannelReplyHostRequest) => Promise<ChannelReplyResult>;
   topicResourceExecutor?: (
-    request: NexTopicResourceReadParams &
-      NexAgentWorkspaceTarget & { trace?: NexProtocolTrace },
+    request: NexTopicResourceReadParams & NexAgentWorkspaceTarget & { trace?: NexProtocolTrace },
     signal: AbortSignal,
   ) => Promise<NexPromptAttachment>;
   topicResourceValidator?: (
-    request: NexTopicResourceReadParams &
-      NexAgentWorkspaceTarget & { trace?: NexProtocolTrace },
+    request: NexTopicResourceReadParams & NexAgentWorkspaceTarget & { trace?: NexProtocolTrace },
     signal: AbortSignal,
   ) => Promise<void>;
   /**
@@ -1437,10 +1429,7 @@ export function createNexAgentService(
   });
   const sessionEventSequenceStates = new Map<string, SessionEventSequenceState>();
   const wiredClients = new WeakSet<NexProtocolClient>();
-  const clientWorkspaces = new WeakMap<
-    NexProtocolClient,
-    Map<string, NexAgentWorkspaceTarget>
-  >();
+  const clientWorkspaces = new WeakMap<NexProtocolClient, Map<string, NexAgentWorkspaceTarget>>();
   const clientSessions = new WeakMap<NexProtocolClient, Map<string, string>>();
 
   function rememberClientTarget(
@@ -2176,10 +2165,7 @@ export function createNexAgentService(
     return rememberBoundedEventId(state.liveEventIds, state.liveEventIdOrder, event.eventId);
   }
 
-  function handleSessionEvent(
-    workspace: NexAgentWorkspaceTarget,
-    event: NexSessionEvent,
-  ): void {
+  function handleSessionEvent(workspace: NexAgentWorkspaceTarget, event: NexSessionEvent): void {
     const normalizedEvent = normalizeSessionEventSeq(workspace, event);
     if (!shouldDeliverLiveSessionEvent(workspace, normalizedEvent)) {
       return;
@@ -2666,9 +2652,7 @@ export function createNexAgentService(
               workspaceKey: resolveWorkspaceKey(workspace),
             });
           };
-          const parsed = nexSessionRequestRuntimePreferencesParamsSchema.safeParse(
-            request.params,
-          );
+          const parsed = nexSessionRequestRuntimePreferencesParamsSchema.safeParse(request.params);
           if (!parsed.success) {
             void client
               .respondError(request.id, {
@@ -2860,8 +2844,7 @@ export function createNexAgentService(
         // 不 emitSessionEvent、不进 pending map——该请求没有 UI 语义，renderer 不参与。
         if (request.method === nexProtocolMethods.interactionRequestOfficialMcpAuthHeaders) {
           const parsed =
-            mcpStatusAuth ??
-            nexOfficialMcpAuthHeadersRequestParamsSchema.safeParse(request.params);
+            mcpStatusAuth ?? nexOfficialMcpAuthHeadersRequestParamsSchema.safeParse(request.params);
           if (!parsed.success) {
             void client.respondError(request.id, {
               code: -32602,
@@ -3493,9 +3476,7 @@ export function createNexAgentService(
     );
   }
 
-  async function resolveStartupReadiness(): Promise<
-    NexAgentProviderReadinessSnapshot | undefined
-  > {
+  async function resolveStartupReadiness(): Promise<NexAgentProviderReadinessSnapshot | undefined> {
     if (modelSelectionReadinessSource) {
       return createProviderReadinessSnapshotFromSelectionView(
         await modelSelectionReadinessSource.getView(),
@@ -5948,9 +5929,7 @@ export function createNexAgentService(
       }
       let preferences: NexSessionRuntimePreferencesResult;
       try {
-        preferences = nexSessionRuntimePreferencesResultSchema.parse(
-          params.resolution.preferences,
-        );
+        preferences = nexSessionRuntimePreferencesResultSchema.parse(params.resolution.preferences);
         // 远端组织态由远端 Host 读取；客户端设置回包不能覆盖本机目录事实。
         if (
           pending.request.scope === "runtime-materialization" &&
@@ -6398,6 +6377,10 @@ export function createNexAgentService(
         result.ack.subscriptionId,
         connection.connectionId,
       );
+      // Bug 原因：V4 冷订阅此前只登记 workspace，没有登记 session 的 owner。
+      // CLI 在恢复后请求 runtime preferences 时带 sessionId，共享连接的路由因查不到
+      // 映射而拒绝整个历史会话。ACK 已证明该 CLI 拥有此会话，沿同一 workspace 注册。
+      rememberClientTarget(client, params, params.sessionId);
       return {
         ...result,
         ack: {
@@ -6663,9 +6646,7 @@ export function createNexAgentService(
 
     async conversationAttachmentReadV4(params: NexAgentConversationAttachmentReadParams) {
       if (!readTrustedNexAgentV4Connection(params)) {
-        throw new NexAttachmentFaultError(
-          NEX_ATTACHMENT_FAULT_CODES.shareReadConnectionUntrusted,
-        );
+        throw new NexAttachmentFaultError(NEX_ATTACHMENT_FAULT_CODES.shareReadConnectionUntrusted);
       }
       const wireParams = v4ConversationAttachmentReadParamsSchema.parse({
         sessionId: params.sessionId,
@@ -6685,9 +6666,7 @@ export function createNexAgentService(
 
     async conversationAttachmentStatV4(params: NexAgentConversationAttachmentStatParams) {
       if (!readTrustedNexAgentV4Connection(params)) {
-        throw new NexAttachmentFaultError(
-          NEX_ATTACHMENT_FAULT_CODES.shareStatConnectionUntrusted,
-        );
+        throw new NexAttachmentFaultError(NEX_ATTACHMENT_FAULT_CODES.shareStatConnectionUntrusted);
       }
       const wireParams = v4ConversationAttachmentStatParamsSchema.parse({
         sessionId: params.sessionId,

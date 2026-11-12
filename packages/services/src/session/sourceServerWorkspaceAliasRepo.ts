@@ -8,6 +8,8 @@ import { mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   isRemoteWorkspaceIdentity,
+  buildServerRemoteWorkspaceIdentity,
+  remoteHostIdFromWorkspaceIdentity,
   parseRemoteWorkspaceIdentity,
   WORKSPACE_CONFIG_FILE_CONFLICT_ERROR_CODE,
   WORKSPACE_MIGRATION_PLAN_DIVERGED_ERROR_CODE,
@@ -28,6 +30,8 @@ export interface SourceServerWorkspaceAliasRepoOptions {
   backupRoot?: string;
   now?: () => number;
   migrationId?: () => string;
+  /** Core 从本库 Host 发现的旧安装身份；外部 RPC 不得自行声明。 */
+  legacyServerHostIds?: readonly string[];
   afterPhaseCommitted?: (phase: WorkspaceMigrationPhase) => Promise<void> | void;
 }
 
@@ -172,7 +176,9 @@ function hasTable(db: Database, table: string): boolean {
 function hasColumn(db: Database, table: string, column: string): boolean {
   if (!hasTable(db, table)) return false;
   return (
-    db.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{ name: string }>
+    db.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{
+      name: string;
+    }>
   ).some((row) => row.name === column);
 }
 
@@ -294,7 +300,9 @@ export class SourceServerWorkspaceAliasRepo {
   private readonly now: () => number;
   private readonly createMigrationId: () => string;
   private readonly afterPhaseCommitted?: SourceServerWorkspaceAliasRepoOptions["afterPhaseCommitted"];
+  private readonly legacyServerHostIds: Set<string>;
   private readonly workspaceOperations = new Map<string, Promise<void>>();
+  private readonly canonicalWorkspaceMappings = new Map<string, string>();
 
   public constructor(options: SourceServerWorkspaceAliasRepoOptions = {}) {
     this.taskDbPath = options.taskDbPath ?? getTasksIndexDatabasePath();
@@ -304,6 +312,7 @@ export class SourceServerWorkspaceAliasRepo {
       options.backupRoot ?? join(getDataBaseDir(), ".nex", "server", "migration-backups");
     this.now = options.now ?? Date.now;
     this.createMigrationId = options.migrationId ?? randomUUID;
+    this.legacyServerHostIds = new Set(options.legacyServerHostIds ?? []);
     this.afterPhaseCommitted = options.afterPhaseCommitted;
   }
 
@@ -339,6 +348,34 @@ export class SourceServerWorkspaceAliasRepo {
         this.workspaceOperations.delete(workspacePath);
       }
     }
+  }
+
+  private isMergeableWorkspaceIdentity(workspaceKey: string): boolean {
+    if (isLegacyRemoteKey(workspaceKey)) return true;
+    if (this.legacyServerHostIds.size === 0) return false;
+    const parsed = parseRemoteWorkspaceIdentity(workspaceKey);
+    return (
+      parsed?.kind === "server" &&
+      this.legacyServerHostIds.has(`remote:server:${parsed.sourceServerId}`)
+    );
+  }
+
+  private legacyPathForServerHost(db: Database, workspacePath: string): string | null {
+    if (!hasTable(db, "hosts") || !hasTable(db, "projects")) return null;
+    for (const hostId of this.legacyServerHostIds) {
+      if (
+        db
+          .prepare(
+            `SELECT 1 FROM hosts h JOIN projects p ON p.host_id = h.host_id
+            JOIN project_roots r ON r.project_id = p.project_id
+            WHERE h.host_id = ? AND h.kind = 'server' AND r.root_path = ? LIMIT 1`,
+          )
+          .get(hostId, workspacePath)
+      ) {
+        return workspacePath;
+      }
+    }
+    return null;
   }
 
   private async resolveCanonicalWorkspaceKeyInternal(
@@ -431,11 +468,16 @@ export class SourceServerWorkspaceAliasRepo {
       if (activeMigration) {
         // Bug 原因：task DB 已提交、session DB 尚未提交时重新扫描活跃度会反向选主，
         // 甚至创建第二条 migration。活动 ledger 是恢复 owner，计划必须原样续跑。
-        return await this.runMigrationPlan({
+        return await this.mergeVariants({
           taskDb,
           sessionDb,
           workspacePath,
-          migration: activeMigration,
+          canonicalKey: activeMigration.canonicalKey,
+          variants: activeMigration.variants,
+          mergedKeys: activeMigration.variants.filter(
+            (key) => key !== activeMigration.canonicalKey,
+          ),
+          activeMigration,
         });
       }
       const abandonedMigration = options.ignoreAbandoned
@@ -445,16 +487,24 @@ export class SourceServerWorkspaceAliasRepo {
         // Bug 原因：放弃合并只写 alias，但旧入口仍因遗留 variant 再次进入 mergeVariants，
         // 于是同一冲突会立刻阻塞重开并创建第二条 ledger。abandoned 是用户明确选择的
         // 冻结 canonical；只有 retryFailedWorkspace 显式清除 abandoned 后才允许重新合并。
-        return { canonicalKey: abandonedMigration.canonicalKey, mergedKeys: [] };
+        return {
+          canonicalKey: abandonedMigration.canonicalKey,
+          mergedKeys: [],
+        };
       }
       const existing = taskDb
         .prepare("SELECT canonical_key FROM workspace_alias WHERE path = ?")
         .get(workspacePath) as { canonical_key: string } | undefined;
       const variants = this.findVariants(taskDb, sessionDb, workspacePath);
+      const legacyPath = this.legacyPathForServerHost(taskDb, workspacePath);
+      if (legacyPath && !variants.includes(legacyPath)) {
+        variants.push(legacyPath);
+        variants.sort();
+      }
       const legacyRouteHint = input.legacyRouteHint?.trim();
       if (
         legacyRouteHint &&
-        isLegacyRemoteKey(legacyRouteHint) &&
+        this.isMergeableWorkspaceIdentity(legacyRouteHint) &&
         !variants.includes(legacyRouteHint) &&
         (await this.hasWorkspaceOwnedStateForHint(taskDb, workspacePath, legacyRouteHint))
       ) {
@@ -487,14 +537,17 @@ export class SourceServerWorkspaceAliasRepo {
         this.markFailedPathResolved(taskDb, workspacePath);
         return { canonicalKey: hint, mergedKeys: [] };
       }
-      if (variants.length === 1) {
+      if (variants.length === 1 && !legacyPath) {
         const canonicalKey = variants[0]!;
         this.writeAlias(taskDb, workspacePath, canonicalKey);
         this.markFailedPathResolved(taskDb, workspacePath);
         return { canonicalKey, mergedKeys: [] };
       }
 
-      const canonicalKey = this.chooseCanonicalKey(taskDb, sessionDb, workspacePath, variants);
+      const canonicalKey =
+        legacyPath && legacyRouteHint
+          ? legacyRouteHint
+          : this.chooseCanonicalKey(taskDb, sessionDb, workspacePath, variants);
       const mergedKeys = variants.filter((key) => key !== canonicalKey);
       return await this.mergeVariants({
         taskDb,
@@ -510,6 +563,77 @@ export class SourceServerWorkspaceAliasRepo {
     }
   }
 
+  public async migrateLegacyServerHosts(
+    sourceServerId: string,
+  ): Promise<ReadonlyMap<string, string>> {
+    const taskDb = openDatabase(this.taskDbPath);
+    try {
+      const rows =
+        hasTable(taskDb, "hosts") && hasTable(taskDb, "projects")
+          ? (taskDb
+              .prepare(
+                `SELECT DISTINCT h.host_id, r.root_path FROM hosts h
+              JOIN projects p ON p.host_id = h.host_id
+              JOIN project_roots r ON r.project_id = p.project_id AND r.is_primary = 1
+              WHERE h.kind = 'server' AND h.host_id LIKE 'remote:server:%'`,
+              )
+              .all() as Array<{ host_id: string; root_path: string }>)
+          : [];
+      const currentHostId = `remote:server:${sourceServerId}`;
+      for (const row of rows) {
+        if (row.host_id === currentHostId) continue;
+        const legacyHostId = row.host_id;
+        const canonicalKey = buildServerRemoteWorkspaceIdentity({
+          serverId: sourceServerId,
+          workspacePath: row.root_path,
+        });
+        const unclassified = taskDb
+          .prepare(
+            `SELECT DISTINCT workspace_path FROM tasks
+             WHERE host_id = ? AND project_id IS NULL AND workspace_key = workspace_path
+               AND workspace_key NOT IN (
+                 SELECT DISTINCT workspace_key FROM tasks WHERE host_id = ? AND project_id IS NOT NULL
+               )`,
+          )
+          .all(legacyHostId, legacyHostId) as Array<{ workspace_path: string }>;
+        for (const entry of unclassified) {
+          const canonical = buildServerRemoteWorkspaceIdentity({
+            serverId: sourceServerId,
+            workspacePath: entry.workspace_path,
+          });
+          // Bug 原因：旧安装只有项目目录被收敛，默认目录等未归类会话仍挂旧 Host，
+          // 使 Host 永远删不掉、Web 丢失这部分历史。保持未归属与 cwd，只更新本机 server 身份。
+          taskDb
+            .prepare(
+              `UPDATE tasks SET workspace_key = ?, workspace_identity = ?, host_id = ?
+               WHERE host_id = ? AND project_id IS NULL AND workspace_key = workspace_path
+                 AND workspace_path = ?`,
+            )
+            .run(canonical, canonical, currentHostId, legacyHostId, entry.workspace_path);
+          this.canonicalWorkspaceMappings.set(canonical, canonical);
+        }
+        const repo = new SourceServerWorkspaceAliasRepo({
+          taskDbPath: this.taskDbPath,
+          sessionDbPath: this.sessionDbPath,
+          backupRoot: this.backupRoot,
+          now: this.now,
+          migrationId: this.createMigrationId,
+          afterPhaseCommitted: this.afterPhaseCommitted,
+          legacyServerHostIds: [legacyHostId],
+        });
+        const result = await repo.resolveCanonicalWorkspaceKey({
+          workspacePath: row.root_path,
+          legacyRouteHint: canonicalKey,
+        });
+        this.legacyServerHostIds.add(legacyHostId);
+        this.canonicalWorkspaceMappings.set(result.canonicalKey, canonicalKey);
+      }
+    } finally {
+      taskDb.close();
+    }
+    return this.canonicalWorkspaceMappings;
+  }
+
   private async mergeVariants(input: {
     taskDb: Database;
     sessionDb: Database | null;
@@ -518,7 +642,17 @@ export class SourceServerWorkspaceAliasRepo {
     variants: string[];
     mergedKeys: string[];
     followUpDepth?: number;
+    activeMigration?: ActiveWorkspaceMigration;
   }): Promise<ResolveCanonicalWorkspaceKeyResult> {
+    if (input.activeMigration) {
+      return await this.runMigrationPlan({
+        taskDb: input.taskDb,
+        sessionDb: input.sessionDb,
+        workspacePath: input.workspacePath,
+        migration: input.activeMigration,
+        followUpDepth: input.followUpDepth,
+      });
+    }
     const {
       taskDb,
       sessionDb,
@@ -567,7 +701,7 @@ export class SourceServerWorkspaceAliasRepo {
       migrationId,
       workspacePath,
       canonicalKey,
-      variants,
+      variants: [canonicalKey, ...variants.filter((key) => key !== canonicalKey)],
       status: "running",
       taskBackupPath,
       sessionBackupPath,
@@ -614,14 +748,16 @@ export class SourceServerWorkspaceAliasRepo {
     workspacePath: string,
   ): ActiveWorkspaceMigration | null {
     const row = db
-      .prepare(`
+      .prepare(
+        `
         SELECT migration_id, canonical_key, variant_keys_json, phase,
                task_backup_path, session_backup_path, session_db_generation
         FROM workspace_migration_ledger
         WHERE path = ? AND status IN ('running', 'failed') AND phase IS NOT NULL
         ORDER BY updated_at DESC, created_at DESC, rowid DESC
         LIMIT 1
-      `)
+      `,
+      )
       .get(workspacePath) as
       | {
           migration_id: string;
@@ -641,18 +777,21 @@ export class SourceServerWorkspaceAliasRepo {
     } catch {
       variants = null;
     }
-    if (
-      !phase ||
-      !Array.isArray(variants) ||
-      variants.some((value) => typeof value !== "string") ||
-      !variants.includes(row.canonical_key)
-    ) {
+    if (!phase || !Array.isArray(variants) || variants.some((value) => typeof value !== "string")) {
       throw new Error(`Invalid active Source Server migration ledger: ${row.migration_id}`);
+    }
+    if (!variants.includes(row.canonical_key)) {
+      if (phase !== "preflight" && phase !== "backups-created") {
+        throw new Error(`Invalid active Source Server migration ledger: ${row.migration_id}`);
+      }
+      // Bug 原因：早期 2.0 首次合并落盘时漏存 canonical；若此时尚未搬运任何任务，
+      // 恢复应补齐冻结计划，而不是把一次可重试失败变成永久无法启动。
+      variants = [row.canonical_key, ...variants];
     }
     return {
       migrationId: row.migration_id,
       canonicalKey: row.canonical_key,
-      variants,
+      variants: variants as string[],
       phase,
       taskBackupPath: row.task_backup_path,
       sessionBackupPath: row.session_backup_path,
@@ -665,15 +804,20 @@ export class SourceServerWorkspaceAliasRepo {
     workspacePath: string,
   ): { canonicalKey: string } | null {
     const row = db
-      .prepare(`
+      .prepare(
+        `
         SELECT canonical_key, status
         FROM workspace_migration_ledger
         WHERE path = ?
         ORDER BY updated_at DESC, created_at DESC, rowid DESC
         LIMIT 1
-      `)
+      `,
+      )
       .get(workspacePath) as
-      | { canonical_key: string; status: "running" | "completed" | "failed" | "abandoned" }
+      | {
+          canonical_key: string;
+          status: "running" | "completed" | "failed" | "abandoned";
+        }
       | undefined;
     return row?.status === "abandoned" ? { canonicalKey: row.canonical_key } : null;
   }
@@ -681,13 +825,15 @@ export class SourceServerWorkspaceAliasRepo {
   private failActiveMigration(db: Database, migrationId: string, errorCode: string): void {
     // Bug 原因：session generation 异常过去无条件保留 phase，连尚未搬运数据的计划也无法
     // abandon。仅 preflight/backups-created 可安全释放 resume owner；post-merge 继续保留。
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE workspace_migration_ledger
       SET status = 'failed',
           phase = CASE WHEN phase IN ('preflight', 'backups-created') THEN NULL ELSE phase END,
           error = ?, updated_at = ?
       WHERE migration_id = ?
-    `).run(errorCode, this.now(), migrationId);
+    `,
+    ).run(errorCode, this.now(), migrationId);
   }
 
   private async runMigrationPlan(input: {
@@ -787,7 +933,7 @@ export class SourceServerWorkspaceAliasRepo {
         phase = await this.commitMigrationPhase(taskDb, migrationId, "task-db-merged");
       }
       if (!hasReachedMigrationPhase(phase, "session-db-merged")) {
-        this.mergeSessionDatabase(sessionDb, workspacePath, canonicalKey, mergedKeys);
+        this.mergeSessionDatabase(sessionDb, taskDb, workspacePath, canonicalKey, mergedKeys);
         phase = await this.commitMigrationPhase(taskDb, migrationId, "session-db-merged");
       }
       if (!hasReachedMigrationPhase(phase, "config-dirs-merged")) {
@@ -868,6 +1014,7 @@ export class SourceServerWorkspaceAliasRepo {
 
   private mergeSessionDatabase(
     sessionDb: Database | null,
+    taskDb: Database,
     workspacePath: string,
     canonicalKey: string,
     mergedKeys: string[],
@@ -883,6 +1030,21 @@ export class SourceServerWorkspaceAliasRepo {
                AND (directory = ? OR path = ?)`,
         )
         .run(canonicalKey, ...mergedKeys, workspacePath, workspacePath);
+      if (mergedKeys.includes(workspacePath) && hasTable(taskDb, "tasks")) {
+        // Bug 原因：1.x 本地 session 的 workspace_id 为 NULL，task index 也只以路径为 key。
+        // 只认领已提交 task-index 中本目录的行；task DB 合并后重启也必须能补齐 session DB。
+        // 不能 ATTACH 后在事务内 DETACH，且不能按同目录批量认领没有索引证明的其它会话。
+        const taskIds = taskDb
+          .prepare("SELECT task_id FROM tasks WHERE workspace_key = ? AND workspace_path = ?")
+          .all(canonicalKey, workspacePath) as Array<{ task_id: string }>;
+        const claim = sessionDb.prepare(
+          `UPDATE session SET workspace_id = ?
+           WHERE workspace_id IS NULL AND (directory = ? OR path = ?) AND id = ?`,
+        );
+        for (const { task_id: taskId } of taskIds) {
+          claim.run(canonicalKey, workspacePath, workspacePath, taskId);
+        }
+      }
       sessionDb.exec("COMMIT");
     } catch (error) {
       rollbackQuietly(sessionDb);
@@ -1044,7 +1206,9 @@ export class SourceServerWorkspaceAliasRepo {
   ): Promise<void> {
     const seen = new Map<
       string,
-      ({ kind: "directory" } | { kind: "file"; content: Buffer }) & { workspaceKey: string }
+      ({ kind: "directory" } | { kind: "file"; content: Buffer }) & {
+        workspaceKey: string;
+      }
     >();
     for (const workspaceKey of [canonicalKey, ...mergedKeys]) {
       const entries = await this.readSessionConfigEntries(
@@ -1088,7 +1252,10 @@ export class SourceServerWorkspaceAliasRepo {
         continue;
       }
       if (entry.isFile()) {
-        result.set(relativePath, { kind: "file", content: await readFile(absolutePath) });
+        result.set(relativePath, {
+          kind: "file",
+          content: await readFile(absolutePath),
+        });
         continue;
       }
       throw new SourceServerWorkspaceConfigConflictError(root, relativePath, root);
@@ -1264,13 +1431,15 @@ export class SourceServerWorkspaceAliasRepo {
     try {
       await runTasksDatabaseMigrations(taskDb, "source-server");
       const ledgerRows = taskDb
-        .prepare(`
+        .prepare(
+          `
           SELECT migration_id, path, canonical_key, variant_keys_json, status, phase,
                  task_backup_path, session_backup_path, error, updated_at,
                  abandoned_at, abandoned_trigger, abandoned_activity_json
           FROM workspace_migration_ledger
           ORDER BY updated_at DESC, created_at DESC, rowid DESC
-        `)
+        `,
+        )
         .all() as unknown as Array<{
         migration_id: string;
         path: string;
@@ -1368,14 +1537,16 @@ export class SourceServerWorkspaceAliasRepo {
     try {
       await runTasksDatabaseMigrations(taskDb, "source-server");
       const ledger = taskDb
-        .prepare(`
+        .prepare(
+          `
           SELECT migration_id, canonical_key, variant_keys_json, phase
           FROM workspace_migration_ledger
           WHERE path = ? AND status = 'failed'
             ${migrationId ? "AND migration_id = ?" : ""}
           ORDER BY updated_at DESC, created_at DESC, rowid DESC
           LIMIT 1
-        `)
+        `,
+        )
         .get(workspacePath, ...(migrationId ? [migrationId] : [])) as
         | {
             migration_id: string;
@@ -1401,11 +1572,13 @@ export class SourceServerWorkspaceAliasRepo {
         // 配置 IO 期间其他进程可能已完成或换了计划；取得写锁后复查，避免旧 abandon
         // 覆盖新 ledger/alias。updated_at 可在同一毫秒内重复，必须比较状态与冻结计划本身。
         const current = taskDb
-          .prepare(`
+          .prepare(
+            `
           SELECT canonical_key, variant_keys_json
           FROM workspace_migration_ledger
           WHERE migration_id = ? AND path = ? AND status = 'failed' AND phase IS NULL
-        `)
+        `,
+          )
           .get(ledger.migration_id, workspacePath) as
           | { canonical_key: string; variant_keys_json: string }
           | undefined;
@@ -1421,12 +1594,14 @@ export class SourceServerWorkspaceAliasRepo {
         }
         sessionDb?.exec("BEGIN");
         taskDb
-          .prepare(`
+          .prepare(
+            `
           UPDATE workspace_migration_ledger
           SET status = 'abandoned', phase = NULL, abandoned_at = ?,
               abandoned_trigger = 'user', abandoned_activity_json = NULL, updated_at = ?
           WHERE migration_id = ?
-        `)
+        `,
+          )
           .run(now, now, ledger.migration_id);
         this.writeAlias(taskDb, workspacePath, ledger.canonical_key);
         // Bug 原因：旧实现先算 digest 再开启 ledger 事务，事务触发器/并发 task 写入会在
@@ -1477,14 +1652,16 @@ export class SourceServerWorkspaceAliasRepo {
     try {
       await runTasksDatabaseMigrations(taskDb, "source-server");
       const failed = taskDb
-        .prepare(`
+        .prepare(
+          `
         SELECT canonical_key
         FROM workspace_migration_ledger
         WHERE path = ? AND status IN ('failed', 'abandoned')
           ${migrationId ? "AND migration_id = ?" : ""}
         ORDER BY updated_at DESC, created_at DESC, rowid DESC
         LIMIT 1
-      `)
+      `,
+        )
         .get(workspacePath, ...(migrationId ? [migrationId] : [])) as
         | { canonical_key: string }
         | undefined;
@@ -1690,7 +1867,7 @@ export class SourceServerWorkspaceAliasRepo {
         )
         .all(workspacePath) as unknown as Array<{ workspace_key: string }>;
       for (const row of rows)
-        if (isLegacyRemoteKey(row.workspace_key)) variants.add(row.workspace_key);
+        if (this.isMergeableWorkspaceIdentity(row.workspace_key)) variants.add(row.workspace_key);
     }
     for (const table of ["task_group_workspace_bootstraps", "automation_runs"] as const) {
       if (!hasTable(taskDb, table) || !hasColumn(taskDb, table, "workspace_key")) continue;
@@ -1699,7 +1876,7 @@ export class SourceServerWorkspaceAliasRepo {
         .all() as unknown as Array<{ workspace_key: string }>;
       for (const row of rows) {
         if (
-          isLegacyRemoteKey(row.workspace_key) &&
+          this.isMergeableWorkspaceIdentity(row.workspace_key) &&
           parseRemoteWorkspaceIdentity(row.workspace_key)?.workspacePath === workspacePath
         ) {
           variants.add(row.workspace_key);
@@ -1716,7 +1893,7 @@ export class SourceServerWorkspaceAliasRepo {
           const workspaceKey = Array.isArray(parsed) ? parsed[0] : null;
           if (
             typeof workspaceKey === "string" &&
-            isLegacyRemoteKey(workspaceKey) &&
+            this.isMergeableWorkspaceIdentity(workspaceKey) &&
             parseRemoteWorkspaceIdentity(workspaceKey)?.workspacePath === workspacePath
           ) {
             variants.add(workspaceKey);
@@ -1731,9 +1908,11 @@ export class SourceServerWorkspaceAliasRepo {
         .prepare(
           "SELECT DISTINCT workspace_id FROM session WHERE (directory = ? OR path = ?) AND workspace_id LIKE 'remote:%'",
         )
-        .all(workspacePath, workspacePath) as unknown as Array<{ workspace_id: string }>;
+        .all(workspacePath, workspacePath) as unknown as Array<{
+        workspace_id: string;
+      }>;
       for (const row of rows)
-        if (isLegacyRemoteKey(row.workspace_id)) variants.add(row.workspace_id);
+        if (this.isMergeableWorkspaceIdentity(row.workspace_id)) variants.add(row.workspace_id);
     }
     return [...variants].sort();
   }
@@ -1893,6 +2072,7 @@ export class SourceServerWorkspaceAliasRepo {
           ? "UPDATE tasks SET cli_title = ?, cli_title_source = ?, cli_created_at = ?, cli_updated_at = ?, cli_last_outcome = ?, cli_deleted = ?, handoff_pending = ? WHERE workspace_key = ? AND task_id = ?"
           : "SELECT NULL WHERE 0",
       );
+      this.migrateSourceServerHosts(db, workspacePath, canonicalKey, mergedKeys);
       for (const sourceKey of mergedKeys) {
         const rows = listTasks.all(sourceKey, workspacePath) as unknown as Array<{
           task_id: string;
@@ -1919,6 +2099,12 @@ export class SourceServerWorkspaceAliasRepo {
         for (const row of rows) {
           const existing = findCanonical.get(canonicalKey, row.task_id) as typeof row | undefined;
           if (!existing) {
+            if (sourceKey === canonicalKey) {
+              // Bug 原因：路径键 → server identity 不是复制一条新任务，原行的 project_id
+              // 已经指向要保留的项目。后续重复扫描 canonical 时不能把它当成重复行删除，
+              // 否则 Host 外键阻止删项目，整个升级事务回滚。
+              continue;
+            }
             const meta = parseMetaRecord(row.meta_json);
             const movedMetaJson =
               meta && "workspaceIdentity" in meta
@@ -2005,11 +2191,13 @@ export class SourceServerWorkspaceAliasRepo {
           deleteTask.run(sourceKey, row.task_id);
         }
         if (hasTable(db, "task_group_members")) {
-          db.prepare(`DELETE FROM task_group_members
+          db.prepare(
+            `DELETE FROM task_group_members
             WHERE workspace_key = ? AND EXISTS (
               SELECT 1 FROM task_group_members target
               WHERE target.workspace_key = ? AND target.task_id = task_group_members.task_id
-            )`).run(sourceKey, canonicalKey);
+            )`,
+          ).run(sourceKey, canonicalKey);
           db.prepare(
             "UPDATE task_group_members SET workspace_key = ?, workspace_identity = ? WHERE workspace_key = ?",
           ).run(canonicalKey, canonicalKey, sourceKey);
@@ -2038,6 +2226,96 @@ export class SourceServerWorkspaceAliasRepo {
     } catch (error) {
       rollbackQuietly(db);
       throw error;
+    }
+  }
+
+  private migrateSourceServerHosts(
+    db: Database,
+    workspacePath: string,
+    canonicalKey: string,
+    mergedKeys: string[],
+  ): void {
+    if (!hasTable(db, "hosts") || !hasTable(db, "projects")) return;
+    for (const sourceKey of mergedKeys) {
+      const parsed = parseRemoteWorkspaceIdentity(sourceKey);
+      const sourceHostId = parsed?.sourceServerId
+        ? `remote:server:${parsed.sourceServerId}`
+        : sourceKey === workspacePath && this.legacyServerHostIds.size === 1
+          ? [...this.legacyServerHostIds][0]!
+          : undefined;
+      if (!sourceHostId) continue;
+      const canonicalHostId = remoteHostIdFromWorkspaceIdentity(canonicalKey);
+      if (!canonicalHostId || canonicalHostId === sourceHostId) continue;
+      const sourceHost = db.prepare("SELECT kind FROM hosts WHERE host_id = ?").get(sourceHostId) as
+        | { kind?: string }
+        | undefined;
+      // Bug 原因：只 rekey workspace_key 会留下旧 Host 的 projects，当前 Host 又生成同名空项目，
+      // 历史会话看似消失。仅迁移受信的本机旧 server Host；其它远端设备入口绝不能并入。
+      if (sourceHost?.kind !== "server") continue;
+      // 先保证父 Host 存在，再迁移子行；不能通过关闭外键掩盖顺序错误。
+      db.prepare("INSERT OR IGNORE INTO hosts(host_id,kind) VALUES(?, 'server')").run(
+        canonicalHostId,
+      );
+      if (
+        db
+          .prepare(
+            `SELECT 1 FROM projects source
+            JOIN projects target ON target.host_id = ? AND target.name = source.name AND target.deleted = 0
+            WHERE source.host_id = ? AND source.deleted = 0 LIMIT 1`,
+          )
+          .get(canonicalHostId, sourceHostId)
+      ) {
+        throw new Error(`Source Server project identity conflict: ${sourceHostId}`);
+      }
+      const ownedTask = db
+        .prepare(
+          "SELECT 1 FROM tasks WHERE host_id = ? AND (workspace_key = ? OR workspace_path = ?) LIMIT 1",
+        )
+        .get(sourceHostId, workspacePath, workspacePath);
+      if (ownedTask) {
+        for (const table of ["tasks", "automations", "off_peak_tasks"] as const) {
+          if (hasTable(db, table) && hasColumn(db, table, "host_id")) {
+            db.prepare(
+              `UPDATE ${table} SET host_id = ? WHERE host_id = ? AND (workspace_key = ? OR workspace_path = ?)`,
+            ).run(canonicalHostId, sourceHostId, workspacePath, workspacePath);
+          }
+        }
+      }
+      for (const table of ["projects", "remote_project_entries"] as const) {
+        if (!hasTable(db, table)) continue;
+        if (table === "projects") {
+          db.prepare(`UPDATE projects SET host_id = ? WHERE host_id = ? AND project_id IN (
+            SELECT project_id FROM project_roots WHERE root_path = ?
+          )`).run(canonicalHostId, sourceHostId, workspacePath);
+        } else {
+          db.prepare(`UPDATE remote_project_entries SET host_id = ? WHERE host_id = ? AND (
+            remote_project_id IN (SELECT project_id FROM project_roots WHERE root_path = ?)
+            OR json_extract(legacy_workspace_json, '$.workspacePath') = ?
+          )`).run(canonicalHostId, sourceHostId, workspacePath, workspacePath);
+        }
+      }
+      const remainingReferences = {
+        tasks: db
+          .prepare("SELECT count(*) AS count FROM tasks WHERE host_id = ?")
+          .get(sourceHostId),
+        projects: db
+          .prepare("SELECT count(*) AS count FROM projects WHERE host_id = ?")
+          .get(sourceHostId),
+        remoteEntries: hasTable(db, "remote_project_entries")
+          ? db
+              .prepare("SELECT count(*) AS count FROM remote_project_entries WHERE host_id = ?")
+              .get(sourceHostId)
+          : { count: 0 },
+      };
+      // 同一旧安装可包含多个项目；只有最后一个目录收敛后才能移除 Host。
+      // 其它目录仍保留原 Host，不参与本目录的 task-id 或 CLI 身份认领。
+      if (
+        !Object.values(remainingReferences).some(
+          (row) => Number((row as { count?: number }).count ?? 0) > 0,
+        )
+      ) {
+        db.prepare("DELETE FROM hosts WHERE host_id = ?").run(sourceHostId);
+      }
     }
   }
 
@@ -2155,14 +2433,16 @@ export class SourceServerWorkspaceAliasRepo {
           .prepare("SELECT migration_id FROM workspace_migration_ledger WHERE migration_id = ?")
           .get(input.migrationId) as { migration_id: string } | undefined)
       : (db
-          .prepare(`
+          .prepare(
+            `
             SELECT migration_id
             FROM workspace_migration_ledger
             WHERE path = ? AND status = 'failed'
               AND error = 'workspace-task-identity-conflict'
             ORDER BY updated_at DESC, created_at DESC, rowid DESC
             LIMIT 1
-          `)
+          `,
+          )
           .get(input.workspacePath) as { migration_id: string } | undefined);
     const migrationId = existing?.migration_id ?? this.createMigrationId();
     const now = this.now();
@@ -2173,23 +2453,27 @@ export class SourceServerWorkspaceAliasRepo {
         // 复用同一 migrationId，但事务性替换当前冲突集，仍不重复备份或新建 ledger。
         // preflight/backups-created 尚未搬运数据，可清 phase 让用户 abandon；之后的 phase
         // 保留 resume owner，禁止把部分迁移伪装成普通冲突。
-        db.prepare(`
+        db.prepare(
+          `
           UPDATE workspace_migration_ledger
           SET canonical_key = ?, variant_keys_json = ?, status = 'failed',
               phase = CASE WHEN phase IN ('preflight', 'backups-created') THEN NULL ELSE phase END,
               error = 'workspace-task-identity-conflict', updated_at = ?
           WHERE migration_id = ?
-        `).run(input.canonicalKey, JSON.stringify(input.variants), now, migrationId);
+        `,
+        ).run(input.canonicalKey, JSON.stringify(input.variants), now, migrationId);
         db.prepare("DELETE FROM workspace_migration_conflicts WHERE migration_id = ?").run(
           migrationId,
         );
       } else {
-        db.prepare(`
+        db.prepare(
+          `
           INSERT INTO workspace_migration_ledger (
             migration_id, path, canonical_key, variant_keys_json, status,
             task_backup_path, session_backup_path, error, created_at, updated_at
           ) VALUES (?, ?, ?, ?, 'failed', '', NULL, 'workspace-task-identity-conflict', ?, ?)
-        `).run(
+        `,
+        ).run(
           migrationId,
           input.workspacePath,
           input.canonicalKey,
@@ -2238,14 +2522,16 @@ export class SourceServerWorkspaceAliasRepo {
           .prepare("SELECT migration_id FROM workspace_migration_ledger WHERE migration_id = ?")
           .get(input.migrationId) as { migration_id: string } | undefined)
       : (db
-          .prepare(`
+          .prepare(
+            `
         SELECT migration_id
         FROM workspace_migration_ledger
         WHERE path = ? AND status = 'failed'
           AND error = 'workspace-config-file-conflict'
         ORDER BY updated_at DESC, created_at DESC, rowid DESC
         LIMIT 1
-      `)
+      `,
+          )
           .get(input.workspacePath) as { migration_id: string } | undefined);
     const migrationId = existing?.migration_id ?? this.createMigrationId();
     const now = this.now();
@@ -2253,24 +2539,28 @@ export class SourceServerWorkspaceAliasRepo {
     try {
       if (existing) {
         // 仅 pre-merge phase 能安全转成可 abandon 冲突；DB 已提交后的冲突必须保留 resume owner。
-        db.prepare(`
+        db.prepare(
+          `
           UPDATE workspace_migration_ledger
           SET canonical_key = ?, variant_keys_json = ?, status = 'failed',
               phase = CASE WHEN phase IN ('preflight', 'backups-created') THEN NULL ELSE phase END,
               error = 'workspace-config-file-conflict', updated_at = ?
           WHERE migration_id = ?
-        `).run(input.canonicalKey, JSON.stringify(input.variants), now, migrationId);
+        `,
+        ).run(input.canonicalKey, JSON.stringify(input.variants), now, migrationId);
         db.prepare("DELETE FROM workspace_migration_conflicts WHERE migration_id = ?").run(
           migrationId,
         );
       } else {
-        db.prepare(`
+        db.prepare(
+          `
           INSERT INTO workspace_migration_ledger (
             migration_id, path, canonical_key, variant_keys_json, status, phase,
             task_backup_path, session_backup_path, error, created_at, updated_at
           ) VALUES (?, ?, ?, ?, 'failed', NULL, '', NULL,
             'workspace-config-file-conflict', ?, ?)
-        `).run(
+        `,
+        ).run(
           migrationId,
           input.workspacePath,
           input.canonicalKey,
@@ -2279,13 +2569,15 @@ export class SourceServerWorkspaceAliasRepo {
           now,
         );
       }
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO workspace_migration_conflicts (
           migration_id, path, conflict_kind, conflict_key, task_id, relative_path,
           source_key, canonical_key, reason, created_at
         ) VALUES (?, ?, 'config-file', ?, NULL, ?, ?, ?,
           'workspace-config-file-conflict', ?)
-      `).run(
+      `,
+      ).run(
         migrationId,
         input.workspacePath,
         input.conflict.relativePath,
@@ -2303,19 +2595,23 @@ export class SourceServerWorkspaceAliasRepo {
 
   private writeAlias(db: Database, workspacePath: string, canonicalKey: string): void {
     const now = this.now();
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO workspace_alias (path, canonical_key, created_at, updated_at)
       VALUES (?, ?, ?, ?)
       ON CONFLICT(path) DO UPDATE SET canonical_key = excluded.canonical_key, updated_at = excluded.updated_at
-    `).run(workspacePath, canonicalKey, now, now);
+    `,
+    ).run(workspacePath, canonicalKey, now, now);
   }
 
   private markFailedPathResolved(db: Database, workspacePath: string): void {
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE workspace_migration_ledger
       SET status = 'completed', error = NULL, updated_at = ?
       WHERE path = ? AND status = 'failed'
-    `).run(this.now(), workspacePath);
+    `,
+    ).run(this.now(), workspacePath);
   }
 
   private writeLedger(
@@ -2332,13 +2628,15 @@ export class SourceServerWorkspaceAliasRepo {
     },
   ): void {
     const now = this.now();
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO workspace_migration_ledger (
         migration_id, path, canonical_key, variant_keys_json, status, phase,
         task_backup_path, session_backup_path, created_at, updated_at,
         session_db_generation
       ) VALUES (?, ?, ?, ?, ?, 'preflight', ?, ?, ?, ?, ?)
-    `).run(
+    `,
+    ).run(
       input.migrationId,
       input.workspacePath,
       input.canonicalKey,
