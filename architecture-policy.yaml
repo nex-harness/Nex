@@ -1207,9 +1207,13 @@ modules:
     owner: desktop-settings
 
 global:
-  # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。
+  # 临时时间戳：unmanaged-new-file 只约束此日期之后首次入库的文件。
   # 基于领先 staging 很多的分支开工时，merge-base 之前的"新增"文件不应被追溯。
-  newFilesEnforcedSince: "2026-09-10"
+  # 2.0 把上游 ZCode 3.14.3 -> 3.17.2 的整段同步（2026-10-10 至 2026-11-03）作为基线整体接收，
+  # 其中的文件在改名为 Nex 后已与 upstream-snapshot 的 blob 不一致（5543 项里仅 2178 项仍一致、2979 项已改动、
+  # 386 项已不存在，2026-11-12 实测），不能再按"原样上游"准入；
+  # 生效日期因此推进到 2.0 基线落地日，只约束这一天及之后新增的文件。
+  newFilesEnforcedSince: "2026-11-10"
   acceptedUpstreamCommits: []
   maxFileLines: 800
   maxContractLines: 300
@@ -1549,6 +1553,47 @@ exceptions:
   # nex-server-cli 与 web 这两个未受管的存量模块内，与既有 server-core / web 源码同一归属。
   # 登录会话、令牌与静态托管必须贴着 Core 的 HTTP ingress 才能共用同一条鉴权链，
   # 拆成独立 managed 模块需要另行设计公共入口，不在本次范围。
+  # 2.0 基线与 1.x 功能移植引入的新增文件。落在 desktop/services/shared/ui/web/nex-cli 这些
+  # 未受管的存量模块内，与既有源码同一归属：
+  #   - ZCode -> Nex 改名后在 3.17.2 基线上新增/改名的文件；
+  #   - 从 1.2.x 移植的 models.dev 查询、模型别名、记忆预览、Web 通知、macOS Dock/菜单栏。
+  # 把这些目录拆成 managed 模块需要另行设计公共入口，不属于基线对齐或功能移植。
+  - id: baseline-and-port-unmanaged-new-files
+    rule: unmanaged-new-file
+    paths:
+      - apps/nex-cli/packages/cli/src/command-center/slash-command-help.ts
+      - apps/nex-cli/packages/cli/src/help.ts
+      - apps/nex-cli/packages/cli/src/index.ts
+      - apps/nex-cli/packages/tui/src/app-locale.ts
+      - packages/desktop/src/main/desktopDockVisibility.ts
+      - packages/nex-cua/broker-helper-constants.js
+      - packages/nex-cua/host-display-contract.js
+      - packages/server/src/bundledNexBuiltinProviderConfig.ts
+      - packages/server/src/remote/nexAgentBundleWrapper.ts
+      - packages/services/src/device/deviceIdentity.ts
+      - packages/services/src/model-provider/modelsDevCatalog.ts
+      - packages/services/src/model-provider/modelsDevLookupService.ts
+      - packages/services/src/model-provider/remoteModelList.ts
+      - packages/services/src/nex-agent/nexAgentErrors.ts
+      - packages/services/src/nex-agent/nexProtocolTransport.ts
+      - packages/services/src/nex-agent/nexStdioTapDevConfig.ts
+      - packages/services/src/nex-agent/pluginReferenceCatalogRequest.ts
+      - packages/services/src/nex-session/nexSession.ts
+      - packages/services/src/session/nexTaskListTypes.ts
+      - packages/shared/src/nex-agent-policy.ts
+      - packages/shared/src/nex-source-headers.ts
+      - packages/ui/src/hooks/useTaskNotificationPermissionPrompt.ts
+      - packages/ui/src/lib/nexProviders.ts
+      - packages/ui/src/lib/rendererNexEndpoint.ts
+      - packages/ui/src/lib/taskNotificationPermissionPrompt.ts
+      - packages/ui/src/settings/MemoryPreviewDialog.tsx
+      - packages/ui/src/settings/TaskNotificationPermissionRow.tsx
+      - packages/ui/src/settings/memoryPreviewErrorPresentation.ts
+      - packages/ui/src/settings/model-provider-section/ProviderModelIdentityFields.tsx
+      - packages/ui/src/settings/model-provider-section/ProviderRemoteModelPickerDialog.tsx
+      - packages/ui/src/settings/model-provider-section/useModelInfoLookup.ts
+      - packages/web/src/webTaskNotifier.ts
+    reason: 2.0 基线（ZCode 3.17.2 改名为 Nex）与 1.2.x 功能移植新增的文件，落在未受管的存量模块内，与同目录既有源码同一归属；拆成独立 managed 模块需要另行设计公共入口，不在本次范围。
   - id: server-web-login-unmanaged-new-files
     rule: unmanaged-new-file
     paths:
