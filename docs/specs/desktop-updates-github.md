@@ -39,15 +39,15 @@ Related: `docs/desktop/auto-update-baseline.md`、`docs/desktop/post-update-rele
 
 ## 状态所有者与接口
 
-| 状态                                     | 所有者                                                   | 说明                                                                  |
-| ---------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------- |
-| 当前更新状态 `menuState`                 | main `autoUpdater.ts`                                    | 经 `PlatformChannels.UpdateStateChanged` 广播，菜单与 renderer 只读   |
-| 当前通道 `availableUpdateChannel`        | main `autoUpdater.ts`                                    | 由 `settings.receivePreviewUpdates` 推导，唯一写入口是检查启动与设置变更 |
-| `receivePreviewUpdates`                  | `AppSettings`（设置页写入）                              | preview 开关；变更后 `refreshAutoUpdaterReleaseChannel` 重新检查       |
-| `autoDownloadAndInstallUpdates`          | `AppSettings`                                            | 发现新版本后是否直接下载；main 独占判断                               |
-| `skippedElectronUpdateVersions[channel]` | `AppSettings`                                            | 按通道记录跳过的版本；手动检查会清除当前通道记录                      |
-| `pendingPostUpdateReleaseNotes`          | `AppSettings`                                            | 下载完成时写入，安装后首次启动展示一次，renderer ack 后清除            |
-| `quitAndInstallState` / ready 更新       | main `autoUpdater.ts`                                    | 安装准入；安装中锁定目标，迟到结果不得替换                            |
+| 状态                                     | 所有者                      | 说明                                                                     |
+| ---------------------------------------- | --------------------------- | ------------------------------------------------------------------------ |
+| 当前更新状态 `menuState`                 | main `autoUpdater.ts`       | 经 `PlatformChannels.UpdateStateChanged` 广播，菜单与 renderer 只读      |
+| 当前通道 `availableUpdateChannel`        | main `autoUpdater.ts`       | 由 `settings.receivePreviewUpdates` 推导，唯一写入口是检查启动与设置变更 |
+| `receivePreviewUpdates`                  | `AppSettings`（设置页写入） | preview 开关；变更后 `refreshAutoUpdaterReleaseChannel` 重新检查         |
+| `autoDownloadAndInstallUpdates`          | `AppSettings`               | 发现新版本后是否直接下载；main 独占判断                                  |
+| `skippedElectronUpdateVersions[channel]` | `AppSettings`               | 按通道记录跳过的版本；手动检查会清除当前通道记录                         |
+| `pendingPostUpdateReleaseNotes`          | `AppSettings`               | 下载完成时写入，安装后首次启动展示一次，renderer ack 后清除              |
+| `quitAndInstallState` / ready 更新       | main `autoUpdater.ts`       | 安装准入；安装中锁定目标，迟到结果不得替换                               |
 
 数据流：
 
@@ -75,10 +75,13 @@ app.startup / poll(15min,2min) ─┘        │
 
 ## 平台覆盖
 
-- 只有随 GitHub Release 上传对应 channel yml 的平台才能收到更新。当前 `release.yaml` 只构建 macOS
-  （`latest-mac.yml`）；`electron-builder.config.js` 虽声明 Windows / Linux 目标，但发布流水线不上传
-  `latest.yml` / `latest-linux.yml`，因此 Windows / Linux 安装包的更新检查会得到「找不到 channel 文件」
-  的错误且不更新，需先补齐 CI 才能启用。
+- 只有随 GitHub Release 上传对应 channel yml 的平台才能收到更新。`release.yaml` 现在有两个任务：
+  `build-macos`（`latest-mac.yml`，可选签名与公证）和 `build-linux-windows`（矩阵：Linux x64 产出
+  AppImage / deb / rpm / pacman + `latest-linux.yml`，Windows x64 产出 NSIS + `latest.yml`）。
+  后者 `needs: build-macos` 且 `max-parallel: 1`，让同一 tag 只由 macOS 任务创建 draft Release，其余任务追加资产。
+- Linux / Windows 任务尚未在 CI 实跑过（本机无 Docker / Windows，无法验证），首次打 tag 时以其结果为准。
+  Windows 不签名（`NEX_ENABLE_WINDOWS_SIGN` 未设置）：自动更新可用，但首次安装会触发 SmartScreen 提示。
+  只构建 x64；arm64 的 Linux / Windows 不在范围内。
 - macOS 更新依赖 zip + `latest-mac.yml` + 代码签名 / 公证一致性；签名或公证失败的包无法被 Squirrel 接管。
 
 ## 发布约束（GitHub Latest 指针）

@@ -1,9 +1,10 @@
-# Release pipeline: push a tag (vX.Y.Z) or dispatch manually to build the macOS
-# desktop bundles, sign/notarize when credentials are configured, and publish
-# everything to a GitHub Release.
+# Release pipeline: push a tag (vX.Y.Z) or dispatch manually to build the macOS,
+# Linux and Windows desktop bundles, sign/notarize macOS when credentials are
+# configured, and publish everything to a GitHub Release.
 #
 # electron-builder publishes with GH_TOKEN and uploads the installers together
-# with latest-mac.yml, which the desktop auto-updater consumes.
+# with latest-mac.yml / latest-linux.yml / latest.yml, which the desktop
+# auto-updater consumes.
 #
 # 发布通道：electron-builder 的 github provider（nex-harness/Nex Releases）。
 # 前置条件：
@@ -172,5 +173,101 @@ jobs:
             packages/desktop/dist/*.zip
             packages/desktop/dist/*.blockmap
             packages/desktop/dist/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 30
+
+  # Linux (AppImage/deb/rpm/pacman + latest-linux.yml) 与 Windows (NSIS + latest.yml)。
+  # needs build-macos + max-parallel 1：electron-builder 对不存在的 tag 会各自新建 draft
+  # Release，并行上传会得到多个同 tag 的 draft；串行后只有 macOS 任务创建，其余追加资产。
+  # Windows 安装包目前不签名（NEX_ENABLE_WINDOWS_SIGN 未设置）；未签名时 electron-builder 不写
+  # publisherName，electron-updater 跳过签名校验，自动更新可用但 SmartScreen 会提示。
+  build-linux-windows:
+    needs: build-macos
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - os: linux
+            runner: ubuntu-latest
+            manifest: latest-linux.yml
+            artifacts: |
+              packages/desktop/dist/*.AppImage
+              packages/desktop/dist/*.deb
+              packages/desktop/dist/*.rpm
+              packages/desktop/dist/*.pkg.tar.zst
+              packages/desktop/dist/latest-linux.yml
+          - os: win
+            runner: windows-latest
+            manifest: latest.yml
+            artifacts: |
+              packages/desktop/dist/*.exe
+              packages/desktop/dist/*.blockmap
+              packages/desktop/dist/latest.yml
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pnpm (pinned)
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          pnpm --version
+
+      # electron-builder 用 fpm 产 rpm，需要 rpmbuild；pacman 目标需要 libarchive/zstd。
+      - name: Install Linux packaging tools
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm libarchive-tools zstd
+
+      - name: Cache pnpm store
+        id: pnpm-cache
+        run: echo "dir=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bootstrap
+        run: pnpm bootstrap
+
+      - name: Build desktop bundles
+        run: pnpm --filter @nex/desktop build
+
+      - name: Package and publish (electron-builder)
+        run: pnpm bundle:desktop
+        env:
+          NEX_TARGET_OS: ${{ matrix.os }}
+          NEX_TARGET_ARCH: x64
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEX_ELECTRON_BUILDER_ARGS: "--publish always"
+
+      - name: Smoke check artifacts
+        run: |
+          ls -lh packages/desktop/dist/${{ matrix.manifest }}
+          test -s packages/desktop/dist/${{ matrix.manifest }}
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nex-${{ matrix.os }}-${{ github.ref_name }}
+          path: ${{ matrix.artifacts }}
           if-no-files-found: error
           retention-days: 30
