@@ -4,8 +4,6 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 import { BUILTIN_MODEL_PROVIDER_IDS } from "@nex/shared";
-import { createMarketingTouchFixture } from "./marketing-touch-fixture.js";
-import { rewardsWebsiteFixture } from "./rewards-website-fixture.js";
 
 export type CodingPlanUpgradeMockScenario =
   | "manual-claim-experience"
@@ -48,9 +46,6 @@ const DEFAULT_FULL_E2E_SPEC_GLOB = "./test/e2e/**/*.test.ts";
 export function resolveCodingPlanUpgradeMockScenario(
   specs: readonly string[],
 ): CodingPlanUpgradeMockScenario | null {
-  if (specs.some((spec) => spec.includes("marketing-touch-"))) {
-    return "manual-claim-experience";
-  }
   if (specs.some((spec) => spec.includes("coding-plan-upgrade-personal-system-busy"))) {
     return "personal-system-busy";
   }
@@ -79,10 +74,9 @@ export function shouldPrepareCodingPlanUpgradeMockForBuild(specs: readonly strin
 export async function resetCodingPlanUpgradeMockServer(
   baseUrl: string,
   scenario: CodingPlanUpgradeMockScenario,
-  options: { marketingTouch?: boolean } = {},
 ): Promise<void> {
   const response = await fetch(`${baseUrl}/__e2e/coding-plan/reset`, {
-    body: JSON.stringify({ scenario, marketingTouch: options.marketingTouch === true }),
+    body: JSON.stringify({ scenario }),
     headers: { "content-type": "application/json" },
     method: "POST",
   });
@@ -95,7 +89,6 @@ export async function resetCodingPlanUpgradeMockServer(
 
 export async function startCodingPlanUpgradeMockServer(
   scenario: CodingPlanUpgradeMockScenario,
-  options: { marketingTouch?: boolean } = {},
 ): Promise<CodingPlanUpgradeMockServer> {
   // 修复原因：pnpm filter 会把 E2E cwd 切到 packages/desktop，不能用 cwd 定位仓库级 fixture。
   const clientConfigFixtureUrl = new URL(
@@ -107,23 +100,15 @@ export async function startCodingPlanUpgradeMockServer(
   ) as CodingPlanClientConfigFixture;
   const requests: CodingPlanUpgradeMockRequest[] = [];
   const state = createCodingPlanUpgradeMockState(baseClientConfigPayload, scenario);
-  // 同套餐场景也供旧测试复用，不能隐式注入需要 release 的营销领取暂停。
-  let marketing = options.marketingTouch ? await createMarketingTouchFixture() : null;
   const server = createServer((request, response) => {
     void (async () => {
       const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
       if (request.method === "POST" && pathname === "/__e2e/coding-plan/reset") {
-        const payload = await readJsonBody<{ scenario?: unknown; marketingTouch?: boolean }>(
-          request,
-        );
+        const payload = await readJsonBody<{ scenario?: unknown }>(request);
         if (!isCodingPlanUpgradeMockScenario(payload.scenario)) {
           sendJson(response, { code: 400, msg: "Invalid Coding Plan E2E scenario" }, 400);
           return;
         }
-        // 混合 suite 复用构建时的 origin；营销开关和投放也必须按 worker 重置，否则弹窗会遮挡购买入口。
-        const nextMarketing = payload.marketingTouch ? await createMarketingTouchFixture() : null;
-        marketing?.stop();
-        marketing = nextMarketing;
         state.webviewWaiters.splice(0).forEach((release) => release());
         state.customerInfoWaiters.splice(0).forEach((release) => release());
         state.inventoryWaiters.splice(0).forEach((release) => release());
@@ -135,27 +120,7 @@ export async function startCodingPlanUpgradeMockServer(
         sendJson(response, { ok: true, scenario: state.scenario });
         return;
       }
-      if (marketing && /^\/(cn|en)\/rewards$/.test(pathname)) {
-        response.writeHead(200, {
-          "Content-Type": "text/html; charset=utf-8",
-          "Cache-Control": "no-store",
-        });
-        response.end(rewardsWebsiteFixture);
-        return;
-      }
-      if (await marketing?.handle(request, response)) return;
-      if (!marketing && pathname === "/api/v1/marketing/touch") {
-        sendJson(response, {
-          code: 0,
-          data: {
-            server_time: Math.floor(Date.now() / 1000),
-            language: request.headers["x-client-language"] === "zh-CN" ? "zh-CN" : "en-US",
-            deliveries: [],
-          },
-        });
-        return;
-      }
-      await handleRequest(state, requests, request, response, marketing !== null);
+      await handleRequest(state, requests, request, response);
     })().catch((error) => {
       if (!response.headersSent) {
         sendJson(response, { code: 500, msg: formatErrorMessage(error) }, 500);
@@ -176,7 +141,6 @@ export async function startCodingPlanUpgradeMockServer(
       return state.scenario;
     },
     stop: async () => {
-      marketing?.stop();
       state.webviewWaiters.splice(0).forEach((release) => release());
       state.customerInfoWaiters.splice(0).forEach((release) => release());
       state.inventoryWaiters.splice(0).forEach((release) => release());
@@ -191,7 +155,6 @@ async function handleRequest(
   requests: CodingPlanUpgradeMockRequest[],
   request: IncomingMessage,
   response: ServerResponse,
-  marketingTouch: boolean,
 ) {
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
   if (url.pathname === "/__e2e/coding-plan/webview-state") {
@@ -510,9 +473,6 @@ async function handleRequest(
       code: 200,
       data:
         state.purchaseCompleted ||
-        // 营销升级先查询全部连接的权益；没有项目凭据会停在 unknown，无法打开升级页。
-        // 只补可查询项目，不把“尚未领取”伪造成已有订阅。
-        marketingTouch ||
         // 无套餐仍需可查询的项目凭据；空项目会让 Account State 变为 unknown，遮蔽订阅入口。
         state.scenario === "personal-sold-out" ||
         state.scenario === "personal-system-busy" ||

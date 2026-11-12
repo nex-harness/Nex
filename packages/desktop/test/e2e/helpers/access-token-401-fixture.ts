@@ -78,7 +78,7 @@ export async function prepareAccessToken401Fixture(options: {
         return;
       }
       let data: unknown;
-      if (path === "/api/v1/client/scenes" || path === "/api/v1/marketing/touch") data = [];
+      if (path === "/api/v1/client/scenes") data = [];
       else if (path === "/api/biz/subscription/enterprise/v2/pricing") data = { productList: [] };
       else if (path === "/api/v1/oauth/cli/init")
         data = {

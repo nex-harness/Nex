@@ -1,5 +1,7 @@
 # 移除 ZCode/Z.ai 账号登录、会话分享与工单反馈（2.0）
 
+后续更新：营销触达与 Rewards 已整体移除，见 [remove-rewards-marketing-touch.md](remove-rewards-marketing-touch.md)。
+
 状态：实现中。范围：`apps/nex-cli`（OAuth/Coding Plan 登录与 `/login`、`/logout`）、
 `packages/{shared,services,client,ui,desktop,web,nex-server-cli}`（会话分享发布/导入/落地页、内置工单反馈）、
 `packages/{web-share,share-ui}`（独立分享站点）、Highspeed 推广分享卡。

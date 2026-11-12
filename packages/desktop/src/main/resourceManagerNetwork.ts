@@ -39,7 +39,6 @@ export function startResourceManagerNetwork(
   const sessions = [
     session.defaultSession,
     session.fromPartition("persist:nex-coding-plan"),
-    session.fromPartition("persist:nex-rewards"),
   ];
   for (const appSession of sessions) {
     disposers.push(

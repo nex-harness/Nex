@@ -11,13 +11,12 @@
 账号夹具提供可解析的个人项目和项目凭据；订阅列表为空，权益接口明确返回无套餐。
 不能以空项目列表模拟无权益，否则账号状态会变成查询失败，而不是已登录、未开通。
 
-混合 suite 可复用构建前确定的 mock origin，但每个 worker 必须显式重置场景与营销开关。
-仅 `marketing-touch-*` worker 启用营销 fixture；购买用例返回空投放，不能继承前一用例的
-Popup、Banner 或挂起领取。重新启用营销时使用新的 fixture 状态。
+混合 suite 可复用构建前确定的 mock origin，但每个 worker 必须显式重置场景。
+营销触达 fixture 已随功能移除（`docs/specs/remove-rewards-marketing-touch.md`），mock server
+只提供 Coding Plan 购买与领取数据。
 
 ```text
-worker spec -> reset(scenario, marketingTouch) -> 同一 mock origin
-  购买用例：空投放                营销用例：全新投放状态
+worker spec -> reset(scenario) -> 同一 mock origin
 ```
 
 ## Case: BigModel 个人套餐全部售罄

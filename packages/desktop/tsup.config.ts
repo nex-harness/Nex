@@ -145,8 +145,6 @@ const desktopNodeRuntimeExternals = [
   // node-forge 内部用动态 require("crypto")，内联进 ESM main/host bundle 后 Electron 会报
   // Dynamic require of "crypto" is not supported。和 undici 同样保留为运行时外部依赖。
   "node-forge",
-  // ZIP 解包器内部依赖 CommonJS require("fs")，不能内联到 ESM main/host 产物。
-  "yauzl",
 ];
 
 function createDevReadyMarkerHook(target: "main" | "host" | "preload"): string {
@@ -206,7 +204,6 @@ export default defineConfig([
     entry: {
       "preload/embeddedBrowserJavaScriptDialog": "src/preload/embeddedBrowserJavaScriptDialog.ts",
       "preload/codingPlanWebview": "src/preload/codingPlanWebview.ts",
-      "preload/rewardsWebview": "src/preload/rewardsWebview.ts",
       "preload/browserVideoRecorder": "src/preload/browserVideoRecorder.ts",
       "preload/index": "src/preload/index.ts",
       "preload/resourceManager": "src/preload/resourceManager.ts",

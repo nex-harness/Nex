@@ -1029,9 +1029,6 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
-      yauzl:
-        specifier: ^3.3.0
-        version: 3.3.0
       yazl:
         specifier: ^3.3.1
         version: 3.3.1
@@ -1063,9 +1060,6 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
-      '@types/yauzl':
-        specifier: ^2.10.3
-        version: 2.10.3
       '@types/yazl':
         specifier: ^3.3.1
         version: 3.3.1
@@ -1368,9 +1362,6 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
-      yauzl:
-        specifier: ^3.3.0
-        version: 3.3.0
       yazl:
         specifier: ^3.3.1
         version: 3.3.1
@@ -1444,9 +1435,6 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
-      yauzl:
-        specifier: ^3.3.0
-        version: 3.3.0
       yazl:
         specifier: ^3.3.1
         version: 3.3.1
@@ -1460,9 +1448,6 @@ importers:
       '@types/node':
         specifier: ^25.5.0
         version: 25.6.0
-      '@types/yauzl':
-        specifier: ^2.10.3
-        version: 2.10.3
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12
@@ -1657,9 +1642,6 @@ importers:
       lexical:
         specifier: ^0.42.0
         version: 0.42.0
-      lottie-web:
-        specifier: 5.13.0
-        version: 5.13.0
       lucide-react:
         specifier: ^1.17.0
         version: 1.17.0(react@19.2.7)
@@ -9657,9 +9639,6 @@ packages:
   loose-envify@1.4.0:
     resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
     hasBin: true
-
-  lottie-web@5.13.0:
-    resolution: {integrity: sha512-+gfBXl6sxXMPe8tKQm7qzLnUy5DUPJPKIyRHwtpCpyUEYjHYRJC/5gjUvdkuO2c3JllrPtHXH5UJJK8LRYl5yQ==}
 
   lowercase-keys@2.0.0:
     resolution: {integrity: sha512-tqNXrS78oMOE73NMxK4EMLQsQowWf8jKooH9g7xPavRT706R6bkQJ6DY2Te7QukaZsulxa30wQ7bk0pm4XiHmA==}
@@ -21295,8 +21274,6 @@ snapshots:
   loose-envify@1.4.0:
     dependencies:
       js-tokens: 4.0.0
-
-  lottie-web@5.13.0: {}
 
   lowercase-keys@2.0.0: {}
 

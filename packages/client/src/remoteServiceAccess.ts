@@ -31,8 +31,6 @@ import {
   ICodingPlanSubscriptionService,
   IClientConfigService,
   IClientScenesService,
-  ICloudContentService,
-  IMarketingTouchService,
   IHighspeedCardService,
   ISkillsService,
   IPetService,
@@ -103,8 +101,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly codingPlanSubscriptionService: ICodingPlanSubscriptionService;
   readonly clientConfigService: IClientConfigService;
   readonly clientScenesService: IClientScenesService;
-  readonly cloudContentService: ICloudContentService;
-  readonly marketingTouchService: IMarketingTouchService;
   readonly highspeedCardService: IHighspeedCardService;
   readonly skillsService: ISkillsService;
   /** 桌面宠物目录服务；旧 server wire 不提供时为 undefined（UI 按可选处理）。 */
@@ -255,12 +251,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
     );
     this.clientScenesService = ProxyChannel.toService<IClientScenesService>(
       channelClient.getChannel(IClientScenesService.channelName),
-    );
-    this.cloudContentService = ProxyChannel.toService<ICloudContentService>(
-      channelClient.getChannel(ICloudContentService.channelName),
-    );
-    this.marketingTouchService = ProxyChannel.toService<IMarketingTouchService>(
-      channelClient.getChannel(IMarketingTouchService.channelName),
     );
     this.highspeedCardService = ProxyChannel.toService<IHighspeedCardService>(
       channelClient.getChannel(IHighspeedCardService.channelName),

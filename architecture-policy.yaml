@@ -849,22 +849,6 @@ modules:
     layers:
       adapters: .
     owner: desktop
-  # marketing-touch-controller：由 architecture:adopt 登记
-  - id: marketing-touch-controller
-    roots:
-      - packages/ui/src/marketing-touch-contract
-      - packages/ui/src/components/marketing-touch/marketingTouchController.ts
-    managed: true
-    requires:
-      - services
-      - shared
-      - ui
-    publicEntrypoints:
-      - packages/ui/src/components/marketing-touch/marketingTouchController.ts
-      - packages/ui/src/marketing-touch-contract/contract.ts
-    layers:
-      app: .
-    owner: desktop
   # data-sync-service：数据同步分类服务形状与本机设备同步状态（docs/remote/data-sync.md）
   - id: data-sync-service
     roots:
@@ -1228,10 +1212,10 @@ exceptions:
     rule: unmanaged-new-file
     paths: [packages/shared/src/productLinks.ts]
     reason: 新增一个公开问题反馈链接常量（Help → Feedback 指向 GitHub Issues），除该常量外不引入新的模块边界；后续若要收口全部产品链接再单独 adopt shared 模块。
-  - id: remove-zcode-login-share-marketing-touch-edit
+  - id: remove-rewards-marketing-touch-network-session-edit
     rule: unmanaged-new-file
-    paths: [packages/ui/src/components/marketing-touch/MarketingTouchProvider.tsx]
-    reason: 已准入的营销触达 Provider 只删去登录态依赖（账号体系移除后营销实例不再按用户身份重建），控制器、副作用时机与模块边界不变；接管整个 marketing-touch 目录需要单独 refactor。
+    paths: [packages/desktop/src/main/resourceManagerNetwork.ts]
+    reason: 已准入的文件只从 App 自有 session 订阅列表删去 Rewards 的 persist:nex-rewards 一条；该文件自基线以来内容未变，因只按历史清单判定而被当作新增路径。采集范围、订阅顺序与其余 session 不变，接管整个 desktop main 不在本次范围内。
   - id: session-features-attribution-header-edit
     rule: unmanaged-new-file
     paths: [apps/nex-cli/packages/adapters/src/model/runner-attribution.ts]
