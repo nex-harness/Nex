@@ -119,12 +119,8 @@ export const ServiceChannels = {
   WindowProject: "window-project",
   WindowRemoteProjects: "window-remote-projects",
   WindowProjectChanges: "window-project-changes",
-  /** 会话分享发布、预览与 continuation API 编排 */
-  ConversationShare: "conversation-share",
   /** 文件系统监视服务 */
   FileWatcher: "file-watcher",
-  /** OAuth 认证服务 */
-  OAuth: "oauth",
   /** 新 Provider Config 的设置读写 Facade */
   ProviderSettings: "provider-settings",
   /** 新 Provider Registry 的模型选择 Facade */
@@ -248,7 +244,7 @@ export const PlatformChannels = {
   StopWebRemoteControl: "nex:stop-web-remote-control",
   /** 查询当前窗口的 Web 远程控制状态 */
   GetWebRemoteControlStatus: "nex:get-web-remote-control-status",
-  /** Renderer → Main：OAuth 会话变化通知，不携带凭据 */
+  /** Renderer → Main：远控登录态变化通知，不携带凭据 */
   WebRemoteControlAuthStateChanged: "nex:web-remote-control-auth-state-changed",
   /** Main → Renderer：当前窗口 Web 远程控制状态变化 */
   WebRemoteControlStatusChanged: "nex:web-remote-control-status-changed",
@@ -324,10 +320,6 @@ export const PlatformChannels = {
   OpenWorkspace: "nex:open-workspace",
   /** Main → Renderer：deep link 直接打开指定本地工作区目录 */
   OpenWorkspacePath: "nex:open-workspace-path",
-  /** Main → Renderer：打开内置反馈对话框 */
-  OpenFeedbackDialog: "nex:open-feedback-dialog",
-  /** Main → Renderer：打开我的工单面板 */
-  OpenTicketsPanel: "nex:open-tickets-panel",
   /** Main → Renderer：窗口全屏状态变化 */
   WindowFullscreenChanged: "nex:window-fullscreen-changed",
   /** Renderer → Main：读取窗口最大化状态与系统原生圆角能力 */
@@ -357,7 +349,7 @@ export const PlatformChannels = {
   StorageRevealPath: "nex:storage-reveal-path",
   /** Main → 资源管理器 renderer：扫描进度快照推送 */
   StorageScanProgress: "nex:storage-scan-progress",
-  /** Renderer → Main：打开外部 URL（用于 OAuth 跳转浏览器） */
+  /** Renderer → Main：打开外部 URL */
   OpenExternal: "nex:open-external",
   /** Renderer → Main：查询当前语言下是否存在可用的用户社群入口 */
   CanOpenCommunity: "nex:can-open-community",
@@ -385,8 +377,6 @@ export const PlatformChannels = {
   NotifyCuaHelperPermissionDragEnded: "nex:notify-cua-helper-permission-drag-ended",
   /** Main → Renderer：转发支付 deep link URL */
   PaymentCallback: "nex:payment-callback",
-  /** Main → Renderer：外部分享页请求导入 share code。 */
-  ShareImport: "nex:share-import",
   /** Renderer → Main：renderer 已就绪，可接收缓存的 deep link */
   RendererReady: "nex:renderer-ready",
   /** Renderer → Main：读取 Renderer 用户操作 Trace 灰度配置。 */
@@ -642,8 +632,6 @@ export const HostMessageTypes = {
   SessionMessageDeliver: "session-message-deliver",
   /** main → host：把 session message 投递结果回写到源 session */
   SessionMessageDeliveryResult: "session-message-delivery-result",
-  /** main → host：反馈日志归档创建结果 */
-  FeedbackLogArchiveResult: "feedback-log-archive-result",
   /** main → host：定时任务到点派发；会话内 cron 复用 targetTaskId，历史未绑定任务才建 session */
   CronRun: "cron-run",
   /** main → host：闲时任务派发；首跑 createTask 新建 session，续跑带 conversationId/sessionId resume */
@@ -741,8 +729,6 @@ export const HostResponseTypes = {
   SessionRouteAnnounce: "session-route-announce",
   /** host → main：目标 host 完成本地 session message 投递 */
   SessionMessageDeliverResult: "session-message-deliver-result",
-  /** host → main：请求 main 复用导出日志逻辑创建反馈日志归档 */
-  FeedbackLogArchiveRequest: "feedback-log-archive-request",
   /** host → main：定时任务派发结果（成功回填 taskId/sessionId，失败带 transient/permanent） */
   CronRunResult: "cron-run-result",
   /** host → main：闲时任务派发结果（成功回填 conversationId/sessionId，失败带 transient/permanent） */
@@ -1079,10 +1065,6 @@ export interface PlatformChannelMap {
   };
   [PlatformChannels.PaymentCallback]: {
     request: string;
-    response: void;
-  };
-  [PlatformChannels.ShareImport]: {
-    request: { shareCode: string };
     response: void;
   };
   [PlatformChannels.RendererReady]: {

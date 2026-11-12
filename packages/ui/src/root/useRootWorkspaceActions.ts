@@ -6,7 +6,6 @@ import {
   remoteHostIdFromWorkspaceIdentity,
   type AppSettings,
   type IPlatformService,
-  type UserInfo,
   type NexTaskClientMode,
 } from "@nex/shared";
 import type { IServiceAccessor } from "@nex/services";
@@ -94,10 +93,7 @@ export function useRootWorkspaceActions({
   openDirectoryBrowser,
   refreshProviderState: _refreshProviderState,
   updateAppSettings: _updateAppSettings,
-  setOAuthError: _setOAuthError,
-  setUser: _setUser,
   onProviderFamilyDomainClearedAfterLogout: _onProviderFamilyDomainClearedAfterLogout,
-  userId: _userId,
   onOpenRemoteConnection,
   openRemoteProjectWorkspace,
   openMobileProjectDraft,
@@ -117,10 +113,7 @@ export function useRootWorkspaceActions({
   openDirectoryBrowser?: () => void;
   refreshProviderState: () => Promise<void>;
   updateAppSettings: (patch: Partial<AppSettings>) => Promise<void>;
-  setOAuthError: (error: string | null) => void;
-  setUser: (user: UserInfo | null) => void;
   onProviderFamilyDomainClearedAfterLogout?: () => void;
-  userId?: string;
   onOpenRemoteConnection?: (preference?: RemoteConnectionOpenPreference) => void;
   openRemoteProjectWorkspace?: (target: {
     hostId: string;
@@ -460,9 +453,6 @@ export function useRootWorkspaceActions({
     setWorkspaceActionError,
   });
 
-  // Nex 无账号体系：退出登录入口已随账号能力移除。
-  const handleLogout = useCallback(async () => {}, []);
-
   const handleSelectProject = useCallback(
     async (path: string, activateOtherWindow = true) => {
       logger.info("[Root] handleSelectProject called with path:", path);
@@ -690,7 +680,6 @@ export function useRootWorkspaceActions({
     setWorkspaceActionError,
     startDraftInWorkspace,
     startNewTaskFromActiveWorkspace,
-    handleLogout,
     handleSelectProject,
     handleSelectConversationWorkspace,
     handleResolveConversationWorkspace,

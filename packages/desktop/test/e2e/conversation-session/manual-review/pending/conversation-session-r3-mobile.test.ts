@@ -303,15 +303,12 @@ async function readMobileControllerServices(
       const { getRemoteWorkspaceSession } = await import(moduleUrl);
       const services = getRemoteWorkspaceSession(target.remoteSessionId)?.services;
       if (!services) throw new Error("MRS05 remote services unavailable");
-      const device = await services.feedbackService.getDeviceSnapshot();
       const widgets = await services.genUiService.listState({
         workspacePath: target.workspacePath,
         workspaceIdentity: target.identity,
         sessionId: target.taskId,
       });
       return {
-        osPlatform: device.osPlatform,
-        appVersion: device.appVersion,
         widgets: widgets.length,
       };
     },
@@ -451,14 +448,13 @@ describe(`${CASE_MARKER}: 手机 viewport 经真实 relay 配对，选择 SSH ta
       taskA.remoteSessionId,
     );
 
-    // MRS05：控制端反馈/Gen UI 读取经过真实手机 attachment，不落到 Linux Source 或等待未知频道。
+    // MRS05：控制端 Gen UI 读取经过真实手机 attachment，不落到 Linux Source 或等待未知频道。
     const controllerServices = await readMobileControllerServices(mobile, {
       remoteSessionId: taskA.remoteSessionId,
       workspacePath: workspaceA,
       identity: taskA.identity,
       taskId: taskA.taskId,
     });
-    expect(controllerServices.osPlatform).toBe(process.platform);
     expect(controllerServices.widgets).toBeGreaterThanOrEqual(0);
     const submissionMarker = `${CASE_MARKER}_MRS_UNSENT`;
     const submissionInput = mobile.getByTestId(TID_V4_COMPOSER_INPUT).first();

@@ -4,7 +4,7 @@ import {
   confirmExternalWorkspaceOpen,
   isNetworkWorkspacePath,
   isValidLocalWorkspaceDirectory,
-} from "./desktopOAuthDeepLink.js";
+} from "./desktopDeepLink.js";
 import {
   createOpenWorkspaceStartupBootstrap,
   type StartupWindowBootstrap,

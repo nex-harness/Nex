@@ -14,8 +14,6 @@ import {
   INexTaskService,
   INexAgentService,
   INexSessionService,
-  IConversationShareService,
-  createUnsupportedConversationShareService,
   IBotsService,
   IFileWatcherService,
   IModelSelectionService,
@@ -79,7 +77,6 @@ export const REMOTE_WORKSPACE_RPC_REGISTRATIONS = [
   ["nexTaskService", INexTaskService],
   ["nexAgentService", INexAgentService],
   ["nexSessionService", INexSessionService],
-  ["conversationShareService", IConversationShareService],
   ["botsService", IBotsService],
   ["fileWatcherService", IFileWatcherService],
   ["providerSettingsService", IProviderSettingsService],
@@ -104,20 +101,6 @@ export const REMOTE_WORKSPACE_RPC_REGISTRATIONS = [
   ["promptAttachmentTransferService", IPromptAttachmentTransferService],
 ] as const satisfies readonly [keyof IServiceAccessor, ServiceDescriptor<unknown>][];
 
-const conversationShareLog = createServiceLogger("conversation-share");
-
-function createUnsupportedRemoteConversationShareService(): IConversationShareService {
-  return createUnsupportedConversationShareService({
-    message: "Conversation sharing is not available for this client or remote target",
-    onRejected: (action) => {
-      conversationShareLog.warn(undefined, "conversation share action rejected", {
-        action,
-        kind: "feature_disabled",
-        reason: "server_remote_unsupported",
-      });
-    },
-  });
-}
 
 export function resolveServerProjectService(params: {
   connectionServices: IServiceAccessor;
@@ -207,13 +190,6 @@ export function createServerRemoteWorkspaceServiceCollection(params: {
     .register(INexTaskService, params.connectionServices.nexTaskService)
     .register(INexAgentService, params.connectionServices.nexAgentService)
     .register(INexSessionService, params.connectionServices.nexSessionService)
-    // R3 的分享属于目标 Environment；不能恢复旧 SSH 的本机 JWT 混装。
-    .register(
-      IConversationShareService,
-      params.targetKind === "server"
-        ? createUnsupportedRemoteConversationShareService()
-        : params.connectionServices.conversationShareService,
-    )
     .register(IBotsService, params.connectionServices.botsService)
     .register(IFileWatcherService, params.connectionServices.fileWatcherService)
     .register(IProviderSettingsService, params.connectionServices.providerSettingsService)

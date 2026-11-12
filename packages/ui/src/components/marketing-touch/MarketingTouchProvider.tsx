@@ -16,7 +16,6 @@ import {
 import { NEX_ENV } from "@nex/shared";
 import { useServices } from "@/hooks/useServices.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
-import { useNexStore } from "@/store/StoreProvider.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { useCloudHeroEnvironment } from "@/components/cloud-content-dialog/useCloudHeroEnvironment.js";
 import { MarketingDialogs } from "@/components/marketing-touch/MarketingDialogs.js";
@@ -56,18 +55,15 @@ export function MarketingTouchProvider({
   const platform = usePlatform();
   const openSettingsTab = useTabStore((state) => state.openSettingsTab);
   const tabStore = useTabStoreApi();
-  const user = useNexStore((state) => state.user);
-  const restoring = useNexStore((state) => state.isRestoringOAuthSession);
-  const requestLogin = useNexStore((state) => state.requestLoginEntry);
   const openRewards = useOpenRewards();
   const openRewardsRef = useRef(openRewards);
   openRewardsRef.current = openRewards;
   const { intl, locale } = useNexIntl();
-  // Nex 无账号体系：Start Plan 权益查询已移除。
-  const identity = user?.id ?? "anonymous";
+  // Nex 无账号体系：Start Plan 权益查询已移除，营销实例不再按账号身份重建。
+  const identity = "anonymous";
   const createRuntime = useCallback(() => {
     const service = services.marketingTouchService;
-    if (!service || restoring) return null;
+    if (!service) return null;
     let poller: ReturnType<typeof createMarketingTouchPoller>;
     const controller = createMarketingTouchController({
       query: () => service.query({ locale }),
@@ -224,11 +220,8 @@ export function MarketingTouchProvider({
     services,
     platform,
     identity,
-    Boolean(user),
-    restoring,
     locale,
     intl,
-    requestLogin,
     desktop,
     openSettingsTab,
     tabStore,

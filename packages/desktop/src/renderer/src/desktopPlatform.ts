@@ -82,7 +82,6 @@ export function createDesktopPlatform(options: {
     notifyWebRemoteControlAuthStateChanged: (change) =>
       window.nex.notifyWebRemoteControlAuthStateChanged(change),
     onPaymentCallback: (callback) => window.nex.onPaymentCallback(callback),
-    onShareImport: (callback) => window.nex.onShareImport?.(callback) ?? (() => {}),
     notifyRendererReady: () => window.nex.notifyRendererReady(),
     showTaskNotification: (payload) => window.nex.showTaskNotification(payload),
     syncWindowTabs: (paths) => window.nex.syncWindowTabs(paths),
@@ -134,8 +133,6 @@ export function createDesktopPlatform(options: {
     },
     onOpenWorkspacePath: (handler) => window.nex.onOpenWorkspacePath?.(handler) ?? (() => {}),
     onOpenSettingsSection: (handler) => window.nex.onOpenSettingsSection?.(handler) ?? (() => {}),
-    onOpenFeedbackDialog: (handler) => window.nex.onOpenFeedbackDialog?.(handler) ?? (() => {}),
-    onOpenTicketsPanel: (handler) => window.nex.onOpenTicketsPanel?.(handler) ?? (() => {}),
     onWindowFullscreenChanged: (handler) => window.nex.onWindowFullscreenChanged(handler),
     getDesktopWindowChromeState: window.nex.getDesktopWindowChromeState
       ? () => window.nex.getDesktopWindowChromeState!()

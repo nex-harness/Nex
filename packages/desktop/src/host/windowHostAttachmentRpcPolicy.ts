@@ -9,7 +9,6 @@ import {
   IWindowRemoteProjectService,
   IWindowProjectChangesService,
   IMcpSyncService,
-  IFeedbackService,
   IGenUiService,
   createWindowProjectChangesService,
   type ServiceExposurePolicy,
@@ -42,11 +41,7 @@ const WEB_REMOTE_REPLAYABLE_ALLOWED_CHANNELS = new Set<string>([
   ServiceChannels.WindowProject,
   ServiceChannels.WindowRemoteProjects,
   ServiceChannels.WindowProjectChanges,
-  // ConversationShare 由 scopeConversationShareServiceForAttachment 按 clientMode 包装：手机只保留
-  // getCapabilities/getPreview 只读透传，publish/import/continuation 一律 feature_disabled。
-  ServiceChannels.ConversationShare,
   ServiceChannels.FileWatcher,
-  ServiceChannels.OAuth,
   ServiceChannels.ProviderSettings,
   ServiceChannels.ModelSelection,
   // ProviderProvisioningTarget 携带跨 Environment 凭据写入，只允许受信 Desktop Host 调用，绝不进手机 allowlist。
@@ -68,7 +63,6 @@ const WEB_REMOTE_REPLAYABLE_ALLOWED_CHANNELS = new Set<string>([
   ServiceChannels.OutputStyle,
   ServiceChannels.SettingsSync,
   ServiceChannels.Bots,
-  ServiceChannels.Feedback,
   ServiceChannels.PromptAttachmentTransfer,
   ServiceChannels.OffPeakTask,
 ]);
@@ -165,13 +159,6 @@ export function exposeWindowHostAttachmentServices(params: {
   if (params.clientMode === "web-remote-replayable") {
     const controllerServices =
       params.attachmentScope?.kind === "remote" ? params.windowServices! : params.services;
-    if (params.attachmentScope?.kind === "remote") {
-      // Source 集合不拥有反馈服务；手机切到远端后仍须复用控制端账号、设备和诊断日志。
-      params.server.registerChannel(
-        IFeedbackService.channelName,
-        ProxyChannel.fromService(controllerServices.get(IFeedbackService)),
-      );
-    }
     const genUi = controllerServices.getOptional(IGenUiService);
     if (genUi) {
       // 发送前 listState 曾因整频道被拒而固定等待超时。只发布控制端的只读上下文接口，

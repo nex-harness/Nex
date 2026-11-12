@@ -16,7 +16,6 @@ export const REMOTE_WORKSPACE_RPC_CHANNELS = [
   "nexTaskService",
   "nexAgentService",
   "nexSessionService",
-  "conversationShareService",
   "botsService",
   "fileWatcherService",
   "providerSettingsService",

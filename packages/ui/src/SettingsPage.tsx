@@ -23,7 +23,6 @@ import type {
   IntegratedTerminalShellSelection,
   Locale,
   UsageEntitlementSnapshot,
-  UserInfo,
   NexInteractionBehavior,
 } from "@nex/shared";
 import { BUILTIN_MODEL_PROVIDER_IDS } from "@nex/shared";
@@ -290,9 +289,6 @@ export function SettingsPage({
   onOpenWorkspace: _onOpenWorkspace,
   onOpenRemoteWorkspace,
   allowOpenWorkspace: _allowOpenWorkspace = true,
-  onLogin: _onLogin,
-  onLogout: _onLogout,
-  user: _user,
 }: {
   isDesktop?: boolean;
   isWindowsDesktop?: boolean;
@@ -306,9 +302,6 @@ export function SettingsPage({
   onOpenRemoteWorkspace?: (preference?: RemoteConnectionOpenPreference) => void;
   /** 远程设备卡「新任务」：激活该设备已打开的 tab 并开新草稿（Root 注入）。 */
   allowOpenWorkspace?: boolean;
-  onLogin?: () => void;
-  onLogout?: () => void;
-  user?: UserInfo | null;
 }) {
   const { intl, localePreference, setLocalePreference } = useNexIntl();
   const { settingsSectionGroups, settingsSections } = useMemo(

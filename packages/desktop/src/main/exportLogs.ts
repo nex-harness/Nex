@@ -19,11 +19,9 @@ import { pipeline } from "node:stream/promises";
 import { ZipFile } from "yazl";
 
 import {
-  createFeedbackDiagnosticArchive,
   getAppConfigDir,
   getExportLogDir as getDefaultExportLogDir,
   getExportLogStageDir as getDefaultExportLogStageDir,
-  getFeedbackLogArchiveDir as getDefaultFeedbackLogArchiveDir,
 } from "@nex/services/node";
 import { createAboutSnapshot, formatAboutDetail, readBuildMetadata } from "./about.js";
 import { logger } from "./logger.js";
@@ -94,13 +92,6 @@ interface ExportLogsDependencies {
 
 interface WriteLogArchiveZipOptions {
   stageRootDir?: string;
-}
-
-interface CreateFeedbackLogArchiveFromExportLogsOptions {
-  now?: () => Date;
-  outputRootDir?: string;
-  stageRootDir?: string;
-  onProgress?: (event: { processedBytes: number; totalBytes: number }) => void;
 }
 
 function formatTimestamp(now: Date = new Date()): string {
@@ -1135,37 +1126,6 @@ export async function writeLogArchiveDirectory(
   logSkippedLogArchiveFiles(skippedFiles);
 
   await writeFile(join(outputPath, "about.txt"), artifacts.aboutContent, "utf-8");
-}
-
-export async function createFeedbackLogArchiveFromExportLogs(
-  sourceDir: string,
-  options: CreateFeedbackLogArchiveFromExportLogsOptions = {},
-): Promise<{ path: string; size: number }> {
-  return createFeedbackDiagnosticArchive({
-    sources: [
-      { directory: join(sourceDir, "logs"), archivePrefix: "logs" },
-      { directory: getNexCliLogDir(), archivePrefix: ".nex/cli/log" },
-      {
-        directory: getNexCliDir(),
-        archivePrefix: ".nex/cli",
-        includeFileNames: ["config.json"],
-        onlyCurrentDay: false,
-        contentPolicy: "cli-config",
-      },
-      {
-        directory: join(getNexCliDir(), "rollout"),
-        archivePrefix: ".nex/cli/rollout",
-      },
-      {
-        directory: getCuaHelperRunDir(),
-        archivePrefix: ".nex/computer-use/run",
-        exitLogsOnly: true,
-      },
-    ],
-    outputRootDir: options.outputRootDir ?? getDefaultFeedbackLogArchiveDir(),
-    now: options.now,
-    onProgress: options.onProgress,
-  });
 }
 
 export async function exportLogs(

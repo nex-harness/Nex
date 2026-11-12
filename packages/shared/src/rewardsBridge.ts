@@ -69,23 +69,15 @@ export function installRewardsPageBridge() {
   });
 }
 
+/** Nex 无账号体系：邀请页只注入主题与语言，不再传递任何登录凭据。 */
 export function createRewardsInjectionScript(
   context: RewardsContext,
-  credentials: { oauth?: string | null; jwt?: string | null },
   expectedUrl?: string,
 ): string {
   const snapshot = rewardsContextSchema.parse(context);
-  const values =
-    snapshot.auth.status === "ready"
-      ? {
-          [`oauth:${snapshot.auth.provider}:access_token`]: credentials.oauth?.trim() || null,
-          nexjwttoken: credentials.jwt?.trim() || null,
-        }
-      : {};
   return `(() => {
     ${expectedUrl ? `if (window.location.href !== ${JSON.stringify(expectedUrl)}) return;` : ""}
     for (const key of ["oauth:zai:access_token", "oauth:bigmodel:access_token", "nexjwttoken"]) localStorage.removeItem(key);
-    for (const [key, value] of Object.entries(${JSON.stringify(values)})) if (value) localStorage.setItem(key, value);
     window.dispatchEvent(new CustomEvent("nex-rewards-context", { detail: ${JSON.stringify(snapshot)} }));
   })()`;
 }

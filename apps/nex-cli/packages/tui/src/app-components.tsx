@@ -196,31 +196,6 @@ export function actionPanelContentWidthForTerminal(
   return normalizeSlashCommandContentWidth(mainWidth - PANEL_HORIZONTAL_CHROME_COLUMNS);
 }
 
-export function LoginRequiredPanel({
-  copy = DEFAULT_TUI_COPY,
-}: {
-  copy?: TuiCopy;
-} = {}): React.ReactElement {
-  return h(
-    "box",
-    {
-      title: copy.loginRequired.title,
-      style: {
-        backgroundColor: palette.panel,
-        border: true,
-        borderColor: palette.warning,
-        flexDirection: "column",
-        height: 5,
-        marginBottom: 1,
-        paddingLeft: 1,
-        paddingRight: 1,
-        width: "100%",
-      },
-    },
-    h("text", { style: { fg: palette.warning } }, copy.loginRequired.message),
-    h("text", { style: { fg: palette.muted } }, copy.loginRequired.help),
-  );
-}
 
 function slashCommandRowParts(
   command: SlashCommand,

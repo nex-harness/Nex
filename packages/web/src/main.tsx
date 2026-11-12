@@ -28,10 +28,6 @@ import {
   createAcknowledgedWebRemoteControlRelayProtocol,
 } from "@nex/client";
 
-import {
-  ConversationShareLandingLoader,
-  ConversationShareLandingStatus,
-} from "./share/ConversationShareLandingPage.js";
 import { INERT_WEB_AUTH_PORT } from "./web-remote-control/webAuthPort.js";
 import { WebLoginPage } from "./WebLoginPage.js";
 import {
@@ -41,14 +37,6 @@ import {
   resolveWebAuthAfterDisconnect,
   sanitizeNextPath,
 } from "./webAuthSession.js";
-import {
-  ConversationSharePreviewClient,
-  resolveConversationShareRouteLocale,
-} from "./share/conversationSharePreviewClient.js";
-import {
-  isConversationSharePath,
-  resolveConversationShareCodeFromPath,
-} from "./share/conversationShareRoute.js";
 import type {
   WebRemoteControlFailure,
   WebRemoteControlFailureReason,
@@ -195,10 +183,7 @@ function resolveWebThemePreference(defaultTheme: Theme = WEB_REMOTE_CONTROL_DEFA
 // 初始化主题：默认 Zai dark，后续由 useTheme hook 接管
 // system 模式下需要查询系统偏好；非 system 模式直接用存储值
 {
-  // 分享页没有本地主题配置时使用浅色，已有配置仍然沿用；其他 Web 页面继续默认深色。
-  const saved = resolveWebThemePreference(
-    isConversationSharePath(window.location.pathname) ? "zai-light" : undefined,
-  );
+  const saved = resolveWebThemePreference();
   const resolved =
     saved === "system"
       ? window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -279,70 +264,6 @@ function renderWebRemoteControlFailure(failure: WebRemoteControlFailure): void {
   );
 }
 
-async function renderConversationSharePage(): Promise<void> {
-  // 页面语言跟随路径前缀：/cn/share 中文，裸 /share 英文。
-  const routeLocale = resolveConversationShareRouteLocale(window.location.pathname);
-  // index.html 固定 lang="en"；不同步会让中文分享页对无障碍与浏览器翻译都报错语言。
-  document.documentElement.lang = routeLocale;
-  // 分享页必须设置 title：否则浏览器标签只显示 index.html 的通用标题。
-  // 会话标题要等 preview 加载完，先给一个语言正确的兜底。
-  document.title = routeLocale === "zh-CN" ? "Nex 会话分享" : "Nex Conversation Share";
-  const shareCode = resolveConversationShareCodeFromPath(window.location.pathname);
-  if (!shareCode) {
-    root.render(
-      <ConversationShareLandingStatus
-        state={{ kind: "error", error: "invalid_contract" }}
-        locale={routeLocale}
-      />,
-    );
-    return;
-  }
-
-  const endpointOrigin =
-    import.meta.env.VITE_NEX_BASE_URL?.trim().replace(/\/+$/u, "") || window.location.origin;
-  const mockMode =
-    import.meta.env.DEV && import.meta.env.VITE_CONVERSATION_SHARE_PREVIEW_MOCK === "true";
-  // Share 加载失败不能只有通用 network 文案：需要区分 mock、endpoint 配置或跨域 fetch。
-  // 这里只记录运行时路由与 endpoint，不记录完整 pathname，避免把 share code 写入日志。
-  console.info("[conversation-share-web]", "preview_runtime_initialized", {
-    browserOrigin: window.location.origin,
-    routeKind: "canonical",
-    endpointOrigin,
-    transport: mockMode ? "mock" : "fetch",
-  });
-  const client = mockMode
-    ? new (
-        await import("./share/mockConversationSharePreviewClient.js")
-      ).MockConversationSharePreviewClient()
-    : new ConversationSharePreviewClient({
-        baseUrl: `${endpointOrigin}/api/v1`,
-      });
-  const getMockToken = () =>
-    mockMode && window.sessionStorage.getItem("nex:share:mock-auth") === "owner"
-      ? "mock-owner-token"
-      : null;
-  // Nex 没有账号体系：Web 只匿名预览公开分享；mock 模式保留 owner token 便于本地预览。
-  const onLogout = () => {
-    if (!mockMode) return;
-    window.sessionStorage.removeItem("nex:share:mock-auth");
-    window.location.reload();
-  };
-  root.render(
-    <ConversationShareLandingLoader
-      shareCode={shareCode}
-      client={client}
-      getAccessToken={() => getMockToken()}
-      onLogin={() => {
-        if (!mockMode) return;
-        window.sessionStorage.setItem("nex:share:mock-auth", "owner");
-        window.location.reload();
-      }}
-      onLogout={onLogout}
-      locale={routeLocale}
-      theme={resolveWebThemePreference("zai-light")}
-    />,
-  );
-}
 
 // 访问 window.localStorage 本身在部分浏览器会抛错，统一包在方法里交给调用方兜底。
 const webRemoteControlStorage: Pick<Storage, "getItem" | "setItem"> = {
@@ -350,19 +271,9 @@ const webRemoteControlStorage: Pick<Storage, "getItem" | "setItem"> = {
   setItem: (key, value) => window.localStorage.setItem(key, value),
 };
 
-const webRemoteControlAuth = (() => {
-  if (import.meta.env.VITE_NEX_E2E_STORE_BRIDGE !== "1") return INERT_WEB_AUTH_PORT;
-  const relayOrigin = new URL(window.location.origin);
-  if (!["127.0.0.1", "localhost", "::1"].includes(relayOrigin.hostname)) return INERT_WEB_AUTH_PORT;
-  // 隔离验收允许显式注入受控 Relay 凭据；生产与跨域 Relay 不读取 localStorage。
-  const token = window.localStorage.getItem("nexjwttoken")?.trim() || null;
-  if (!token) return INERT_WEB_AUTH_PORT;
-  return {
-    ...INERT_WEB_AUTH_PORT,
-    getNexJwtToken: () => token,
-    getActiveAccount: () => ({ provider: "zai" as const, displayName: "Nex E2E" }),
-  };
-})();
+// Nex 无账号体系：远控配对仍依赖 relay 的 JWT supplier 端口，但客户端不提供任何登录能力。
+const webRemoteControlAuth = INERT_WEB_AUTH_PORT;
+
 
 const remoteEntry = new WebRemoteControlEntry({
   auth: webRemoteControlAuth,
@@ -656,9 +567,6 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
       }),
     }),
     // 分享发布首期只属于 desktop local host；Web 首页和 /remote 不建立独立发布权威。
-    conversationShareService: createUnsupportedHomeOnlyService<
-      RootServices["conversationShareService"]
-    >("conversationShareService"),
     promptAttachmentTransferService: createEmptyHomeOnlyService<
       RootServices["promptAttachmentTransferService"]
     >({
@@ -761,10 +669,6 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
       listStyles: async () => ({ styles: [] }),
       getUserStylesDirectory: async () => ({ path: "" }),
     }),
-    // Bugfix: feedbackService 成为统一服务接口后，Web 远控首页 fallback 也必须补齐。
-    // 断开 bridge 时这里明确报不可用，避免类型通过但运行时误以为空反馈数据。
-    feedbackService:
-      createUnsupportedHomeOnlyService<RootServices["feedbackService"]>("feedbackService"),
     settingsSyncService:
       createUnsupportedHomeOnlyService<RootServices["settingsSyncService"]>("settingsSyncService"),
   };
@@ -1779,10 +1683,6 @@ async function renderWebLoginPage(): Promise<void> {
 async function bootstrapWebApp() {
   if (isWebRemoteControlRoute() || isWebRemoteControlOAuthCallback(new URL(window.location.href))) {
     document.documentElement.lang = resolveWebRemoteControlScreenLocale(navigator.language);
-  }
-  if (isConversationSharePath(window.location.pathname)) {
-    await renderConversationSharePage();
-    return;
   }
 
   if (isWebRemoteControlRoute()) {

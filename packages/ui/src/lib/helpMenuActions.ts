@@ -1,6 +1,5 @@
-import type { IPlatformService } from "@nex/shared";
+import { NEX_GITHUB_ISSUES_NEW_URL, type IPlatformService } from "@nex/shared";
 import type { IntlInstance } from "@/i18n/IntlProvider.js";
-import type { FeedbackSubmitDraft } from "@/feedback/feedbackStore.js";
 import { runExportLogsAction } from "@/lib/exportLogsAction.js";
 import { NEX_PRODUCT_DOCS_URL } from "@/lib/productDocs.js";
 
@@ -13,21 +12,14 @@ export interface HelpMenuActionHandlers {
 export function createHelpMenuActionHandlers({
   platform,
   intl,
-  openSubmit,
 }: {
   platform: Pick<IPlatformService, "captureWindowScreenshot" | "exportLogs" | "openExternal">;
   intl: IntlInstance;
-  openSubmit: (draft?: FeedbackSubmitDraft) => void;
 }): HelpMenuActionHandlers {
   return {
     openIssueReport: async () => {
-      openSubmit({
-        type: "bug",
-        module: "其它",
-        severity: "P2-中",
-        includeLogs: true,
-        screenshots: [],
-      });
+      // 产品决定：不再内置工单系统，Help → Feedback 直接打开 GitHub Issues 新建页。
+      platform.openExternal(NEX_GITHUB_ISSUES_NEW_URL);
     },
     openProductDocs: () => {
       platform.openExternal(NEX_PRODUCT_DOCS_URL);

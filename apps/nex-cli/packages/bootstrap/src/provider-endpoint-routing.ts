@@ -1,8 +1,4 @@
 import { createConfig, type ConfigResult } from "@nex/adapters/config";
-import {
-  createSharedNexCredentialStore,
-  SHARED_NEX_CREDENTIAL_KEYS,
-} from "@nex/adapters/auth";
 import { createNodeHttpClientAdapter } from "@nex/adapters/http";
 import { createProviderEndpointRoutingPort } from "@nex/adapters/model";
 import { createNodeLoggerFactory } from "@nex/adapters/logging";
@@ -45,8 +41,6 @@ export function resolveProcessProviderEndpointRoutingPort(
     return existing;
   }
 
-  const credentialStore = createSharedNexCredentialStore({ env });
-
   const port = createProviderEndpointRoutingPort({
     appVersion: options.appVersion,
     endpointOrigin,
@@ -59,7 +53,6 @@ export function resolveProcessProviderEndpointRoutingPort(
     logger: options.logger.child({
       module: "adapters.model.provider_endpoint_routing",
     }),
-    readNexJwt: () => credentialStore.load(SHARED_NEX_CREDENTIAL_KEYS.nexJwtToken),
     sourceHeaders: () =>
       createProviderEndpointRoutingSourceHeaders({
         appVersion: options.appVersion,

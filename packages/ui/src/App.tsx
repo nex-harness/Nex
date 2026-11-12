@@ -37,8 +37,6 @@ import {
 } from "@/quickpick/taskFindNavigationState.js";
 import { createQuickPickCommands } from "@/quickpick/quickPickCommands.js";
 import { CommandCenterDialog } from "@/command-center/CommandCenterDialog.js";
-import { FeedbackHost } from "@/feedback/FeedbackHost.js";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import {
   resolveQuickPickConversationNavigation,
   selectQuickPickConversationTaskIds,
@@ -94,14 +92,10 @@ const EMPTY_REMOTE_CONNECTION_LOGS: NonNullable<AppProps["remoteConnectionLogs"]
 
 export function App({
   services,
-  baseFeedbackService,
   onConnectRemote,
   onSelectRemoteProject,
   onCancelRemoteProject,
   onReconnectRemoteWorkspace,
-  onLogout,
-  onLogin,
-  user,
   reconnectingRemoteWorkspaceKeys,
   remoteWorkspaceRecoveryByWorkspaceKey = EMPTY_REMOTE_WORKSPACE_RECOVERY_BY_WORKSPACE_KEY,
   remoteWorkspaceErrorByWorkspaceKey,
@@ -683,27 +677,10 @@ export function App({
   const handleOpenQuickPick = useCallback(() => {
     setIsQuickPickOpen((open) => !open);
   }, []);
-  const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
-  const openFeedbackTickets = useFeedbackStore((state) => state.openTickets);
-  const isLoggedIn = Boolean(user);
   const handleOpenFeedback = useCallback(() => {
+    // 产品决定：Help → Feedback 统一打开 GitHub Issues 新建页。
     void platform.openFeedback();
   }, [platform]);
-
-  useEffect(() => {
-    // 内置反馈中心合并了"提交反馈 / 我的反馈"两个 Tab，
-    // 老的 OpenTicketsPanel IPC 仍然兼容（直接打开列表），未来如果还需要单独入口可以复用。
-    const disposeFeedbackDialog = platform.onOpenFeedbackDialog?.(() => {
-      openFeedbackSubmit();
-    });
-    const disposeTicketsPanel = platform.onOpenTicketsPanel?.(() => {
-      openFeedbackTickets();
-    });
-    return () => {
-      disposeFeedbackDialog?.();
-      disposeTicketsPanel?.();
-    };
-  }, [openFeedbackSubmit, openFeedbackTickets, platform]);
   const handleOpenCommunity = useCallback(() => platform.openCommunity(), [platform]);
   const handleOpenProductDocs = useCallback(() => {
     platform.openExternal(NEX_PRODUCT_DOCS_URL);
@@ -1040,9 +1017,6 @@ export function App({
         canOpenCommunity: canOpenCommunityFromQuickPick,
         isSidebarVisible,
         supportsEmbeddedBrowser,
-        // quick pick 命令只关心登录态布尔值。
-        // 如果依赖完整 user 对象，auth store 返回等价新引用时会重建整组 command/run 闭包。
-        isLoggedIn,
         themeTarget,
         shortcuts: {
           newTask: newTaskShortcutLabel,
@@ -1066,8 +1040,6 @@ export function App({
           openFeedback: handleOpenFeedback,
           openCommunity: handleOpenCommunity,
           openProductDocs: handleOpenProductDocs,
-          login: onLogin,
-          logout: onLogout,
           toggleSidebar: () => runVisibleWorkspaceCommand(handleToggleSidebar),
           toggleTerminal: () => runVisibleWorkspaceCommand(handleToggleTerminalIfWritable),
           togglePreview: () => runVisibleWorkspaceCommand(handleToggleBrowser),
@@ -1091,12 +1063,9 @@ export function App({
       handleToggleBrowser,
       handleToggleSidebar,
       handleToggleTerminalIfWritable,
-      isLoggedIn,
       isSidebarVisible,
       newTaskShortcutLabel,
       handleCreateTaskIfWritable,
-      onLogin,
-      onLogout,
       onOpenWorkspace,
       runVisibleWorkspaceCommand,
       openSettingsTab,
@@ -1159,9 +1128,6 @@ export function App({
         onSearchResultHighlightRequest={handleSearchResultHighlightRequest}
         onOpenCodeViewer={handleOpenCodeViewerIfWritable}
       />
-      {/* Bugfix: 反馈是应用级能力，必须固定走本机 base host；SSH session 连接中或断开时，
-          workspace-scoped services 会切成断连代理，不能让反馈提交跟随远程 session 失效。 */}
-      <FeedbackHost feedbackService={baseFeedbackService} platform={platform} />
       <PluginUiWorkspaceProvider onOpenSidePane={handleOpenPluginUi}>
         <WorkspaceShellLayout
           services={services}
@@ -1181,9 +1147,6 @@ export function App({
           onSelectRemoteProject={onSelectRemoteProject}
           onCancelRemoteProject={onCancelRemoteProject}
           onReconnectRemoteWorkspace={onReconnectRemoteWorkspace}
-          onLogout={onLogout}
-          onLogin={onLogin}
-          user={user}
           reconnectingRemoteWorkspaceKeys={reconnectingRemoteWorkspaceKeys}
           remoteWorkspaceErrorByWorkspaceKey={remoteWorkspaceErrorByWorkspaceKey}
           remoteWorkspaceRecoveryByWorkspaceKey={remoteWorkspaceRecoveryByWorkspaceKey}

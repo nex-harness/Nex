@@ -4,7 +4,6 @@ import { ApprovalPanel } from "./app-approval-panel.js";
 import {
   actionPanelContentWidthForTerminal,
   AppShell,
-  LoginRequiredPanel,
   SlashSuggestionPanel,
 } from "./app-components.js";
 import { SelectionPanel } from "./app-selection-panel.js";
@@ -67,7 +66,6 @@ export function AppView(props: {
   inputCursorToEndVersion: number;
   lastError?: string;
   lastEvent: string;
-  loginRequired: boolean;
   liveModelText: string;
   mode: string;
   modeOptions: readonly TuiModeOption[];
@@ -107,9 +105,7 @@ export function AppView(props: {
     props.terminalWidth,
     props.sidebarLayout.reservedWidth,
   );
-  const mcpStatus = useMcpSidebarStatus(
-    props.loginRequired ? undefined : props.options.listMcpServers,
-  );
+  const mcpStatus = useMcpSidebarStatus(props.options.listMcpServers);
   const transcriptMessages = props.liveModelText
     ? [
         ...props.messages,
@@ -212,7 +208,6 @@ export function AppView(props: {
               effortSelection: props.effortSelection,
               fileMention: props.fileMention,
               inputCursorToEndVersion: props.inputCursorToEndVersion,
-              loginRequired: props.loginRequired,
               mode: props.mode,
               modeOptions: props.modeOptions,
               modeSelection: props.modeSelection,
@@ -243,7 +238,6 @@ export function ComposerInputArea(props: {
   effortSelection?: EffortCommandSelectionState;
   fileMention?: FileMentionState;
   inputCursorToEndVersion: number;
-  loginRequired: boolean;
   mode: string;
   modeOptions: readonly TuiModeOption[];
   modeSelection?: ModeCommandSelectionState;
@@ -261,7 +255,6 @@ export function ComposerInputArea(props: {
   return h(
     React.Fragment,
     null,
-    props.loginRequired ? h(LoginRequiredPanel, { copy: props.copy }) : null,
     props.fileMention
       ? h(FileMentionPanel, {
           contentWidth: props.contentWidth,

@@ -14,7 +14,6 @@ const SELECTION_SIDE_CHAT_RESTRICTED_COMMANDS = new Set<CommandEnvelope["type"]>
   "editUserQuery",
   "retryTurn",
   "forkAssistant",
-  "discardSharedContext",
 ]);
 
 export class V4SelectionSideChatRestrictedCommandError extends Error {

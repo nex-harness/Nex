@@ -1,4 +1,3 @@
-import { scopeConversationShareServiceForAttachment } from "@nex/services/node";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { hostname } from "node:os";
 import { resolveServerOsUser } from "@nex/shared/node";
@@ -23,7 +22,6 @@ import {
   createNexAgentConnectionScope,
   IProviderProvisioningTargetService,
   INexAgentService,
-  IConversationShareService,
   IProjectService,
   ServiceCollection,
 } from "@nex/services";
@@ -160,18 +158,6 @@ function exposeWebSocket(
   const overrides = new Map<string, unknown>();
   if (scope) {
     overrides.set(INexAgentService.channelName, scope.service);
-  }
-  const shareService = services.getOptional(IConversationShareService);
-  if (shareService) {
-    overrides.set(
-      IConversationShareService.channelName,
-      scopeConversationShareServiceForAttachment(
-        shareService,
-        clientMode,
-        scope?.service,
-        connectionContext,
-      ),
-    );
   }
   // Provisioning envelope 携带跨 Environment 的 Personal 配置与凭据，只允许受信 Desktop Host
   // 通过 /ws/host 下发；/ws 上的 Web / 手机 replayable 客户端即使知道频道名，也只能拿到抛错 stub，

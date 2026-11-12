@@ -21,7 +21,6 @@ export interface StartPromptTurnParamsBase {
   intent?: TurnInputIntentMetadata;
   /** 标准 Selection 的单次执行约束；不会改写 Session Selection。 */
   modelExecution?: SendInputOptions["modelExecution"];
-  sharedContextRefs?: SendInputOptions["sharedContextRefs"];
   toolDisallowlist?: readonly string[];
   /** 当前输入必须保留为未来独立 turn，不能因 admission 瞬间转为空闲而直接启动。 */
   requireQueue?: boolean;
@@ -217,7 +216,6 @@ async function startPromptTurnAfterPreflight(
         }),
         intent: params.intent,
         ...(params.modelExecution ? { modelExecution: params.modelExecution } : {}),
-        ...(params.sharedContextRefs ? { sharedContextRefs: params.sharedContextRefs } : {}),
         ...(turnToolDisallowlist ? { toolDisallowlist: turnToolDisallowlist } : {}),
         ...(params.requireQueue ? { requireQueue: true } : {}),
         ...(params.requireIdle ? { requireIdle: true } : {}),

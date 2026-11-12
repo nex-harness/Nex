@@ -132,34 +132,6 @@ describe("帮助配置 client/configs", () => {
     await expectExternal(fixture.local.community_urls!["en-US"]!);
   });
 
-  it("HC-03: false 覆盖本地 true 并显示弹窗；新 endpoint 的 true 打开表单", async () => {
-    await command("openFeedback");
-    await $('[role="dialog"]').waitForDisplayed({ timeout: 10000 });
-    await expect($('[role="dialog"]')).toHaveText(expect.stringContaining("Submit feedback"));
-    if (process.platform === "linux") {
-      const overlayTop = await browser.execute(() => {
-        const overlay = document.querySelector<HTMLElement>('[data-slot="dialog-overlay"]');
-        if (!overlay) throw new Error("反馈弹窗遮罩不存在");
-        return overlay.getBoundingClientRect().top;
-      });
-      expect(overlayTop).toBe(0);
-    }
-    await expect(external).not.toHaveBeenCalled();
-    await browser.keys("Escape");
-    const other = await startHelpConfigFixture({
-      ...fixture.remote,
-      feedback_use_external_form: true,
-    });
-    try {
-      await seedSettings({ nexEndpointOrigin: other.origin });
-      await command("openFeedback");
-      await expectExternal(fixture.remote.feedback_url!);
-      expect(other.requests).toHaveLength(1);
-    } finally {
-      await other.close();
-    }
-  });
-
   for (const failure of ["http", "business", "json"] as const) {
     it(`HC-04-${failure}: 失败回退、不缓存失败、同 endpoint 恢复`, async () => {
       server.setFailure(failure);

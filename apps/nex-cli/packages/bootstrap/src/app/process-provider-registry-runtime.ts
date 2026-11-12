@@ -140,10 +140,9 @@ export async function startProcessProviderRegistryRuntime(
     : undefined;
   // 复用 AccountService 的串行、过期结果丢弃机制，凭据变化与 Built-in 变化不能各自发布。
   const standaloneHeaders = credentialStore
-    ? createStandaloneProviderRuntimeHeadersPort(credentialStore, env)
+    ? createStandaloneProviderRuntimeHeadersPort(credentialStore)
     : undefined;
   const disposeCredentialSubscription = credentialStore?.onDidChange?.(async () => {
-    await standaloneHeaders?.invalidateChangedCredentials();
     await standaloneAccount!.refresh("standalone-credentials-changed");
     await runtime.registryService.refresh("standalone-credentials-barrier");
   });
@@ -168,7 +167,6 @@ export async function startProcessProviderRegistryRuntime(
         },
         dispose() {
           disposeCredentialSubscription?.();
-          standaloneHeaders?.clearProjectTokens();
           disposeRecovery?.();
           standaloneAccount?.dispose();
           modelSelectionConfigRepository.dispose();

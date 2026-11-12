@@ -18,7 +18,6 @@ import type { TuiOptions, TuiSubmitPromptResult } from "./types.js";
 type TuiApplyResultInput = {
   fallback: {
     locale: NonNullable<TuiOptions["locale"]>;
-    loginRequired: boolean;
     mode: CollaborationMode;
     model: string;
   };
@@ -30,7 +29,6 @@ type TuiApplyResultInput = {
   setLastEvent: (event: string) => void;
   setLiveModelText: (value: string) => void;
   setLocale: (locale: NonNullable<TuiOptions["locale"]>) => void;
-  setLoginRequired: (loginRequired: boolean) => void;
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   setMode: React.Dispatch<React.SetStateAction<CollaborationMode>>;
   setModel: (model: string) => void;
@@ -54,7 +52,6 @@ export function useTuiApplyResult(input: TuiApplyResultInput) {
       input.setMode(result.mode ?? input.fallback.mode);
       input.setModel(result.model ?? input.fallback.model);
       if (result.locale) input.setLocale(result.locale);
-      if (result.loginRequired !== undefined) input.setLoginRequired(result.loginRequired);
       if (result.effortOptions) input.setEffortOptions(result.effortOptions);
       if (result.modelOptions) input.setModelOptions(result.modelOptions);
       if ("thoughtLevel" in result) input.setThoughtLevel(result.thoughtLevel ?? "");
@@ -88,14 +85,7 @@ export function useTuiApplyResult(input: TuiApplyResultInput) {
 
       input.setSelection(createSelectionState(result.selection));
       input.setQueuedInputs([]);
-      const activeLoginRequired = result.loginRequired ?? input.fallback.loginRequired;
-      input.setStatus(
-        result.selection
-          ? result.selection.prompt
-          : activeLoginRequired
-            ? resultCopy.loginRequired.status
-            : resultCopy.status.ready,
-      );
+      input.setStatus(result.selection ? result.selection.prompt : resultCopy.status.ready);
       input.setLastEvent(result.turnId ? `turn ${result.turnId}` : "complete");
     },
     [input],

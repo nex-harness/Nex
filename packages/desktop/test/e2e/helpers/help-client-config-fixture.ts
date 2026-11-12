@@ -10,8 +10,6 @@ export const HELP_FIXTURE_PATH = resolve(
 );
 export interface HelpFixtureConfig {
   community_urls?: Partial<Record<"zh-CN" | "en-US", string>>;
-  feedback_url?: string;
-  feedback_use_external_form?: boolean;
 }
 export async function readHelpFixture(): Promise<{
   remote: HelpFixtureConfig;

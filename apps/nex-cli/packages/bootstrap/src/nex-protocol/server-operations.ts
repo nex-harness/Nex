@@ -1046,108 +1046,13 @@ async function persistImportedSessionHistory(params: {
   const workspace = params.record.workspace;
   const workspaceIdentity = workspace.workspaceIdentity?.trim();
   const now = Date.now();
-  const createdAt =
-    importedHistory.createdAt ??
-    (importedHistory.source === "claudeCode"
-      ? importedHistory.messages[0]?.timestamp
-      : undefined) ??
-    now;
+  const createdAt = importedHistory.createdAt ?? importedHistory.messages[0]?.timestamp ?? now;
   const updatedAt =
-    importedHistory.source === "claudeCode"
-      ? (importedHistory.updatedAt ?? importedHistory.messages.at(-1)?.timestamp ?? createdAt)
-      : createdAt;
+    importedHistory.updatedAt ?? importedHistory.messages.at(-1)?.timestamp ?? createdAt;
   // 历史导入不执行模型；未绑定时保留消息内容，不能要求当前选择或伪造消息来源。
   const currentModel = optionalModelSelectionFromString(params.record.app.getModel());
   const providerId = currentModel?.providerId as ModelProviderId | undefined;
   const modelId = currentModel?.modelId as ModelId | undefined;
-
-  if (importedHistory.source === "sharedContext") {
-    if (!sessionStore.commitSharedContextImportBundle) {
-      throw new ProtocolRequestError(
-        -32003,
-        "Shared context import requires atomic session storage",
-      );
-    }
-    const messageId = createMessageId(`${params.sessionId}_shared_context`);
-    const importedAt = importedHistory.createdAt ?? now;
-    const contextId =
-      importedHistory.provenance.contextId ?? `legacy-shared-context-${params.sessionId}`;
-    const contextStatus = importedHistory.provenance.status ?? "pending";
-    await sessionStore.commitSharedContextImportBundle({
-      session: {
-        id: params.sessionId,
-        projectID: projectIdFromDirectory(workspace.workspacePath),
-        workspaceID: workspaceIdentity as WorkspaceId | undefined,
-        traceID: params.record.traceContext.traceId,
-        slug: slugifyImportedSession(params.sessionId),
-        directory: workspace.workspacePath,
-        path: workspace.workspacePath,
-        title: importedHistory.title,
-        titleSource: "custom",
-        version: params.context.deps.version ?? "0.0.0",
-        permission: { mode: params.record.app.getMode() },
-        time: { created: importedAt, updated: importedAt },
-      },
-      contextMessage: {
-        info: {
-          id: messageId,
-          sessionID: params.sessionId,
-          role: "user",
-          time: { created: importedAt },
-          agent: "nex-agent",
-          // 合并新增分享导入时仍沿用旧 model 字段，既引用了失效变量，也会丢失未绑定语义。
-          // 与普通导入共用结构化选择合同；导入不要求模型可执行。
-          ...(currentModel ? { modelSelection: currentModel } : {}),
-          synthetic: true,
-          source: "shared_context",
-          visibility: "model-only",
-          semantics: {
-            origin: "import",
-            kind: "shared_context",
-            source: "conversation_share",
-            uiVisibility: "hidden",
-            providerVisibility: "visible",
-            transcriptVisibility: "visible",
-          },
-          metadata: {
-            shareId: importedHistory.provenance.shareId,
-            contextId,
-            sharedContextStatus: contextStatus,
-          },
-        },
-        parts: [
-          {
-            id: createPartId(`${params.sessionId}_shared_context_text`),
-            sessionID: params.sessionId,
-            messageID: messageId,
-            type: "text",
-            text: importedHistory.markdown,
-            time: { start: importedAt, end: importedAt },
-            metadata: { sharedContext: true },
-          },
-        ],
-      },
-      provenance: {
-        // session_entry.id 是全库主键（同类修复见 sqlite-session-store.ts
-        // 的 fork command fact），旧模板只含 shareId。同一个 share 导入到第二个
-        // workspace 时按 (shareCode, workspaceKey) 的去重不命中、marker 也各在自己
-        // workspace 下不冲突，saveSessionEntry 的 on conflict(id) 就把第一个会话的
-        // provenance 改绑到新会话，旧会话的 shared context 记录静默消失。
-        // 校验：所有读取都走 (session_id, type) + data.contextId，没有一处按 id 反查，
-        // 因此新旧 id 共存安全，不需要数据迁移。
-        id: `v4_shared_context_import:${params.sessionId}:${importedHistory.provenance.shareId}`,
-        sessionID: params.sessionId,
-        type: "v4/shared_context_import",
-        time: { created: importedAt, updated: importedAt },
-        data: {
-          ...importedHistory.provenance,
-          contextId,
-          status: contextStatus,
-        },
-      },
-    });
-    return;
-  }
 
   await sessionStore.createSession({
     id: params.sessionId,

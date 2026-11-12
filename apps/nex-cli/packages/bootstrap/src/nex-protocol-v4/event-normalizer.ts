@@ -91,7 +91,6 @@ export interface CanonicalUserIntentFact extends CanonicalConversationFactBase {
   requestedDelivery?: "auto" | "startNow" | "queue" | "guide";
   admittedDelivery?: "startNow" | "queue" | "guide";
   genUiContext?: import("@nex/contracts").TurnInputIntentMetadata["genUiContext"];
-  sharedContextRefs?: readonly { kind: "shared_context_import"; context_id: string }[];
   fallbackReasonCode?: string;
   modelSelection?: TurnInputIntentMetadata["modelSelection"];
   mode?: TurnInputIntentMetadata["mode"];
@@ -286,9 +285,6 @@ function normalizeTurnStarted(
       ? { admittedDelivery: payload.intent.admittedDelivery }
       : {}),
     ...(intentInput.genUiContext !== undefined ? { genUiContext: intentInput.genUiContext } : {}),
-    ...(payload.intent?.sharedContextRefs
-      ? { sharedContextRefs: payload.intent.sharedContextRefs }
-      : {}),
     ...(payload.intent?.fallbackReasonCode
       ? { fallbackReasonCode: payload.intent.fallbackReasonCode }
       : {}),

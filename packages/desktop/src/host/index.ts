@@ -49,7 +49,6 @@ import {
   IDeviceSyncStateService,
   IProviderProvisioningStatusService,
   IWindowControllerService,
-  IConversationShareService,
   IPromptAttachmentTransferService,
   INexAgentService,
   INexTaskService,
@@ -159,7 +158,6 @@ import {
   createWindowHostTerminalOwners,
   createTerminalScope,
 } from "./windowHostAttachmentRpcPolicy.js";
-import { scopeConversationShareServiceForAttachment } from "./conversationShareAttachmentService.js";
 import {
   createWindowRemoteConnectionRegistry,
   type WindowRemoteConnectionCloseEvent,
@@ -245,19 +243,11 @@ process.title = formatNexHostProcessName(process.env["NEX_PROCESS_LABEL"]);
 
 type HostLogLevel = "info" | "warn" | "error";
 
-interface PendingFeedbackLogArchiveRequest {
-  resolve: (archive: { path: string; size: number }) => void;
-  reject: (error: Error) => void;
-  onProgress?: (event: { processedBytes: number; totalBytes: number }) => void;
-}
-
 interface PendingLocalMediaPreviewPathAuthorization {
   resolve: (path: string) => void;
   reject: (error: Error) => void;
 }
 
-const pendingFeedbackLogArchiveRequests = new Map<string, PendingFeedbackLogArchiveRequest>();
-let nextFeedbackLogArchiveRequestSeq = 0;
 const pendingLocalMediaPreviewPathAuthorizations = new Map<
   string,
   PendingLocalMediaPreviewPathAuthorization
@@ -382,37 +372,6 @@ function writeHostLog(level: HostLogLevel, ...args: unknown[]): void {
     level === "error" ? rawConsole.error : level === "warn" ? rawConsole.warn : rawConsole.log;
   consoleFn(prefix, ...args);
   reportHostLog(level, [prefix, ...args]);
-}
-
-function createFullFeedbackLogArchiveViaMain(
-  sourceDir: string,
-  options?: {
-    onProgress?: (event: { processedBytes: number; totalBytes: number }) => void;
-  },
-): Promise<{ path: string; size: number }> {
-  const requestId = `feedback-log-archive-${Date.now()}-${nextFeedbackLogArchiveRequestSeq++}`;
-  options?.onProgress?.({ processedBytes: 0, totalBytes: 0 });
-
-  return new Promise((resolve, reject) => {
-    pendingFeedbackLogArchiveRequests.set(requestId, {
-      resolve,
-      reject,
-      onProgress: options?.onProgress,
-    });
-    // 问题反馈以前在 host service 内走 compactLogArchive 的 full fallback，
-    // 收集范围和“导出日志”不一致，缺少 nex-cli 日志、rollout/debug 以及导出链路脱敏。
-    // 这里把完整日志打包委托给 main process 的导出日志同源逻辑，host 只拿 zip 路径继续上传。
-    try {
-      parentPort.postMessage({
-        type: HostResponseTypes.FeedbackLogArchiveRequest,
-        requestId,
-        sourceDir,
-      });
-    } catch (error) {
-      pendingFeedbackLogArchiveRequests.delete(requestId);
-      reject(error instanceof Error ? error : new Error(String(error)));
-    }
-  });
 }
 
 const logger = {
@@ -2244,20 +2203,6 @@ function exposeServicesOnMessagePort(
   if (connectionScope) {
     overrides.set(INexAgentService.channelName, connectionScope.service);
   }
-  const conversationShareService = services.getOptional(IConversationShareService);
-  if (conversationShareService) {
-    // Share service 若继续持有 raw Agent，会绕过当前 MessagePort 已握手的 trusted carrier，
-    // rowsRange 会以 connection untrusted 拒绝。必须复用同一 attachment connection scope。
-    overrides.set(
-      IConversationShareService.channelName,
-      scopeConversationShareServiceForAttachment(
-        conversationShareService,
-        clientMode,
-        connectionScope?.service,
-        connectionContext,
-      ),
-    );
-  }
   if (scopedTerminal) overrides.set(ITerminalService.channelName, scopedTerminal);
   const isWebRemoteAttachment = clientMode === "web-remote-replayable";
   const baseProjectService = isWebRemoteAttachment
@@ -2699,21 +2644,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
 
   if (msg.type === HostMessageTypes.ProviderProvisioningLaneResult) {
     hostProviderProvisioningStatus.handleResult(msg);
-    return;
-  }
-
-  if (msg.type === HostMessageTypes.FeedbackLogArchiveResult) {
-    const pending = pendingFeedbackLogArchiveRequests.get(msg.requestId);
-    if (!pending) {
-      return;
-    }
-    pendingFeedbackLogArchiveRequests.delete(msg.requestId);
-    if (msg.ok && msg.path && typeof msg.size === "number") {
-      pending.onProgress?.({ processedBytes: msg.size, totalBytes: msg.size });
-      pending.resolve({ path: msg.path, size: msg.size });
-      return;
-    }
-    pending.reject(new Error(msg.error ?? "反馈日志归档创建失败"));
     return;
   }
 
@@ -3544,11 +3474,6 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
               nexBuiltinProviderConfigFilePath: msg.nexBuiltinProviderConfigFilePath,
               processLifecycleReporter: runtimeProcessLifecycleReporter,
               taskRuntimeReporter: runtimeTaskReporter,
-              feedback: {
-                getDeviceMid: () => msg.deviceMid,
-                apiBaseUrl: msg.feedbackApiBase,
-                createFullLogArchive: createFullFeedbackLogArchiveViaMain,
-              },
               forwardSessionMessageSendRequested: (request) => {
                 parentPort?.postMessage({
                   type: HostResponseTypes.SessionMessageSendRequested,

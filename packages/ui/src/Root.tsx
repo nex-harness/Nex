@@ -216,11 +216,7 @@ function RootInner({
     management: services.sourceServerManagementService,
   });
   const theme = useNexStore((state) => state.theme);
-  const user = useNexStore((state) => state.user);
-  const isRestoringOAuthSession = useNexStore((state) => state.isRestoringOAuthSession);
-  useWebRemoteControlAuthSync(platform, null, user?.id, isRestoringOAuthSession);
-  const setUser = useNexStore((state) => state.setUser);
-  const setOAuthError = useNexStore((state) => state.setOAuthError);
+  useWebRemoteControlAuthSync(platform);
   const {
     settings: appSettings,
     refresh: refreshAppSettings,
@@ -512,7 +508,7 @@ function RootInner({
 
   const shouldPreferDirectoryBrowser = Boolean(preferDirectoryBrowser);
   const supportsEmbeddedBrowser = explicitSupportsEmbeddedBrowser ?? Boolean(isDesktop);
-  const isResolvingStartupAuthState = isRestoringOAuthSession;
+  const isResolvingStartupAuthState = false;
   const rootProviderAvailability = resolveProviderAvailabilityState({
     modelSelectionView: rootModelSelectionView,
   });
@@ -584,7 +580,6 @@ function RootInner({
     setWorkspaceActionError,
     startDraftInWorkspace,
     startNewTaskFromActiveWorkspace,
-    handleLogout,
     handleSelectProject,
     handleSelectConversationWorkspace,
     handleResolveConversationWorkspace,
@@ -608,10 +603,7 @@ function RootInner({
     openDirectoryBrowser: handleOpenDirectoryBrowser,
     refreshProviderState,
     updateAppSettings,
-    setOAuthError,
-    setUser,
     onProviderFamilyDomainClearedAfterLogout: () => {},
-    userId: user?.id,
     onOpenRemoteConnection: allowRemoteWorkspace ? handleOpenRemoteConnection : undefined,
     openRemoteProjectWorkspace: openPreparedRemoteProjectWorkspace,
     openMobileProjectDraft: webRemoteControlWorkspaceSwitcher?.openProjectDraft,
@@ -893,7 +885,6 @@ function RootInner({
     webRemoteControlFeatureEnabled,
     hasCompletedFullTabRestore: hasCompletedFullRestore,
     intl,
-    isRestoringOAuthSession: isResolvingStartupAuthState || providerStartupSyncPending,
   });
 
   useEffect(() => {
@@ -1072,8 +1063,6 @@ function RootInner({
     );
   }, [isSettingsTabActive, workspaceShellPath]);
 
-  // Nex 无账号体系：登录入口与 WelcomeScreen 已移除。
-  const handleOpenLoginEntry = useCallback(() => {}, []);
   const remoteProjectIntentEpoch = useRef(0);
   const [remoteProjectSelection, setRemoteProjectSelection] = useState<{
     host: RemoteProjectHost;
@@ -1297,9 +1286,6 @@ function RootInner({
     onCreateTask: handleCreateTask,
     onOpenWorkspace: handleOpenWorkspace,
     allowOpenWorkspace,
-    onLogin: !user ? handleOpenLoginEntry : undefined,
-    onLogout: user ? handleLogout : undefined,
-    user,
   };
 
   if (isStartupRenderBlocked) {
@@ -1402,7 +1388,6 @@ function RootInner({
             >
               <RootWorkspaceContent
                 workspaceScopedServices={workspaceScopedServices}
-                baseFeedbackService={services.feedbackService}
                 workspaceShellPath={workspaceShellPath}
                 workspaceIdentity={workspaceShellIdentity}
                 workspaceRemoteSessionId={workspaceShellRemoteSessionId}
@@ -1424,9 +1409,6 @@ function RootInner({
                 remoteWorkspaceSessions={remoteWorkspaceSessions}
                 allowRemoteWorkspace={allowRemoteWorkspace}
                 handleBackFromSettings={handleBackFromSettings}
-                handleLogout={user ? handleLogout : undefined}
-                onLogin={!user ? handleOpenLoginEntry : undefined}
-                user={user}
                 reconnectingRemoteWorkspaceKeys={reconnectingRemoteWorkspaceKeys}
                 remoteWorkspaceRecoveryByWorkspaceKey={remoteWorkspaceRecoveryByWorkspaceKey}
                 remoteWorkspaceErrorByWorkspaceKey={remoteWorkspaceErrorByWorkspaceKey}

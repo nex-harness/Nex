@@ -8,10 +8,9 @@ import {
   REWARDS_PARTITION,
   TEST_NEX_ENDPOINT_ORIGIN,
   getCommunityUrlFromConfigs,
-  getFeedbackUrlFromConfig,
+  NEX_GITHUB_ISSUES_NEW_URL,
   normalizeNexEndpointOrigin,
   PlatformChannels,
-  resolveHelpAppConfig,
   resolveNexEndpointOrigin,
   NEX_ENV,
   NEX_PRODUCT_FLAVOR,
@@ -180,7 +179,7 @@ async function resolveRemoteAppConfigValue(options: {
   fetchRemoteConfig?: () => Promise<unknown>;
   readLocalConfig?: () => unknown;
   resolveFromConfig: (config: unknown) => string | undefined;
-  logPrefix: "feedback" | "community";
+  logPrefix: "community";
   logger: {
     warn: (...args: unknown[]) => void;
   };
@@ -206,20 +205,6 @@ async function resolveRemoteAppConfigValue(options: {
   }
 
   return undefined;
-}
-
-export async function resolveFeedbackUrl(options: {
-  fetchRemoteConfig?: () => Promise<unknown>;
-  readLocalConfig?: () => unknown;
-  logger: {
-    warn: (...args: unknown[]) => void;
-  };
-}): Promise<string | undefined> {
-  return resolveRemoteAppConfigValue({
-    ...options,
-    logPrefix: "feedback",
-    resolveFromConfig: getFeedbackUrlFromConfig,
-  });
 }
 
 export async function resolveCommunityUrl(options: {
@@ -248,28 +233,14 @@ export async function resolveCommunityUrl(options: {
 }
 
 async function openFeedback(
-  logger: { warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void },
-  targetWindow?: BrowserWindow | null,
-  fetchRemoteConfig?: () => Promise<unknown>,
-) {
-  let remoteConfig: unknown;
-  let localConfig: unknown;
+  logger: { warn: (...args: unknown[]) => void },
+): Promise<void> {
+  // 产品决定：不再内置工单系统，Help → Feedback 统一打开 GitHub Issues 新建页。
   try {
-    remoteConfig = await fetchRemoteAppConfig(fetchRemoteConfig);
+    await shell.openExternal(NEX_GITHUB_ISSUES_NEW_URL);
   } catch (error) {
-    logger.warn("[feedback] failed to fetch remote config:", error);
+    logger.warn("[feedback] failed to open GitHub issues:", error);
   }
-  try {
-    localConfig = await readLocalAppConfig();
-  } catch (error) {
-    logger.warn("[feedback] failed to read local config:", error);
-  }
-  const config = resolveHelpAppConfig(remoteConfig, localConfig);
-  if (!config.feedback_use_external_form) {
-    resolveTargetWindow(targetWindow)?.webContents.send(PlatformChannels.OpenFeedbackDialog);
-    return;
-  }
-  if (config.feedback_url) await shell.openExternal(config.feedback_url);
 }
 
 async function openCommunity(
@@ -606,7 +577,7 @@ export async function executeDesktopCommand(options: {
       await options.onRelaunchApp();
       return;
     case DesktopCommandIds.OpenFeedback:
-      await openFeedback(options.logger, targetWindow, options.fetchHelpConfig);
+      await openFeedback(options.logger);
       return;
     case DesktopCommandIds.OpenCommunity:
       await openCommunity(

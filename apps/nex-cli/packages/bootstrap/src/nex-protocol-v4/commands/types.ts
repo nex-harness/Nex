@@ -128,7 +128,6 @@ export interface V4CommandCoreHost {
     admission: { admissionSeq: number; admittedAt: number; queueItemId: string },
   ): Promise<ConversationInputIntent | null>;
   cancelInputCommand?(sessionId: string, queueItemId: string, reason: string): Promise<void>;
-  discardSharedContext?(sessionId: string, contextId: string): Promise<boolean>;
   /**
    * 当前输入路由模式（数据源 = v4 投影 inputRouting.mode）。
    * sendText/sendGoalCommand 的 held choice 裁决（heldQueueInputRequiresChoice）依赖它判定是否必须携带 heldQueueDisposition。

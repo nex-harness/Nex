@@ -17,7 +17,6 @@ export type {
   NexAppOptions,
   NexModelOption,
 } from "./app/types.js";
-export * from "./auth-login.js";
 export {
   inspectNexCustomCommand,
   listNexCustomCommands,

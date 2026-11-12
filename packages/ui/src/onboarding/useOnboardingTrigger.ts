@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import type { AppSettings } from "@nex/shared";
 import type { useOnboardingRecordService } from "@/hooks/useOnboardingRecordService.js";
 import { logger } from "@/logger.js";
 
@@ -21,14 +20,10 @@ import { logger } from "@/logger.js";
  */
 export function useOnboardingTrigger(options: {
   onboardingRecord: ReturnType<typeof useOnboardingRecordService>;
-  userId: string | null;
   loadDeviceMid: () => string;
-  update: (patch: Partial<AppSettings>) => Promise<void>;
 }): [boolean | null, () => void] {
-  const { onboardingRecord, userId, loadDeviceMid, update } = options;
+  const { onboardingRecord, loadDeviceMid } = options;
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);
-  // 记录上一次判定时的 userId，回填只在身份实际变化后发生（见下方回填条件）。
-  const lastSyncedUserIdRef = useRef<string | null | undefined>(undefined);
   // 状态镜像：超时回调读"是否已产生判定结果"，避免闭包捕获陈旧 state。
   const needsOnboardingRef = useRef<boolean | null>(null);
   needsOnboardingRef.current = needsOnboarding;
@@ -64,39 +59,14 @@ export function useOnboardingTrigger(options: {
             },
             Math.max(0, deadline - Date.now()),
           );
-    // 登录认领先行：未登录时答的引导（null 条目）移交给当前登录用户，同一人不重复引导。
-    // 必须 await 完成后再判定，否则 shouldOnboard 读到认领前的文件会误判需要引导。
+    // Nex 无账号体系：不存在跨账号认领或偏好回填，直接读取本机记录判定。
     onboardingRecord
-      .claimAnonymousRecord()
-      .catch((cause: unknown) => {
-        logger.warn("[occupation-onboarding] 认领匿名引导记录失败", { error: String(cause) });
-      })
-      .then(() => onboardingRecord.shouldOnboard(loadDeviceMid()))
+      .shouldOnboard(loadDeviceMid())
       .then(
         (result) => {
           if (!cancelled) {
             releaseDeadlineRef.current = null;
             setNeedsOnboarding(result);
-          }
-          // 换账号恢复该用户偏好：settings 不分用户，A 答完后 B 触发引导会把 settings 顶成
-          // B 的答案；再切回 A 时按 record 最近作答回填。同步失败只留日志。
-          // 仅"上次是非空的另一身份"时回填（A→B 直切、B→登出）。null→id 不回填：启动 OAuth
-          // 恢复与运行中登录共用该序列且无法区分，宁可少回填——手动修改已由各入口回写
-          // record（record=最新偏好），缺失回填只影响"apikey 态后登录旧账号"这类边缘场景。
-          const previousUserId = lastSyncedUserIdRef.current;
-          lastSyncedUserIdRef.current = userId;
-          if (!cancelled && !result && previousUserId != null && previousUserId !== userId) {
-            void onboardingRecord
-              .syncSettingsFromRecord()
-              .then((patch) => {
-                if (cancelled || !patch) return;
-                return update(patch);
-              })
-              .catch((cause: unknown) => {
-                logger.warn("[occupation-onboarding] 按记录同步偏好失败", {
-                  error: String(cause),
-                });
-              });
           }
         },
         (cause) => {
@@ -122,7 +92,7 @@ export function useOnboardingTrigger(options: {
     // 重跑条件=判定上下文（服务实例 / 身份 / 设备 id）；重跑只刷新判定上下文，不重置
     // 放行预算（见 releaseDeadlineRef）。不依赖 settings：settings 不再参与资格判定
     // （spec §6），仅由调用方用于"存量用户不等判定直接进主界面"的 UI 放行。
-  }, [onboardingRecord, userId, loadDeviceMid]);
+  }, [onboardingRecord, loadDeviceMid]);
   return [
     needsOnboarding,
     () => {

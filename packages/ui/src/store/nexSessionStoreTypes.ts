@@ -132,11 +132,6 @@ export interface ComposerTextInsertRequest {
   mode?: "replace" | "prepend-if-missing";
 }
 
-export interface TimelineBottomRequest {
-  requestId: number;
-  taskId: string;
-}
-
 export type ComposerInitialConfig = Pick<
   Partial<SessionConfigState>,
   "planEnabled" | "modelSelection"
@@ -176,8 +171,6 @@ export interface WorkspaceNexUIState {
     | null;
   composerTextInsertVersion: number;
   composerTextInsertRequest: ComposerTextInsertRequest | null;
-  timelineBottomRequestVersion: number;
-  timelineBottomRequest: TimelineBottomRequest | null;
   /** 草稿态错误需要跨页面保留，避免切走再回来后提示被本地 state 一起卸载 */
   draftError: NexUiError | null;
   /** 模型切换中的并发保护 requestId；只允许最新请求落库 */
@@ -250,16 +243,6 @@ export interface NexSessionStoreState {
     mode?: "replace" | "prepend-if-missing",
   ) => number;
   clearComposerTextInsertRequest: (
-    workspacePath: string,
-    requestId: number,
-    workspaceIdentity?: string,
-  ) => void;
-  requestTimelineBottom: (
-    workspacePath: string,
-    taskId: string,
-    workspaceIdentity?: string,
-  ) => number;
-  clearTimelineBottomRequest: (
     workspacePath: string,
     requestId: number,
     workspaceIdentity?: string,
@@ -527,8 +510,6 @@ export function createDefaultWorkspaceState(
     pluginUiOpenRequest: null,
     composerTextInsertVersion: 0,
     composerTextInsertRequest: null,
-    timelineBottomRequestVersion: 0,
-    timelineBottomRequest: null,
     draftError: null,
     modelSwitchRequestId: null,
     modelSwitchPending: false,
