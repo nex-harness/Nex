@@ -224,7 +224,6 @@ window.addEventListener("beforeunload", () => {
 interface WebBootstrapResult {
   wsUrl: string;
   initialWorkspaceAbsPath?: string;
-  initialWorkspaceIdentity?: string;
   initialTaskId?: string;
   restoreSession?: boolean;
   allowOpenWorkspace?: boolean;
@@ -344,12 +343,12 @@ async function resolveWebBootstrap(): Promise<WebBootstrapResult> {
     }
     const serverInfo = (await response.json()) as Partial<ServerRemoteInfo>;
     const workspace = Array.isArray(serverInfo.workspaces) ? serverInfo.workspaces[0] : undefined;
+    // 不能把 workspace.workspaceIdentity 带进初始 tab：侧栏任务行只有 workspacePath，
+    // 带 identity 的 tab 会让会话状态落在无 identity 的桶，界面却读 identity 桶，
+    // 导致排第一的项目的历史会话点不开（见 docs/specs/server-web-login.md「工作区身份」）。
     return {
       wsUrl,
       ...(workspace?.path ? { initialWorkspaceAbsPath: workspace.path } : {}),
-      ...(workspace?.workspaceIdentity
-        ? { initialWorkspaceIdentity: workspace.workspaceIdentity }
-        : {}),
       allowOpenWorkspace: true,
     };
   } catch {
@@ -1746,7 +1745,6 @@ async function bootstrapWebApp() {
             platform={platform}
             directServerConnection
             initialWorkspaceAbsPath={bootstrap.initialWorkspaceAbsPath}
-            initialWorkspaceIdentity={bootstrap.initialWorkspaceIdentity}
             initialTaskId={bootstrap.initialTaskId}
             restoreSession={bootstrap.restoreSession}
             allowOpenWorkspace={bootstrap.allowOpenWorkspace}

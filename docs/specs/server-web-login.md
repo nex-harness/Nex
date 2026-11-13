@@ -45,6 +45,20 @@
    `X-Forwarded-Proto: https`）；明文 HTTP 上 token 会被网络路径看到，文档与 CLI 输出必须提示
    「对公网暴露请放在 TLS 反代之后」。登录限流按连接对端地址计，不信任 `X-Forwarded-For`。
 
+## 工作区身份（直连 Server 的 Web）
+
+浏览器直接使用 Server 时，只有一个 Server，工作区不需要用 `remote:server:<id>:<path>` 来区分归属。
+Web 在 `/api/server-info` 的 `workspaces[0]` 上建的初始工作区 tab 因此**不携带** `workspaceIdentity`，
+与侧栏任务行（只有 `workspacePath`）保持同一个身份。
+
+- 会话状态的 key 是 `workspaceIdentity?.trim() || workspacePath`。同一个目录在 tab 上带 identity、在任务行上不带，
+  就会得到两个桶：点击会话把 `activeTaskId` 写进无 identity 的桶，界面却按 tab 的 identity 读另一个空桶，
+  结果停在新任务首页，并且订阅走带 identity 的路径，被服务端按 `existing-only` 拒绝
+  （`Nex Agent runtime is not running.`）。
+- 只有排在 `workspaces[0]` 的项目会触发，换项目顺序后换另一个项目受影响。
+- `/api/server-info.workspaces[].workspaceIdentity` 仍由 Server 返回，桌面把该 Server 当作远端设备连接时继续使用它；
+  Web 直连不使用它。
+
 ## 状态所有者
 
 | 状态                        | 所有者                                     | 读取方                     |
@@ -107,3 +121,6 @@ Web   ──location.replace(next)       （整页跳转，丢弃登录前失败
 5. `--host 0.0.0.0` 自动启用登录：未登录的 `/api/*`、`/ws` 为 401；`NEX_SERVER_WEB_TOKEN`
    短于 12 个字符时 Core 启动失败。
 6. 浏览器实测：未登录访问 `/` 跳登录页，登录后进入应用，登出/会话丢失后回登录页。
+7. 直连 Server 的 Web（至少两个项目）：每个项目下的历史会话都能打开并渲染正文；把任意项目调到第一位后，
+   原来排第一的项目仍可打开，侧栏第一个项目的会话也不再停在新任务首页。会话状态只出现在无 identity 的桶里
+   （`/api/server-info` 返回的 `workspaceIdentity` 不进入 Web 的 tab 与会话状态）。
