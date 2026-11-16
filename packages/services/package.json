@@ -22,6 +22,7 @@
     "@nex/provider": "workspace:*",
     "@nex/provider-node": "workspace:*",
     "@nex/rpc": "workspace:*",
+    "@nex/session-control": "workspace:*",
     "@nex/shared": "workspace:*",
     "@nex/nex-cua": "workspace:*",
     "chokidar": "4.0.3",

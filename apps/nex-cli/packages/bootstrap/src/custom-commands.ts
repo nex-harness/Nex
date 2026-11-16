@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { createConfig } from "@nex/adapters/config";
+import { createConfigWithPluginMigrations } from "@nex/adapters/config";
 import { createNodeCustomCommandAdapter } from "@nex/adapters/commands";
 import type {
   CustomCommandContent,
@@ -7,10 +7,14 @@ import type {
   CustomCommandLoadOutcome,
   Logger,
 } from "@nex/contracts";
-import { resolveNexPlugins } from "./plugins.js";
+import { resolveNexPlugins, type ResolveNexPluginsOptions } from "./plugins.js";
 import { collectDisabledPaths } from "./skill-command-overrides.js";
 
 export interface ListNexCustomCommandsOptions {
+  workspaceIdentity?: string;
+  remoteSessionId?: string;
+  pluginPreparation?: ResolveNexPluginsOptions["pluginPreparation"];
+  pluginDiscovery?: ResolveNexPluginsOptions["pluginDiscovery"];
   env?: NodeJS.ProcessEnv;
   homeDirectory?: string;
   logger?: Logger;
@@ -33,7 +37,7 @@ export interface NexCustomCommandInspection {
 export async function listNexCustomCommands(
   options: ListNexCustomCommandsOptions = {},
 ): Promise<CustomCommandLoadOutcome> {
-  const discovery = createCustomCommandDiscovery(options);
+  const discovery = await createCustomCommandDiscovery(options);
   return await discovery.adapter.discoverCommands({
     workingDirectory: discovery.workingDirectory,
   });
@@ -42,7 +46,7 @@ export async function listNexCustomCommands(
 export async function inspectNexCustomCommand(
   options: InspectNexCustomCommandOptions,
 ): Promise<NexCustomCommandInspection> {
-  const discovery = createCustomCommandDiscovery(options);
+  const discovery = await createCustomCommandDiscovery(options);
   const workingDirectory = discovery.workingDirectory;
   const adapter = discovery.adapter;
   const outcome = await adapter.discoverCommands({ workingDirectory });
@@ -63,23 +67,27 @@ export async function inspectNexCustomCommand(
 export async function loadNexCustomCommand(
   options: InspectNexCustomCommandOptions,
 ): Promise<CustomCommandContent> {
-  const discovery = createCustomCommandDiscovery(options);
+  const discovery = await createCustomCommandDiscovery(options);
   return await discovery.adapter.loadCommand({
     name: normalizeCommandName(options.name),
     workingDirectory: discovery.workingDirectory,
   });
 }
 
-function createCustomCommandDiscovery(options: ListNexCustomCommandsOptions) {
+async function createCustomCommandDiscovery(options: ListNexCustomCommandsOptions) {
   const workingDirectory = resolve(options.workingDirectory ?? process.cwd());
-  const configResult = createConfig({
+  const configResult = await createConfigWithPluginMigrations({
     env: options.env,
     projectConfigPath: options.projectConfigPath,
     workingDirectory,
     skipUserConfig: options.skipUserConfig,
     userConfigPath: options.userConfigPath,
   });
-  const pluginOutcome = resolveNexPlugins({
+  const pluginOutcome = await resolveNexPlugins({
+    pluginPreparation: options.pluginPreparation,
+    pluginDiscovery: options.pluginDiscovery,
+    workspaceIdentity: options.workspaceIdentity,
+    remoteSessionId: options.remoteSessionId,
     configResult,
     env: options.env,
     logger: options.logger,

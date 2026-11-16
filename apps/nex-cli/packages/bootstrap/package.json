@@ -34,6 +34,7 @@
     "@nex/i18n": "workspace:*",
     "@nex/provider": "workspace:*",
     "@nex/provider-node": "workspace:*",
+    "@nex/session-control": "workspace:*",
     "@nex/shared": "workspace:*",
     "@nex/telemetry": "workspace:*",
     "diff": "^9.0.0",

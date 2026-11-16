@@ -3,6 +3,8 @@ import {
   buildHelpAppConfigUrl,
   buildNexSourceHeadersFromContext,
   createHelpAppConfigReader,
+  resolveOptionalNexAuthorization,
+  type NexJwtTokenResolver,
   NEX_ENV,
 } from "@nex/shared";
 
@@ -12,28 +14,33 @@ export function createDesktopHelpConfigReader(options: {
   deviceMid: string;
   /** 当前界面语言；以前不传，X-Client-Language 固定为 unknown。 */
   getClientLanguage: () => string;
+  resolveZcodeJwtToken?: NexJwtTokenResolver;
 }) {
   const read = createHelpAppConfigReader({
     fetchImpl: (input, init) => net.fetch(input instanceof URL ? input.href : input, init),
   });
   return async () => {
     const endpointOrigin = await options.resolveEndpointOrigin();
+    const authorization = await resolveOptionalNexAuthorization(options.resolveZcodeJwtToken);
     return read(
       buildHelpAppConfigUrl(
         endpointOrigin,
         options.appVersion,
         `${process.platform}-${process.arch}`,
       ),
-      buildNexSourceHeadersFromContext({
-        endpointOrigin,
-        appVersion: options.appVersion,
-        clientLanguage: options.getClientLanguage(),
-        deviceMid: options.deviceMid,
-        platform: process.platform,
-        arch: process.arch,
-        releaseChannel: NEX_ENV,
-        sourceTitle: "electron",
-      }),
+      {
+        ...(authorization ? { Authorization: authorization } : {}),
+        ...buildNexSourceHeadersFromContext({
+          endpointOrigin,
+          appVersion: options.appVersion,
+          clientLanguage: options.getClientLanguage(),
+          deviceMid: options.deviceMid,
+          platform: process.platform,
+          arch: process.arch,
+          releaseChannel: NEX_ENV,
+          sourceTitle: "electron",
+        }),
+      },
     );
   };
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useEffectEvent } from "react";
 import type { IServiceAccessor } from "@nex/services";
 import type { FileEntry } from "@nex/shared";
-import { FolderIcon, FolderSymlinkIcon, LoaderIcon } from "lucide-react";
+import { FolderIcon, FolderSymlinkIcon, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
@@ -369,7 +369,7 @@ export function DirectoryBrowser({
               role={selecting ? "status" : undefined}
               aria-hidden={!selecting}
             >
-              <LoaderIcon
+              <LoaderCircle
                 aria-hidden="true"
                 className="size-4 animate-spin motion-reduce:animate-none"
               />

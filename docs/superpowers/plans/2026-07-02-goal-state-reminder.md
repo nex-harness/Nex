@@ -211,7 +211,7 @@
 - [x] `pnpm exec vitest packages/shared/test/nexSessionVisibleContent.test.ts --run`
 - [x] `pnpm exec vitest packages/ui/test/nexSessionProjection.test.ts --run`
   - 2026-07-12 两个文件合计 108 条通过，model-only reminder 未变成可见 user bubble。
-- [x] `pnpm --filter @nex/desktop exec wdio run wdio.conf.ts --spec './test/e2e/conversation-session/conversation-session-stop-empty.test.ts'`
+- [x] `pnpm --filter @nex/desktop exec wdio run wdio.conf.ts --spec './test/e2e/conversation-session/execution/conversation-session-stop-empty.test.ts'`
   - 2026-07-12 B12 等 2 条通过；tool call 运行中 Stop 且 queue=0 后，下一条普通消息立即发起并完成。
 - [x] `pnpm --filter @nex/desktop typecheck:e2e`
 - [x] `pnpm typecheck`

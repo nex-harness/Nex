@@ -14,5 +14,5 @@ export interface NexProtocolTransport extends IDisposable {
   readonly onMessage: Event<NexProtocolMessage>;
   readonly onClose: Event<NexProtocolTransportClosedEvent>;
   send(message: NexProtocolMessage): Promise<void>;
-  disposeAndWait?(): Promise<void>;
+  disposeAndWait?(options?: { deadlineAtMs?: number }): Promise<void>;
 }

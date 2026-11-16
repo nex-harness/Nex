@@ -21,7 +21,7 @@ Nex bundles this package as the official
 `android-emulator@zcode-plugins-official` plugin. Enable the plugin to project
 its skill, slash command, and MCP server into the session.
 At startup Nex copies the packaged plugin files into
-`~/.nex/cli/plugins/cache/zcode-plugins-official/android-emulator/0.1.0/`
+`~/.nex/cli/plugins/cache/zcode-plugins-official/android-emulator/0.1.1/`
 and runs the MCP server from that cache directory. SEA builds rewrite the
 official plugin's Nex manifest to launch the cached MCP server through Nex's
 internal plugin host, so the server uses the embedded Node.js runtime.

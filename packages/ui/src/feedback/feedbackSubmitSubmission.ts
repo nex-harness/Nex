@@ -3,6 +3,7 @@ import {
   type FeedbackTicketModule,
   type FeedbackTicketSeverity,
   type FeedbackTicketType,
+  type Locale,
 } from "@nex/shared";
 import type { IFeedbackService } from "@nex/services";
 import { persistFeedbackContactPreference } from "@/feedback/feedbackContactPreference.js";
@@ -53,7 +54,7 @@ export async function startSimplifiedFeedbackSubmission({
   ticketSeverity: FeedbackTicketSeverity;
   ticketModule: FeedbackTicketModule;
   modelContext: FeedbackAgentModelContext;
-  locale: "zh-CN" | "en-US";
+  locale: Locale;
   copy: FeedbackSubmissionCopy;
   formatMessage: (descriptor: { id: string }, values?: Record<string, string>) => string;
   onTicketCreated?: (ticketId: string) => void;

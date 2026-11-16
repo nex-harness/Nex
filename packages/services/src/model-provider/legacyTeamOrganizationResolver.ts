@@ -15,7 +15,13 @@ export function createLegacyTeamOrganizationResolver(dependencies: {
   apiClient: ApiClient;
   loadOAuthTokenSet: (
     family: ProviderFamilyDomain,
-  ) => Promise<{ accessToken: string; nexJwtToken?: string | null } | null>;
+  ) => Promise<{
+    accessToken: string;
+    nexJwtToken?: string | null;
+    sessionRevision?: string | null;
+    accountIdentity?: string;
+    nexUserId?: string;
+  } | null>;
 }): (connection: LegacyTeamConnection) => Promise<string | null> {
   return async ({ family, projectId }) => {
     const tokens = await dependencies.loadOAuthTokenSet(family);
@@ -38,7 +44,15 @@ export function createLegacyTeamOrganizationResolver(dependencies: {
     const payload = (await response.json()) as RemoteEnvelope<RemoteCustomerInfo>;
     if (payload.code !== undefined && payload.code !== 0 && payload.code !== 200) return null;
     // 账号切换使旧查询失去权威，即使项目 ID 碰巧相同也不能把组织写给新账号。
-    if ((await dependencies.loadOAuthTokenSet(family))?.accessToken.trim() !== token) return null;
+    const latest = await dependencies.loadOAuthTokenSet(family);
+    if (
+      latest?.accessToken.trim() !== token ||
+      latest?.nexJwtToken !== tokens?.nexJwtToken ||
+      latest?.sessionRevision !== tokens?.sessionRevision ||
+      latest?.accountIdentity !== tokens?.accountIdentity ||
+      latest?.nexUserId !== tokens?.nexUserId
+    )
+      return null;
     const organizations = new Set(
       (payload.data?.organizations ?? [])
         .filter((org) => org.projects?.some((project) => project.projectId?.trim() === projectId))

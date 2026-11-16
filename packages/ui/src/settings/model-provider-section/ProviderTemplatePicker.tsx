@@ -1,6 +1,7 @@
 import type { ProviderSettingsView } from "@nex/services";
 import { ArrowLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
 import { resolveProviderTemplateName } from "@nex/provider";
+import { toZhOrEnLocale } from "@nex/shared";
 import type { ReactNode } from "react";
 import {
   TID_MODEL_PROVIDER_TEMPLATE_BACK_BUTTON,
@@ -107,7 +108,12 @@ export function ProviderTemplatePicker({
                 />
               ) : null}
               {group.templates.map((template) => {
-                const label = resolveProviderTemplateName(template.templateId, template, locale);
+                const label = resolveProviderTemplateName(
+                  template.templateId,
+                  template,
+                  // Provider 模板名只有中英两套。
+                  toZhOrEnLocale(locale),
+                );
                 return (
                   <ProviderTemplateCard
                     key={template.templateId}

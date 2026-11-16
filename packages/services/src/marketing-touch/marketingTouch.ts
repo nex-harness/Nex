@@ -1,10 +1,10 @@
-import { ServiceChannels, type MarketingTouchSnapshot } from "@nex/shared";
+import { ServiceChannels, type Locale, type MarketingTouchSnapshot } from "@nex/shared";
 import { createServiceDescriptor } from "#src/descriptors.js";
 
 export interface IMarketingTouchService {
-  query(input: { locale: "zh-CN" | "en-US" }): Promise<MarketingTouchSnapshot & { scope: string }>;
+  query(input: { locale: Locale }): Promise<MarketingTouchSnapshot & { scope: string }>;
   report(input: {
-    locale: "zh-CN" | "en-US";
+    locale: Locale;
     scope: string;
     campaignId: string;
     actionType: "confirm" | "cancel";

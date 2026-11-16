@@ -1,20 +1,20 @@
 import { createHash } from "node:crypto";
 import type { ConversationShareCapabilities } from "@nex/shared";
-import type { ConversationRow } from "@nex/shared/nex-protocol-v4";
+import type { WireConversationRow } from "@nex/shared/nex-protocol-v4";
 import type { ConversationShareFailureIssue } from "./conversationShare.js";
 
 /** 内嵌图片转为既有 artifact；预检和发布使用同一份确定性转换，不新增文件读取通道。 */
 export function materializeConversationShareInlineImages(
-  sourceRows: readonly ConversationRow[],
+  sourceRows: readonly WireConversationRow[],
   capabilities: ConversationShareCapabilities,
   turnOrdinals: ReadonlyMap<string, number>,
 ): {
-  rows: ConversationRow[];
+  rows: WireConversationRow[];
   bytesBySourceRef: Map<string, Uint8Array>;
   warnings: ConversationShareFailureIssue[];
   toolImages: Map<number, Array<{ resourceId: string; mimeType: string }>>;
 } {
-  const rows: ConversationRow[] = [];
+  const rows: WireConversationRow[] = [];
   const toolImages = new Map<number, Array<{ resourceId: string; mimeType: string }>>();
   const bytesBySourceRef = new Map<string, Uint8Array>();
   const warnings: ConversationShareFailureIssue[] = [];
