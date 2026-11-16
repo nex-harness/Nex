@@ -16,7 +16,7 @@ const releaseModulePath = fileURLToPath(
 const cliModulePath = fileURLToPath(
   new URL("../src/packaging/stageRemoteAssetsCli.ts", import.meta.url),
 );
-const allTargets = ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"];
+const allTargets = ["linux-x64", "linux-arm64", "darwin-arm64"];
 
 beforeEach(() => {
   vi.resetModules();
@@ -100,16 +100,33 @@ describe("remote asset staging CLI", () => {
     );
   });
 
-  it("preserves all four targets and environment for the default entry", async () => {
+  it("preserves all three targets and environment for the default entry", async () => {
     vi.stubEnv("NEX_ENV", undefined);
     await runCli([]);
-    expect(spawn).toHaveBeenCalledTimes(5);
+    expect(spawn).toHaveBeenCalledTimes(4);
     expect(spawn.mock.calls.slice(1).map((call) => call[1][6])).toEqual(allTargets);
     for (const call of spawn.mock.calls) {
       expect(call[1]).not.toContain("--skip-component-archives");
     }
     expect(spawn.mock.calls[0]![2].env?.NEX_ENV).toBeUndefined();
     expect(collect).toHaveBeenCalledWith(expect.objectContaining({ targets: allTargets }));
+  });
+
+  it("writes the release under <out>/releases/<version> when --out is given", async () => {
+    await runCli(["--out", "/tmp/nex-release-root"]);
+    const rootPackage = JSON.parse(
+      await readFile(new URL("../../../package.json", import.meta.url), "utf8"),
+    ) as { version: string };
+    const expected = `/tmp/nex-release-root/releases/${rootPackage.version}`;
+    expect(begin).toHaveBeenCalledWith({ versionReleaseDir: expected });
+    expect(collect).toHaveBeenCalledWith(expect.objectContaining({ versionReleaseDir: expected }));
+  });
+
+  it("rejects --out without a directory before invalidating or building", async () => {
+    await expect(runCli(["--out"])).rejects.toThrow(/--out requires a directory/);
+    await expect(runCli(["--out", "--linux"])).rejects.toThrow(/--out requires a directory/);
+    expect(begin).not.toHaveBeenCalled();
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it("rejects invalid Linux environments before invalidating or building", async () => {

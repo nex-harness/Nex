@@ -35,7 +35,6 @@ import {
 } from "./remoteCdn.js";
 import { getElectronAppPath, isElectronAppPackaged } from "./desktopElectronApp.js";
 
-
 const isLocalDevelopmentRuntime = !isElectronAppPackaged();
 export const desktopRuntimeEnv: NexRuntimeEnv = isLocalDevelopmentRuntime
   ? "development"
@@ -244,8 +243,7 @@ function resolveEnvValue(envName: string, localEnv: LocalRuntimeEnv = {}): strin
 export function resolveNexEndpointEnvBaseOrigin(
   localEnv: LocalRuntimeEnv = {},
 ): string | undefined {
-  const scopedEnvName =
-    NEX_ENV === "production" ? "NEX_PRODUCTION_BASE_URL" : "NEX_TEST_BASE_URL";
+  const scopedEnvName = NEX_ENV === "production" ? "NEX_PRODUCTION_BASE_URL" : "NEX_TEST_BASE_URL";
   // Bugfix: main 进程临时验证更新服务时不会重新写 .env，命令行传入的 endpoint 必须优先于本地文件。
   return (
     process.env["NEX_BASE_URL"]?.trim() ||
@@ -301,6 +299,20 @@ export function resolveRemoteAssetDirs(
 ): RemoteAssetDirs {
   const remoteCdnBaseUrls = resolveRemoteCdnBaseUrls(options, localEnv);
   const remoteCdnBaseUrl = remoteCdnBaseUrls[0];
+
+  // 本地发布目录覆盖（测试用，docs/specs/remote-server-release-assets.md）：打包 App 也能只消费
+  // 一个本地目录里的 descriptor 与归档。复用开发态的 mock-cdn 通道和 content-addressed 策略，
+  // 这样解析器在目录不可用时明确失败，不会回退到 GitHub 或缓存而把「本地产物没生效」伪装成成功。
+  const localReleaseRoot = resolveEnvValue("NEX_REMOTE_ASSET_LOCAL_RELEASE_DIR", localEnv);
+  if (localReleaseRoot) {
+    return {
+      mockCdnDir: resolve(localReleaseRoot),
+      sourceServerArtifactPolicy: "development-content-addressed",
+      remoteCdnBaseUrl,
+      remoteCdnBaseUrls,
+      remoteCacheDir: resolveRemoteAssetCacheDir(localEnv),
+    };
+  }
 
   // remote 资源之前和 desktop 本地 provider 资源共用安装包内路径，
   // 结果打包后会把整套 Linux 远程运行时一起塞进 .app，和“remote 资源走 CDN / mock-cdn”的职责边界冲突。

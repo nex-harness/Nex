@@ -100,6 +100,23 @@ jobs:
       - name: Stage server-cli release (${{ matrix.target }})
         run: pnpm --filter @nex/server-cli stage
 
+      # 桌面「添加远程 Server」用的归档：stage 产出的 nex-server-<平台>.tar.gz（带一层顶级目录，
+      # 远端用 tar --strip-components=1 解包），文件名不带标签。必须在下一步之前另存：
+      # 一键安装包是另一种布局（无顶级目录 + web/），两者不能互相改名复用。
+      # 见 docs/specs/remote-server-release-assets.md。
+      - name: Keep the remote-install archive
+        working-directory: packages/nex-server-cli/dist-release
+        run: |
+          mkdir -p remote
+          cp nex-server-${{ matrix.target }}.tar.gz remote/
+
+      - name: Upload remote-install archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-nex-server-${{ matrix.target }}
+          path: packages/nex-server-cli/dist-release/remote/nex-server-${{ matrix.target }}.tar.gz
+          retention-days: 7
+
       - name: Package one-step install tarball
         working-directory: packages/nex-server-cli/dist-release
         run: |
@@ -121,17 +138,51 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download artifacts
+      - name: Download install tarballs
         uses: actions/download-artifact@v4
         with:
+          pattern: nex-server-*
           merge-multiple: true
           path: dist
+
+      - name: Download remote-install archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: remote-nex-server-*
+          merge-multiple: true
+          path: remote-dist
+
+      - uses: actions/setup-node@v4
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: pnpm/action-setup@v4
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          version: 10.33.2
+
+      # 桌面「添加远程 Server」从与 App 同一个 Release 取 source-server-release.json 和
+      # nex-server-<平台>.tar.gz（见 docs/specs/remote-server-release-assets.md）。
+      # 索引由与本地 prepare:remote-assets 相同的收集函数生成（含 sha256 与大小），缺任何一个平台都会失败。
+      - name: Build remote-install release index (v* tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          pnpm install --frozen-lockfile --filter @nex/server-cli...
+          pnpm --filter @nex/server-cli exec tsx src/packaging/stageRemoteAssetsCli.ts \
+            --collect-only --dist "$GITHUB_WORKSPACE/remote-dist" --out "$GITHUB_WORKSPACE/remote-release"
+          ls -l remote-release/releases/*/
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
 
       - name: Publish versioned release (v* tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/nex-server-*.tar.gz
+          files: |
+            dist/nex-server-*.tar.gz
+            remote-release/releases/*/source-server-release.json
+            remote-release/releases/*/nex-server-*.tar.gz
 
       - name: Resolve short sha
         id: meta

@@ -7,6 +7,7 @@ import { pipeline } from "node:stream/promises";
 import { dirname, join } from "node:path";
 import {
   SOURCE_SERVER_RELEASE_DESCRIPTOR_FILE_NAME,
+  SOURCE_SERVER_RELEASE_TARGETS,
   NEX_VERSION,
   normalizeRemoteAssetInstallMode,
   sourceServerReleaseDescriptorSchema,
@@ -196,19 +197,17 @@ async function resolveReleaseAsset(
   remoteAssetNetwork?: RemoteAssetNetworkPort,
   options: { metadataOnly?: boolean } = {},
 ): Promise<ServerReleaseAsset> {
-  if (
-    (probe.platform !== "linux" && probe.platform !== "darwin") ||
-    (probe.arch !== "x64" && probe.arch !== "arm64")
-  ) {
+  const target = `${probe.platform}-${probe.arch}`;
+  if (!(SOURCE_SERVER_RELEASE_TARGETS as readonly string[]).includes(target)) {
     // Bug 原因：英文拒绝信息没有公开码，又被下载阶段兜底成 remote-download-failed，
     // riscv64 等设备看到“下载失败”并被建议重试；平台不支持应使用专用码和中文原因。
     // Bug 原因：原因曾写成“Linux / macOS”，连接错误脱敏把空格后的裸 `/` 当作路径遮到行尾，
     // 用户只看到“只提供 Linux [redacted-path]”。脱敏无法区分路径与分隔符，列举改用顿号。
+    // 支持清单只认共享的 SOURCE_SERVER_RELEASE_TARGETS，不在这里另写一份（darwin-x64 不提供）。
     throw createUnsupportedRemotePlatformError(
-      `当前不支持 ${probe.platform}-${probe.arch} 设备：远程服务只提供 Linux、macOS 的 x64 与 arm64 版本`,
+      `当前不支持 ${target} 设备：远程服务只提供 Linux 的 x64 与 arm64、macOS 的 arm64 版本`,
     );
   }
-  const target = `${probe.platform}-${probe.arch}`;
   const installMode =
     remoteTarget.kind === "ssh"
       ? normalizeRemoteAssetInstallMode(remoteTarget.assetInstallMode)

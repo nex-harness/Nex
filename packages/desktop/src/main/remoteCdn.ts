@@ -2,45 +2,15 @@ import { NEX_VERSION, type NexEnv } from "@nex/shared";
 
 declare const __NEX_REMOTE_CDN_RELEASE_ROOTS__: readonly string[] | undefined;
 
-const REMOTE_CDN_RELEASE_ROOTS = {
-  domestic: "https://cdn.codegeex.cn/nex/electron/releases",
-  // 开发构建未注入 CDN_DOMAIN 时也须使用当前发布域名，避免仍请求旧域名。
-  overseas: "https://cdn-zcode.z.ai/nex/electron/releases",
-} as const;
+// 远程 Server 资产与 App 同一个 GitHub Release：.../releases/download/v<版本>/。
+// 详见 docs/specs/remote-server-release-assets.md。
+const GITHUB_RELEASE_DOWNLOAD_ROOT = "https://github.com/nex-harness/Nex/releases/download";
 const TEST_REMOTE_CDN_RELEASE_ROOT = "http://intranet.example.invalid:12345/ssh-remote-assets";
 
 export interface ResolveRemoteCdnOptions {
   env?: NexEnv;
-  locale?: string;
-  timeZone?: string;
   overrideBaseUrl?: string;
   version?: string;
-  now?: Date;
-}
-
-function isChineseLocale(locale?: string | null): boolean {
-  return locale?.trim().toLowerCase().startsWith("zh") ?? false;
-}
-
-function resolveLocalTimeZone(): string | undefined {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
-
-export function isUtcPlusEightTimeZone(timeZone?: string | null, now: Date = new Date()): boolean {
-  const normalizedTimeZone = timeZone?.trim();
-  if (!normalizedTimeZone) {
-    return false;
-  }
-
-  const offsetMinutes = resolveTimeZoneOffsetMinutes(normalizedTimeZone, now);
-  return offsetMinutes === 8 * 60;
-}
-
-export function shouldPreferDomesticRemoteCdn(
-  options: Pick<ResolveRemoteCdnOptions, "locale" | "timeZone" | "now">,
-): boolean {
-  const timeZone = options.timeZone ?? resolveLocalTimeZone();
-  return isChineseLocale(options.locale) && isUtcPlusEightTimeZone(timeZone, options.now);
 }
 
 export function resolveRemoteCdnBaseUrls(options: ResolveRemoteCdnOptions = {}): string[] {
@@ -49,9 +19,6 @@ export function resolveRemoteCdnBaseUrls(options: ResolveRemoteCdnOptions = {}):
     return [normalizeBaseUrl(overrideBaseUrl)];
   }
 
-  const orderedReleaseRoots = shouldPreferDomesticRemoteCdn(options)
-    ? [REMOTE_CDN_RELEASE_ROOTS.domestic, REMOTE_CDN_RELEASE_ROOTS.overseas]
-    : [REMOTE_CDN_RELEASE_ROOTS.overseas, REMOTE_CDN_RELEASE_ROOTS.domestic];
   const version = options.version ?? NEX_VERSION;
 
   if (options.env === "test") {
@@ -59,18 +26,16 @@ export function resolveRemoteCdnBaseUrls(options: ResolveRemoteCdnOptions = {}):
   }
 
   const configuredReleaseRoots =
-    typeof __NEX_REMOTE_CDN_RELEASE_ROOTS__ === "undefined"
-      ? []
-      : __NEX_REMOTE_CDN_RELEASE_ROOTS__;
+    typeof __NEX_REMOTE_CDN_RELEASE_ROOTS__ === "undefined" ? [] : __NEX_REMOTE_CDN_RELEASE_ROOTS__;
   if (configuredReleaseRoots.length > 0) {
-    // Bugfix：remote runtime 的 manifest/components 下载根不能继续写死旧 CDN。
-    // 构建期按 CI 的 CDN_DOMAIN/OSS_PATH_PREFIX 注入有序列表，切换时只改 CI 变量。
+    // 构建期可以用 CI 的 CDN_DOMAIN/OSS_PATH_PREFIX 注入有序列表覆盖默认来源。
     return configuredReleaseRoots.map(
       (releaseRoot) => `${normalizeBaseUrl(releaseRoot)}/${version}`,
     );
   }
 
-  return orderedReleaseRoots.map((releaseRoot) => `${releaseRoot}/${version}`);
+  // GitHub 的下载路径把版本放在 tag 里（v<版本>），不是 <根>/<版本>。
+  return [`${GITHUB_RELEASE_DOWNLOAD_ROOT}/v${version}`];
 }
 
 export function resolvePrimaryRemoteCdnBaseUrl(
@@ -81,40 +46,4 @@ export function resolvePrimaryRemoteCdnBaseUrl(
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
-}
-
-function resolveTimeZoneOffsetMinutes(timeZone: string, now: Date): number | null {
-  try {
-    const formatter = new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    });
-    const parts = formatter.formatToParts(now);
-    const values = Object.fromEntries(
-      parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]),
-    );
-    const year = Number(values.year);
-    const month = Number(values.month);
-    const day = Number(values.day);
-    const hour = Number(values.hour);
-    const minute = Number(values.minute);
-    const second = Number(values.second);
-    if ([year, month, day, hour, minute, second].some((value) => Number.isNaN(value))) {
-      return null;
-    }
-
-    // 这里把目标时区“格式化后的人类时间”反算成 UTC，得到该时区相对 UTC 的真实偏移。
-    // 不能只按常见亚洲城市白名单判断，否则 UTC+8 但非中国命名的时区会被误判。
-    const targetUtcMs = Date.UTC(year, month - 1, day, hour, minute, second);
-    const currentUtcMs = now.getTime();
-    return Math.round((targetUtcMs - currentUtcMs) / 60_000);
-  } catch {
-    return null;
-  }
 }

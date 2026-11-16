@@ -1,11 +1,7 @@
 import { z } from "zod";
 
-export const SOURCE_SERVER_RELEASE_TARGETS = [
-  "linux-x64",
-  "linux-arm64",
-  "darwin-x64",
-  "darwin-arm64",
-] as const;
+// 远程 Server 只发布这三个平台；不提供 darwin-x64，见 docs/specs/remote-server-release-assets.md。
+export const SOURCE_SERVER_RELEASE_TARGETS = ["linux-x64", "linux-arm64", "darwin-arm64"] as const;
 export const SOURCE_SERVER_RELEASE_DESCRIPTOR_FILE_NAME = "source-server-release.json";
 
 export const sourceServerArtifactPolicySchema = z.enum([

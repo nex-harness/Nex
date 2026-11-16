@@ -10,12 +10,11 @@ import {
 const RELEASE_DIR = "/repo/packages/desktop/mock-cdn/releases/3.12.0";
 const DESCRIPTOR_PATH = `${RELEASE_DIR}/source-server-release.json`;
 // 与 stage:remote-assets（remoteAssetRelease.ts collectSourceServerRemoteReleaseArchives）
-// 的实际产物一致：descriptor 最后原子写入，四个 archive 按 target 命名。
+// 的实际产物一致：descriptor 最后原子写入，三个 archive 按 target 命名（不提供 darwin-x64）。
 const RELEASE_FILES = [
   "source-server-release.json",
   "nex-server-linux-x64.tar.gz",
   "nex-server-linux-arm64.tar.gz",
-  "nex-server-darwin-x64.tar.gz",
   "nex-server-darwin-arm64.tar.gz",
 ];
 
@@ -153,7 +152,7 @@ describe("ensureSshRemoteReleaseAssets（默认全平台判断）", () => {
         releaseDir: RELEASE_DIR,
       }),
     ).rejects.toThrow(
-      /prepare:remote-assets.*\/releases\/3\.12\.0.*nex-server-linux-arm64\.tar\.gz, nex-server-darwin-x64\.tar\.gz, nex-server-darwin-arm64\.tar\.gz/u,
+      /prepare:remote-assets.*\/releases\/3\.12\.0.*nex-server-linux-arm64\.tar\.gz, nex-server-darwin-arm64\.tar\.gz/u,
     );
     expect(prepareReleaseAssets).toHaveBeenCalledOnce();
   });

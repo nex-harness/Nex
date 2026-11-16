@@ -11,7 +11,7 @@ import {
 const descriptor: SourceServerReleaseDescriptor = {
   schemaVersion: 1,
   version: "3.12.0",
-  archives: (["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"] as const).map((target) => ({
+  archives: (["linux-x64", "linux-arm64", "darwin-arm64"] as const).map((target) => ({
     target,
     version: "3.12.0",
     fileName: `${target}-custom.tar.gz`,
@@ -31,7 +31,6 @@ describe("Source Server E2E release faults", () => {
     ["Linux", "aarch64", "linux-arm64"],
     ["Linux", "x86_64", "linux-x64"],
     ["Darwin", "arm64", "darwin-arm64"],
-    ["Darwin", "x86_64", "darwin-x64"],
   ])("selects the actual %s/%s target instead of a fixed x64 archive", (platform, arch, target) => {
     expect(selectSourceServerReleaseArchive(descriptor, { platform, arch })).toEqual(
       descriptor.archives.find((entry) => entry.target === target),

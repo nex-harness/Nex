@@ -53,7 +53,32 @@ async function main(): Promise<void> {
   const { version } = JSON.parse(await readFile(join(repoRoot, "package.json"), "utf8")) as {
     version: string;
   };
-  const versionReleaseDir = join(repoRoot, "packages/desktop/mock-cdn/releases", version);
+  // --out <根目录> 输出到 <根目录>/releases/<版本>/，与 NEX_REMOTE_ASSET_LOCAL_RELEASE_DIR 的目录结构一致；
+  // 不带时沿用开发态的 packages/desktop/mock-cdn。
+  const argv = process.argv.slice(2);
+  const outIndex = argv.indexOf("--out");
+  const outRoot = outIndex >= 0 ? argv[outIndex + 1] : undefined;
+  if (outIndex >= 0 && (!outRoot || outRoot.startsWith("--"))) {
+    throw new Error("--out requires a directory");
+  }
+  const releaseRoot = outRoot ? resolve(outRoot) : join(repoRoot, "packages/desktop/mock-cdn");
+  const versionReleaseDir = join(releaseRoot, "releases", version);
+  // --collect-only --dist <目录>：不构建，只把 <目录> 里已有的 nex-server-<平台>.tar.gz 收集成发布目录并生成
+  // source-server-release.json。CI 的每台构建机只 stage 自己的平台，最后在 release 任务里汇总用。
+  if (argv.includes("--collect-only")) {
+    const distIndex = argv.indexOf("--dist");
+    const distDir = distIndex >= 0 ? argv[distIndex + 1] : undefined;
+    if (!distDir || distDir.startsWith("--"))
+      throw new Error("--collect-only requires --dist <directory>");
+    const collectedOnly = await collectSourceServerRemoteReleaseArchives({
+      distReleaseDir: resolve(distDir),
+      versionReleaseDir,
+      version,
+      targets,
+    });
+    for (const path of collectedOnly) console.log(`[source-server-release] ${path}`);
+    return;
+  }
   await beginSourceServerRemoteReleaseGeneration({ versionReleaseDir });
   await run("pnpm", ["--filter", "@nex/server-cli", "build"], repoRoot, env);
   for (const [index, target] of targets.entries()) {
