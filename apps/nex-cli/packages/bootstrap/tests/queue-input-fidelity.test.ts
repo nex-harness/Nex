@@ -24,6 +24,7 @@ const intent: TurnInputIntentMetadata = {
   queuePosition: 0,
   attachmentRefs: [{ ref: "artifact://note", fileName: "note.txt", mime: "text/plain", bytes: 3 }],
   genUiContext: [{ path: "/project/example.html", state: { stage: "entry" } }],
+  source: { kind: "session", sessionId: "source-session", title: "来源会话" },
   provenance: {
     sourceCommandId: "original-command",
     queueItemId: "original-queue",

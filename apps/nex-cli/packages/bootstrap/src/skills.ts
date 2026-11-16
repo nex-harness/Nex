@@ -1,14 +1,18 @@
 import { resolve } from "node:path";
-import { createConfig, resolvePath } from "@nex/adapters/config";
+import { createConfigWithPluginMigrations, resolvePath } from "@nex/adapters/config";
 import { createNodeSkillAdapter } from "@nex/adapters/skills";
 import type { Logger, SkillContent, SkillDiagnostic, SkillLoadOutcome } from "@nex/contracts";
 import { resolveBundledSkillRoots } from "./app/bundled-skills.js";
 import { getCliStorageRoot } from "./app/paths.js";
 import { filterVisualizeSkillRoots } from "./app/visualize-skill-gate.js";
-import { resolveNexPlugins } from "./plugins.js";
+import { resolveNexPlugins, type ResolveNexPluginsOptions } from "./plugins.js";
 import { collectDisabledPaths } from "./skill-command-overrides.js";
 
 export interface ListNexSkillsOptions {
+  workspaceIdentity?: string;
+  remoteSessionId?: string;
+  pluginPreparation?: ResolveNexPluginsOptions["pluginPreparation"];
+  pluginDiscovery?: ResolveNexPluginsOptions["pluginDiscovery"];
   env?: NodeJS.ProcessEnv;
   /** 协议宿主草稿目录使用；CLI 命令缺省关闭。 */
   includeVisualize?: boolean;
@@ -31,7 +35,7 @@ export interface NexSkillInspection {
 export async function listNexSkills(
   options: ListNexSkillsOptions = {},
 ): Promise<SkillLoadOutcome> {
-  const discovery = createSkillDiscovery(options);
+  const discovery = await createSkillDiscovery(options);
   if (!discovery.enabled) {
     return {
       diagnostics: [],
@@ -48,7 +52,7 @@ export async function listNexSkills(
 export async function inspectNexSkill(
   options: InspectNexSkillOptions,
 ): Promise<NexSkillInspection> {
-  const discovery = createSkillDiscovery(options);
+  const discovery = await createSkillDiscovery(options);
   if (!discovery.enabled) {
     throw new Error("Skills are disabled.");
   }
@@ -75,7 +79,7 @@ export async function inspectNexSkill(
   };
 }
 
-function createSkillDiscovery(options: ListNexSkillsOptions):
+async function createSkillDiscovery(options: ListNexSkillsOptions): Promise<
   | {
       enabled: false;
       workingDirectory: string;
@@ -84,9 +88,10 @@ function createSkillDiscovery(options: ListNexSkillsOptions):
       enabled: true;
       skillPort: ReturnType<typeof createNodeSkillAdapter>;
       workingDirectory: string;
-    } {
+    }
+> {
   const workingDirectory = resolve(options.workingDirectory ?? process.cwd());
-  const configResult = createConfig({
+  const configResult = await createConfigWithPluginMigrations({
     env: options.env,
     projectConfigPath: options.projectConfigPath,
     workingDirectory,
@@ -100,7 +105,11 @@ function createSkillDiscovery(options: ListNexSkillsOptions):
       workingDirectory,
     };
   }
-  const pluginOutcome = resolveNexPlugins({
+  const pluginOutcome = await resolveNexPlugins({
+    pluginPreparation: options.pluginPreparation,
+    pluginDiscovery: options.pluginDiscovery,
+    workspaceIdentity: options.workspaceIdentity,
+    remoteSessionId: options.remoteSessionId,
     configResult,
     env: options.env,
     logger: options.logger,

@@ -5,6 +5,7 @@ import {
   Moon,
   Settings,
   Settings2,
+  SlidersHorizontal,
   Package,
   Bot,
   Palette,
@@ -85,6 +86,12 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     id: "personalization",
     icon: User,
     titleId: "settings.personalization.title",
+    groupId: "agentCapabilities",
+  },
+  {
+    id: "agentBehavior",
+    icon: SlidersHorizontal,
+    titleId: "settings.agentBehavior.title",
     groupId: "agentCapabilities",
   },
   {
@@ -263,7 +270,10 @@ export const SETTINGS_SECTION_GROUPS = BASE_SETTINGS_SECTION_GROUPS.map((group) 
 export type { SettingsSectionId };
 
 /** 依赖本机 Source Server 管理与设备连接的设置页，Web 与手机远控不显示。 */
-const DESKTOP_ONLY_SETTINGS_SECTIONS = new Set<SettingsSectionId>(["remoteDevices", "dataSync"]);
+const DESKTOP_ONLY_SETTINGS_SECTIONS = new Set<SettingsSectionId>([
+  "remoteDevices",
+  "dataSync",
+]);
 
 export function isSettingsSectionAvailable(
   section: SettingsSectionId,

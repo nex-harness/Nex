@@ -98,6 +98,7 @@ function compileFixture({
     `/DELECTRON_BUILDER_NSIS_INCLUDE_DIR=${resolve(appBuilderLibDir, "templates/nsis/include")}`,
     `/DNSIS_PLUGIN_DIR=${resolve(nsisResourcesDir, "plugins/x86-unicode")}`,
     `/DNEX_INSTALLER_NSH=${installerNshPath}`,
+    `/DNEX_INSTALLER_PROCESS_HELPER=${resolve(desktopDir, `bundled-tools/win32-${process.arch}/runtime-host/nex-installer-process-helper.exe`)}`,
     `/DFIXTURE_EXE=${process.env.ComSpec ?? "C:\\Windows\\System32\\cmd.exe"}`,
     `/DOUTPUT_FILE=${outputPath}`,
     `/DDEFAULT_LOG_PATH=${defaultLogPath}`,

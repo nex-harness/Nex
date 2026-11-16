@@ -1,5 +1,5 @@
 import { downloadNexBuiltinRelease, type NexBuiltinRelease } from "@nex/provider-node";
-import type { ApiClient } from "@nex/shared";
+import type { ApiClient, NexJwtTokenResolver } from "@nex/shared";
 
 export interface FetchNexBuiltinRemoteReleaseOptions {
   readonly apiClient: ApiClient;
@@ -7,6 +7,7 @@ export interface FetchNexBuiltinRemoteReleaseOptions {
   readonly appVersion: string;
   readonly platform: string;
   readonly signal?: AbortSignal;
+  readonly resolveZcodeJwtToken?: NexJwtTokenResolver;
 }
 
 /** Services 仅注入既有网络装配；URL、预算与 Release 校验由 provider-node 唯一实现。 */
@@ -18,6 +19,7 @@ export async function fetchNexBuiltinRemoteRelease(
     appVersion: options.appVersion,
     platform: options.platform,
     signal: options.signal,
+    resolveZcodeJwtToken: options.resolveZcodeJwtToken,
     request: (url, init) => options.apiClient.request(url, init),
   });
 }

@@ -396,5 +396,5 @@ function buildRemoteServerCommand(
       );
     }
   }
-  return `${envParts.join(" ")} ~/.nex/server/node ~/.nex/server/nex-server.cjs`;
+  return `${envParts.join(" ")} ~/.nex/server/node ~/.nex/server/nex-server.cjs --prepare-credentials`;
 }

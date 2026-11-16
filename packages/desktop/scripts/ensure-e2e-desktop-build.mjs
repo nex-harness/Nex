@@ -31,6 +31,7 @@ export const E2E_DESKTOP_REQUIRED_OUTPUT_PATHS = [
   "out/main/index.js",
   "out/host/index.js",
   "out/scheduler/index.js",
+  "out/extension-host/index.js",
   "out/preload/index.cjs",
   "out/preload/resourceManager.cjs",
   "out/renderer/index.html",
@@ -61,6 +62,7 @@ export const DEFAULT_E2E_DESKTOP_BUILD_INPUTS = [
   "packages/desktop/tsconfig.preload.json",
   "packages/desktop/tsconfig.renderer.json",
   "packages/desktop/tsconfig.scheduler.json",
+  "packages/desktop/tsconfig.extension-host.json",
   "packages/desktop/tsup.config.ts",
   "packages/desktop/vite.config.ts",
 ];
@@ -95,6 +97,34 @@ const WORKSPACE_DEPENDENCY_FIELDS = [
   "optionalDependencies",
   "peerDependencies",
 ];
+
+/**
+ * E2E 桌面包固定按 test 环境构建。
+ *
+ * bug 根因：从 Nex 客户端拉起的 shell 里带有应用自身环境（实测 NEX_ENV=production、
+ * NEX_BASE_URL=https://zcode.z.ai）。这些变量被 tsup 当作构建输入编译进 main/host 包，
+ * 于是 `resolveNexEndpointOrigin` 走 production 分支、忽略 settings 里的 endpoint，
+ * spec 用 fixture 起的本地 mock server 全部收不到请求，表现为大批配置类用例失败。
+ * 构建前统一归一，runner 与本脚本共用同一结果；NEX_BASE_URL 等运行时变量也不能进入构建。
+ */
+export const E2E_DESKTOP_BUILD_INHERITED_ENV_NAMES = [
+  "NEX_BASE_URL",
+  "NEX_RUNTIME_ENV",
+  "NEX_APP_VERSION",
+  "NEX_BUILD_COMMIT_ID",
+  "NEX_PROCESS_LABEL",
+  "NEX_DESKTOP_CONTEXT_PROMPT_ENABLED",
+  "NEX_CUA_BUNDLED_HELPER_APP_PATH",
+  "NEX_CUA_LAUNCHER_PID",
+];
+
+export function normalizeE2EDesktopBuildEnv(env = process.env) {
+  const normalized = { ...env, NEX_ENV: "test" };
+  for (const name of E2E_DESKTOP_BUILD_INHERITED_ENV_NAMES) {
+    delete normalized[name];
+  }
+  return normalized;
+}
 
 function listFiles(path) {
   if (!existsSync(path)) return [];
@@ -240,7 +270,8 @@ export function ensureE2EDesktopBuild({
   return withE2EDesktopBuildLock({ ...lockOptions, lockPath }, () => {
     // Bug 根因：两个 full runner 会在锁外同时观察 miss，随后递归清理并重写同一个
     // packages/desktop/out。fingerprint 与 cache hit 必须在获得共享写锁后重新计算和检查。
-    const fingerprint = createE2EDesktopBuildFingerprint({ ...fingerprintOptions, env });
+    const buildEnv = normalizeE2EDesktopBuildEnv(env);
+    const fingerprint = createE2EDesktopBuildFingerprint({ ...fingerprintOptions, env: buildEnv });
     const forceBuild = env.NEX_E2E_FORCE_DESKTOP_BUILD === "1";
     if (
       !forceBuild &&
@@ -263,7 +294,7 @@ export function ensureE2EDesktopBuild({
     } else {
       execFileSync("pnpm", ["--filter", "@nex/desktop", "build:no-runtime-assets"], {
         cwd: REPO_ROOT,
-        env,
+        env: buildEnv,
         shell: process.platform === "win32",
         stdio: "inherit",
       });

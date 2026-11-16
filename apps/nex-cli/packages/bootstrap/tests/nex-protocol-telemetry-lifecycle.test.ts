@@ -6,12 +6,58 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createNodeProviderRuntimePathEnv } from "@nex/provider-node";
 
 const telemetryMocks = vi.hoisted(() => ({
+  preparationOptions: [] as unknown[],
+  discoveryOwners: [] as unknown[],
+  disposePluginDiscovery: vi.fn(),
+  preparePlugins: vi.fn(async () => []),
+  disposePluginPreparation: vi.fn(async () => {}),
+  createdApp: vi.fn(),
+  preparationOwners: [] as unknown[],
   closeMcp: vi.fn(async () => {}),
   emitMcpOnStart: false,
   emitToolOnAppCreate: false,
   disposeProcessProviderRegistryRuntime: vi.fn(),
   disposeProviderRegistryRuntime: vi.fn(),
 }));
+
+vi.mock("@nex/adapters/plugins", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@nex/adapters/plugins")>();
+  return {
+    ...original,
+    createNodePluginAdapter(options: Parameters<typeof original.createNodePluginAdapter>[0]) {
+      const adapter = original.createNodePluginAdapter(options);
+      const dispose = adapter.dispose.bind(adapter);
+      adapter.dispose = () => {
+        telemetryMocks.disposePluginDiscovery();
+        dispose();
+      };
+      telemetryMocks.discoveryOwners.push(adapter);
+      return adapter;
+    },
+  };
+});
+
+vi.mock("../src/app/bundled-plugins.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../src/app/bundled-plugins.js")>();
+  return {
+    ...original,
+    createOfficialPluginPreparation(
+      options: Parameters<typeof original.createOfficialPluginPreparation>[0],
+    ) {
+      const owner = {
+        startupDegraded: false,
+        resolvePlugins: async (resolve: () => Promise<unknown>) => await resolve(),
+        prepare: telemetryMocks.preparePlugins,
+        dispose: telemetryMocks.disposePluginPreparation,
+        invalidate: () => {},
+        signal: new AbortController().signal,
+      };
+      telemetryMocks.preparationOptions.push(options);
+      telemetryMocks.preparationOwners.push(owner);
+      return owner;
+    },
+  };
+});
 
 vi.mock("../src/app/process-provider-registry-runtime.js", async (importOriginal) => {
   const original =
@@ -102,6 +148,7 @@ vi.mock("../src/app/create-app.js", async (importOriginal) => {
   return {
     ...original,
     async createNexApp(options: Parameters<typeof original.createNexApp>[0]) {
+      telemetryMocks.createdApp(options);
       if (telemetryMocks.emitToolOnAppCreate)
         options.onToolExecResource?.({
           platform: "linux",
@@ -128,6 +175,30 @@ describe("Nex Protocol resource notification lifecycle", () => {
     vi.clearAllMocks();
     telemetryMocks.emitMcpOnStart = false;
     telemetryMocks.emitToolOnAppCreate = false;
+    telemetryMocks.preparationOwners = [];
+    telemetryMocks.discoveryOwners = [];
+    telemetryMocks.preparationOptions = [];
+  });
+
+  it("does not enable the plugin startup budget or emit a degraded notification", async () => {
+    const chunks: string[] = [];
+    await runProtocolAgent(chunks);
+    // 冷启动 seed 在 Windows 实测约 3 秒，协议进程停用 3 秒预算；入口不得再传预算参数。
+    expect(telemetryMocks.preparationOptions).toEqual([undefined]);
+    const messages = chunks
+      .join("")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    expect(messages.some((message) => message.method === "startup/pluginsDegraded")).toBe(false);
+  });
+
+  it("prewarms plugins without a session and disposes the process preparation owner", async () => {
+    await runProtocolAgent();
+    expect(telemetryMocks.preparePlugins).toHaveBeenCalledOnce();
+    expect(telemetryMocks.createdApp).not.toHaveBeenCalled();
+    expect(telemetryMocks.disposePluginPreparation).toHaveBeenCalledOnce();
+    expect(telemetryMocks.disposePluginDiscovery).toHaveBeenCalledOnce();
   });
 
   it("MCP 关闭失败仍完成协议清理", async () => {
@@ -174,6 +245,12 @@ describe("Nex Protocol resource notification lifecycle", () => {
     telemetryMocks.emitToolOnAppCreate = true;
     const chunks: string[] = [];
     await runProtocolAgent(chunks, true);
+    expect(telemetryMocks.createdApp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pluginPreparation: telemetryMocks.preparationOwners[0],
+        pluginDiscovery: telemetryMocks.discoveryOwners[0],
+      }),
+    );
     const messages = chunks
       .join("")
       .split("\n")

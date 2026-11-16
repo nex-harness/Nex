@@ -185,9 +185,6 @@ test("keeps busy sendInput user row before streamed response", async () => {
     draftAttachments: [],
     messageInsertIndex: state.messages.length,
     options,
-    requestPermission: async () => {
-      throw new Error("permission should not be requested");
-    },
     setDraftValue: () => {},
     setLastError: () => {},
     setMessages: state.setMessages,
@@ -232,9 +229,6 @@ test("keeps queued busy input out of the transcript projection", async () => {
     draftAttachments: [],
     messageInsertIndex: state.messages.length,
     options,
-    requestPermission: async () => {
-      throw new Error("permission should not be requested");
-    },
     setDraftValue: () => {},
     setLastError: () => {},
     setMessages: state.setMessages,
@@ -420,9 +414,6 @@ test("submitting compact slash command creates timeline row without a user row",
     applySessionEvent: state.apply,
     draftAttachments: [],
     options,
-    requestPermission: async () => {
-      throw new Error("permission should not be requested");
-    },
     setBusy: () => {},
     setDraftAttachments: () => {},
     setDraftValue: () => {},

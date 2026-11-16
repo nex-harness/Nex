@@ -15,7 +15,7 @@ import {
   type WindowHostRemoteWorkspaceDescriptor,
   type BindRemoteWorkspaceSessionContextResult,
 } from "@nex/shared";
-import { dispatchTaskNotification } from "./desktopNotifications.js";
+import { dispatchExtensionNotification, dispatchTaskNotification } from "./desktopNotifications.js";
 import {
   clearWindowDeepLinkRoutes,
   deliverPendingDeepLink,
@@ -302,6 +302,14 @@ export function registerRemoteIpcHandlers(options: {
   });
   ipcMain.handle(PlatformChannels.ShowTaskNotification, (event, payload: unknown) =>
     dispatchTaskNotification({
+      event,
+      payload,
+      revealDockForForeground: options.revealDockForForeground,
+      logger: options.logger,
+    }),
+  );
+  ipcMain.handle(PlatformChannels.ShowExtensionNotification, (event, payload: unknown) =>
+    dispatchExtensionNotification({
       event,
       payload,
       revealDockForForeground: options.revealDockForForeground,

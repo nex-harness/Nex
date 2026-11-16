@@ -32,9 +32,10 @@
     "@nex/dynamic-workflow": "workspace:*",
     "@nex/dynamic-workflow-runtime": "workspace:*",
     "@nex/i18n": "workspace:*",
-    "@nex/provider": "link:../../../../packages/provider",
-    "@nex/provider-node": "link:../../../../packages/provider-node",
-    "@nex/shared": "link:../../../../packages/shared",
+    "@nex/provider": "workspace:*",
+    "@nex/provider-node": "workspace:*",
+    "@nex/session-control": "workspace:*",
+    "@nex/shared": "workspace:*",
     "diff": "^9.0.0",
     "zod": "4.6.5"
   },

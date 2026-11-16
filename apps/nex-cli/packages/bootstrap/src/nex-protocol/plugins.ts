@@ -18,7 +18,9 @@ import {
   type NexPluginComponentGroup,
   type NexPluginDiagnostic,
   type NexPluginInfo,
+  type NexPluginExtensionSummary,
   type NexPluginMarketplaceSummary,
+  type NexPluginStoreListing,
   type NexPluginsConfigureResult,
   type NexPluginsDescribeResult,
   type NexPluginsInstallResult,
@@ -29,6 +31,7 @@ import {
   type NexPluginsSetEnabledResult,
   type NexPluginsUninstallResult,
   type NexPluginsValidateResult,
+  isUserFacingPlugin,
 } from "@nex/shared";
 import type { PluginDiagnostic, PluginMetadata } from "@nex/contracts";
 import {
@@ -39,6 +42,7 @@ import {
   getNexPluginsOverview,
   installNexMarketplacePlugin,
   removeNexPluginMarketplace,
+  resolveNexPluginConfigWithSecrets,
   resolveNexPlugins,
   resetNexPluginConfig,
   restoreBuiltinPlugin as restoreBuiltinPluginCore,
@@ -50,13 +54,16 @@ import {
 import { listInstalledPluginRecords } from "@nex/adapters/plugins";
 import { withPluginStorageLock } from "../lib/plugin-storage-lock.js";
 import { getCliStorageRoot, getPluginStorageRoot } from "../app/paths.js";
-import { resolveOfficialPluginHostMcpServerNames } from "../app/official-plugin-definitions.js";
-import { createConfig, resolvePath, type ConfigResult } from "@nex/adapters/config";
+import {
+  createConfig,
+  createConfigWithPluginMigrations,
+  resolvePath,
+  type ConfigResult,
+} from "@nex/adapters/config";
 import { parseParams, type NexProtocolAgentServerContext } from "./server-types.js";
 
 // 把 CLI 的 PluginMetadata 投影成协议可序列化的 NexPluginInfo (只保留 UI 需要的字段)。
 function toPluginInfo(plugin: PluginMetadata, configResult?: ConfigResult): NexPluginInfo {
-  const hostMcpServerNames = resolveOfficialPluginHostMcpServerNames(plugin.id);
   const configuredOptions = Object.fromEntries(
     Object.entries(plugin.configuredOptions ?? {}).filter(
       ([key]) => plugin.userConfig?.[key]?.sensitive !== true,
@@ -92,15 +99,25 @@ function toPluginInfo(plugin: PluginMetadata, configResult?: ConfigResult): NexP
       })),
     })),
     declaredMcpServerNames: plugin.declaredMcpServerNames,
-    ...(plugin.uiSurfaces?.length ? { uiSurfaces: plugin.uiSurfaces.map((surface) => ({
-      pluginId: plugin.id, pluginName: plugin.name, id: surface.id, title: surface.title,
-      ...(surface.icon ? { icon: surface.icon } : {}), server: surface.server,
-      resourceUri: surface.resourceUri, availability: surface.availability,
-    })) } : {}),
+    ...(plugin.uiSurfaces?.length
+      ? {
+          uiSurfaces: plugin.uiSurfaces.map((surface) => ({
+            pluginId: plugin.id,
+            pluginName: plugin.name,
+            id: surface.id,
+            title: surface.title,
+            ...(surface.icon ? { icon: surface.icon } : {}),
+            server: surface.server,
+            resourceUri: surface.resourceUri,
+            availability: surface.availability,
+          })),
+        }
+      : {}),
     mcpServerNames: plugin.mcpServerNames,
-    ...(hostMcpServerNames.length > 0 ? { hostMcpServerNames } : {}),
     hookDetails: plugin.hookDetails,
     rootPath: plugin.rootPath,
+    // 插件的持久数据目录：App 交给扩展作 ctx.extension.dataPath（plugin-compat.md「Storage Layout」）。
+    dataPath: plugin.dataPath,
     ...(plugin.userConfig ? { userConfig: plugin.userConfig } : {}),
     ...(Object.keys(configuredOptions).length > 0 ? { configuredOptions } : {}),
     ...(rootSource ? { rootSource } : {}),
@@ -132,16 +149,16 @@ function resolveInlinePluginRootSource(
   return undefined;
 }
 
-function createPluginConfigView(
+async function createPluginConfigView(
   context: NexProtocolAgentServerContext,
   workspacePath: string,
   configScope: "user" | "workspace" | undefined,
-): ConfigResult {
+): Promise<ConfigResult> {
   // Settings 的 User 与 Workspace 现在是同一批 Host Plugin 的两个配置视图。
   // User 视图若继续加载 project config，会把 Workspace override 投影成 User 当前值；
   // 不传 workingDirectory 可保留 User/default 层，同时仍由调用方的 workspacePath 决定
   // package storage 和相对执行上下文。
-  return createConfig({
+  return createConfigWithPluginMigrations({
     env: context.deps?.env,
     ...(configScope === "user" ? {} : { workingDirectory: workspacePath }),
   });
@@ -179,9 +196,7 @@ function createMissingConfiguredPluginInfos(
         rootPath: "",
         packageStatus: "missing",
         ...(enabledSource ? { enabledSource } : {}),
-        ...(optionSources && Object.keys(optionSources).length > 0
-          ? { optionSources }
-          : {}),
+        ...(optionSources && Object.keys(optionSources).length > 0 ? { optionSources } : {}),
       },
     ];
   });
@@ -194,9 +209,7 @@ export function normalizePluginRootForComparison(
   const resolvedRoot = resolvePath(rootPath);
   // Windows 路径不区分大小写，且配置与 loader 可能分别返回正斜杠和反斜杠。
   // 若直接做字符串比较，会把同一个 Workspace plugins.dirs 根误判为无归属。
-  return platform === "win32"
-    ? resolvedRoot.replaceAll("\\", "/").toLowerCase()
-    : resolvedRoot;
+  return platform === "win32" ? resolvedRoot.replaceAll("\\", "/").toLowerCase() : resolvedRoot;
 }
 
 function toPluginDiagnostic(diagnostic: PluginDiagnostic): NexPluginDiagnostic {
@@ -213,19 +226,29 @@ export async function listPlugins(
   rawParams: unknown,
 ): Promise<NexPluginsListResult> {
   const params = parseParams(nexPluginsListParamsSchema, rawParams);
-  const configResult = createPluginConfigView(
-    context,
-    params.workspace.workspacePath,
-    params.configScope,
-  );
-  const outcome = resolveNexPlugins({
+  context.deps?.pluginPreparation?.signal.throwIfAborted();
+  // optionSources 要包含已迁进私有文件的敏感键（值仍过滤），否则设置页的 scope 标记与
+  // 「清除」按钮会在迁移后消失；所以投影用叠加私有文件后的配置视图。
+  const configResult = await resolveNexPluginConfigWithSecrets({
+    configResult: await createPluginConfigView(
+      context,
+      params.workspace.workspacePath,
+      params.configScope,
+    ),
+    workingDirectory: params.workspace.workspacePath,
+  });
+  const outcome = await resolveNexPlugins({
+    pluginPreparation: context.deps?.pluginPreparation,
+    pluginDiscovery: context.deps?.pluginDiscovery,
+    workspaceIdentity: params.workspace.workspaceIdentity,
+    remoteSessionId: params.workspace.remoteSessionId,
     configResult,
     logger: context.logger,
     workingDirectory: params.workspace.workspacePath,
   });
-  const plugins = outcome.plugins.map((plugin) =>
-    toPluginInfo(plugin, configResult),
-  );
+  // 启动 fallback 只表示能力暂不可用；管理查询不能把它投影成磁盘缺包。
+  context.deps?.pluginPreparation?.signal.throwIfAborted();
+  const plugins = outcome.plugins.map((plugin) => toPluginInfo(plugin, configResult));
   return {
     plugins: [
       ...plugins,
@@ -233,7 +256,7 @@ export async function listPlugins(
         configResult,
         new Set(plugins.map((plugin) => plugin.id)),
       ),
-    ],
+    ].filter((plugin) => isUserFacingPlugin(plugin.id)),
     diagnostics: outcome.diagnostics.map(toPluginDiagnostic),
   };
 }
@@ -246,6 +269,11 @@ export async function setPluginEnabled(
   const params = parseParams(nexPluginsSetEnabledParamsSchema, rawParams);
   abortSignal?.throwIfAborted();
   const result = await setNexPluginEnabled({
+    abortSignal,
+    pluginPreparation: context.deps?.pluginPreparation,
+    pluginDiscovery: context.deps?.pluginDiscovery,
+    workspaceIdentity: params.workspace.workspaceIdentity,
+    remoteSessionId: params.workspace.remoteSessionId,
     enabled: params.enabled,
     logger: context.logger,
     plugin: params.pluginId,
@@ -268,12 +296,17 @@ export async function getPluginsOverview(
   rawParams: unknown,
 ): Promise<NexPluginsOverviewResult> {
   const params = parseParams(nexPluginsOverviewParamsSchema, rawParams);
+  context.deps?.pluginPreparation?.signal.throwIfAborted();
   enrichCachedClaudeMarketplaceIconsForOverview({
     logger: context.logger,
     workingDirectory: params.workspace.workspacePath,
   });
-  const overview = getNexPluginsOverview({
-    configResult: createPluginConfigView(
+  const overview = await getNexPluginsOverview({
+    pluginPreparation: context.deps?.pluginPreparation,
+    pluginDiscovery: context.deps?.pluginDiscovery,
+    workspaceIdentity: params.workspace.workspaceIdentity,
+    remoteSessionId: params.workspace.remoteSessionId,
+    configResult: await createPluginConfigView(
       context,
       params.workspace.workspacePath,
       params.configScope,
@@ -281,11 +314,22 @@ export async function getPluginsOverview(
     logger: context.logger,
     workingDirectory: params.workspace.workspacePath,
   });
+  // 查询途中预算到期也走既有失败通道，避免用空发现结果覆盖已安装状态。
+  context.deps?.pluginPreparation?.signal.throwIfAborted();
+  // 扩展摘要只在被要求时放进 listing：listing 与结果都是 strict，比 CLI 旧的 services 解析到新键会让
+  // 整个商店打不开（docs/plugins/plugin-publishing.md §4.3）。能这样要的 services 已先读过能力位。
+  const withSummary = params.includeExtensionSummary === true;
   return {
     marketplaces: overview.marketplaces.map(toMarketplaceSummary),
-    availablePlugins: overview.availablePlugins.map(toAvailablePluginSummary),
-    installedPlugins: overview.installedPlugins.map(toInstalledPluginSummary),
-    restorableBuiltins: overview.restorableBuiltins.map(toAvailablePluginSummary),
+    availablePlugins: overview.availablePlugins
+      .filter((plugin) => isUserFacingPlugin(plugin.id))
+      .map((plugin) => toAvailablePluginSummary(withExtensionSummary(plugin, withSummary))),
+    installedPlugins: overview.installedPlugins
+      .filter((plugin) => isUserFacingPlugin(plugin.id))
+      .map((plugin) => toInstalledPluginSummary(withExtensionSummary(plugin, withSummary))),
+    restorableBuiltins: overview.restorableBuiltins
+      .filter((plugin) => isUserFacingPlugin(plugin.id))
+      .map(toAvailablePluginSummary),
     diagnostics: overview.diagnostics.map(toPluginDiagnostic),
     capability: { supported: true },
   };
@@ -297,16 +341,13 @@ export async function addPluginMarketplace(
   abortSignal?: AbortSignal,
 ): Promise<NexPluginsMarketplaceMutationResult> {
   const params = parseParams(nexPluginsMarketplaceAddParamsSchema, rawParams);
-  const pluginStorageRoot = resolvePluginStorageRoot(params.workspace.workspacePath);
-  const marketplace = await withPluginStorageLock(pluginStorageRoot, async () =>
-    addNexPluginMarketplace({
-      abortSignal,
-      dryRun: params.dryRun,
-      logger: context.logger,
-      source: params.source,
-      workingDirectory: params.workspace.workspacePath,
-    }),
-  );
+  const marketplace = await addNexPluginMarketplace({
+    abortSignal,
+    dryRun: params.dryRun,
+    logger: context.logger,
+    source: params.source,
+    workingDirectory: params.workspace.workspacePath,
+  });
   return { marketplace: toMarketplaceSummary(marketplace), diagnostics: [] };
 }
 
@@ -315,14 +356,11 @@ export async function removePluginMarketplace(
   rawParams: unknown,
 ): Promise<NexPluginsMarketplaceMutationResult> {
   const params = parseParams(nexPluginsMarketplaceRemoveParamsSchema, rawParams);
-  const pluginStorageRoot = resolvePluginStorageRoot(params.workspace.workspacePath);
-  await withPluginStorageLock(pluginStorageRoot, async () =>
-    removeNexPluginMarketplace({
-      logger: context.logger,
-      marketplace: params.marketplace,
-      workingDirectory: params.workspace.workspacePath,
-    }),
-  );
+  await removeNexPluginMarketplace({
+    logger: context.logger,
+    marketplace: params.marketplace,
+    workingDirectory: params.workspace.workspacePath,
+  });
   return { diagnostics: [] };
 }
 
@@ -332,15 +370,12 @@ export async function updatePluginMarketplace(
   abortSignal?: AbortSignal,
 ): Promise<NexPluginsMarketplaceMutationResult> {
   const params = parseParams(nexPluginsMarketplaceUpdateParamsSchema, rawParams);
-  const pluginStorageRoot = resolvePluginStorageRoot(params.workspace.workspacePath);
-  const result = await withPluginStorageLock(pluginStorageRoot, async () =>
-    updateNexPluginMarketplace({
-      abortSignal,
-      logger: context.logger,
-      marketplace: params.marketplace,
-      workingDirectory: params.workspace.workspacePath,
-    }),
-  );
+  const result = await updateNexPluginMarketplace({
+    abortSignal,
+    logger: context.logger,
+    marketplace: params.marketplace,
+    workingDirectory: params.workspace.workspacePath,
+  });
   return {
     marketplaces: result.marketplaces.map(toMarketplaceSummary),
     diagnostics: result.diagnostics.map(toPluginDiagnostic),
@@ -353,18 +388,19 @@ export async function installPlugin(
   abortSignal?: AbortSignal,
 ): Promise<NexPluginsInstallResult> {
   const params = parseParams(nexPluginsInstallParamsSchema, rawParams);
-  const pluginStorageRoot = resolvePluginStorageRoot(params.workspace.workspacePath);
-  const result = await withPluginStorageLock(pluginStorageRoot, async () =>
-    installNexMarketplacePlugin({
-      abortSignal,
-      dryRun: params.dryRun,
-      logger: context.logger,
-      marketplace: params.marketplace,
-      pluginName: params.pluginName,
-      scope: params.scope,
-      workingDirectory: params.workspace.workspacePath,
-    }),
-  );
+  const result = await installNexMarketplacePlugin({
+    pluginPreparation: context.deps?.pluginPreparation,
+    pluginDiscovery: context.deps?.pluginDiscovery,
+    workspaceIdentity: params.workspace.workspaceIdentity,
+    remoteSessionId: params.workspace.remoteSessionId,
+    abortSignal,
+    dryRun: params.dryRun,
+    logger: context.logger,
+    marketplace: params.marketplace,
+    pluginName: params.pluginName,
+    scope: params.scope,
+    workingDirectory: params.workspace.workspacePath,
+  });
   return {
     dependencyClosure: result.dependencyClosure,
     installedPlugins: result.installedPlugins.map(toInstalledPluginSummary),
@@ -378,6 +414,10 @@ export async function uninstallPlugin(
 ): Promise<NexPluginsUninstallResult> {
   const params = parseParams(nexPluginsUninstallParamsSchema, rawParams);
   const removed = await uninstallNexMarketplacePlugin({
+    pluginPreparation: context.deps?.pluginPreparation,
+    pluginDiscovery: context.deps?.pluginDiscovery,
+    workspaceIdentity: params.workspace.workspaceIdentity,
+    remoteSessionId: params.workspace.remoteSessionId,
     logger: context.logger,
     marketplace: params.marketplace,
     pluginId: params.pluginId,
@@ -397,14 +437,13 @@ export async function updatePlugin(
 ): Promise<NexPluginsInstallResult> {
   const params = parseParams(nexPluginsUpdateParamsSchema, rawParams);
   const pluginStorageRoot = resolvePluginStorageRoot(params.workspace.workspacePath);
-  const installed = listInstalledPluginRecords(pluginStorageRoot).filter((record) => {
-    if (params.pluginId) return record.id === params.pluginId;
-    if (params.marketplace) return record.marketplace === params.marketplace;
-    return true;
-  });
-  // 与 uninstall 一样把整个重装循环串行化到同一 storageRoot 的 in-process 锁里，
-  // 避免并发 update/install 交错读改写 installed_plugins.json / cache。
-  return withPluginStorageLock(pluginStorageRoot, async () => {
+  // 在同一把写锁内选择待更新记录，避免把等锁期间卸载的插件重新装回去。
+  return withPluginStorageLock(pluginStorageRoot, async (lock) => {
+    const installed = listInstalledPluginRecords(pluginStorageRoot).filter((record) => {
+      if (params.pluginId) return record.id === params.pluginId;
+      if (params.marketplace) return record.marketplace === params.marketplace;
+      return true;
+    });
     const installedPlugins: NexInstalledPluginSummary[] = [];
     const dependencyClosure: string[] = [];
     // 聚合每条记录重装产生的诊断：installNexMarketplacePlugin 失败时不抛错，而是返回
@@ -414,6 +453,12 @@ export async function updatePlugin(
     const diagnostics: NexPluginDiagnostic[] = [];
     for (const record of installed) {
       const result = await installNexMarketplacePlugin({
+        pluginStorageRoot: lock.root,
+        pluginStorageLock: lock,
+        pluginPreparation: context.deps?.pluginPreparation,
+        pluginDiscovery: context.deps?.pluginDiscovery,
+        workspaceIdentity: params.workspace.workspaceIdentity,
+        remoteSessionId: params.workspace.remoteSessionId,
         logger: context.logger,
         marketplace: record.marketplace,
         pluginName: record.name,
@@ -436,6 +481,10 @@ export async function restoreBuiltinPlugin(
 ): Promise<NexPluginsRestoreBuiltinResult> {
   const params = parseParams(nexPluginsRestoreBuiltinParamsSchema, rawParams);
   await restoreBuiltinPluginCore({
+    pluginPreparation: context.deps?.pluginPreparation,
+    pluginDiscovery: context.deps?.pluginDiscovery,
+    workspaceIdentity: params.workspace.workspaceIdentity,
+    remoteSessionId: params.workspace.remoteSessionId,
     logger: context.logger,
     pluginId: params.pluginId,
     workingDirectory: params.workspace.workspacePath,
@@ -449,6 +498,10 @@ export async function configurePlugin(
 ): Promise<NexPluginsConfigureResult> {
   const params = parseParams(nexPluginsConfigureParamsSchema, rawParams);
   await configureNexPlugin({
+    pluginPreparation: context.deps?.pluginPreparation,
+    pluginDiscovery: context.deps?.pluginDiscovery,
+    workspaceIdentity: params.workspace.workspaceIdentity,
+    remoteSessionId: params.workspace.remoteSessionId,
     clearOptionKeys: params.clearOptionKeys,
     dryRun: params.dryRun,
     logger: context.logger,
@@ -479,16 +532,13 @@ export async function validatePlugin(
   rawParams: unknown,
 ): Promise<NexPluginsValidateResult> {
   const params = parseParams(nexPluginsValidateParamsSchema, rawParams);
-  const pluginStorageRoot = resolvePluginStorageRoot(params.workspace.workspacePath);
-  const diagnostics = await withPluginStorageLock(pluginStorageRoot, async () =>
-    validateNexPlugin({
-      logger: context.logger,
-      marketplace: params.marketplace,
-      pluginName: params.pluginName,
-      source: params.source,
-      workingDirectory: params.workspace.workspacePath,
-    }),
-  );
+  const diagnostics = await validateNexPlugin({
+    logger: context.logger,
+    marketplace: params.marketplace,
+    pluginName: params.pluginName,
+    source: params.source,
+    workingDirectory: params.workspace.workspacePath,
+  });
   return {
     ok: diagnostics.every((diagnostic) => diagnostic.severity !== "error"),
     diagnostics: diagnostics.map(toPluginDiagnostic),
@@ -505,13 +555,11 @@ export async function describePlugin(
   rawParams: unknown,
 ): Promise<NexPluginsDescribeResult> {
   const params = parseParams(nexPluginsDescribeParamsSchema, rawParams);
-  const pluginStorageRoot = resolvePluginStorageRoot(params.workspace.workspacePath);
   // 已安装目录、已缓存 manifest 与临时 source 解析都不持锁；只有懒加载 manifest 写入进锁。
   const result = await describeNexPlugin({
     logger: context.logger,
     marketplace: params.marketplace,
     pluginName: params.pluginName,
-    withWriteLock: (write) => withPluginStorageLock(pluginStorageRoot, write),
     workingDirectory: params.workspace.workspacePath,
   });
   const components: NexPluginComponentGroup[] = result.components.map((group) => ({
@@ -551,6 +599,14 @@ function toMarketplaceSummary(input: {
     ...(input.featured ? { featured: input.featured } : {}),
     ...(input.refreshFailure ? { refreshFailure: input.refreshFailure } : {}),
   };
+}
+
+/** 按请求把 CLI 内部的扩展摘要并进 listing；不要求时原样返回（摘要不进线）。 */
+function withExtensionSummary<
+  T extends { listing?: NexPluginStoreListing; extensionSummary?: NexPluginExtensionSummary },
+>(plugin: T, include: boolean): T {
+  if (!include || !plugin.extensionSummary) return plugin;
+  return { ...plugin, listing: { ...plugin.listing, extensionSummary: plugin.extensionSummary } };
 }
 
 function toAvailablePluginSummary(input: {

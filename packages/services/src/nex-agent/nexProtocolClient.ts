@@ -9,6 +9,7 @@ import {
 } from "@nex/shared";
 import { NexStorageStartupGate } from "#src/nex-agent/nexStorageStartupGate.js";
 import { Emitter } from "@nex/rpc";
+import { nexPluginStartupDegradedSchema, nexProtocolNotifications } from "@nex/shared";
 import type { IDisposable } from "@nex/rpc";
 import type {
   NexProtocolMethod,
@@ -165,6 +166,8 @@ export class NexProtocolClient implements IDisposable {
   }
 
   readonly onNotification = this.notificationEmitter.event;
+  /** 当前连接的降级投影；新进程的新连接自然重置，不跨进程保存。 */
+  pluginStartupDegraded = false;
   readonly onRequest = this.requestEmitter.event;
   readonly onRequestTimeout = this.requestTimeoutEmitter.event;
   readonly onPendingRequestsDrained = this.pendingDrainedEmitter.event;
@@ -349,14 +352,14 @@ export class NexProtocolClient implements IDisposable {
     this.transport.dispose();
   }
 
-  async disposeAndWait(): Promise<void> {
+  async disposeAndWait(options?: { deadlineAtMs?: number }): Promise<void> {
     const wasDisposed = this.disposed;
     if (!wasDisposed) {
       this.disposed = true;
       this.disposeLocalResources();
     }
     if (this.transport.disposeAndWait) {
-      await this.transport.disposeAndWait();
+      await this.transport.disposeAndWait(options);
       return;
     }
     if (!wasDisposed) {
@@ -399,6 +402,13 @@ export class NexProtocolClient implements IDisposable {
     }
 
     if ("method" in message) {
+      if (
+        message.method === nexProtocolNotifications.pluginStartupDegraded &&
+        nexPluginStartupDegradedSchema.safeParse((message as NexProtocolNotification).params)
+          .success
+      ) {
+        this.pluginStartupDegraded = true;
+      }
       if (
         message.method === "startup/storageState" &&
         this.storageStartup.accept((message as NexProtocolNotification).params)

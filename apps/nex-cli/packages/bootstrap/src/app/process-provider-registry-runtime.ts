@@ -78,6 +78,7 @@ export async function startProcessProviderRegistryRuntime(
                 appVersion: NEX_VERSION,
                 platform: resolveNexBuiltinClientPlatform(),
                 request: options.standalone?.request ?? globalThis.fetch,
+                resolveZcodeJwtToken: () => credentialStore?.load("nexjwttoken"),
               }),
             onRefreshResult: options.standalone?.onBuiltinRefreshResult,
           },

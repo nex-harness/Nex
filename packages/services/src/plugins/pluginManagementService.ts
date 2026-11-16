@@ -5,7 +5,21 @@
 import type { INexAgentService } from "../nex-agent/nexAgent.js";
 import type { IPluginManagementService } from "./pluginManagement.js";
 
+/** 插件管理变更成功的信号（Window Host 侧）。action 与遥测的动作名相同。 */
+export interface PluginMutationSucceededEvent {
+  /** install、uninstall、update、restore、configure、reset_config、enable、disable、source_* 等。 */
+  action: string;
+  pluginId?: string;
+  scope?: "user" | "workspace";
+}
+
 export interface PluginManagementServiceDependencies {
+  /**
+   * 插件清单「变了」的 Window Host 侧信号：安装、卸载、启停、配置等变更成功返回后调用。
+   * 扩展进程据此重读插件清单（docs/plugins/extension-host.md §3.4、§13）；配置与重置还通知该插件的
+   * settings.onDidChange（§16.7）。dryRun 不触发。
+   */
+  onMutationSucceeded?: (event: PluginMutationSucceededEvent) => void;
   nexAgentService: Pick<
     INexAgentService,
     | "listPlugins"
@@ -44,12 +58,25 @@ export function createPluginManagementService(
     };
   // 参数里的 telemetry 观测上下文不再有上报出口；仍在入口剥离，避免透传给执行侧。
   const observe = async <T>(
-    _action: string,
+    action: string,
     params: Params,
     invoke: (clean: Params) => Promise<T>,
   ): Promise<T> => {
     const { telemetry: _telemetry, ...clean } = params;
-    return await invoke(clean);
+    const result = await invoke(clean);
+    if (!params.dryRun) {
+      // 通知方故障不能改变已成功的业务返回。
+      try {
+        dependencies.onMutationSucceeded?.({
+          action,
+          ...(params.pluginId ? { pluginId: params.pluginId } : {}),
+          ...(params.scope ? { scope: params.scope } : {}),
+        });
+      } catch {
+        /* 观察者自行记录错误。 */
+      }
+    }
+    return result;
   };
   return {
     listPlugins: (params) => agent.listPlugins(params),

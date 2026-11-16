@@ -1,17 +1,32 @@
 import {
   DesktopCommandIds,
   buildLocalMediaPreviewUrl,
+  resolveLocaleFromLanguageTag,
   unwrapRemoteWorkspaceBindResult,
   type IPlatformService,
 } from "@nex/shared";
 
 import { desktopBrowserPlatformBridge } from "./desktopBrowserPlatformBridge.js";
+import { registerAppControlNavigationHandler } from "#src/app-control-navigation/renderer.js";
 import { createDesktopPluginSandboxPlatform } from "./plugin-sandbox/desktopPluginSandboxPlatform.js";
 
 export function createDesktopPlatform(options: {
   isLocalDevelopmentRuntime: boolean;
 }): IPlatformService {
   return {
+    onAppControlNavigation: (handler) =>
+      registerAppControlNavigationHandler(
+        {
+          subscribe: (listener) => window.nex.onAppControlNavigationMessage(listener),
+          register: (generation) =>
+            window.nex.sendAppControlNavigation({ type: "register", generation }),
+          unregister: (generation) =>
+            window.nex.sendAppControlNavigation({ type: "unregister", generation }),
+          reply: (message) => window.nex.sendAppControlNavigation({ type: "result", ...message }),
+        },
+        handler,
+        crypto.randomUUID(),
+      ),
     canSelectFilePath: true,
     canOpenLocalFiles: true,
     pluginSandbox: createDesktopPluginSandboxPlatform(),
@@ -84,6 +99,9 @@ export function createDesktopPlatform(options: {
     onPaymentCallback: (callback) => window.nex.onPaymentCallback(callback),
     notifyRendererReady: () => window.nex.notifyRendererReady(),
     showTaskNotification: (payload) => window.nex.showTaskNotification(payload),
+    // 扩展的系统通知（§18.1 H8）：只有桌面实现；Web 与手机远控没有这两个方法，Renderer 按 unsupported 处理。
+    showExtensionNotification: (payload) => window.nex.showExtensionNotification(payload),
+    onExtensionNotificationClick: (handler) => window.nex.onExtensionNotificationClick(handler),
     syncWindowTabs: (paths) => window.nex.syncWindowTabs(paths),
     syncWebRemoteControlWorkspaces: (workspaces) =>
       window.nex.syncWebRemoteControlWorkspaces?.(workspaces),
@@ -190,7 +208,7 @@ export function createDesktopPlatform(options: {
     setApplicationLocale: (locale) => window.nex.setApplicationLocale(locale),
     getSystemLocale: () =>
       window.nex.getSystemLocale?.() ??
-      Promise.resolve(navigator.language.toLowerCase().startsWith("zh") ? "zh-CN" : "en-US"),
+      Promise.resolve(resolveLocaleFromLanguageTag(navigator.language)),
     setTitleBarTheme: (theme) => window.nex.setTitleBarTheme(theme),
     getDeviceId: () =>
       (window as Window & { __NEX_DEVICE_ID__?: string }).__NEX_DEVICE_ID__ ?? "",

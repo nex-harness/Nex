@@ -28,7 +28,24 @@ export type {
   PersistedWorkspaceSessionEntry,
 } from "./protocol.js";
 export type { WorkspacePurpose } from "./workspacePurpose.js";
-export { DEFAULT_LOCALE } from "./protocol.js";
+export { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "./protocol.js";
+export {
+  hasLegacyIncompatiblePersistedLocale,
+  isLocale,
+  isLocalePreference,
+  LOCALE_NATIVE_NAMES,
+  resolveLocaleFromLanguageTag,
+  resolvePersistedUiLocale,
+  resolvePersistedUiLocalePreference,
+  toLegacyPersistedLocalePreference,
+  toPersistedSettingsLocaleFields,
+  toZhOrEnLocale,
+} from "./locale.js";
+export type {
+  LegacyPersistedLocale,
+  LegacyPersistedLocalePreference,
+  PersistedSettingsLocaleFields,
+} from "./locale.js";
 export { NEX_VERSION, NEX_COMMIT, NEX_BUILD_TIME } from "./version.js";
 export type { HelloMessage, HelloAckMessage } from "./handshake.js";
 export type { NexEnv, NexProductFlavor } from "./env.js";
@@ -66,6 +83,7 @@ export {
   NEX_PRODUCT_FLAVOR,
   NEX_APP_VERSION_ENV,
   NEX_BUILD_COMMIT_ID_ENV,
+  NEX_CLIENT_LANGUAGE_ENV,
   RUNTIME_NEX_DEBUG,
   NEX_AUTO_UPDATE_ENABLED,
   normalizeNexEnv,
@@ -135,6 +153,7 @@ export {
   BROWSER_SCREENSHOT_SURFACE_PREPARE_TIMEOUT_MS,
   BROWSER_VIEW_RESTORE_BOOTSTRAP_URL,
   LOCAL_MEDIA_PREVIEW_SCHEME,
+  BROWSER_VIEW_DRAFT_SESSION_ID,
   BROWSER_LOCAL_PREVIEW_SCHEME,
   browserPreviewSourceUrl,
   DesktopCommandIds,
@@ -153,6 +172,7 @@ export type {
   BrowserTabResidencyState,
   BrowserViewCloseTabNotification,
   BrowserViewCloseTabRequest,
+  BrowserViewPromoteDraftTabsRequest,
   BrowserViewOperationPayload,
   BrowserViewResidencyReportPayload,
   BrowserViewResidencyTransitionPayload,
@@ -175,6 +195,12 @@ export type {
   SaveFileRequest,
   SaveFileResult,
   PrintPageToPdfResult,
+  MicrophoneAccessResetResult,
+  MicrophoneAccessResult,
+  MicrophoneSettingsTarget,
+  CaptureBrowserGuestPageClip,
+  CaptureBrowserGuestPageRequest,
+  CaptureBrowserGuestPageResult,
   DesktopCloseToTrayCapability,
   DesktopCommandId,
   CuaOsSupport,
@@ -199,6 +225,9 @@ export type {
   EmbeddedBrowserSitePermissionUpdateRequest,
   EmbeddedBrowserSitePermissionsSnapshot,
   IPlatformService,
+  AppNavigationTarget,
+  AppNavigationResult,
+  AppNavigationHandler,
   OpenInEditorRemoteTarget,
   OpenInEditorOptions,
   PostUpdateReleaseNotesPayload,
@@ -316,6 +345,7 @@ export * from "./session-debug.js";
 export { API_KEY_USAGE_SCENE, type ApiKeyCreationUsageScene } from "./api-key-usage-scene.js";
 export {
   projectAccessTokenFingerprint,
+  projectAccessTokenRetryAfterMs,
   ProjectAccessTokenError,
   ProjectAccessTokenHttpStatusError,
   ProjectAccessTokenTransientError,
@@ -331,6 +361,7 @@ export * from "./conversationSelection.js";
 export * from "./attachment-source.js";
 
 export * from "./channel-mention.js";
+export * from "./plugin-store-visibility.js";
 
 export {
   requestSecuritySensitiveHeaders,

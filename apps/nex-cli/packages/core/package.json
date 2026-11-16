@@ -10,6 +10,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./session-control": {
+      "types": "./dist/tool/session-control/contract.d.ts",
+      "import": "./dist/tool/session-control/contract.js"
+    },
     "./repl": {
       "types": "./dist/repl/node-repl-session.d.ts",
       "import": "./dist/repl/node-repl-session.js"
@@ -35,7 +39,8 @@
   "dependencies": {
     "@nex/contracts": "workspace:*",
     "@nex/dynamic-workflow": "workspace:*",
-    "@nex/shared": "link:../../../../packages/shared",
+    "@nex/session-control": "workspace:*",
+    "@nex/shared": "workspace:*",
     "@nex/shared-types": "workspace:*",
     "@nex/nex-cua": "link:../../../../packages/nex-cua",
     "cheerio": "^1.0.0",
@@ -45,7 +50,8 @@
     "meriyah": "^7.1.1",
     "quickjs-wasi": "3.6.2",
     "unbash": "4.0.1",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

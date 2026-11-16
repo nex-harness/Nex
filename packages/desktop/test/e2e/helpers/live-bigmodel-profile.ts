@@ -72,7 +72,9 @@ export async function importLiveBigModelCredentials(caseMarker: string): Promise
   setDataBaseDir(paths.homeDir);
   const targetCipher = createCredentialCipherProvider({
     env: {
-      NEX_CREDENTIAL_SECRET: `nex-credential-fallback:${platform()}:${paths.homeDir}:${username}`,
+      NEX_CREDENTIAL_SECRET:
+        process.env.NEX_CREDENTIAL_SECRET ||
+        `nex-credential-fallback:${platform()}:${paths.homeDir}:${username}`,
     },
   });
   const service = createCredentialService({ cipherProvider: targetCipher });

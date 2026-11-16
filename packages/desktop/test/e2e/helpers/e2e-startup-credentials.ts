@@ -17,6 +17,8 @@ export function createE2EStartupCredentialSeed(
     const fileName = spec.replaceAll("\\", "/").split("/").at(-1);
     return (
       fileName === "jwt-401-auto-logout.test.ts" ||
+      // 语音输入只对已登录用户显示，ticket 请求带 nexjwttoken。
+      fileName === "composer-voice-input.test.ts" ||
       isRequestSecuritySpec(fileName) ||
       fileName === "coding-plan-upgrade-webview-refresh-provider.test.ts" ||
       fileName === "start-plan-manual-claim-experience.test.ts" ||

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ModelConnectivityResult } from "@nex/shared";
+import { toZhOrEnLocale, type ModelConnectivityResult } from "@nex/shared";
 import type { ProviderSettingsFormProvider } from "@/lib/providerSettingsFormTypes.js";
 import { useNexIntl } from "@/i18n/IntlProvider.js";
 import { Button } from "@/components/ui/button.js";
@@ -140,7 +140,7 @@ export function ModelProviderSection({
     async (input: { templateId?: string; providerName?: string }) => {
       setCreatingProvider(true);
       try {
-        const created = await createPersonalProvider({ ...input, locale });
+        const created = await createPersonalProvider({ ...input, locale: toZhOrEnLocale(locale) });
         setPendingCreatedProviderId(created.providerId);
         setSelectedNodeKey(createCustomProviderNodeKey(created.providerId));
         setTemplatePickerOpen(false);

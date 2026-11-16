@@ -369,6 +369,10 @@ export function useRootWorkspaceActions({
         const target = await services.projectService.prepareSession({
           ...(projectId ? { projectId } : {}),
           ...(hostId ? { hostId } : {}),
+          // worktree 模式由 Host 新建受管 worktree 并返回其中的 cwd；不复用未归类草稿目录。
+          ...(typeof request === "object" && request.worktree && projectId
+            ? { worktree: request.worktree }
+            : {}),
           // 显式 local 与省略 Host 是同一入口，不能漏掉待发送身份而另建目录。
           ...(pendingDraft
             ? { draftId: pendingDraft.draftId, reuseDraft: Boolean(pendingDraft.workspacePath) }

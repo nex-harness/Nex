@@ -159,9 +159,6 @@ test("picker reference survives composer submission and selects the catalog reas
     turnRef: { current: undefined },
     applyResult: noop,
     applySessionEvent: noop,
-    requestPermission: async () => {
-      throw new Error("No permissions requested by model selection");
-    },
     options: {
       submitPrompt: async (input, options) => {
         submitted = input;

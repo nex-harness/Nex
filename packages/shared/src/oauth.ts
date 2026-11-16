@@ -11,6 +11,15 @@ export const BIGMODEL_PROVIDER_ID = "bigmodel" as const;
 /** 内置 ZAI provider id */
 export const ZAI_PROVIDER_ID = "zai" as const;
 
+/** 同一 Nex 主体的关联业务凭据，仅供 Host 内部使用。 */
+export interface OAuthLinkedBigModel {
+  customerId: string;
+  accessToken: string;
+}
+
+/** 当前受支持的 Host/CLI 写入方共同维护，用于识别同账号重复登录的不同提交。 */
+export const OAUTH_SESSION_REVISION_KEY = "oauth:session_revision" as const;
+
 /** 凭据解密失败错误前缀 */
 export const CREDENTIAL_DECRYPT_ERROR_PREFIX = "凭据解密失败：" as const;
 

@@ -1,7 +1,11 @@
+import type {
+  V4SessionDeletionPreview,
+  V4SessionDeletionResult,
+} from "@nex/shared/nex-protocol-v4";
 /* eslint-disable max-lines -- Nex task wrapper service 接口集中承载 app/runtime API，拆散会让替换阶段更难追踪。 */
 import type { Event } from "@nex/rpc";
 import { ServiceChannels } from "@nex/shared";
-import type { CommandPayloadMap } from "@nex/shared/nex-protocol-v4";
+import type { CommandAck, CommandPayloadMap } from "@nex/shared/nex-protocol-v4";
 import { createServiceDescriptor } from "#src/descriptors.js";
 import type {
   NexImportSessionsResult,
@@ -288,7 +292,10 @@ export interface INexTaskService {
     source: import("@nex/shared").BotGroupInputSource;
   }): Promise<import("@nex/shared/nex-protocol-v4").CommandAck>;
 
-  /** 发送 prompt 到指定 task */
+  /**
+   * 发送 prompt 到指定 task。
+   * v4 文本路径返回 sendText ACK（含 duplicate）；附件旧路径与旧版远端不返回 ACK。
+   */
   sendPrompt(
     params: {
       taskId: string;
@@ -307,10 +314,11 @@ export interface INexTaskService {
       botDeliveryTarget?: NexAutomationBotDeliveryTarget;
       /** 标准模型选择；闲时任务同样经 Registry / ModelFactory 创建 Model。 */
       modelSelection?: CommandPayloadMap["sendText"]["modelSelection"];
+      modelSelectionBasis?: CommandPayloadMap["sendText"]["modelSelectionBasis"];
       /** 单次执行约束与动态鉴权；仅 idle start-now 接受，不进入普通队列。 */
       modelExecution?: CommandPayloadMap["sendText"]["modelExecution"];
     } & NexBackgroundTurnAttribution,
-  ): Promise<void>;
+  ): Promise<CommandAck | void>;
 
   deliverSessionMessage(
     request: SessionMessageSendRequested,
@@ -441,6 +449,12 @@ export interface INexTaskService {
 
   /** 读取 workspace 下已删除 task id；供闲时绑定会话与 Bots tombstone 判断 session 是否已删除 */
   listDeletedTaskIds(params: {
+    workspacePath: string;
+    workspaceIdentity?: string;
+  }): Promise<string[]>;
+
+  /** 永久删除的最小凭据；供新 attachment 清理离线期间遗留的客户端内容。 */
+  listPermanentlyDeletedTaskIds?(params: {
     workspacePath: string;
     workspaceIdentity?: string;
   }): Promise<string[]>;
@@ -670,6 +684,19 @@ export interface INexTaskService {
     resumeTaskId?: string;
     bumpRuntimeEpoch?: boolean;
   }): Promise<void>;
+
+  previewArchivedTaskDeletion(params: {
+    taskId: string;
+    workspacePath: string;
+    workspaceIdentity?: string;
+  }): Promise<V4SessionDeletionPreview>;
+  permanentlyDeleteArchivedTask(params: {
+    taskId: string;
+    workspacePath: string;
+    workspaceIdentity?: string;
+    revision: string;
+    operationId: string;
+  }): Promise<V4SessionDeletionResult>;
 
   /** 将已持久化 task 标记为列表不可见；CLI session 内容继续保留 */
   deleteTask(params: {
