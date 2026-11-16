@@ -9,7 +9,6 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { TaskIndexRepo } from "../packages/services/src/session/taskIndexRepo.js";
 import { AutomationRepo } from "../packages/services/src/session/automationRepo.js";
-import { OffPeakTaskRepo } from "../packages/services/src/session/offPeakTaskRepo.js";
 import { getTasksIndexDatabasePath, setDataBaseDir } from "../packages/services/src/paths.js";
 import { SQLITE_MIGRATIONS } from "../apps/nex-cli/packages/adapters/src/storage/session-store/migrations.js";
 import { sqliteMigrations } from "../packages/shared/src/sqlite-migrations/index.js";
@@ -24,7 +23,7 @@ await exec("git", ["rev-parse", "--verify", `${base}^{commit}`]);
 const directory = await mkdtemp(join(tmpdir(), "nex-schema-check-"));
 const cli = new DatabaseSync(":memory:");
 setDataBaseDir(directory);
-const repos = [new AutomationRepo(), new OffPeakTaskRepo(), new TaskIndexRepo()];
+const repos = [new AutomationRepo(), new TaskIndexRepo()];
 try {
   for (const repo of repos) await repo.ensureReady();
   const app = new DatabaseSync(getTasksIndexDatabasePath(), { readOnly: true });
