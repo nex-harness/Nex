@@ -91,3 +91,25 @@ CI（tag vX.Y.Z）：3 个平台各自 stage -> 收集 nex-server-<平台>.tar.g
 - 官方插件市场的 CDN（`cdn-zcode.z.ai/nex/official-plugin/...`）：保持不变。
 - Windows 远端：不提供。
 - 签名与公证：这里只校验 sha256，不引入新的签名链路。
+
+## 验证记录
+
+### 2026-11-16：本地构建产物部署到真实 Linux x86 远端（`remotebuilder`，Debian 13，glibc 2.41）
+
+用 `stage:remote-assets --out /tmp/nex-remote-release` 生成的 `linux-x64` 归档（90 MB），按桌面安装器的同一条命令序列，
+在**隔离的 HOME**（`/tmp/nex-rt/home`，不碰该机器已有的 `~/.nex` 与正在运行的 nex-next）下手动走完：
+
+| 步骤 | 结果 |
+| --- | --- |
+| 上传 | 本机、远端、索引三处 sha256 完全一致（`5e5027a3…`） |
+| 解包 | `tar -xzf … --strip-components=1`：得到 `bin/`、`runtime/`、`manifest.json`；`manifest` 为 `nex-server` / `linux-x64` / `2.0.0` |
+| 运行时 | 随包 Node `v22.16.0` 在该机器 glibc 上直接启动 |
+| 安装 | `bin/nex update --from-archive … --json --progress` 依次输出 `verify-archive`、`extract`、`verify`，结果 `{"applied":true,"installed":true,"version":"2.0.0"}` |
+| 启动 | `nex serve --daemon --port 3099` 就绪；`status` 为 `ready`，版本 2.0.0 |
+| 经 SSH 隧道 | 未认证：`/api/server-info` 只返回受限信息，`/ws` 返回 401；带 ingress token：返回完整 server-info，`/ws` 升级返回 101 |
+
+验证后已停止该 server 并删除临时目录；该机器原有的 `~/.nex`、nex-next 进程未被改动。
+
+**没有覆盖：** 没有通过桌面 App 的界面走「添加远程 Server」这一整条流程（本机没有图形化驱动该窗口），上表是用与之相同的命令序列手动执行，
+差别只在上传由 `scp` 代替 SFTP、`HOME` 被隔离。`linux-arm64` 与 `darwin-arm64` 的归档只做了索引与校验，没有部署到真实机器。
+GitHub Release 上的下载路径（`remote-download` 模式）和 CI 新增步骤需要首次打 tag 才能验证。
