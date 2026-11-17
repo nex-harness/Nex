@@ -45,7 +45,7 @@ jobs:
         include:
           - { os: macos-latest, target: darwin-arm64 }
           - { os: ubuntu-latest, target: linux-x64 }
-          - { os: ubuntu-latest, target: linux-arm64 }
+          - { os: ubuntu-24.04-arm, target: linux-arm64 }
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -124,7 +124,7 @@ jobs:
           cp -R nex-server-${{ matrix.target }}/. bundle/
           # Matching web build, served by `nex serve --web-root <dir>/web`.
           mkdir -p bundle/web
-          cp -r ../../../web/dist/. bundle/web/
+          cp -r ../../web/dist/. bundle/web/
           tar -czf nex-server-${{ matrix.target }}-${{ steps.meta.outputs.label }}.tar.gz -C bundle .
 
       - name: Upload artifact
