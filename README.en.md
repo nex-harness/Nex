@@ -15,6 +15,7 @@ Nex is an AI coding workspace with desktop, browser, and terminal interfaces. Th
 
 ## Updates
 
+- **2026-11-18**: Nex v2.0.0, rebuilt on upstream ZCode v3.18.2 with accounts, telemetry, conversation share, and Coding Plan removed; adds standalone server web hosting/login and GitHub Releases updates and remote server assets.
 - **2026-11-03**: Updated to Nex v3.17.2.
 - 2026-10-30: Updated to Nex v3.17.1.
 - 2026-10-19: Updated to Nex v3.16.2.
