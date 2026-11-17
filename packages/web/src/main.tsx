@@ -10,7 +10,9 @@ import "core-js/stable/object/group-by";
 import { createWebPlatform } from "#src/platform/index.js";
 import {
   WEB_REMOTE_CONTROL_WORKSPACE_RECONNECT_TIMEOUT_MS,
+  buildServerRemoteWorkspaceIdentity,
   createWebRemoteControlConnectionRecoveryTimeoutFailure,
+  remoteHostIdFromWorkspaceIdentity,
   resolveWebRemoteControlRelayWsUrl,
   matchesWebRemoteControlRoutePath,
   resolveWebRemoteControlWorkspaceKey,
@@ -235,6 +237,10 @@ interface WebBootstrapResult {
   initialTaskId?: string;
   restoreSession?: boolean;
   allowOpenWorkspace?: boolean;
+  /** 直连 Standalone Server 时设为 true；remote=? 子路由保持 false。 */
+  directServer?: boolean;
+  /** Server 自身在 tasks-index 中的 ownerHostId（如 remote:server:<serverId>）。 */
+  serverOwnerHostId?: string;
 }
 
 type WebRemoteControlWorkspaceListUpdateListener = (
@@ -347,21 +353,152 @@ async function resolveWebBootstrap(): Promise<WebBootstrapResult> {
       cache: "no-store",
     });
     if (!response.ok) {
-      return { wsUrl };
+      return { wsUrl, directServer: true };
     }
     const serverInfo = (await response.json()) as Partial<ServerRemoteInfo>;
     const workspace = Array.isArray(serverInfo.workspaces) ? serverInfo.workspaces[0] : undefined;
+    const serverOwnerHostId = serverInfo.serverId
+      ? remoteHostIdFromWorkspaceIdentity(
+          buildServerRemoteWorkspaceIdentity({
+            serverId: serverInfo.serverId,
+            workspacePath: "/",
+          }),
+        )
+      : undefined;
     // 不能把 workspace.workspaceIdentity 带进初始 tab：侧栏任务行只有 workspacePath，
     // 带 identity 的 tab 会让会话状态落在无 identity 的桶，界面却读 identity 桶，
     // 导致排第一的项目的历史会话点不开（见 docs/specs/server-web-login.md「工作区身份」）。
     return {
       wsUrl,
+      directServer: true,
+      ...(serverOwnerHostId ? { serverOwnerHostId } : {}),
       ...(workspace?.path ? { initialWorkspaceAbsPath: workspace.path } : {}),
       allowOpenWorkspace: true,
     };
   } catch {
-    return { wsUrl };
+    return { wsUrl, directServer: true };
   }
+}
+
+/**
+ * 直连 Standalone Server 时，浏览器把当前 Server 当作本地主机（hostId = "local"），
+ * 而 Server 侧 tasks-index 与 /ws/host 仍以 ownerHostId = remote:server:<serverId> 存储，
+ * 供桌面远端挂载复用（见 docs/specs/server-web-login.md「工作区身份与项目 Host 归属」）。
+ */
+function adaptDirectServerServices(
+  rawServices: RootServices,
+  serverOwnerHostId?: string,
+): RootServices {
+  const raw = rawServices.projectService;
+  if (!raw) return rawServices;
+
+  const toServerHostId = (hostId?: string): string | undefined =>
+    !hostId || hostId === "local" ? undefined : hostId;
+  const isOwnHost = (hostId: string): boolean =>
+    serverOwnerHostId ? hostId === serverOwnerHostId : hostId.startsWith("remote:server:");
+  const toLocalProject = <T extends { hostId: string }>(project: T): T =>
+    isOwnHost(project.hostId) ? { ...project, hostId: "local" } : project;
+  const toLocalTask = <T extends { hostId: string }>(task: T): T =>
+    isOwnHost(task.hostId) ? { ...task, hostId: "local" } : task;
+
+  const projectService: NonNullable<RootServices["projectService"]> = {
+    readDirectory(params) {
+      if (!params) return raw.readDirectory();
+      const { hostId, ...rest } = params;
+      const mapped = toServerHostId(hostId);
+      return raw.readDirectory({ ...rest, ...(mapped ? { hostId: mapped } : {}) });
+    },
+    async readProjects(params) {
+      const mapped = toServerHostId(params?.hostId);
+      const projects = await raw.readProjects(
+        params
+          ? {
+              ...(params.includeDeleted !== undefined
+                ? { includeDeleted: params.includeDeleted }
+                : {}),
+              ...(mapped ? { hostId: mapped } : {}),
+            }
+          : undefined,
+      );
+      return projects.map(toLocalProject);
+    },
+    async readTree(params) {
+      const mapped = toServerHostId(params?.hostId);
+      const tree = await raw.readTree(
+        params
+          ? {
+              ...(params.includeDeleted !== undefined
+                ? { includeDeleted: params.includeDeleted }
+                : {}),
+              ...(params.includeDeletedTasks !== undefined
+                ? { includeDeletedTasks: params.includeDeletedTasks }
+                : {}),
+              ...(mapped ? { hostId: mapped } : {}),
+            }
+          : undefined,
+      );
+      return {
+        ...tree,
+        projects: tree.projects.map(toLocalProject),
+        tasks: tree.tasks.map(toLocalTask),
+        ...(tree.deletedTasks ? { deletedTasks: tree.deletedTasks.map(toLocalTask) } : {}),
+      };
+    },
+    async saveProject(input) {
+      const { hostId, reuseExistingRoot, ...rest } = input;
+      const mapped = toServerHostId(hostId);
+      if (reuseExistingRoot && !mapped && rest.roots?.length === 1) {
+        const targetRoot = rest.roots[0]!;
+        const existing = (await raw.readProjects()).find(
+          (project) => !project.deleted && project.roots.some((root) => root.rootPath === targetRoot),
+        );
+        if (existing) return toLocalProject(existing);
+        return toLocalProject(await raw.saveProject({ roots: [targetRoot] }));
+      }
+      const saved = await raw.saveProject({
+        ...rest,
+        ...(reuseExistingRoot !== undefined ? { reuseExistingRoot } : {}),
+        ...(mapped ? { hostId: mapped } : {}),
+      });
+      return toLocalProject(saved);
+    },
+    deleteProject(id, hostId) {
+      return raw.deleteProject(id, toServerHostId(hostId));
+    },
+    async restoreProject(id, hostId) {
+      return toLocalProject(await raw.restoreProject(id, toServerHostId(hostId)));
+    },
+    moveTask(input) {
+      const { hostId, ...rest } = input;
+      const mapped = toServerHostId(hostId);
+      return raw.moveTask({ ...rest, ...(mapped ? { hostId: mapped } : {}) });
+    },
+    reorderProjects(ids, hostId) {
+      return raw.reorderProjects(ids, toServerHostId(hostId));
+    },
+    prepareSession(params) {
+      if (!params) return raw.prepareSession();
+      const { hostId, ...rest } = params;
+      const mapped = toServerHostId(hostId);
+      return raw.prepareSession({ ...rest, ...(mapped ? { hostId: mapped } : {}) });
+    },
+    measureProjectData(ids, hostId) {
+      return raw.measureProjectData(ids, toServerHostId(hostId));
+    },
+    deleteProjectData(id, hostId) {
+      return raw.deleteProjectData(id, toServerHostId(hostId));
+    },
+    resolveSessionDirectories(task, hostId) {
+      return raw.resolveSessionDirectories(task, toServerHostId(hostId));
+    },
+  };
+
+  return new Proxy(rawServices, {
+    get(target, prop) {
+      if (prop === "projectService") return projectService;
+      return Reflect.get(target, prop, target);
+    },
+  });
 }
 
 function isWebRemoteControlRoute(): boolean {
@@ -1754,7 +1891,7 @@ async function bootstrapWebApp() {
 
   try {
     let socketOpened = false;
-    const services = await connectViaWebSocket(bootstrap.wsUrl, {
+    const rawServices = await connectViaWebSocket(bootstrap.wsUrl, {
       onOpenSocket: () => {
         socketOpened = true;
       },
@@ -1770,6 +1907,9 @@ async function bootstrapWebApp() {
         });
       },
     });
+    const services = bootstrap.directServer
+      ? adaptDirectServerServices(rawServices, bootstrap.serverOwnerHostId)
+      : rawServices;
     const platform = createWebPlatform();
     document.title = "Nex - Web + Server";
 

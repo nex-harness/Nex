@@ -2390,3 +2390,8 @@ exceptions:
     paths:
       - packages/ui/src/root/GlobalDatabaseStartupLoading.tsx
     reason: 启动失败页在现有复制诊断/重试/退出旁增加导出日志按钮（docs/desktop/database-migration-startup-gate-plan.md）。只扩展既有失败页交互，不新增文件、不改变启动状态 owner 或模块边界；接管 packages/ui/src/root 不在本次范围内。
+  - id: design-plugin-vendored-design-resources
+    rule: unmanaged-new-file
+    paths:
+      - apps/nex-cli/packages/design-plugin/skills/design/design-resources/**
+    reason: 上游 3.18.2 随内置 design 插件引入的第三方 open-design 静态技能骨架资源（已在 third-party/copied-components.json 与 .gitattributes 登记为 linguist-vendored）；这些模板脚本与 schema 仅作技能资产下发，不参与应用模块编译，因 apps/zcode-cli -> apps/nex-cli 路径重命名而脱离 upstream-snapshot 原始路径匹配。

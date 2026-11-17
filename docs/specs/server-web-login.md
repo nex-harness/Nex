@@ -45,19 +45,17 @@
    `X-Forwarded-Proto: https`）；明文 HTTP 上 token 会被网络路径看到，文档与 CLI 输出必须提示
    「对公网暴露请放在 TLS 反代之后」。登录限流按连接对端地址计，不信任 `X-Forwarded-For`。
 
-## 工作区身份（直连 Server 的 Web）
+## 工作区身份与项目 Host 归属（直连 Server 的 Web）
 
-浏览器直接使用 Server 时，只有一个 Server，工作区不需要用 `remote:server:<id>:<path>` 来区分归属。
-Web 在 `/api/server-info` 的 `workspaces[0]` 上建的初始工作区 tab 因此**不携带** `workspaceIdentity`，
-与侧栏任务行（只有 `workspacePath`）保持同一个身份。
+浏览器直接使用 Server 时，只有一个 Server，工作区不需要用 `remote:server:<id>:<path>` 来区分归属，对浏览器而言当前 Server 就是本地主机（`hostId = "local"`）：
 
-- 会话状态的 key 是 `workspaceIdentity?.trim() || workspacePath`。同一个目录在 tab 上带 identity、在任务行上不带，
-  就会得到两个桶：点击会话把 `activeTaskId` 写进无 identity 的桶，界面却按 tab 的 identity 读另一个空桶，
-  结果停在新任务首页，并且订阅走带 identity 的路径，被服务端按 `existing-only` 拒绝
-  （`Nex Agent runtime is not running.`）。
-- 只有排在 `workspaces[0]` 的项目会触发，换项目顺序后换另一个项目受影响。
-- `/api/server-info.workspaces[].workspaceIdentity` 仍由 Server 返回，桌面把该 Server 当作远端设备连接时继续使用它；
-  Web 直连不使用它。
+1. **初始工作区身份**：Web 在 `/api/server-info` 的 `workspaces[0]` 上建的初始工作区 tab **不携带** `workspaceIdentity`，与侧栏任务行（只有 `workspacePath`）保持同一个身份。
+   - 会话状态的 key 是 `workspaceIdentity?.trim() || workspacePath`。同一个目录在 tab 上带 identity、在任务行上不带，就会得到两个桶：点击会话把 `activeTaskId` 写进无 identity 的桶，界面却按 tab 的 identity 读另一个空桶，结果停在新任务首页，并且订阅走带 identity 的路径，被服务端按 `existing-only` 拒绝（`Nex Agent runtime is not running.`）。
+   - `/api/server-info.workspaces[].workspaceIdentity` 仍由 Server 返回，桌面把该 Server 当作远端设备连接时继续使用它；Web 直连不使用它。
+2. **项目与分组的 `hostId` 边界**：
+   - Standalone Server 在 `tasks-index.sqlite` 与 `/ws/host`（桌面远端连接）中保持 `ownerHostId = "remote:server:<serverId>"` 不变，保证桌面把该 Server 作为远端设备挂载时的身份隔离。
+   - 直连 Web 入口（`packages/web/src/main.tsx`，`directServerConnection = true`）在客户端 `IProjectService` 适配层把本 Server 的 `ownerHostId` 与 UI 的 `"local"` 双向映射：下行项目/任务的 `ownerHostId` 投影为 `"local"`（使侧栏项目操作、新建任务继承项目、未归属任务展示、分组校验与本地一致）；上行 `hostId === "local"` 归一为省略 `hostId`（交由 Server 自身的 `ownerHostId` 处理，避免目录浏览 `readDirectory`、多轮追问 `resolveSessionDirectories` 等因 `"local" !== ownerHostId` 报 `project.host-offline`）；`saveProject({ reuseExistingRoot: true })` 在直连适配层先按根路径复用已有未删除项目，不存在时退化为常规单目录创建。
+   - Standalone Server 的 `ITaskGroupService.resolveTasks` 对无 `workspaceIdentity` 且 `hostId === "local"` 的任务引用读取自身项目树并匹配 `ownerHostId`，使直连 Web 的任务分组登记与移动可用，同时不影响桌面本地控制端。
 
 ## 状态所有者
 
@@ -124,3 +122,5 @@ Web   ──location.replace(next)       （整页跳转，丢弃登录前失败
 7. 直连 Server 的 Web（至少两个项目）：每个项目下的历史会话都能打开并渲染正文；把任意项目调到第一位后，
    原来排第一的项目仍可打开，侧栏第一个项目的会话也不再停在新任务首页。会话状态只出现在无 identity 的桶里
    （`/api/server-info` 返回的 `workspaceIdentity` 不进入 Web 的 tab 与会话状态）。
+8. 直连 Server 的 Web 新建项目与多轮对话：「新建项目 → 选择文件夹」可正常列出 Server 主目录并创建项目，
+   不再报 `project.host-offline`；项目下新建会话首轮与后续追问轮均可正常发送，侧栏会话切换、重命名、归档与重启后恢复正常。

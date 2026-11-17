@@ -1912,17 +1912,25 @@ export function createLocalServices(options: {
       }),
     },
   });
+  const standaloneOwnerHostId =
+    options?.projectStorageHostId && options.projectStorageHostId !== "local"
+      ? options.projectStorageHostId
+      : undefined;
   const taskGroupService = createTaskGroupService({
     database: () => taskIndexRepo.getOrganizationDatabase(),
     resolveTasks: async (refs) => {
       // 只读所属 Host 的权威目录；项目路由不会为分组建立连接或启动 Agent。
+      // 直连 Standalone Server 的 Web 不携带 workspaceIdentity，taskSchema 将其归为 hostId="local"，
+      // 读取与归属比对需回落到本 Server 自身的 projectStorageHostId。
       const hostIds = [...new Set(refs.map((task) => task.hostId))];
       const results = await Promise.all(
         hostIds.map(async (hostId) => {
+          const isLocalAlias = Boolean(standaloneOwnerHostId && hostId === "local");
           const tree = await projectService.readTree({
-            hostId,
+            ...(isLocalAlias ? {} : { hostId }),
             includeDeletedTasks: true,
           });
+          const expectedFactHostId = isLocalAlias ? standaloneOwnerHostId! : hostId;
           const facts = new Map(
             [
               ...tree.tasks,
@@ -1936,7 +1944,9 @@ export function createLocalServices(options: {
             .filter((ref) => ref.hostId === hostId)
             .flatMap((ref) => {
               const fact = facts.get(groupTaskKey(ref));
-              return fact && fact.hostId === ref.hostId && fact.workspacePath === ref.workspacePath
+              return fact &&
+                fact.hostId === expectedFactHostId &&
+                fact.workspacePath === ref.workspacePath
                 ? [{ ...fact, ...ref }]
                 : [];
             });
