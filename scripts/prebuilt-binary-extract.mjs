@@ -55,6 +55,16 @@ export function extractPrebuiltArchive({ archivePath, archiveExt, extractDir, cw
   }
 
   const tarCwd = cwd ?? process.cwd();
+  if (process.platform === "win32") {
+    const stagedArchive = join(extractDir, ".prebuilt-archive.tgz");
+    copyFileSync(archivePath, stagedArchive);
+    try {
+      runCommand("tar", ["-xzf", ".prebuilt-archive.tgz"], { cwd: extractDir });
+    } finally {
+      rmSync(stagedArchive, { force: true });
+    }
+    return;
+  }
   runCommand(
     "tar",
     ["-xzf", resolveTarArchiveArg(archivePath, tarCwd), "-C", toTarPosixPath(extractDir)],
