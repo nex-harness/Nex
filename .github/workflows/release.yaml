@@ -182,7 +182,6 @@ jobs:
   # Windows 安装包目前不签名（NEX_ENABLE_WINDOWS_SIGN 未设置）；未签名时 electron-builder 不写
   # publisherName，electron-updater 跳过签名校验，自动更新可用但 SmartScreen 会提示。
   build-linux-windows:
-    needs: build-macos
     strategy:
       fail-fast: false
       max-parallel: 1
