@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, FileCode, Folder, GitCompare, MessageSquare,
 import { type ReactNode, useEffect, useState } from 'react';
 import { useNexStore } from '../core/store';
 import { DirEntry, FilePreview, WorkbenchTabKind } from '../core/types';
+import { wsClient } from '../core/wsClient';
 import { GhosttyTerminal } from './GhosttyTerminal';
 
 export function WorkbenchSidebar() {
@@ -427,21 +428,19 @@ function SideConversationPanel({ runnerId, sideSessionId }: { runnerId: string; 
   const sendSide = () => {
     const text = input.trim();
     if (!text || !runnerId || !sideSessionId) return;
-    import('../core/wsClient').then(({ wsClient }) => {
-      wsClient.sendEnvelope('client.subscribe', { session_id: sideSessionId, last_seen_seq: st?.lastSeq || 0 });
-      wsClient.sendEnvelope(
-        'session.prompt',
-        {
-          session_id: sideSessionId,
-          runner_id: runnerId,
-          provider_id: selectedProviderId,
-          model_id: selectedModelId,
-          permission_mode: 'read_only',
-          text,
-        },
-        { session_id: sideSessionId, runner_id: runnerId },
-      );
-    });
+    wsClient.sendEnvelope('client.subscribe', { session_id: sideSessionId, last_seen_seq: st?.lastSeq || 0 });
+    wsClient.sendEnvelope(
+      'session.prompt',
+      {
+        session_id: sideSessionId,
+        runner_id: runnerId,
+        provider_id: selectedProviderId,
+        model_id: selectedModelId,
+        permission_mode: 'read_only',
+        text,
+      },
+      { session_id: sideSessionId, runner_id: runnerId },
+    );
     setInput('');
   };
 

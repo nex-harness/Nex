@@ -229,8 +229,8 @@ func (n *Node) ExecutePrompt(
 	}
 
 	title := p.Text
-	if len(title) > 60 {
-		title = title[:60] + "..."
+	if runes := []rune(title); len(runes) > 48 {
+		title = string(runes[:48]) + "..."
 	}
 	if title == "" {
 		title = "Session"

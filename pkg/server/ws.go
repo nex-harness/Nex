@@ -181,6 +181,13 @@ func (s *Server) ingestRunnerSessionEvent(ctx context.Context, rc *runnerConn, e
 		return
 	}
 
+	if savedEv.EventType == "agent_end" {
+		if sess, gErr := s.store.GetSession(ctx, savedEv.SessionID); gErr == nil && sess != nil {
+			sess.Status = "idle"
+			_, _ = s.store.CreateOrUpdateSession(ctx, *sess)
+		}
+	}
+
 	if evPayload.Telemetry != nil {
 		tel := *evPayload.Telemetry
 		tel.SessionID = ev.SessionID
@@ -310,8 +317,8 @@ func (s *Server) routeClientPrompt(ctx context.Context, cc *clientConn, env prot
 		p.SessionID = "sess_" + uuid.NewString()
 	}
 	title := p.Text
-	if len(title) > 60 {
-		title = title[:60] + "..."
+	if runes := []rune(title); len(runes) > 48 {
+		title = string(runes[:48]) + "..."
 	}
 	if title == "" {
 		title = "New Conversation"
