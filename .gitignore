@@ -1,0 +1,28 @@
+# Binaries & build artifacts
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Frontend
+node_modules/
+clients/web/dist/
+clients/web/.vite/
+
+# Local runtime state & temporary worktrees
+.nex/
+*.db
+*.db-shm
+*.db-wal
+*.zst
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
