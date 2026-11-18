@@ -1,0 +1,128 @@
+[
+  {
+    "id": "claude-sonnet-4-5",
+    "provider_id": "anthropic",
+    "display_name": "Claude Sonnet 4.5",
+    "source": "models.dev",
+    "context_window": 200000,
+    "max_output_tokens": 64000,
+    "supports_vision": true,
+    "supports_pdf": true,
+    "supports_audio": false,
+    "supports_video": false,
+    "supports_tools": true,
+    "supports_reasoning": true,
+    "supports_caching": true,
+    "pricing": {
+      "input_per_1m": 3.0,
+      "output_per_1m": 15.0,
+      "cache_read_per_1m": 0.3,
+      "cache_write_per_1m": 3.75
+    }
+  },
+  {
+    "id": "claude-opus-4-5",
+    "provider_id": "anthropic",
+    "display_name": "Claude Opus 4.5",
+    "source": "models.dev",
+    "context_window": 200000,
+    "max_output_tokens": 64000,
+    "supports_vision": true,
+    "supports_pdf": true,
+    "supports_audio": false,
+    "supports_video": false,
+    "supports_tools": true,
+    "supports_reasoning": true,
+    "supports_caching": true,
+    "pricing": {
+      "input_per_1m": 5.0,
+      "output_per_1m": 25.0,
+      "cache_read_per_1m": 0.5,
+      "cache_write_per_1m": 6.25
+    }
+  },
+  {
+    "id": "claude-haiku-4-5",
+    "provider_id": "anthropic",
+    "display_name": "Claude Haiku 4.5",
+    "source": "models.dev",
+    "context_window": 200000,
+    "max_output_tokens": 64000,
+    "supports_vision": true,
+    "supports_pdf": true,
+    "supports_audio": false,
+    "supports_video": false,
+    "supports_tools": true,
+    "supports_reasoning": true,
+    "supports_caching": true,
+    "pricing": {
+      "input_per_1m": 1.0,
+      "output_per_1m": 5.0,
+      "cache_read_per_1m": 0.1,
+      "cache_write_per_1m": 1.25
+    }
+  },
+  {
+    "id": "gpt-5-codex",
+    "provider_id": "openai",
+    "display_name": "GPT-5 Codex",
+    "source": "models.dev",
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "supports_vision": true,
+    "supports_pdf": true,
+    "supports_audio": false,
+    "supports_video": false,
+    "supports_tools": true,
+    "supports_reasoning": true,
+    "supports_caching": true,
+    "pricing": {
+      "input_per_1m": 1.25,
+      "output_per_1m": 10.0,
+      "cache_read_per_1m": 0.125,
+      "cache_write_per_1m": 0.0
+    }
+  },
+  {
+    "id": "gpt-5",
+    "provider_id": "openai",
+    "display_name": "GPT-5",
+    "source": "models.dev",
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "supports_vision": true,
+    "supports_pdf": true,
+    "supports_audio": false,
+    "supports_video": false,
+    "supports_tools": true,
+    "supports_reasoning": true,
+    "supports_caching": true,
+    "pricing": {
+      "input_per_1m": 1.25,
+      "output_per_1m": 10.0,
+      "cache_read_per_1m": 0.125,
+      "cache_write_per_1m": 0.0
+    }
+  },
+  {
+    "id": "gpt-5-mini",
+    "provider_id": "openai",
+    "display_name": "GPT-5 Mini",
+    "source": "models.dev",
+    "context_window": 400000,
+    "max_output_tokens": 128000,
+    "supports_vision": true,
+    "supports_pdf": false,
+    "supports_audio": false,
+    "supports_video": false,
+    "supports_tools": true,
+    "supports_reasoning": true,
+    "supports_caching": true,
+    "pricing": {
+      "input_per_1m": 0.25,
+      "output_per_1m": 2.0,
+      "cache_read_per_1m": 0.025,
+      "cache_write_per_1m": 0.0
+    }
+  }
+]

@@ -1,0 +1,258 @@
+package tools
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/nex-harness/nex/pkg/ai"
+)
+
+const (
+	defaultBashTimeoutMS = 120_000
+	maxBashTimeoutMS     = 600_000
+	maxInlineOutputBytes = 64 * 1024
+)
+
+type bashArgs struct {
+	Command   string `json:"command"`
+	TimeoutMS int    `json:"timeout_ms,omitempty"`
+	Cwd       string `json:"cwd,omitempty"`
+}
+
+// BashTool executes shell commands with streaming output and cross-platform process-tree cleanup.
+type BashTool struct{}
+
+func NewBashTool() *BashTool { return &BashTool{} }
+
+func (t *BashTool) Name() string                      { return "bash" }
+func (t *BashTool) Category() string                  { return "system" }
+func (t *BashTool) IsReadOnly(_ json.RawMessage) bool { return false }
+
+func (t *BashTool) Definition() ai.ToolDefinition {
+	return ai.ToolDefinition{
+		Name:        "bash",
+		Category:    "system",
+		Description: "Execute a shell command in the workspace with streaming output and automatic process-tree cleanup on timeout or cancellation.",
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"command": {"type": "string", "description": "Shell command to execute"},
+				"timeout_ms": {"type": "integer", "description": "Timeout in milliseconds (default 120000, max 600000)"},
+				"cwd": {"type": "string", "description": "Optional working directory relative to workspace"}
+			},
+			"required": ["command"]
+		}`),
+	}
+}
+
+func (t *BashTool) Execute(ctx context.Context, workDir string, rawArgs json.RawMessage, onUpdate UpdateFunc) (Result, error) {
+	var args bashArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return Result{Output: "invalid bash arguments: " + err.Error(), IsError: true}, nil
+	}
+	if strings.TrimSpace(args.Command) == "" {
+		return Result{Output: "command is required", IsError: true}, nil
+	}
+
+	timeoutMS := args.TimeoutMS
+	if timeoutMS <= 0 {
+		timeoutMS = defaultBashTimeoutMS
+	}
+	if timeoutMS > maxBashTimeoutMS {
+		timeoutMS = maxBashTimeoutMS
+	}
+
+	execDir := workDir
+	if args.Cwd != "" {
+		execDir = ResolvePath(workDir, args.Cwd)
+	}
+	if execDir != "" {
+		if st, err := os.Stat(execDir); err != nil || !st.IsDir() {
+			return Result{Output: fmt.Sprintf("working directory %s does not exist", execDir), IsError: true}, nil
+		}
+	}
+
+	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
+	defer cancel()
+
+	collector := newBoundedCollector(maxInlineOutputBytes, onUpdate)
+	defer collector.Close()
+
+	exitCode, runErr := runPlatformShellCommand(runCtx, execDir, args.Command, collector)
+	timedOut := errors.Is(runCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil
+	canceled := ctx.Err() != nil
+
+	output, spillFile, totalBytes := collector.Finalize()
+	var sb strings.Builder
+	sb.WriteString(output)
+
+	if spillFile != "" {
+		fmt.Fprintf(&sb, "\n\n[Output exceeded %d bytes (total %d bytes); full log saved to %s]", maxInlineOutputBytes, totalBytes, spillFile)
+	}
+
+	if timedOut {
+		fmt.Fprintf(&sb, "\n[Command timed out after %d ms and its process tree was terminated]", timeoutMS)
+		return Result{
+			Output:   strings.TrimSpace(sb.String()),
+			IsError:  true,
+			Metadata: map[string]any{"exit_code": -1, "timed_out": true},
+		}, nil
+	}
+	if canceled {
+		fmt.Fprintf(&sb, "\n[Command canceled]")
+		return Result{
+			Output:   strings.TrimSpace(sb.String()),
+			IsError:  true,
+			Metadata: map[string]any{"exit_code": -1, "canceled": true},
+		}, runCtx.Err()
+	}
+
+	if runErr != nil && exitCode == 0 {
+		return Result{Output: fmt.Sprintf("failed to execute command: %v", runErr), IsError: true}, nil
+	}
+
+	if exitCode != 0 {
+		if sb.Len() > 0 {
+			sb.WriteString("\n")
+		}
+		fmt.Fprintf(&sb, "Exit code %d", exitCode)
+		return Result{
+			Output:   strings.TrimSpace(sb.String()),
+			IsError:  true,
+			Metadata: map[string]any{"exit_code": exitCode},
+		}, nil
+	}
+
+	finalOut := sb.String()
+	if strings.TrimSpace(finalOut) == "" {
+		finalOut = "(command completed with no output)"
+	}
+	return Result{
+		Output:   strings.TrimRight(finalOut, "\n"),
+		Metadata: map[string]any{"exit_code": 0},
+	}, nil
+}
+
+// boundedCollector streams live chunks via onUpdate while keeping head+tail in RAM and spilling huge outputs to disk.
+type boundedCollector struct {
+	mu        sync.Mutex
+	maxBytes  int
+	headLimit int
+	tailLimit int
+	head      bytes.Buffer
+	tail      []byte
+	total     int
+	spillFile *os.File
+	spillPath string
+	onUpdate  UpdateFunc
+}
+
+func newBoundedCollector(maxBytes int, onUpdate UpdateFunc) *boundedCollector {
+	half := maxBytes / 2
+	return &boundedCollector{
+		maxBytes:  maxBytes,
+		headLimit: half,
+		tailLimit: maxBytes - half,
+		onUpdate:  onUpdate,
+	}
+}
+
+func (c *boundedCollector) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	chunkStr := string(p)
+
+	c.mu.Lock()
+	n := len(p)
+	c.total += n
+
+	if c.head.Len() < c.headLimit {
+		rem := c.headLimit - c.head.Len()
+		if n <= rem {
+			c.head.Write(p)
+		} else {
+			c.head.Write(p[:rem])
+			c.appendTailLocked(p[rem:])
+		}
+	} else {
+		c.appendTailLocked(p)
+	}
+
+	if c.total > c.maxBytes && c.spillFile == nil {
+		if f, err := os.CreateTemp("", "nex-bash-*.log"); err == nil {
+			c.spillFile = f
+			c.spillPath = f.Name()
+			_, _ = c.spillFile.Write(c.head.Bytes())
+			// Write existing tail excluding current p which is written below
+			prevTailLen := len(c.tail) - n
+			if prevTailLen > 0 {
+				_, _ = c.spillFile.Write(c.tail[:prevTailLen])
+			}
+		}
+	}
+	if c.spillFile != nil {
+		_, _ = c.spillFile.Write(p)
+	}
+	c.mu.Unlock()
+
+	if c.onUpdate != nil {
+		c.onUpdate(chunkStr)
+	}
+	return n, nil
+}
+
+func (c *boundedCollector) appendTailLocked(p []byte) {
+	if len(p) >= c.tailLimit {
+		c.tail = append(c.tail[:0], p[len(p)-c.tailLimit:]...)
+		return
+	}
+	if len(c.tail)+len(p) <= c.tailLimit {
+		c.tail = append(c.tail, p...)
+		return
+	}
+	drop := len(c.tail) + len(p) - c.tailLimit
+	copy(c.tail, c.tail[drop:])
+	c.tail = append(c.tail[:len(c.tail)-drop], p...)
+}
+
+func (c *boundedCollector) Finalize() (output string, spillPath string, total int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.spillFile != nil {
+		_ = c.spillFile.Sync()
+		_ = c.spillFile.Close()
+		c.spillFile = nil
+	}
+	if c.total <= c.maxBytes {
+		var b strings.Builder
+		b.Write(c.head.Bytes())
+		b.Write(c.tail)
+		return b.String(), "", c.total
+	}
+	omitted := c.total - c.head.Len() - len(c.tail)
+	var b strings.Builder
+	b.Write(c.head.Bytes())
+	fmt.Fprintf(&b, "\n... [%d bytes omitted] ...\n", omitted)
+	b.Write(c.tail)
+	return b.String(), c.spillPath, c.total
+}
+
+func (c *boundedCollector) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.spillFile != nil {
+		_ = c.spillFile.Close()
+		c.spillFile = nil
+	}
+}
+
+var _ io.Writer = (*boundedCollector)(nil)
