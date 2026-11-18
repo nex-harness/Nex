@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+:root {
+  --nex-font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --nex-font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  --nex-font-size: 14px;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  font-family: var(--nex-font-sans);
+  font-size: var(--nex-font-size);
+}
+
+code, pre, .font-mono {
+  font-family: var(--nex-font-mono);
+}

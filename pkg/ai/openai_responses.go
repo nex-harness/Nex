@@ -574,22 +574,25 @@ func parseResponsesUsage(respObj map[string]any) Usage {
 	totalInput := intField(uMap, "input_tokens")
 	output := intField(uMap, "output_tokens")
 	cached := 0
+	cacheWrite := 0
 	if inDetails, ok := uMap["input_tokens_details"].(map[string]any); ok {
 		cached = intField(inDetails, "cached_tokens")
+		cacheWrite = intField(inDetails, "cache_write_tokens")
 	}
 	reasoning := 0
 	if outDetails, ok := uMap["output_tokens_details"].(map[string]any); ok {
 		reasoning = intField(outDetails, "reasoning_tokens")
 	}
-	uncached := totalInput - cached
+	uncached := totalInput - cached - cacheWrite
 	if uncached < 0 {
 		uncached = 0
 	}
 	return Usage{
-		InputTokens:     uncached,
-		OutputTokens:    output,
-		ReasoningTokens: reasoning,
-		CacheReadTokens: cached,
+		InputTokens:      uncached,
+		OutputTokens:     output,
+		ReasoningTokens:  reasoning,
+		CacheReadTokens:  cached,
+		CacheWriteTokens: cacheWrite,
 	}
 }
 

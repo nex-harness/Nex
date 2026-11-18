@@ -1,6 +1,5 @@
 # Binaries & build artifacts
 bin/
-dist/
 *.exe
 *.dll
 *.so
@@ -10,7 +9,7 @@ dist/
 coverage.out
 coverage.html
 
-# Frontend
+# Frontend dependencies & cache (pkg/webui/dist is tracked/built for go:embed)
 node_modules/
 clients/web/dist/
 clients/web/.vite/
