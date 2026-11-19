@@ -3,30 +3,63 @@ import { hostBridge } from '../host/bridge';
 import { apiFetch } from './protocol';
 import { applySessionEvent, emptyStreamState, RawSessionEventRow, SessionStreamState } from './reducer';
 import {
+  AgentProfile,
+  CronJobRecord,
   DirEntry,
   FilePreview,
   GitSummary,
+  MCPServerRecord,
   ModelMeta,
+  PluginRecord,
   ProviderRecord,
   RunnerRecord,
   SessionRecord,
+  SettingsSectionId,
+  SkillRecord,
   TurnTelemetry,
+  UsageSummary,
   UserPreferences,
   WorkbenchTab,
   WorkbenchTabKind,
 } from './types';
 import { wsClient } from './wsClient';
 
+export function applyDocumentTheme(theme: UserPreferences['theme']): void {
+  if (typeof document === 'undefined') return;
+  const prefersDark =
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : true;
+  const isDark = theme === 'dark' || (theme === 'system' && prefersDark);
+  document.documentElement.classList.toggle('dark', isDark);
+}
+
 export interface AppState {
   wsConnected: boolean;
+  locale: 'zh-CN' | 'en-US';
+  mainView: 'workspace' | 'settings';
+  settingsSection: SettingsSectionId;
+  sidebarVisible: boolean;
+  sidePaneVisible: boolean;
+  showBottomPanel: boolean;
+  quickSearchOpen: boolean;
+  pinnedSessionIds: Record<string, boolean>;
+
   runners: RunnerRecord[];
   providers: ProviderRecord[];
   models: ModelMeta[];
   preferences: UserPreferences;
   sessions: SessionRecord[];
   archivedSessions: SessionRecord[];
+  agentProfiles: AgentProfile[];
+  skills: SkillRecord[];
+  plugins: PluginRecord[];
+  mcpServers: MCPServerRecord[];
+  cronJobs: CronJobRecord[];
+  todaySummary: UsageSummary | null;
 
   selectedRunnerId: string;
+  selectedWorkspacePath: string;
   selectedProviderId: string;
   selectedModelId: string;
   thinkingEffort: '' | 'low' | 'medium' | 'high';
@@ -41,19 +74,31 @@ export interface AppState {
   activeRightTabId: string;
   bottomTerminals: Array<{ id: string; title: string; ptyId: string }>;
   activeBottomTermId: string;
-  showBottomPanel: boolean;
+
+  openSettings: (section?: SettingsSectionId) => void;
+  closeSettings: () => void;
+  setLocale: (loc: 'zh-CN' | 'en-US') => void;
+  togglePinSession: (sessionId: string) => void;
+  toggleSidebar: () => void;
+  toggleSidePane: () => void;
+  toggleBottomPanel: () => void;
+  setQuickSearchOpen: (open: boolean) => void;
 
   setComposerText: (text: string) => void;
   appendComposerRef: (refText: string) => void;
-  setSelectedRunner: (id: string) => void;
+  setSelectedRunner: (id: string, workspacePath?: string) => void;
   setSelectedModel: (providerId: string, modelId: string) => void;
   setThinkingEffort: (effort: '' | 'low' | 'medium' | 'high') => void;
   setPermissionMode: (mode: 'full_access' | 'interactive' | 'read_only') => void;
+  updateThemeQuick: (theme: UserPreferences['theme']) => Promise<void>;
 
   bootstrap: () => Promise<void>;
   refreshInitialData: () => Promise<void>;
+  refreshRegistries: () => Promise<void>;
   selectSession: (sessionId: string) => Promise<void>;
-  startNewSession: () => void;
+  startNewSession: (runnerId?: string, workspacePath?: string) => void;
+  renameSession: (sessionId: string, newTitle: string) => Promise<void>;
+  deleteSession: (sessionId: string) => Promise<void>;
   sendPromptOrSteer: (overrideText?: string) => void;
   abortActiveSession: () => void;
   resolveApproval: (approvalId: string, approved: boolean) => void;
@@ -75,24 +120,46 @@ export interface AppState {
 }
 
 const DEFAULT_PREFS: UserPreferences = {
-  theme: 'dark',
-  code_theme: 'github-dark',
-  font_family: 'Inter, system-ui, sans-serif',
-  mono_font_family: 'JetBrains Mono, Menlo, monospace',
+  theme: 'light',
+  code_theme: 'github-light',
+  font_family: 'Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif',
+  mono_font_family: 'JetBrains Mono, SFMono-Regular, Menlo, monospace',
   expand_thinking: false,
   auto_archive_after_days: 30,
 };
 
 export const useNexStore = create<AppState>((set, get) => ({
   wsConnected: false,
+  locale: ((typeof localStorage !== 'undefined' && localStorage.getItem('nex.locale')) as 'zh-CN' | 'en-US') || 'zh-CN',
+  mainView: 'workspace',
+  settingsSection: 'general',
+  sidebarVisible: true,
+  sidePaneVisible: false,
+  showBottomPanel: false,
+  quickSearchOpen: false,
+  pinnedSessionIds: (() => {
+    try {
+      return JSON.parse(localStorage.getItem('nex.pinned.sessions') || '{}');
+    } catch {
+      return {};
+    }
+  })(),
+
   runners: [],
   providers: [],
   models: [],
   preferences: DEFAULT_PREFS,
   sessions: [],
   archivedSessions: [],
+  agentProfiles: [],
+  skills: [],
+  plugins: [],
+  mcpServers: [],
+  cronJobs: [],
+  todaySummary: null,
 
   selectedRunnerId: '',
+  selectedWorkspacePath: '',
   selectedProviderId: '',
   selectedModelId: '',
   thinkingEffort: 'low',
@@ -103,22 +170,82 @@ export const useNexStore = create<AppState>((set, get) => ({
   streams: {},
   gitSummary: null,
 
-  rightTabs: [{ id: 'tab_files', kind: 'files', title: 'Files', closable: true }],
-  activeRightTabId: 'tab_files',
+  rightTabs: [{ id: 'tab_launcher', kind: 'new_tab', title: '新标签页', closable: true }],
+  activeRightTabId: 'tab_launcher',
   bottomTerminals: [],
   activeBottomTermId: '',
-  showBottomPanel: true,
+
+  openSettings: (section) => {
+    set((s) => ({ mainView: 'settings', settingsSection: section || s.settingsSection }));
+    void get().refreshRegistries();
+  },
+  closeSettings: () => set({ mainView: 'workspace' }),
+  setLocale: (loc) => {
+    try {
+      localStorage.setItem('nex.locale', loc);
+    } catch {
+      // ignore
+    }
+    set({ locale: loc });
+  },
+  togglePinSession: (sessionId) => {
+    set((s) => {
+      const next = { ...s.pinnedSessionIds };
+      if (next[sessionId]) delete next[sessionId];
+      else next[sessionId] = true;
+      try {
+        localStorage.setItem('nex.pinned.sessions', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return { pinnedSessionIds: next };
+    });
+  },
+  toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
+  toggleSidePane: () =>
+    set((s) => {
+      const nextOpen = !s.sidePaneVisible;
+      if (nextOpen && s.rightTabs.length === 0) {
+        const launcherTab: WorkbenchTab = {
+          id: `tab_${crypto.randomUUID().slice(0, 8)}`,
+          kind: 'new_tab',
+          title: s.locale === 'en-US' ? 'New tab' : '新标签页',
+          closable: true,
+        };
+        return { sidePaneVisible: true, rightTabs: [launcherTab], activeRightTabId: launcherTab.id };
+      }
+      return { sidePaneVisible: nextOpen };
+    }),
+  toggleBottomPanel: () => {
+    const next = !get().showBottomPanel;
+    set({ showBottomPanel: next });
+    if (next && get().bottomTerminals.length === 0) {
+      void get().spawnBottomTerminal();
+    }
+  },
+  setQuickSearchOpen: (open) => set({ quickSearchOpen: open }),
 
   setComposerText: (text) => set({ composerText: text }),
   appendComposerRef: (refText) =>
     set((s) => ({ composerText: s.composerText ? `${s.composerText} ${refText} ` : `${refText} ` })),
-  setSelectedRunner: (id) => {
-    set({ selectedRunnerId: id });
+  setSelectedRunner: (id, workspacePath) => {
+    const r = get().runners.find((it) => it.id === id);
+    set({
+      selectedRunnerId: id,
+      selectedWorkspacePath: workspacePath ?? r?.workspace_default ?? '',
+    });
     void get().refreshGitSummary(false);
   },
   setSelectedModel: (providerId, modelId) => set({ selectedProviderId: providerId, selectedModelId: modelId }),
   setThinkingEffort: (effort) => set({ thinkingEffort: effort }),
   setPermissionMode: (mode) => set({ permissionMode: mode }),
+
+  updateThemeQuick: async (theme) => {
+    const nextPrefs = { ...get().preferences, theme };
+    applyDocumentTheme(theme);
+    set({ preferences: nextPrefs });
+    await apiFetch('/api/v1/preferences', { method: 'PUT', body: JSON.stringify(nextPrefs) }).catch(() => {});
+  },
 
   bootstrap: async () => {
     hostBridge.setDeviceFontScale(hostBridge.getDeviceFontScale());
@@ -160,7 +287,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         if (raw.event_type === 'tool_execution_end' || raw.event_type === 'agent_end') {
           void get().refreshGitSummary(false);
           if (raw.event_type === 'agent_end') {
-            void apiFetch<SessionRecord[]>('/api/v1/sessions').then((list) => set({ sessions: list || [] })).catch(() => {});
+            void get().refreshInitialData();
           }
         }
       }
@@ -168,20 +295,23 @@ export const useNexStore = create<AppState>((set, get) => ({
 
     wsClient.connect();
     await get().refreshInitialData();
+    await get().refreshRegistries();
   },
 
   refreshInitialData: async () => {
-    const [runners, providers, models, prefs, sessions, archives] = await Promise.all([
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
+    const [runners, providers, models, prefs, sessions, archives, todaySummary] = await Promise.all([
       apiFetch<RunnerRecord[]>('/api/v1/runners').catch(() => []),
       apiFetch<ProviderRecord[]>('/api/v1/providers').catch(() => []),
       apiFetch<ModelMeta[]>('/api/v1/models').catch(() => []),
       apiFetch<UserPreferences>('/api/v1/preferences').catch(() => DEFAULT_PREFS),
       apiFetch<SessionRecord[]>('/api/v1/sessions').catch(() => []),
       apiFetch<SessionRecord[]>('/api/v1/archives').catch(() => []),
+      apiFetch<UsageSummary>(`/api/v1/stats?window=today&tz=${encodeURIComponent(tz)}`).catch(() => null),
     ]);
 
+    applyDocumentTheme(prefs.theme);
     if (typeof document !== 'undefined') {
-      document.documentElement.classList.toggle('dark', prefs.theme !== 'light');
       if (prefs.font_family) document.documentElement.style.setProperty('--nex-font-sans', prefs.font_family);
       if (prefs.mono_font_family) document.documentElement.style.setProperty('--nex-font-mono', prefs.mono_font_family);
     }
@@ -189,7 +319,8 @@ export const useNexStore = create<AppState>((set, get) => ({
     set((state) => {
       const onlineRunner = (runners || []).find((r) => r.status === 'online') || (runners || [])[0];
       const nextRunner = state.selectedRunnerId || onlineRunner?.id || '';
-      const firstModel = (models || [])[0];
+      const chosenRunnerObj = (runners || []).find((r) => r.id === nextRunner);
+      const customModel = (models || []).find((m) => m.source === 'custom') || (models || [])[0];
       return {
         runners: runners || [],
         providers: providers || [],
@@ -197,20 +328,40 @@ export const useNexStore = create<AppState>((set, get) => ({
         preferences: prefs || DEFAULT_PREFS,
         sessions: sessions || [],
         archivedSessions: archives || [],
+        todaySummary,
         selectedRunnerId: nextRunner,
-        selectedProviderId: state.selectedProviderId || firstModel?.provider_id || '',
-        selectedModelId: state.selectedModelId || firstModel?.id || '',
+        selectedWorkspacePath: state.selectedWorkspacePath || chosenRunnerObj?.workspace_default || '',
+        selectedProviderId: state.selectedProviderId || customModel?.provider_id || '',
+        selectedModelId: state.selectedModelId || customModel?.id || '',
       };
     });
   },
 
+  refreshRegistries: async () => {
+    const [agentProfiles, skills, plugins, mcpServers, cronJobs] = await Promise.all([
+      apiFetch<AgentProfile[]>('/api/v1/agents').catch(() => []),
+      apiFetch<SkillRecord[]>('/api/v1/skills').catch(() => []),
+      apiFetch<PluginRecord[]>('/api/v1/plugins').catch(() => []),
+      apiFetch<MCPServerRecord[]>('/api/v1/mcp').catch(() => []),
+      apiFetch<CronJobRecord[]>('/api/v1/cron').catch(() => []),
+    ]);
+    set({
+      agentProfiles: agentProfiles || [],
+      skills: skills || [],
+      plugins: plugins || [],
+      mcpServers: mcpServers || [],
+      cronJobs: cronJobs || [],
+    });
+  },
+
   selectSession: async (sessionId) => {
-    set({ activeSessionId: sessionId });
+    set({ mainView: 'workspace', activeSessionId: sessionId });
     const [evs, tels] = await Promise.all([
       apiFetch<RawSessionEventRow[]>(`/api/v1/sessions/${sessionId}/events`).catch(() => []),
       apiFetch<TurnTelemetry[]>(`/api/v1/sessions/${sessionId}/telemetry`).catch(() => []),
     ]);
-    const runnerId = get().sessions.find((s) => s.id === sessionId)?.runner_id || get().selectedRunnerId;
+    const meta = get().sessions.find((s) => s.id === sessionId);
+    const runnerId = meta?.runner_id || get().selectedRunnerId;
     let st = emptyStreamState();
     for (const ev of evs || []) {
       st = applySessionEvent(st, runnerId, ev);
@@ -220,13 +371,34 @@ export const useNexStore = create<AppState>((set, get) => ({
     }
     set((s) => ({
       selectedRunnerId: runnerId || s.selectedRunnerId,
+      selectedWorkspacePath: meta?.workspace_path || s.selectedWorkspacePath,
       streams: { ...s.streams, [sessionId]: st },
     }));
     wsClient.sendEnvelope('client.subscribe', { session_id: sessionId, last_seen_seq: st.lastSeq });
+    void get().refreshGitSummary(false);
   },
 
-  startNewSession: () => {
-    set({ activeSessionId: '' });
+  startNewSession: (runnerId, workspacePath) => {
+    set((s) => ({
+      mainView: 'workspace',
+      activeSessionId: '',
+      selectedRunnerId: runnerId || s.selectedRunnerId,
+      selectedWorkspacePath: workspacePath !== undefined ? workspacePath : s.selectedWorkspacePath,
+    }));
+  },
+
+  renameSession: async (sessionId, newTitle) => {
+    await apiFetch(`/api/v1/sessions/${sessionId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ title: newTitle }),
+    });
+    await get().refreshInitialData();
+  },
+
+  deleteSession: async (sessionId) => {
+    await apiFetch(`/api/v1/sessions/${sessionId}`, { method: 'DELETE' });
+    if (get().activeSessionId === sessionId) set({ activeSessionId: '' });
+    await get().refreshInitialData();
   },
 
   sendPromptOrSteer: (overrideText) => {
@@ -246,6 +418,7 @@ export const useNexStore = create<AppState>((set, get) => ({
     if (!sessionId) {
       sessionId = `sess_${crypto.randomUUID()}`;
       set((prev) => ({
+        mainView: 'workspace',
         activeSessionId: sessionId,
         streams: { ...prev.streams, [sessionId]: emptyStreamState() },
       }));
@@ -256,6 +429,7 @@ export const useNexStore = create<AppState>((set, get) => ({
       {
         session_id: sessionId,
         runner_id: s.selectedRunnerId,
+        workspace_path: s.selectedWorkspacePath || undefined,
         provider_id: s.selectedProviderId,
         model_id: s.selectedModelId,
         thinking_effort: s.thinkingEffort,
@@ -317,6 +491,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   },
 
   openRightTab: async (kind, title) => {
+    set({ sidePaneVisible: true });
     const existing = get().rightTabs.find((t) => t.kind === kind && (kind === 'files' || kind === 'review'));
     if (existing) {
       set({ activeRightTabId: existing.id });
@@ -336,7 +511,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         );
         ptyId = resp.payload?.pty_id || '';
       } catch {
-        // fallback empty ptyId until connected
+        // ignore
       }
       const tab: WorkbenchTab = { id, kind: 'terminal', title: title || 'Terminal', ptyId, closable: true };
       set((s) => ({ rightTabs: [...s.rightTabs, tab], activeRightTabId: id }));
@@ -348,11 +523,12 @@ export const useNexStore = create<AppState>((set, get) => ({
     }
 
     const defaultTitles: Record<WorkbenchTabKind, string> = {
-      files: 'Files',
+      new_tab: get().locale === 'en-US' ? 'New tab' : '新标签页',
+      files: get().locale === 'en-US' ? 'Files' : '文件',
       file_preview: 'Preview',
-      review: 'Review',
-      terminal: 'Terminal',
-      side_chat: 'Side conversation',
+      review: get().locale === 'en-US' ? 'Review' : '审查',
+      terminal: get().locale === 'en-US' ? 'Terminal' : '终端',
+      side_chat: get().locale === 'en-US' ? 'Side conversation' : '辅助对话',
     };
     const tab: WorkbenchTab = {
       id,
@@ -361,7 +537,16 @@ export const useNexStore = create<AppState>((set, get) => ({
       sideSessionId: kind === 'side_chat' ? `sess_side_${crypto.randomUUID().slice(0, 8)}` : undefined,
       closable: true,
     };
-    set((s) => ({ rightTabs: [...s.rightTabs, tab], activeRightTabId: id }));
+    // If active tab is a blank 'new_tab' launcher and user picked a concrete app, replace the launcher tab cleanly!
+    set((s) => {
+      const activeIdx = s.rightTabs.findIndex((t) => t.id === s.activeRightTabId);
+      if (kind !== 'new_tab' && activeIdx >= 0 && s.rightTabs[activeIdx].kind === 'new_tab') {
+        const nextTabs = [...s.rightTabs];
+        nextTabs[activeIdx] = tab;
+        return { rightTabs: nextTabs, activeRightTabId: id };
+      }
+      return { rightTabs: [...s.rightTabs, tab], activeRightTabId: id };
+    });
   },
 
   closeRightTab: (tabId) => {
@@ -379,6 +564,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   setActiveRightTab: (tabId) => set({ activeRightTabId: tabId }),
 
   openFileInPreviewTab: async (relPath) => {
+    set({ sidePaneVisible: true });
     const existing = get().rightTabs.find((t) => t.kind === 'file_preview' && t.relPath === relPath);
     if (existing) {
       set({ activeRightTabId: existing.id });
@@ -439,7 +625,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         return resp.payload;
       }
     } catch {
-      // ignore offline
+      // ignore
     }
     return null;
   },
@@ -449,7 +635,7 @@ export const useNexStore = create<AppState>((set, get) => ({
     if (!rid || !wsClient.connected) return;
     const resp = await wsClient.requestRPC<{ cols: number; rows: number; title: string }, { pty_id: string; title: string }>(
       'pty.open',
-      { cols: 100, rows: 20, title: 'Nex' },
+      { cols: 100, rows: 18, title: 'Nex' },
       { runner_id: rid },
     );
     const ptyId = resp.payload?.pty_id;
@@ -472,6 +658,7 @@ export const useNexStore = create<AppState>((set, get) => ({
       return {
         bottomTerminals: rem,
         activeBottomTermId: s.activeBottomTermId === id ? rem[rem.length - 1]?.id || '' : s.activeBottomTermId,
+        showBottomPanel: rem.length > 0 ? s.showBottomPanel : false,
       };
     });
   },

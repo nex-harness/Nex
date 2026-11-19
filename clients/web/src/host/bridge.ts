@@ -103,7 +103,7 @@ export function createHostBridge(): HostBridge {
         // ignore
       }
       if (typeof document !== 'undefined') {
-        document.documentElement.style.setProperty('--nex-font-size', `${clamped}px`);
+        document.documentElement.style.setProperty('--ui-font-size', `${clamped}px`);
       }
     },
   };

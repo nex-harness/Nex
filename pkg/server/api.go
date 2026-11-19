@@ -24,6 +24,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/health", s.handleHealth)
 	s.mux.HandleFunc("/api/v1/preferences", s.handlePreferences)
 	s.mux.HandleFunc("/api/v1/providers", s.handleProviders)
+	s.mux.HandleFunc("/api/v1/providers/", s.handleProviderDelete)
 	s.mux.HandleFunc("/api/v1/models", s.handleModels)
 	s.mux.HandleFunc("/api/v1/models/sync", s.handleModelsSync)
 	s.mux.HandleFunc("/api/v1/runners", s.handleRunners)
@@ -34,9 +35,13 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/blobs/", s.handleBlobs)
 	s.mux.HandleFunc("/api/v1/stats", s.handleStats)
 	s.mux.HandleFunc("/api/v1/agents", s.handleAgentProfiles)
+	s.mux.HandleFunc("/api/v1/agents/", s.handleAgentDelete)
 	s.mux.HandleFunc("/api/v1/skills", s.handleSkills)
+	s.mux.HandleFunc("/api/v1/skills/", s.handleSkillDelete)
 	s.mux.HandleFunc("/api/v1/plugins", s.handlePlugins)
+	s.mux.HandleFunc("/api/v1/plugins/", s.handlePluginDelete)
 	s.mux.HandleFunc("/api/v1/mcp", s.handleMCPServers)
+	s.mux.HandleFunc("/api/v1/mcp/", s.handleMCPDelete)
 	s.mux.HandleFunc("/api/v1/cron", s.handleCronJobs)
 	s.mux.HandleFunc("/api/v1/cron/", s.handleCronDelete)
 
@@ -254,12 +259,49 @@ func (s *Server) handleSessionSubroutes(w http.ResponseWriter, r *http.Request) 
 
 	switch action {
 	case "":
-		sess, err := s.store.GetSession(r.Context(), sessID)
-		if err != nil {
-			writeErr(w, http.StatusNotFound, err)
-			return
+		switch r.Method {
+		case http.MethodGet:
+			sess, err := s.store.GetSession(r.Context(), sessID)
+			if err != nil {
+				writeErr(w, http.StatusNotFound, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, sess)
+		case http.MethodPatch, http.MethodPut:
+			sess, err := s.store.GetSession(r.Context(), sessID)
+			if err != nil {
+				writeErr(w, http.StatusNotFound, err)
+				return
+			}
+			var patch struct {
+				Title          *string `json:"title"`
+				PermissionMode *string `json:"permission_mode"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+				writeErr(w, http.StatusBadRequest, err)
+				return
+			}
+			if patch.Title != nil && strings.TrimSpace(*patch.Title) != "" {
+				sess.Title = strings.TrimSpace(*patch.Title)
+			}
+			if patch.PermissionMode != nil && *patch.PermissionMode != "" {
+				sess.PermissionMode = *patch.PermissionMode
+			}
+			updated, err := s.store.CreateOrUpdateSession(r.Context(), *sess)
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, updated)
+		case http.MethodDelete:
+			if err := s.store.DeleteActiveSession(r.Context(), sessID); err != nil {
+				writeErr(w, http.StatusInternalServerError, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "session_id": sessID})
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
-		writeJSON(w, http.StatusOK, sess)
 
 	case "events":
 		after, _ := strconv.ParseUint(r.URL.Query().Get("after_seq"), 10, 64)
@@ -540,4 +582,34 @@ func (s *Server) handleCronDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	s.BroadcastConfigSync(r.Context())
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+}
+
+func (s *Server) deleteRegistryHandler(w http.ResponseWriter, r *http.Request, prefix, table, col string) {
+	if r.Method != http.MethodDelete {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	key := strings.TrimPrefix(r.URL.Path, prefix)
+	if err := s.store.DeleteResourceByName(r.Context(), table, col, key); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.BroadcastConfigSync(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+}
+
+func (s *Server) handleProviderDelete(w http.ResponseWriter, r *http.Request) {
+	s.deleteRegistryHandler(w, r, "/api/v1/providers/", "providers", "id")
+}
+func (s *Server) handleAgentDelete(w http.ResponseWriter, r *http.Request) {
+	s.deleteRegistryHandler(w, r, "/api/v1/agents/", "agent_profiles", "slug")
+}
+func (s *Server) handleSkillDelete(w http.ResponseWriter, r *http.Request) {
+	s.deleteRegistryHandler(w, r, "/api/v1/skills/", "skills_registry", "name")
+}
+func (s *Server) handlePluginDelete(w http.ResponseWriter, r *http.Request) {
+	s.deleteRegistryHandler(w, r, "/api/v1/plugins/", "plugins_registry", "name")
+}
+func (s *Server) handleMCPDelete(w http.ResponseWriter, r *http.Request) {
+	s.deleteRegistryHandler(w, r, "/api/v1/mcp/", "mcp_servers", "name")
 }

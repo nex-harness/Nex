@@ -1,18 +1,268 @@
 @import "tailwindcss";
 
+/* === ZCode-Inspired Semantic Design System (Zai Light & Zai Dark) === */
+
 :root {
-  --nex-font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --nex-font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
-  --nex-font-size: 14px;
+  --ui-font-size: 14px;
+  --code-font-size: 13px;
+  --nex-font-sans: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif;
+  --nex-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "PingFang SC", monospace;
+
+  /* Zai Light Foundation (Default Light) */
+  --shadow-composer-soft: 0 1px 3px rgb(0 0 0 / 4%), 0 6px 18px rgb(0 0 0 / 4%);
+  --color-background-shell: #ececee;
+  --color-background: #f8f8f8;
+  --color-header: #ffffff;
+  --color-panel: #ffffff;
+  --color-sidebar: #f0f0f0;
+  --color-surface: rgba(13, 13, 13, 0.03);
+  --color-surface-hover: rgba(13, 13, 13, 0.055);
+  --color-user-message-bubble: rgba(13, 13, 13, 0.055);
+  --color-card: #ffffff;
+  --color-card-selected: #f2f2f4;
+  --color-popover: #ffffff;
+  --color-popover-header: #f8f8f8;
+  --color-menu: #ffffff;
+  --color-menu-hover: #f0f0f0;
+  --color-input: #ffffff;
+  --color-input-focused: #ffffff;
+  --color-tab: #f0f0f0;
+  --color-tab-active: #ffffff;
+  --color-tag: #e6e6e6;
+
+  --color-foreground: #171717;
+  --color-foreground-subtle: rgba(23, 23, 23, 0.68);
+  --color-foreground-subtlest: rgba(23, 23, 23, 0.42);
+  --color-remote-muted: #595959;
+
+  --color-border: rgba(13, 13, 13, 0.09);
+  --color-border-hover: rgba(13, 13, 13, 0.16);
+  --color-hover: rgba(13, 13, 13, 0.05);
+  --color-selected: rgba(13, 13, 13, 0.065);
+  --color-resize-handle: #0284c7;
+
+  --color-primary: #000000;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #e6e6e6;
+  --color-brand-blue: #0b7fff;
+
+  /* Semantic Status & Diff Tokens */
+  --color-success: #1e8a3e;
+  --color-success-surface: #eaf7ee;
+  --color-success-surface-fg: #166b32;
+  --color-warning: #e07b00;
+  --color-warning-surface: rgba(224, 123, 0, 0.12);
+  --color-warning-surface-fg: #914e00;
+  --color-destructive: #e03131;
+  --color-destructive-surface: rgba(224, 49, 49, 0.1);
+  --color-destructive-surface-fg: #b42020;
+  --color-diff-added-bg: rgba(30, 138, 62, 0.11);
+  --color-diff-added-fg: #166b32;
+  --color-diff-removed-bg: rgba(224, 49, 49, 0.11);
+  --color-diff-removed-fg: #b42020;
+
+  /* Monochromatic Sky Ramp for Context Breakdown */
+  --color-ctx-1: #0b7fff;
+  --color-ctx-2: #338fff;
+  --color-ctx-3: #5ca7ff;
+  --color-ctx-4: #85bbff;
+  --color-ctx-5: #acd0ff;
+  --color-ctx-6: #c8ddff;
 }
 
-html, body, #root {
-  height: 100%;
+.dark {
+  /* Zai Dark Foundation */
+  --shadow-composer-soft: 0 2px 10px rgb(0 0 0 / 28%);
+  --color-background-shell: #161616;
+  --color-background: #161616;
+  --color-header: #202020;
+  --color-panel: #202020;
+  --color-sidebar: #161616;
+  --color-surface: rgba(255, 255, 255, 0.045);
+  --color-surface-hover: rgba(255, 255, 255, 0.085);
+  --color-user-message-bubble: rgba(255, 255, 255, 0.08);
+  --color-card: #262626;
+  --color-card-selected: #303030;
+  --color-popover: #2b2b2b;
+  --color-popover-header: #202020;
+  --color-menu: #2b2b2b;
+  --color-menu-hover: #363636;
+  --color-input: #262626;
+  --color-input-focused: #2b2b2b;
+  --color-tab: #202020;
+  --color-tab-active: #161616;
+  --color-tag: #333333;
+
+  --color-foreground: #f2f2f2;
+  --color-foreground-subtle: rgba(229, 229, 229, 0.62);
+  --color-foreground-subtlest: rgba(229, 229, 229, 0.34);
+  --color-remote-muted: #b3b3b3;
+
+  --color-border: rgba(255, 255, 255, 0.09);
+  --color-border-hover: rgba(255, 255, 255, 0.16);
+  --color-hover: rgba(255, 255, 255, 0.055);
+  --color-selected: rgba(255, 255, 255, 0.1);
+  --color-resize-handle: #38bdf8;
+
+  --color-primary: #ffffff;
+  --color-primary-foreground: #000000;
+  --color-secondary: #363636;
+  --color-brand-blue: #4099ff;
+
+  --color-success: #46bf72;
+  --color-success-surface: rgba(70, 191, 114, 0.16);
+  --color-success-surface-fg: #87d9a4;
+  --color-warning: #ff8a30;
+  --color-warning-surface: rgba(255, 138, 48, 0.16);
+  --color-warning-surface-fg: #ffa159;
+  --color-destructive: #ff5c5c;
+  --color-destructive-surface: rgba(255, 92, 92, 0.16);
+  --color-destructive-surface-fg: #ff8585;
+  --color-diff-added-bg: rgba(70, 191, 114, 0.14);
+  --color-diff-added-fg: #87d9a4;
+  --color-diff-removed-bg: rgba(255, 92, 92, 0.14);
+  --color-diff-removed-fg: #ff9999;
+
+  --color-ctx-1: #4099ff;
+  --color-ctx-2: #66adff;
+  --color-ctx-3: #80beff;
+  --color-ctx-4: #9dceff;
+  --color-ctx-5: #b9ddff;
+  --color-ctx-6: #d0e8ff;
+}
+
+@theme {
+  --font-sans: var(--nex-font-sans);
+  --font-mono: var(--nex-font-mono);
+
+  /* ZCode Dedicated UI Typography Scale (follows --ui-font-size without mutating rem geometry) */
+  --text-ui-settings-title: calc(var(--ui-font-size) + 10px);
+  --text-ui-xl: calc(var(--ui-font-size) + 4px);
+  --text-ui-lg: calc(var(--ui-font-size) + 2px);
+  --text-ui-base: var(--ui-font-size);
+  --text-ui-caption: calc(var(--ui-font-size) - 1px);
+  --text-ui-sm: calc(var(--ui-font-size) - 2px);
+  --text-ui-xs: calc(var(--ui-font-size) - 4px);
+
+  --color-shell: var(--color-background-shell);
+  --color-background: var(--color-background);
+  --color-header: var(--color-header);
+  --color-panel: var(--color-panel);
+  --color-sidebar: var(--color-sidebar);
+  --color-surface: var(--color-surface);
+  --color-surface-hover: var(--color-surface-hover);
+  --color-user-bubble: var(--color-user-message-bubble);
+  --color-card: var(--color-card);
+  --color-card-selected: var(--color-card-selected);
+  --color-popover: var(--color-popover);
+  --color-popover-header: var(--color-popover-header);
+  --color-menu: var(--color-menu);
+  --color-menu-hover: var(--color-menu-hover);
+  --color-input: var(--color-input);
+  --color-input-focused: var(--color-input-focused);
+  --color-tab: var(--color-tab);
+  --color-tab-active: var(--color-tab-active);
+  --color-tag: var(--color-tag);
+
+  --color-foreground: var(--color-foreground);
+  --color-foreground-subtle: var(--color-foreground-subtle);
+  --color-foreground-subtlest: var(--color-foreground-subtlest);
+  --color-remote-muted: var(--color-remote-muted);
+
+  --color-border: var(--color-border);
+  --color-border-hover: var(--color-border-hover);
+  --color-hover: var(--color-hover);
+  --color-selected: var(--color-selected);
+  --color-resize-handle: var(--color-resize-handle);
+
+  --color-primary: var(--color-primary);
+  --color-primary-foreground: var(--color-primary-foreground);
+  --color-secondary: var(--color-secondary);
+  --color-brand-blue: var(--color-brand-blue);
+
+  --color-success: var(--color-success);
+  --color-success-surface: var(--color-success-surface);
+  --color-success-surface-fg: var(--color-success-surface-fg);
+  --color-warning: var(--color-warning);
+  --color-warning-surface: var(--color-warning-surface);
+  --color-warning-surface-fg: var(--color-warning-surface-fg);
+  --color-destructive: var(--color-destructive);
+  --color-destructive-surface: var(--color-destructive-surface);
+  --color-destructive-surface-fg: var(--color-destructive-surface-fg);
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100dvh;
   margin: 0;
+  overflow: hidden;
   font-family: var(--nex-font-sans);
-  font-size: var(--nex-font-size);
+  background-color: var(--color-background-shell);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
 }
 
-code, pre, .font-mono {
+*:focus,
+*:focus-visible {
+  outline: none;
+}
+
+code,
+pre,
+.font-mono {
   font-family: var(--nex-font-mono);
+}
+
+.composer-shadow {
+  box-shadow: var(--shadow-composer-soft);
+}
+
+/* ZCode Shimmer Utility for Running Tool Labels & Thinking Stream */
+@keyframes zcode-gradient-flow {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: -100% 50%;
+  }
+}
+
+.animated-gradient-text {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-foreground-subtle) 0%,
+    var(--color-foreground) 45%,
+    var(--color-foreground-subtlest) 55%,
+    var(--color-foreground-subtle) 100%
+  );
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: zcode-gradient-flow 2.8s linear infinite;
+}
+
+.summary-hover-text:hover {
+  color: var(--color-foreground);
+}
+
+/* Subtle custom scrollbars matching dense operational desktop apps */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-hover);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-foreground-subtlest);
 }

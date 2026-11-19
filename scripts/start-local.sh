@@ -4,7 +4,16 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-ADDR="${NEX_ADDR:-127.0.0.1:8080}"
+if [[ -z "${NEX_ADDR:-}" ]]; then
+  if lsof -iTCP:8080 -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "==> Port 8080 is already in use; automatically switching to 127.0.0.1:18080 (override via NEX_ADDR)"
+    ADDR="127.0.0.1:18080"
+  else
+    ADDR="127.0.0.1:8080"
+  fi
+else
+  ADDR="${NEX_ADDR}"
+fi
 DATA_ROOT="${NEX_DATA_ROOT:-${HOME}/.nex/v3-local}"
 WORKSPACE="${NEX_WORKSPACE:-${ROOT_DIR}}"
 

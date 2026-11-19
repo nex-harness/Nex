@@ -1,15 +1,23 @@
+import { X } from 'lucide-react';
 import { useState } from 'react';
 import { apiFetchText, formatCompactTokens } from '../core/protocol';
+import { useNexStore } from '../core/store';
 import { TurnTelemetry } from '../core/types';
+import { formatMsg, type MessageKey } from '../i18n/messages';
 
-const CATEGORY_LABELS: Record<string, { label: string; color: string }> = {
-  messages: { label: 'Messages', color: '#3b82f6' },
-  system_tools: { label: 'System tools', color: '#60a5fa' },
-  system_prompt: { label: 'System prompt', color: '#2563eb' },
-  mcp_tools: { label: 'MCP tools', color: '#818cf8' },
-  skills: { label: 'Skills', color: '#64748b' },
-  meta_context: { label: 'Meta context', color: '#475569' },
-};
+interface CategoryMeta {
+  labelKey: MessageKey;
+  colorVar: string;
+}
+
+const CATEGORY_META: Array<{ key: string; meta: CategoryMeta }> = [
+  { key: 'messages', meta: { labelKey: 'chat.contextUsage.messages', colorVar: 'var(--color-ctx-1)' } },
+  { key: 'system_tools', meta: { labelKey: 'chat.contextUsage.systemTools', colorVar: 'var(--color-ctx-2)' } },
+  { key: 'system_prompt', meta: { labelKey: 'chat.contextUsage.systemPrompt', colorVar: 'var(--color-ctx-3)' } },
+  { key: 'mcp_tools', meta: { labelKey: 'chat.contextUsage.mcpTools', colorVar: 'var(--color-ctx-4)' } },
+  { key: 'skills', meta: { labelKey: 'chat.contextUsage.skills', colorVar: 'var(--color-ctx-5)' } },
+  { key: 'meta_context', meta: { labelKey: 'chat.contextUsage.metaUserContext', colorVar: 'var(--color-ctx-6)' } },
+];
 
 export function ContextWindowsButton({
   telemetry,
@@ -18,6 +26,7 @@ export function ContextWindowsButton({
   telemetry: TurnTelemetry | null;
   contextLimit: number;
 }) {
+  const locale = useNexStore((s) => s.locale);
   const [open, setOpen] = useState(false);
   const [traceModal, setTraceModal] = useState<{ title: string; content: string } | null>(null);
   const [loadingBlob, setLoadingBlob] = useState(false);
@@ -39,7 +48,9 @@ export function ContextWindowsButton({
     }
   };
 
-  const radius = 7;
+  const radius = 5.4;
+  const size = 14;
+  const center = size / 2;
   const circ = 2 * Math.PI * radius;
   const dashOffset = circ - (pct / 100) * circ;
 
@@ -49,89 +60,106 @@ export function ContextWindowsButton({
         type="button"
         data-testid="context-ring-btn"
         onClick={() => setOpen((v) => !v)}
-        title={`Context: ${formatCompactTokens(used)} / ${formatCompactTokens(limit)} (${pct}%)`}
-        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition"
+        title={`${formatMsg(locale, 'chat.contextUsage.title')}: ${formatCompactTokens(used)} / ${formatCompactTokens(
+          limit,
+        )} (${pct}%)`}
+        className="flex size-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
       >
-        <svg width="18" height="18" className="-rotate-90">
-          <circle cx="9" cy="9" r={radius} stroke="#3f3f46" strokeWidth="2.2" fill="none" />
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+          <circle cx={center} cy={center} r={radius} stroke="var(--color-border-hover)" strokeWidth="1.6" fill="none" />
           <circle
-            cx="9"
-            cy="9"
+            cx={center}
+            cy={center}
             r={radius}
-            stroke="#3b82f6"
-            strokeWidth="2.2"
+            stroke="var(--color-brand-blue)"
+            strokeWidth="1.6"
             fill="none"
             strokeDasharray={circ}
             strokeDashoffset={dashOffset}
             strokeLinecap="round"
           />
         </svg>
-        <span className="font-mono text-[11px]">{pct}%</span>
       </button>
 
       {open && (
         <div
           data-testid="context-popover"
-          className="absolute bottom-9 right-0 z-40 w-80 rounded-xl border border-zinc-800 bg-zinc-900/95 p-4 shadow-2xl backdrop-blur"
+          className="absolute bottom-9 right-0 z-40 w-80 rounded-xl border border-border bg-popover p-3.5 text-foreground shadow-lg"
         >
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-zinc-100">Context windows</span>
-            <span className="font-mono text-zinc-400">
+          <div className="flex items-center justify-between text-ui-sm">
+            <span className="font-semibold text-foreground">{formatMsg(locale, 'chat.contextUsage.title')}</span>
+            <span className="font-mono text-ui-xs tabular-nums text-foreground-subtle">
               {formatCompactTokens(used)}/{formatCompactTokens(limit)} ({pct}%)
             </span>
           </div>
 
-          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
-            <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${Math.max(pct, 1.5)}%` }} />
+          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-surface">
+            <div className="h-full rounded-full bg-brand-blue transition-all" style={{ width: `${Math.max(pct, 2)}%` }} />
           </div>
 
           {telemetry && (
-            <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-400">
-              <span>Cache hit: {telemetry.cache_hit_rate_pct.toFixed(1)}%</span>
-              <span>Est. turn: ${telemetry.estimated_cost_usd.toFixed(4)}</span>
+            <div className="mt-2 flex items-center justify-between text-ui-xs tabular-nums text-foreground-subtle">
+              <span>
+                {formatMsg(locale, 'chat.contextUsage.cacheHitRate')}: {telemetry.cache_hit_rate_pct.toFixed(1)}%
+              </span>
+              <span>${telemetry.estimated_cost_usd.toFixed(4)}</span>
             </div>
           )}
 
-          <div className="mt-3 space-y-1.5 text-xs">
-            {['messages', 'system_tools', 'system_prompt', 'mcp_tools', 'skills', 'meta_context'].map((catKey) => {
-              const found = telemetry?.breakdown?.find((b) => b.category === catKey);
-              const meta = CATEGORY_LABELS[catKey] || { label: catKey, color: '#64748b' };
+          <div className="mt-3 space-y-0.5 text-ui-sm">
+            {CATEGORY_META.map(({ key, meta }) => {
+              const found = telemetry?.breakdown?.find((b) => b.category === key);
               const itemPct = found ? found.pct : 0;
               return (
                 <div
-                  key={catKey}
-                  onClick={() => found?.blob_hash && inspectBlob(meta.label, found.blob_hash)}
-                  className={`flex items-center justify-between rounded px-1.5 py-0.5 ${
-                    found?.blob_hash ? 'cursor-pointer hover:bg-zinc-800' : ''
+                  key={key}
+                  onClick={() => found?.blob_hash && void inspectBlob(formatMsg(locale, meta.labelKey), found.blob_hash)}
+                  className={`flex items-center justify-between rounded-md px-1.5 py-1 ${
+                    found?.blob_hash ? 'cursor-pointer hover:bg-menu-hover' : ''
                   }`}
                 >
-                  <span className="flex items-center gap-2 text-zinc-300">
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: meta.color }} />
-                    {meta.label}
+                  <span className="flex min-w-0 items-center gap-2 text-foreground">
+                    <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: meta.colorVar }} />
+                    <span className="truncate">{formatMsg(locale, meta.labelKey)}</span>
                   </span>
-                  <span className="font-mono text-zinc-400">{itemPct}%</span>
+                  <span className="shrink-0 font-mono text-ui-xs tabular-nums text-foreground-subtle">
+                    {itemPct.toFixed(1)}%
+                  </span>
                 </div>
               );
             })}
           </div>
 
-          <div className="mt-3.5 flex gap-2">
+          <div className="mt-3 flex gap-2">
             <button
               type="button"
               disabled={!telemetry?.system_prompt_blob_hash || loadingBlob}
-              onClick={() => inspectBlob('System Prompt', telemetry?.system_prompt_blob_hash)}
-              className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800/80 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-40"
+              onClick={() =>
+                void inspectBlob(formatMsg(locale, 'chat.contextUsage.systemPrompt'), telemetry?.system_prompt_blob_hash)
+              }
+              className="h-7 flex-1 rounded-lg border border-border bg-surface text-ui-sm font-medium text-foreground transition-colors hover:bg-surface-hover disabled:opacity-40"
             >
-              {loadingBlob ? 'Loading...' : 'Show system prompt'}
+              {loadingBlob
+                ? locale === 'en-US'
+                  ? 'Loading...'
+                  : '加载中...'
+                : locale === 'en-US'
+                  ? 'Show system prompt'
+                  : '查看系统提示词'}
             </button>
             {telemetry?.raw_trace_blob_hash && (
               <button
                 type="button"
                 disabled={loadingBlob}
-                onClick={() => inspectBlob('Full Turn Trace (JSON)', telemetry.raw_trace_blob_hash)}
-                className="rounded-lg border border-zinc-700 bg-zinc-800/80 px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700"
+                onClick={() =>
+                  void inspectBlob(
+                    locale === 'en-US' ? 'Full Turn Trace (JSON)' : '完整轮次轨迹 (JSON)',
+                    telemetry.raw_trace_blob_hash,
+                  )
+                }
+                className="h-7 rounded-lg border border-border bg-surface px-2.5 text-ui-sm text-foreground-subtle transition-colors hover:bg-surface-hover hover:text-foreground"
               >
-                Trace
+                {locale === 'en-US' ? 'Trace' : '轨迹'}
               </button>
             )}
           </div>
@@ -139,19 +167,19 @@ export function ContextWindowsButton({
       )}
 
       {traceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
-          <div className="flex max-h-[85vh] w-full max-w-4xl flex-col rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-              <h3 className="text-sm font-semibold text-zinc-100">{traceModal.title}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-[1px]">
+          <div className="flex max-h-[85vh] w-full max-w-4xl flex-col rounded-2xl border border-border bg-popover shadow-xl">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <h3 className="text-ui-base font-semibold text-foreground">{traceModal.title}</h3>
               <button
                 type="button"
                 onClick={() => setTraceModal(null)}
-                className="rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                className="flex size-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
               >
-                Close
+                <X className="size-4" />
               </button>
             </div>
-            <pre className="flex-1 overflow-auto p-4 font-mono text-xs whitespace-pre-wrap text-zinc-300">
+            <pre className="flex-1 overflow-auto p-4 font-mono text-ui-sm whitespace-pre-wrap text-foreground">
               {traceModal.content}
             </pre>
           </div>

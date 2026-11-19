@@ -1,9 +1,34 @@
-import { ChevronDown, ChevronRight, FileCode, Folder, GitCompare, MessageSquare, Plus, TerminalSquare, X } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  FileCode,
+  FileDiff,
+  Folder,
+  FolderOpen,
+  MessageSquare,
+  MessageSquareText,
+  PanelRightClose,
+  Plus,
+  RefreshCw,
+  SquareTerminal,
+  X,
+} from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useNexStore } from '../core/store';
-import { DirEntry, FilePreview, WorkbenchTabKind } from '../core/types';
+import { DirEntry, FilePreview, WorkbenchTab, WorkbenchTabKind } from '../core/types';
 import { wsClient } from '../core/wsClient';
+import { formatMsg } from '../i18n/messages';
 import { GhosttyTerminal } from './GhosttyTerminal';
+import { MarkdownRenderer } from './MarkdownRenderer';
+
+const TAB_ICON: Record<WorkbenchTabKind, ReactNode> = {
+  new_tab: <Plus className="size-3.5" />,
+  files: <Folder className="size-3.5" />,
+  file_preview: <FileCode className="size-3.5" />,
+  review: <FileDiff className="size-3.5" />,
+  terminal: <SquareTerminal className="size-3.5" />,
+  side_chat: <MessageSquareText className="size-3.5" />,
+};
 
 export function WorkbenchSidebar() {
   const {
@@ -12,6 +37,7 @@ export function WorkbenchSidebar() {
     selectedRunnerId,
     wsConnected,
     gitSummary,
+    locale,
     openRightTab,
     closeRightTab,
     setActiveRightTab,
@@ -20,82 +46,93 @@ export function WorkbenchSidebar() {
     searchWorkspaceFiles,
     refreshGitSummary,
     appendComposerRef,
+    toggleSidePane,
   } = useNexStore();
 
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const activeTab = rightTabs.find((t) => t.id === activeRightTabId) || rightTabs[0];
 
   const menuItems: Array<{ kind: WorkbenchTabKind; label: string; icon: ReactNode }> = [
-    { kind: 'side_chat', label: 'Side conversation', icon: <MessageSquare className="h-3.5 w-3.5" /> },
-    { kind: 'review', label: 'Review', icon: <GitCompare className="h-3.5 w-3.5" /> },
-    { kind: 'files', label: 'Files', icon: <Folder className="h-3.5 w-3.5" /> },
-    { kind: 'terminal', label: 'Terminal', icon: <TerminalSquare className="h-3.5 w-3.5" /> },
+    { kind: 'new_tab', label: formatMsg(locale, 'sidePane.newTab'), icon: <Plus className="size-3.5" /> },
+    { kind: 'side_chat', label: 'Side conversation', icon: <MessageSquare className="size-3.5" /> },
+    { kind: 'review', label: 'Review', icon: <FileDiff className="size-3.5" /> },
+    { kind: 'files', label: 'Files', icon: <Folder className="size-3.5" /> },
+    { kind: 'terminal', label: 'Terminal', icon: <SquareTerminal className="size-3.5" /> },
   ];
 
   return (
-    <aside className="flex h-full w-full flex-col border-l border-zinc-800 bg-zinc-950">
-      {/* Multi-Tab Bar + '+' Dropdown */}
-      <div className="relative flex items-center gap-1 border-b border-zinc-800 bg-zinc-900/60 px-2 py-1.5 overflow-x-auto">
-        {rightTabs.map((tab) => {
-          const isActive = tab.id === activeTab?.id;
-          return (
-            <div
-              key={tab.id}
-              onClick={() => setActiveRightTab(tab.id)}
-              className={`group flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition ${
-                isActive ? 'bg-zinc-800 text-zinc-100 font-medium' : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
-              }`}
+    <section className="flex h-full w-full flex-col overflow-hidden border-l border-border bg-background text-foreground">
+      {/* Tab Strip */}
+      <div className="flex h-12 shrink-0 items-center justify-between gap-1 border-b border-border px-3">
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+            {rightTabs.map((tab) => (
+              <TabChip
+                key={tab.id}
+                tab={tab}
+                active={tab.id === activeTab?.id}
+                canClose={tab.closable && rightTabs.length > 1}
+                onSelect={() => setActiveRightTab(tab.id)}
+                onClose={() => closeRightTab(tab.id)}
+              />
+            ))}
+          </div>
+
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              data-testid="workbench-plus-btn"
+              onClick={() => setPlusMenuOpen((v) => !v)}
+              className="flex size-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
             >
-              <span className="max-w-[140px] truncate">{tab.title}</span>
-              {tab.closable && rightTabs.length > 1 && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeRightTab(tab.id);
-                  }}
-                  className="rounded p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-200"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-          );
-        })}
+              <Plus className="size-3.5" />
+            </button>
 
-        <div className="relative ml-0.5">
-          <button
-            type="button"
-            data-testid="workbench-plus-btn"
-            onClick={() => setPlusMenuOpen((v) => !v)}
-            className="flex h-6 w-6 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </button>
-
-          {plusMenuOpen && (
-            <div className="absolute left-0 top-8 z-50 w-48 rounded-xl border border-zinc-800 bg-zinc-900 p-1.5 shadow-2xl">
-              {menuItems.map((m) => (
-                <button
-                  key={m.kind}
-                  type="button"
-                  onClick={() => {
-                    setPlusMenuOpen(false);
-                    void openRightTab(m.kind, m.label);
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs text-zinc-200 hover:bg-zinc-800"
-                >
-                  {m.icon}
-                  <span>{m.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
+            {plusMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setPlusMenuOpen(false)} />
+                <div className="absolute left-0 top-8 z-50 w-52 space-y-0.5 rounded-lg border border-border bg-menu p-1 shadow-md">
+                  {menuItems.map((m) => (
+                    <button
+                      key={m.kind}
+                      type="button"
+                      onClick={() => {
+                        setPlusMenuOpen(false);
+                        void openRightTab(m.kind, m.label);
+                      }}
+                      className="flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-ui-base text-foreground hover:bg-menu-hover"
+                    >
+                      <span className="text-foreground-subtle">{m.icon}</span>
+                      <span>{m.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
+
+        <button
+          type="button"
+          data-testid="side-pane-close"
+          onClick={toggleSidePane}
+          title={formatMsg(locale, 'sidePane.collapse')}
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+        >
+          <PanelRightClose className="size-4" />
+        </button>
       </div>
 
       {/* Tab Body */}
-      <div className="flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto">
+        {activeTab?.kind === 'new_tab' && (
+          <TabLauncher
+            locale={locale}
+            gitSummary={gitSummary}
+            onOpen={(kind) => void openRightTab(kind)}
+          />
+        )}
+
         {activeTab?.kind === 'files' && (
           <FilesTreePanel
             wsConnected={wsConnected}
@@ -126,7 +163,132 @@ export function WorkbenchSidebar() {
           <SideConversationPanel runnerId={selectedRunnerId} sideSessionId={activeTab.sideSessionId || ''} />
         )}
       </div>
-    </aside>
+    </section>
+  );
+}
+
+function TabChip({
+  tab,
+  active,
+  canClose,
+  onSelect,
+  onClose,
+}: {
+  tab: WorkbenchTab;
+  active: boolean;
+  canClose: boolean;
+  onSelect: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      onClick={onSelect}
+      className={`group flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-ui-sm transition-colors ${
+        active
+          ? 'bg-selected font-medium text-foreground'
+          : 'text-foreground-subtle hover:bg-hover hover:text-foreground'
+      }`}
+    >
+      <span className={active ? 'text-foreground-subtle' : 'text-foreground-subtlest'}>{TAB_ICON[tab.kind]}</span>
+      <span className="max-w-[140px] truncate">{tab.title}</span>
+      {canClose && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          className="rounded-sm p-0.5 text-foreground-subtlest hover:bg-selected hover:text-foreground"
+        >
+          <X className="size-3" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function TabLauncher({
+  locale,
+  gitSummary,
+  onOpen,
+}: {
+  locale: 'zh-CN' | 'en-US';
+  gitSummary: ReturnType<typeof useNexStore.getState>['gitSummary'];
+  onOpen: (kind: WorkbenchTabKind) => void;
+}) {
+  const dirty = Boolean(gitSummary?.is_git_repo && (gitSummary?.changed_files || 0) > 0);
+
+  return (
+    <div className="mx-auto max-w-2xl px-6 py-6">
+      <h2 className="mb-4 text-ui-xl font-semibold text-foreground">{formatMsg(locale, 'sidePane.newTab')}</h2>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <LauncherRow
+          icon={<FolderOpen className="size-5" />}
+          title={formatMsg(locale, 'fileManager.title')}
+          description={formatMsg(locale, 'fileManager.desc')}
+          onClick={() => onOpen('files')}
+        />
+        <LauncherRow
+          icon={<FileDiff className="size-5" />}
+          title={formatMsg(locale, 'sidePane.review')}
+          description={formatMsg(locale, 'sidePane.launcher.review')}
+          onClick={() => onOpen('review')}
+          badge={
+            dirty ? (
+              <span className="flex items-center gap-1 font-mono text-ui-xs tabular-nums">
+                <span className="text-success">+{gitSummary?.additions || 0}</span>
+                <span className="text-destructive">-{gitSummary?.deletions || 0}</span>
+              </span>
+            ) : null
+          }
+        />
+        <LauncherRow
+          icon={<SquareTerminal className="size-5" />}
+          title={formatMsg(locale, 'terminal.title')}
+          description={formatMsg(locale, 'sidePane.launcher.terminal')}
+          onClick={() => onOpen('terminal')}
+        />
+        <LauncherRow
+          icon={<MessageSquareText className="size-5" />}
+          title={formatMsg(locale, 'sidePane.selectionChat')}
+          description={formatMsg(locale, 'sidePane.launcher.sideChat')}
+          onClick={() => onOpen('side_chat')}
+        />
+      </div>
+    </div>
+  );
+}
+
+function LauncherRow({
+  icon,
+  title,
+  description,
+  onClick,
+  badge,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+  badge?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-hover"
+    >
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-surface text-foreground-subtle">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="truncate text-ui-base font-semibold text-foreground">{title}</span>
+          {badge}
+        </span>
+        <span className="mt-0.5 block truncate text-ui-sm text-foreground-subtle">{description}</span>
+      </span>
+    </button>
   );
 }
 
@@ -161,7 +323,7 @@ function FilesTreePanel({
     }
     const timer = setTimeout(() => {
       void searchFiles(query).then(setSearchResults).catch(() => {});
-    }, 180);
+    }, 160);
     return () => clearTimeout(timer);
   }, [query, searchFiles]);
 
@@ -185,23 +347,23 @@ function FilesTreePanel({
           <div
             style={{ paddingLeft: `${depth * 14 + 10}px` }}
             onClick={() => (isDir ? void toggleFolder(entry.rel_path) : onOpenFile(entry.rel_path))}
-            className={`flex cursor-pointer items-center justify-between py-1 pr-3 text-xs hover:bg-zinc-900 ${
-              entry.git_ignored ? 'opacity-45' : 'text-zinc-200'
+            className={`flex h-7 cursor-pointer items-center justify-between pr-3 text-ui-sm hover:bg-hover ${
+              entry.git_ignored ? 'text-foreground-subtlest' : 'text-foreground'
             }`}
           >
-            <span className="flex items-center gap-1.5 truncate">
+            <span className="flex min-w-0 items-center gap-1.5">
               {isDir ? (
                 isOpen ? (
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                  <ChevronDown className="size-3.5 shrink-0 text-foreground-subtlest" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                  <ChevronRight className="size-3.5 shrink-0 text-foreground-subtlest" />
                 )
               ) : (
-                <FileCode className="h-3.5 w-3.5 shrink-0 text-blue-400/80" />
+                <FileCode className="size-3.5 shrink-0 text-brand-blue" />
               )}
               <span className="truncate">{entry.name}</span>
             </span>
-            {entry.git_status && <span className="font-mono text-[10px] text-amber-400">{entry.git_status}</span>}
+            {entry.git_status && <span className="font-mono text-ui-xs text-warning">{entry.git_status}</span>}
           </div>
           {isDir && isOpen && expanded[entry.rel_path] && renderNodes(expanded[entry.rel_path], depth + 1)}
         </div>
@@ -210,13 +372,13 @@ function FilesTreePanel({
 
   return (
     <div className="flex flex-col">
-      <div className="border-b border-zinc-800 p-2">
+      <div className="border-b border-border/60 p-2">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜索文件..."
-          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 outline-none focus:border-blue-500"
+          className="h-7 w-full rounded-lg border border-border bg-input px-2.5 text-ui-sm text-foreground placeholder-foreground-subtlest focus:border-border-hover"
         />
       </div>
 
@@ -226,12 +388,14 @@ function FilesTreePanel({
             <div
               key={rel}
               onClick={() => onOpenFile(rel)}
-              className="cursor-pointer truncate px-3 py-1.5 font-mono text-xs text-zinc-300 hover:bg-zinc-900"
+              className="cursor-pointer truncate px-3 py-1.5 font-mono text-ui-sm text-foreground hover:bg-hover"
             >
               {rel}
             </div>
           ))}
-          {searchResults.length === 0 && <div className="p-4 text-center text-xs text-zinc-500">无匹配文件</div>}
+          {searchResults.length === 0 && (
+            <div className="p-6 text-center text-ui-sm text-foreground-subtlest">无匹配文件</div>
+          )}
         </div>
       ) : (
         <div className="py-1">{renderNodes(rootEntries, 0)}</div>
@@ -251,10 +415,9 @@ function FilePreviewPanel({
 
   if (preview.preview_as === 'binary') {
     return (
-      <div className="p-6 text-center text-xs text-zinc-400">
-        <p className="font-medium text-zinc-200">{preview.rel_path}</p>
-        <p className="mt-1">Binary file ({preview.total_size} bytes) — preview disabled</p>
-        {preview.sha256 && <p className="mt-1 font-mono text-[11px] text-zinc-500">SHA-256: {preview.sha256.slice(0, 16)}...</p>}
+      <div className="p-6 text-center text-ui-sm text-foreground-subtle">
+        <p className="font-medium text-foreground">{preview.rel_path}</p>
+        <p className="mt-1">二进制文件 ({preview.total_size} bytes) — 暂不支持文本预览</p>
       </div>
     );
   }
@@ -265,9 +428,9 @@ function FilePreviewPanel({
         <img
           src={`data:${preview.mime_type || 'image/png'};base64,${preview.content || ''}`}
           alt={preview.name}
-          className="max-h-[70vh] max-w-full rounded border border-zinc-800 object-contain"
+          className="max-h-[70vh] max-w-full rounded-lg border border-border object-contain"
         />
-        <span className="mt-2 text-xs text-zinc-500">
+        <span className="mt-2 font-mono text-ui-xs text-foreground-subtle">
           {preview.rel_path} ({preview.total_size} bytes)
         </span>
       </div>
@@ -278,14 +441,14 @@ function FilePreviewPanel({
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900/40 px-3 py-1.5 text-xs">
-        <span className="truncate font-mono text-zinc-300">{preview.rel_path}</span>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between border-b border-border/60 bg-surface px-3 py-1.5 text-ui-xs">
+        <span className="truncate font-mono text-foreground-subtle">{preview.rel_path}</span>
+        <div className="flex items-center gap-1.5">
           {preview.preview_as === 'markdown' && (
             <button
               type="button"
               onClick={() => setRawView((v) => !v)}
-              className="rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300 hover:bg-zinc-800"
+              className="rounded-md border border-border px-2 py-0.5 text-ui-xs text-foreground hover:bg-hover"
             >
               {rawView ? 'Rendered' : 'Source'}
             </button>
@@ -293,35 +456,29 @@ function FilePreviewPanel({
           <button
             type="button"
             onClick={() => onAddRef(`@${preview.rel_path}`)}
-            className="rounded bg-blue-600/20 px-2 py-0.5 text-[11px] text-blue-300 hover:bg-blue-600/30"
+            className="rounded-md bg-selected px-2 py-0.5 text-ui-xs font-medium text-foreground hover:bg-hover"
           >
-            @ Cite in chat
+            @ 引用到对话
           </button>
         </div>
       </div>
 
-      {preview.truncated && (
-        <div className="bg-amber-500/10 px-3 py-1 text-[11px] text-amber-300">
-          Large file ({preview.total_size} bytes) — showing first 256 KB
-        </div>
-      )}
-
       {preview.preview_as === 'markdown' && !rawView ? (
-        <div className="prose prose-invert max-w-none p-4 text-xs whitespace-pre-wrap text-zinc-200">
-          {preview.content}
+        <div className="p-4">
+          <MarkdownRenderer content={preview.content || ''} />
         </div>
       ) : (
-        <div className="overflow-x-auto py-2 font-mono text-xs leading-5">
+        <div className="overflow-x-auto py-2 font-mono text-[12.5px] leading-5">
           {lines.map((line, idx) => (
-            <div key={idx} className="flex hover:bg-zinc-900/70">
+            <div key={idx} className="flex hover:bg-hover">
               <span
                 onClick={() => onAddRef(`@${preview.rel_path}:L${idx + 1}`)}
-                title="Click line number to cite in chat"
-                className="w-11 shrink-0 cursor-pointer select-none pr-3 text-right text-zinc-600 hover:text-blue-400"
+                title="点击行号引用至输入框"
+                className="w-11 shrink-0 cursor-pointer select-none pr-3 text-right tabular-nums text-foreground-subtlest hover:text-brand-blue"
               >
                 {idx + 1}
               </span>
-              <span className="whitespace-pre pr-4 text-zinc-200">{line}</span>
+              <span className="whitespace-pre pr-4 text-foreground">{line}</span>
             </div>
           ))}
         </div>
@@ -339,89 +496,178 @@ function GitReviewPanel({
   onRefresh: () => void;
   onOpenFile: (rel: string) => void;
 }) {
-  const [splitView, setSplitView] = useState(false);
+  const [viewMode, setViewMode] = useState<'unified' | 'split'>('unified');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'staged' | 'unstaged'>('all');
 
   useEffect(() => {
     onRefresh();
   }, [onRefresh]);
 
   if (!summary || !summary.is_git_repo) {
-    return <div className="p-6 text-center text-xs text-zinc-500">当前工作区未检测到 Git 仓库</div>;
+    return <div className="p-6 text-center text-ui-sm text-foreground-subtlest">当前工作区未检测到 Git 仓库</div>;
   }
+
+  const files = summary.files || [];
+  const filteredFiles =
+    sourceFilter === 'all'
+      ? files
+      : files.filter((f) => {
+          // Backend porcelain mapping: added/renamed entries are index (staged) changes,
+          // everything else (modified/deleted/untracked) lives in the working tree.
+          const staged = f.status === 'A' || f.status === 'R';
+          return sourceFilter === 'staged' ? staged : !staged;
+        });
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-zinc-800 px-2 py-0.5 font-mono text-zinc-300">{summary.branch || 'HEAD'}</span>
-          <span className="font-mono text-emerald-400">+{summary.additions}</span>
-          <span className="font-mono text-rose-400">-{summary.deletions}</span>
+      <div className="flex items-center justify-between border-b border-border/60 px-3 py-2 text-ui-sm">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="rounded-md bg-tag px-2 py-0.5 font-mono text-ui-xs text-foreground">
+            {summary.branch || 'HEAD'}
+          </span>
+          <span className="font-mono text-ui-xs tabular-nums text-success">+{summary.additions}</span>
+          <span className="font-mono text-ui-xs tabular-nums text-destructive">-{summary.deletions}</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setSplitView((v) => !v)}
-            className="rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300 hover:bg-zinc-800"
-          >
-            {splitView ? 'Unified' : 'Split'}
-          </button>
-          <button
-            type="button"
-            onClick={onRefresh}
-            className="rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300 hover:bg-zinc-800"
-          >
-            Refresh
-          </button>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="flex h-6 items-center gap-1 rounded-md border border-border px-2 text-ui-xs text-foreground-subtle hover:bg-hover hover:text-foreground"
+        >
+          <RefreshCw className="size-3" />
+          <span>刷新</span>
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between border-b border-border/60 px-3 py-1.5">
+        <div className="flex items-center gap-0.5">
+          {(
+            [
+              { id: 'all', label: '全部' },
+              { id: 'staged', label: '已暂存' },
+              { id: 'unstaged', label: '未暂存' },
+            ] as const
+          ).map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setSourceFilter(f.id)}
+              className={`h-6 rounded-md px-2 text-ui-xs transition-colors ${
+                sourceFilter === f.id
+                  ? 'bg-selected font-medium text-foreground'
+                  : 'text-foreground-subtle hover:bg-hover hover:text-foreground'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center rounded-md border border-border bg-surface p-0.5">
+          {(
+            [
+              { id: 'unified', label: 'Unified' },
+              { id: 'split', label: 'Split' },
+            ] as const
+          ).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setViewMode(m.id)}
+              className={`h-5 rounded px-1.5 text-ui-xs transition-colors ${
+                viewMode === m.id ? 'bg-card text-foreground shadow-2xs' : 'text-foreground-subtlest hover:text-foreground'
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {(!summary.files || summary.files.length === 0) && (
-        <div className="p-6 text-center text-xs text-zinc-500">Working tree clean</div>
+      {filteredFiles.length === 0 && (
+        <div className="p-8 text-center text-ui-sm text-foreground-subtlest">工作区干净，无未提交改动</div>
       )}
 
-      <div className="divide-y divide-zinc-800">
-        {(summary.files || []).map((f) => (
-          <div key={f.rel_path} className="p-2.5">
-            <div className="flex items-center justify-between text-xs">
-              <button
-                type="button"
-                onClick={() => onOpenFile(f.rel_path)}
-                className="truncate font-mono font-medium text-zinc-200 hover:text-blue-400"
-              >
-                [{f.status}] {f.rel_path}
-              </button>
-              <span className="shrink-0 font-mono text-[11px]">
-                <span className="text-emerald-400">+{f.additions}</span>{' '}
-                <span className="text-rose-400">-{f.deletions}</span>
-              </span>
+      <div className="divide-y divide-border">
+        {filteredFiles.map((f) => {
+          const diffLines = (f.diff || '').split('\n');
+          const unifiedLines = viewMode === 'unified' ? diffLines : splitDiffLines(diffLines);
+          return (
+            <div key={f.rel_path} className="p-2.5">
+              <div className="flex items-center justify-between text-ui-sm">
+                <button
+                  type="button"
+                  onClick={() => onOpenFile(f.rel_path)}
+                  className="truncate font-mono font-medium text-foreground hover:text-brand-blue"
+                >
+                  [{f.status}] {f.rel_path}
+                </button>
+                <span className="shrink-0 font-mono text-ui-xs tabular-nums">
+                  <span className="text-success">+{f.additions}</span>{' '}
+                  <span className="text-destructive">-{f.deletions}</span>
+                </span>
+              </div>
+              {f.folded && !f.diff && (
+                <div className="mt-2 rounded-lg border border-border/60 bg-surface px-2 py-1.5 text-ui-xs text-foreground-subtlest">
+                  大文件差异已折叠（{f.additions} 行新增 / {f.deletions} 行删除）
+                </div>
+              )}
+              {f.diff && (
+                <pre className="mt-2 overflow-x-auto rounded-lg border border-border/60 bg-surface p-2 font-mono text-[11.5px] leading-5">
+                  {unifiedLines.map((dl, i) => {
+                    const style = dl.startsWith('+')
+                      ? { backgroundColor: 'var(--color-diff-added-bg)', color: 'var(--color-diff-added-fg)' }
+                      : dl.startsWith('-')
+                        ? { backgroundColor: 'var(--color-diff-removed-bg)', color: 'var(--color-diff-removed-fg)' }
+                        : undefined;
+                    return (
+                      <div key={i} style={style} className="px-1.5 text-foreground-subtle">
+                        {dl || ' '}
+                      </div>
+                    );
+                  })}
+                </pre>
+              )}
             </div>
-            {f.diff && (
-              <pre className="mt-2 overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900/60 p-2 font-mono text-[11px] leading-5">
-                {f.diff.split('\n').map((dl, i) => {
-                  const cls = dl.startsWith('+')
-                    ? 'bg-emerald-500/10 text-emerald-300'
-                    : dl.startsWith('-')
-                      ? 'bg-rose-500/10 text-rose-300'
-                      : dl.startsWith('@@')
-                        ? 'text-blue-400'
-                        : 'text-zinc-400';
-                  return (
-                    <div key={i} className={`px-1 ${cls}`}>
-                      {dl}
-                    </div>
-                  );
-                })}
-              </pre>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
+function splitDiffLines(lines: string[]): string[] {
+  const out: string[] = [];
+  let removals: string[] = [];
+  let additions: string[] = [];
+
+  const flush = () => {
+    const rows = Math.max(removals.length, additions.length);
+    for (let i = 0; i < rows; i++) {
+      out.push(`${(removals[i] || '').padEnd(44)} │ ${additions[i] || ''}`);
+    }
+    removals = [];
+    additions = [];
+  };
+
+  for (const line of lines) {
+    if (line.startsWith('-') && !line.startsWith('---')) {
+      if (additions.length > 0) flush();
+      removals.push(line);
+      continue;
+    }
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      additions.push(line);
+      continue;
+    }
+    flush();
+    out.push(line);
+  }
+  flush();
+  return out;
+}
+
 function SideConversationPanel({ runnerId, sideSessionId }: { runnerId: string; sideSessionId: string }) {
-  const { streams, selectedProviderId, selectedModelId } = useNexStore();
+  const { streams, selectedProviderId, selectedModelId, locale } = useNexStore();
   const [input, setInput] = useState('');
   const st = streams[sideSessionId];
 
@@ -446,35 +692,35 @@ function SideConversationPanel({ runnerId, sideSessionId }: { runnerId: string; 
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 space-y-3 overflow-auto p-3 text-xs">
+      <div className="flex-1 space-y-3 overflow-auto p-3 text-ui-sm">
         {(!st || st.items.length === 0) && (
-          <p className="text-zinc-500">旁路问答（只读模式，不打断左侧主对话上下文）</p>
+          <p className="text-foreground-subtlest">{formatMsg(locale, 'sidePane.launcher.sideChat')}</p>
         )}
         {st?.items.map((m) => (
           <div
             key={m.id}
-            className={`rounded-lg p-2.5 whitespace-pre-wrap ${
-              m.role === 'user' ? 'bg-blue-600/20 text-blue-100' : 'bg-zinc-900 text-zinc-200'
+            className={`rounded-xl p-2.5 ${
+              m.role === 'user' ? 'bg-user-bubble text-foreground' : 'bg-surface text-foreground'
             }`}
           >
-            {m.text}
+            <MarkdownRenderer content={m.text} />
           </div>
         ))}
       </div>
-      <div className="border-t border-zinc-800 p-2 flex gap-1.5">
+      <div className="flex gap-1.5 border-t border-border/60 p-2">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && sendSide()}
-          placeholder="Ask side question..."
-          className="flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none"
+          placeholder="输入旁路问题..."
+          className="h-8 flex-1 rounded-lg border border-border bg-input px-2.5 text-ui-sm text-foreground placeholder-foreground-subtlest"
         />
         <button
           type="button"
           onClick={sendSide}
-          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500"
+          className="h-8 rounded-lg bg-primary px-3 text-ui-sm font-medium text-primary-foreground hover:opacity-90"
         >
-          Send
+          {formatMsg(locale, 'chat.send')}
         </button>
       </div>
     </div>

@@ -54,6 +54,71 @@ export interface UserPreferences {
   auto_archive_after_days: number;
 }
 
+export interface AgentProfile {
+  id?: string;
+  slug: string;
+  display_name: string;
+  description: string;
+  system_prompt: string;
+  model_ref: string;
+  thinking_effort: string;
+  tools_allow: string[];
+  max_turns: number;
+  isolation_mode: 'shared' | 'worktree';
+}
+
+export interface SkillRecord {
+  id?: string;
+  name: string;
+  description: string;
+  content_md: string;
+  scope: string;
+  target_runners: string[];
+  enabled: boolean;
+}
+
+export interface PluginRecord {
+  id?: string;
+  name: string;
+  source_ts: string;
+  compiled_js?: string;
+  compiled_js_hash?: string;
+  scope: string;
+  target_runners: string[];
+  enabled: boolean;
+}
+
+export interface MCPServerRecord {
+  id?: string;
+  name: string;
+  host_mode: 'runner_local' | 'server_hosted';
+  transport: 'stdio' | 'http';
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  url: string;
+  scope: string;
+  target_runners: string[];
+  idle_ttl_sec: number;
+  enabled: boolean;
+}
+
+export interface CronJobRecord {
+  id?: string;
+  runner_id: string;
+  title: string;
+  cron_expr: string;
+  timezone: string;
+  prompt: string;
+  workspace_path: string;
+  permission_mode: string;
+  recurring: boolean;
+  max_runs: number;
+  run_count?: number;
+  enabled: boolean;
+  last_run_at?: number;
+}
+
 export interface SessionRecord {
   id: string;
   runner_id: string;
@@ -191,7 +256,7 @@ export interface GitSummary {
   files?: GitFileChange[];
 }
 
-export type WorkbenchTabKind = 'files' | 'file_preview' | 'review' | 'terminal' | 'side_chat';
+export type WorkbenchTabKind = 'new_tab' | 'files' | 'file_preview' | 'review' | 'terminal' | 'side_chat';
 
 export interface WorkbenchTab {
   id: string;
@@ -226,3 +291,16 @@ export interface UsageSummary {
     cache_saved_usd: number;
   }>;
 }
+
+export type SettingsSectionId =
+  | 'general'
+  | 'appearance'
+  | 'providers'
+  | 'runners'
+  | 'agents'
+  | 'plugins'
+  | 'mcp'
+  | 'skills'
+  | 'automations'
+  | 'usage'
+  | 'archives';

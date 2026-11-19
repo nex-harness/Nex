@@ -230,6 +230,68 @@ func (s *Store) GetSession(ctx context.Context, id string) (*SessionRecord, erro
 	`, id))
 }
 
+// DeleteActiveSession deletes a session (and its child subagent sessions) from main.db and decrements blob refs.
+func (s *Store) DeleteActiveSession(ctx context.Context, sessionID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var hashes []string
+	rows, err := s.mainDB.QueryContext(ctx, `
+		SELECT blob_hashes_json FROM session_events
+		WHERE session_id IN (SELECT id FROM sessions WHERE id = ? OR parent_session_id = ?)
+	`, sessionID, sessionID)
+	if err == nil {
+		for rows.Next() {
+			var raw string
+			if rows.Scan(&raw) == nil {
+				var hs []string
+				_ = json.Unmarshal([]byte(raw), &hs)
+				hashes = append(hashes, hs...)
+			}
+		}
+		rows.Close()
+	}
+
+	tx, err := s.mainDB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	_, _ = tx.ExecContext(ctx, `DELETE FROM turn_telemetry WHERE session_id IN (SELECT id FROM sessions WHERE id = ? OR parent_session_id = ?)`, sessionID, sessionID)
+	_, _ = tx.ExecContext(ctx, `DELETE FROM session_events WHERE session_id IN (SELECT id FROM sessions WHERE id = ? OR parent_session_id = ?)`, sessionID, sessionID)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE id = ? OR parent_session_id = ?`, sessionID, sessionID); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if len(hashes) > 0 {
+		_ = s.DecrefBlobs(ctx, hashes)
+	}
+	return nil
+}
+
+// DeleteResourceByName deletes an entry from a named registry table by id or name and bumps config_rev.
+func (s *Store) DeleteResourceByName(ctx context.Context, table, keyCol, val string) error {
+	allowed := map[string]string{
+		"providers":        "id",
+		"agent_profiles":   "slug",
+		"skills_registry":  "name",
+		"plugins_registry": "name",
+		"mcp_servers":      "name",
+	}
+	col, ok := allowed[table]
+	if !ok || (keyCol != "" && keyCol != col) {
+		return fmt.Errorf("unsupported registry delete target %s", table)
+	}
+	_, err := s.mainDB.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE %s = ?`, table, col), val)
+	if err == nil {
+		_, _ = s.BumpConfigRev(ctx)
+	}
+	return err
+}
+
 func (s *Store) ListSessions(ctx context.Context, runnerID string, includeChildren bool) ([]SessionRecord, error) {
 	q := `SELECT id, runner_id, parent_session_id, parent_tool_call_id, depth, title, workspace_path,
 	             agent_profile_slug, model_id, provider_id, permission_mode, status,

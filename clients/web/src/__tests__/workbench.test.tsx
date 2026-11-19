@@ -4,7 +4,7 @@ import { App } from '../App';
 import { decodePTYBinaryFrame, encodePTYBinaryFrame, PTY_BINARY_STDOUT } from '../core/protocol';
 import { applySessionEvent, emptyStreamState } from '../core/reducer';
 
-describe('Nex-v3 Web Client Core & Workbench UI', () => {
+describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () => {
   it('encodes and decodes binary PTY frames matching Go protocol', () => {
     const ptyId = 'b9777673-535b-4d67-a726-b390c39ed46d';
     const frame = encodePTYBinaryFrame(PTY_BINARY_STDOUT, ptyId, 'hello ghostty');
@@ -31,9 +31,9 @@ describe('Nex-v3 Web Client Core & Workbench UI', () => {
       seq: 2,
       turn_idx: 1,
       event_type: 'message_update',
-      payload: { delta_kind: 'text', delta: 'Hello Nex!' },
+      payload: { delta_kind: 'text', delta: '## Heading\n|A|B|\n|---|---|\n|1|2|' },
     });
-    expect(st.items[0].text).toBe('Hello Nex!');
+    expect(st.items[0].text).toContain('## Heading');
 
     st = applySessionEvent(st, 'run_1', {
       session_id: 's1',
@@ -79,16 +79,42 @@ describe('Nex-v3 Web Client Core & Workbench UI', () => {
     expect(st.latestTelemetry?.breakdown).toHaveLength(6);
   });
 
-  it('renders Workbench layout, Context windows popover, and + tab menu', () => {
+  it('starts with Side Pane closed by default, opens New Tab launcher on demand, and navigates ZCode Settings', () => {
     render(<App />);
-    const ringBtn = screen.getByTestId('context-ring-btn');
-    fireEvent.click(ringBtn);
-    expect(screen.getByTestId('context-popover')).toBeTruthy();
-    expect(screen.getByText('Show system prompt')).toBeTruthy();
+    expect(screen.getByTestId('project-sidebar')).toBeTruthy();
 
-    const plusBtn = screen.getByTestId('workbench-plus-btn');
-    fireEvent.click(plusBtn);
-    expect(screen.getByText('Side conversation')).toBeTruthy();
-    expect(screen.getByText('Review')).toBeTruthy();
+    // Right Side Pane is NOT persistent by default!
+    expect(screen.queryByTestId('workbench-plus-btn')).toBeNull();
+
+    // Click header Side Pane toggle -> reveals New Tab launcher & moves close button into Side Pane tab bar
+    fireEvent.click(screen.getByTestId('side-pane-toggle'));
+    expect(screen.getByTestId('workbench-plus-btn')).toBeTruthy();
+    expect(screen.queryByTestId('side-pane-toggle')).toBeNull();
+
+    // Close Side Pane again via its tab-strip close button
+    fireEvent.click(screen.getByTestId('side-pane-close'));
+    expect(screen.queryByTestId('workbench-plus-btn')).toBeNull();
+
+    // Open localized Context Windows popover (`上下文容量`)
+    fireEvent.click(screen.getByTestId('context-ring-btn'));
+    expect(screen.getByTestId('context-popover')).toBeTruthy();
+    expect(screen.getByText('上下文容量')).toBeTruthy();
+
+    // Navigate to full-page Settings Center and switch ZCode-named sections
+    fireEvent.click(screen.getByTestId('sidebar-settings-btn'));
+    expect(screen.getByTestId('settings-page')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('settings-nav-appearance'));
+    expect(screen.getAllByText('外观').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByTestId('settings-nav-usage'));
+    expect(screen.getAllByText('使用统计').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByTestId('settings-nav-plugins'));
+    expect(screen.getAllByText('插件').length).toBeGreaterThan(0);
+
+    // Return back to Workspace
+    fireEvent.click(screen.getByTestId('settings-back-btn'));
+    expect(screen.getByTestId('chat-stream')).toBeTruthy();
   });
 });
