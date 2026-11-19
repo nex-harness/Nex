@@ -12,21 +12,25 @@ import { WorkbenchSidebar } from './features/WorkbenchSidebar';
 import { formatMsg } from './i18n/messages';
 
 export function App() {
-  const {
-    locale,
-    mainView,
-    sidebarVisible,
-    sidePaneVisible,
-    showBottomPanel,
-    selectedRunnerId,
-    activeSessionId,
-    streams,
-    bottomTerminals,
-    activeBottomTermId,
-    bootstrap,
-    spawnBottomTerminal,
-    closeBottomTerminal,
-  } = useNexStore();
+  const locale = useNexStore((s) => s.locale);
+  const mainView = useNexStore((s) => s.mainView);
+  const sidebarVisible = useNexStore((s) => s.sidebarVisible);
+  const sidePaneVisible = useNexStore((s) => s.sidePaneVisible);
+  const showBottomPanel = useNexStore((s) => s.showBottomPanel);
+  const selectedRunnerId = useNexStore((s) => s.selectedRunnerId);
+  const bottomTerminals = useNexStore((s) => s.bottomTerminals);
+  const activeBottomTermId = useNexStore((s) => s.activeBottomTermId);
+  const bootstrap = useNexStore((s) => s.bootstrap);
+  const spawnBottomTerminal = useNexStore((s) => s.spawnBottomTerminal);
+  const closeBottomTerminal = useNexStore((s) => s.closeBottomTerminal);
+
+  // Subscribe ONLY to blocking modal states so App shell NEVER re-renders on text/tool streaming frames!
+  const pendingApproval = useNexStore((s) =>
+    s.activeSessionId ? s.streams[s.activeSessionId]?.pendingApproval || null : null,
+  );
+  const pendingUIPrompt = useNexStore((s) =>
+    s.activeSessionId ? s.streams[s.activeSessionId]?.pendingUIPrompt || null : null,
+  );
 
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [sidePaneWidth, setSidePaneWidth] = useState(460);
@@ -73,15 +77,14 @@ export function App() {
     window.addEventListener('pointerup', onUp);
   };
 
-  const currentStream = (activeSessionId && streams[activeSessionId]) || emptyStreamState();
   const activeBottomTerm = bottomTerminals.find((t) => t.id === activeBottomTermId) || bottomTerminals[0];
 
   if (mainView === 'settings') {
     return (
       <>
         <SettingsPage />
-        {currentStream.pendingApproval && <ApprovalModal approval={currentStream.pendingApproval} />}
-        {currentStream.pendingUIPrompt && <UIPromptModal prompt={currentStream.pendingUIPrompt} />}
+        {pendingApproval && <ApprovalModal approval={pendingApproval} />}
+        {pendingUIPrompt && <UIPromptModal prompt={pendingUIPrompt} />}
       </>
     );
   }
@@ -186,8 +189,8 @@ export function App() {
       )}
 
       {/* Blocking Interaction Dialogs */}
-      {currentStream.pendingApproval && <ApprovalModal approval={currentStream.pendingApproval} />}
-      {currentStream.pendingUIPrompt && <UIPromptModal prompt={currentStream.pendingUIPrompt} />}
+      {pendingApproval && <ApprovalModal approval={pendingApproval} />}
+      {pendingUIPrompt && <UIPromptModal prompt={pendingUIPrompt} />}
     </div>
   );
 }

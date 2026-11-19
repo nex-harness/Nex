@@ -42,8 +42,9 @@ func ResolvePath(workDir, targetPath string) string {
 	return filepath.Clean(filepath.Join(workDir, targetPath))
 }
 
-// DefaultCodingTools returns the core orthogonal coding tools inspired by pi-agent.
+// DefaultCodingTools returns the core orthogonal coding tools inspired by pi-agent (including per-session TodoWrite/TodoRead).
 func DefaultCodingTools() []Tool {
+	todoStore := NewTodoStore()
 	return []Tool{
 		NewReadTool(),
 		NewWriteTool(),
@@ -51,5 +52,7 @@ func DefaultCodingTools() []Tool {
 		NewBashTool(),
 		NewGrepTool(),
 		NewGlobTool(),
+		NewTodoWriteTool(todoStore),
+		NewTodoReadTool(todoStore),
 	}
 }

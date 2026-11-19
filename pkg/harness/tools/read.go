@@ -34,7 +34,7 @@ func (t *ReadTool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
 		Name:        "read",
 		Category:    "system",
-		Description: "Read a file from the workspace. Supports line slicing (offset/limit) for text files and multimodal image loading for PNG/JPG/GIF/WEBP.",
+		Description: "Read a file from the local filesystem. Returns up to 2000 lines by default in `cat -n` format: each line is prefixed with its 1-based line number and a tab, which is clickable when referenced as `file_path:line_number`.\n\n- Use `offset` and `limit` to slice large files; read the region you need instead of the whole file.\n- Supports PNG, JPG, GIF, and WEBP images, which are returned as multimodal image content.\n- Do NOT re-read a file immediately after `edit` or `write` to verify the change; those tools already report the result and a diff.\n- Binary and oversized files are rejected with an explanation.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {

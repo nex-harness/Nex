@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nex-harness/nex/pkg/agent"
 	"github.com/nex-harness/nex/pkg/ai"
+	"github.com/nex-harness/nex/pkg/harness/prompts"
 	"github.com/nex-harness/nex/pkg/harness/tools"
 	"github.com/nex-harness/nex/pkg/protocol"
 	"github.com/nex-harness/nex/pkg/store"
@@ -89,6 +91,25 @@ func (n *Node) EmitUIStatus(ctx context.Context, sessionID, key, badge string, w
 }
 
 func (n *Node) recordAndEmitSessionEvent(ctx context.Context, sessionID string, turnIdx int, evType string, payload json.RawMessage, blobHashes []string) {
+	// ZCode Persistence Rule: transient streaming deltas are emitted live over WS only, never stored in SQLite/Outbox!
+	if evType == string(agent.EventMessageUpdate) || evType == string(agent.EventToolExecutionUpdate) {
+		if !n.IsOnline() {
+			return
+		}
+		transient := store.SessionEvent{
+			SessionID: sessionID,
+			TurnIdx:   turnIdx,
+			EventType: evType,
+			Payload:   payload,
+			CreatedAt: time.Now().UnixMilli(),
+		}
+		env, _ := protocol.NewEnvelope(protocol.TypeSessionEvent, transient)
+		env.SessionID = sessionID
+		env.RunnerID = n.cfg.RunnerID
+		_ = n.sendEnvelope(ctx, env)
+		return
+	}
+
 	online := n.IsOnline()
 	saved, err := n.store.AppendSessionEvent(ctx, store.SessionEvent{
 		SessionID:  sessionID,
@@ -228,13 +249,7 @@ func (n *Node) ExecutePrompt(
 		return nil, err
 	}
 
-	title := p.Text
-	if runes := []rune(title); len(runes) > 48 {
-		title = string(runes[:48]) + "..."
-	}
-	if title == "" {
-		title = "Session"
-	}
+	title, modelText := buildUserTurnText(p.Text)
 
 	sessRec, err := n.store.GetSession(parentCtx, p.SessionID)
 	if err != nil {
@@ -265,43 +280,8 @@ func (n *Node) ExecutePrompt(
 
 	history := n.loadSessionMessages(parentCtx, sessRec.ID)
 
-	// Build System Sections (Core Prompt + Skills Catalog + Meta Context + Optional Extensions)
-	sysPrompt := "You are Nex, an autonomous software engineering agent running on a cross-platform Runner."
-	if profiles, err := n.store.ListAgentProfiles(parentCtx); err == nil {
-		for _, ap := range profiles {
-			if ap.Slug == sessRec.AgentProfileSlug && ap.SystemPrompt != "" {
-				sysPrompt = ap.SystemPrompt
-				break
-			}
-		}
-	}
-
-	sections := []ai.SystemSection{
-		{Category: agent.CatSystemPrompt, Content: sysPrompt, CacheControl: true},
-	}
-
-	// Inject synced Skills catalog summary
-	if skills, err := n.store.ListSkills(parentCtx); err == nil && len(skills) > 0 {
-		var sb string
-		sb = "Available Skills (stored locally under " + filepath.Join(n.cfg.DataDir, "skills") + "):\n"
-		for _, sk := range skills {
-			if sk.Enabled {
-				sb += fmt.Sprintf("- %s: %s (file: %s)\n", sk.Name, sk.Description, filepath.Join(n.cfg.DataDir, "skills", sk.Name, "SKILL.md"))
-			}
-		}
-		sections = append(sections, ai.SystemSection{Category: agent.CatSkills, Content: sb})
-	}
-
-	// Inject Runner OS / Shell / Workspace Meta Context (and optional AGENTS.md)
-	metaText := fmt.Sprintf("Runner ID: %s\nOS/Arch: %s/%s\nShell: %s\nWorkspace: %s\nDate: %s",
-		n.cfg.RunnerID, runtime.GOOS, runtime.GOARCH, tools.DefaultShellName(), workDir, time.Now().Format("2006-01-02"))
-	if agentsMD, err := os.ReadFile(filepath.Join(workDir, "AGENTS.md")); err == nil && len(agentsMD) > 0 {
-		if len(agentsMD) > 16384 {
-			agentsMD = agentsMD[:16384]
-		}
-		metaText += "\n\n# Workspace AGENTS.md\n" + string(agentsMD)
-	}
-	sections = append(sections, ai.SystemSection{Category: agent.CatMetaContext, Content: metaText})
+	// Build System Sections (stable cached core + Skills + MCP + volatile meta context)
+	sections := buildPromptSections(parentCtx, n, sessRec, workDir, triggerSource)
 
 	sessionTools := tools.DefaultCodingTools()
 	var hooks agent.Hooks
@@ -322,6 +302,54 @@ func (n *Node) ExecutePrompt(
 	runCtx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
+	// ZCode 30ms Frame Coalescer: first streaming delta flushes eagerly for snappy TTFT;
+	// subsequent adjacent deltas coalesce within 30ms windows; any lifecycle/control event flushes pending first!
+	var coalMu sync.Mutex
+	var pendingEv *agent.Event
+	var flushTimer *time.Timer
+	firstDeltaSent := false
+
+	emitRaw := func(ev agent.Event) {
+		type enrichedEvent struct {
+			agent.Event
+			SessionMeta *store.SessionRecord `json:"session_meta,omitempty"`
+		}
+		var metaPtr *store.SessionRecord
+		if ev.Type == agent.EventAgentStart {
+			cp := *sessRec
+			metaPtr = &cp
+		}
+		var hashes []string
+		if ev.Telemetry != nil {
+			if ev.Telemetry.SystemPromptBlobHash != "" {
+				hashes = append(hashes, ev.Telemetry.SystemPromptBlobHash)
+			}
+			if ev.Telemetry.RawTraceBlobHash != "" {
+				hashes = append(hashes, ev.Telemetry.RawTraceBlobHash)
+			}
+		}
+		raw, _ := json.Marshal(enrichedEvent{Event: ev, SessionMeta: metaPtr})
+		n.recordAndEmitSessionEvent(context.Background(), sessRec.ID, ev.TurnIdx, string(ev.Type), raw, hashes)
+	}
+
+	flushPendingLocked := func() {
+		if flushTimer != nil {
+			flushTimer.Stop()
+			flushTimer = nil
+		}
+		if pendingEv != nil {
+			evToEmit := *pendingEv
+			pendingEv = nil
+			emitRaw(evToEmit)
+		}
+	}
+
+	defer func() {
+		coalMu.Lock()
+		flushPendingLocked()
+		coalMu.Unlock()
+	}()
+
 	loop := agent.NewLoop(agent.LoopConfig{
 		SessionID:       sessRec.ID,
 		RunnerID:        n.cfg.RunnerID,
@@ -341,26 +369,44 @@ func (n *Node) ExecutePrompt(
 		Hooks:           hooks,
 		Store:           n.store,
 		OnEvent: func(ev agent.Event) {
-			type enrichedEvent struct {
-				agent.Event
-				SessionMeta *store.SessionRecord `json:"session_meta,omitempty"`
-			}
-			var metaPtr *store.SessionRecord
-			if ev.Type == agent.EventAgentStart {
-				cp := *sessRec
-				metaPtr = &cp
-			}
-			var hashes []string
-			if ev.Telemetry != nil {
-				if ev.Telemetry.SystemPromptBlobHash != "" {
-					hashes = append(hashes, ev.Telemetry.SystemPromptBlobHash)
+			coalMu.Lock()
+			defer coalMu.Unlock()
+
+			isCoalescible := ev.Type == agent.EventMessageUpdate || ev.Type == agent.EventToolExecutionUpdate
+			if !isCoalescible {
+				flushPendingLocked()
+				if ev.Type == agent.EventMessageStart {
+					firstDeltaSent = false
 				}
-				if ev.Telemetry.RawTraceBlobHash != "" {
-					hashes = append(hashes, ev.Telemetry.RawTraceBlobHash)
-				}
+				emitRaw(ev)
+				return
 			}
-			raw, _ := json.Marshal(enrichedEvent{Event: ev, SessionMeta: metaPtr})
-			n.recordAndEmitSessionEvent(context.Background(), sessRec.ID, ev.TurnIdx, string(ev.Type), raw, hashes)
+
+			// Eager first delta for instant TTFT feel
+			if !firstDeltaSent {
+				firstDeltaSent = true
+				emitRaw(ev)
+				return
+			}
+
+			if pendingEv != nil &&
+				pendingEv.Type == ev.Type &&
+				pendingEv.TurnIdx == ev.TurnIdx &&
+				pendingEv.DeltaKind == ev.DeltaKind &&
+				pendingEv.ToolCallID == ev.ToolCallID &&
+				len(pendingEv.Delta)+len(ev.Delta) <= 8192 {
+				pendingEv.Delta += ev.Delta
+				return
+			}
+
+			flushPendingLocked()
+			evCopy := ev
+			pendingEv = &evCopy
+			flushTimer = time.AfterFunc(30*time.Millisecond, func() {
+				coalMu.Lock()
+				defer coalMu.Unlock()
+				flushPendingLocked()
+			})
 		},
 	}, history)
 
@@ -377,11 +423,134 @@ func (n *Node) ExecutePrompt(
 	}()
 
 	var blocks []ai.ContentBlock
-	if p.Text != "" {
-		blocks = append(blocks, ai.TextBlock(p.Text))
+	if modelText != "" {
+		blocks = append(blocks, ai.TextBlock(modelText))
 	}
 	blocks = append(blocks, p.Images...)
 	userMsg := ai.Message{Role: ai.RoleUser, Content: blocks}
 
 	return loop.Run(runCtx, &userMsg)
+}
+
+// buildUserTurnText splits a raw prompt into a clean display/title label and the
+// model-facing text. A leading `/goal ` is stripped for the title and the
+// objective is wrapped in structured goal framing for the model.
+func buildUserTurnText(raw string) (title, modelText string) {
+	display := raw
+	modelText = raw
+
+	if objective, isGoal := prompts.ParseGoalCommand(raw); isGoal {
+		display = prompts.GoalDisplaySummary(objective)
+		modelText = prompts.FormatGoalTurnPrompt(objective)
+	}
+	if strings.TrimSpace(display) == "" {
+		display = "Session"
+	}
+
+	title = display
+	if runes := []rune(title); len(runes) > 48 {
+		title = string(runes[:48]) + "..."
+	}
+	return title, modelText
+}
+
+// buildPromptSections assembles the ordered system sections for a session. Child
+// sessions use the subagent prompt builder; everything else uses the main agent.
+// Skills and MCP namespaces are collected here so the cached core stays stable.
+func buildPromptSections(ctx context.Context, n *Node, sessRec *store.SessionRecord, workDir, triggerSource string) []ai.SystemSection {
+	opts := prompts.SessionOptions{
+		RunnerID: n.cfg.RunnerID,
+		WorkDir:  workDir,
+		Now:      time.Now(),
+	}
+
+	isSubagent := sessRec.Depth > 0 || triggerSource == "subagent"
+	if isSubagent {
+		opts.SubagentType = subagentRoleSlug(sessRec.AgentProfileSlug)
+	}
+	opts.CustomPrompt = agentProfilePrompt(ctx, n, sessRec.AgentProfileSlug)
+
+	opts.Skills = loadSkillInfos(ctx, n)
+	opts.MCPNamespaces = loadMCPNamespaceSummary(ctx, n)
+
+	return prompts.BuildSessionSections(opts)
+}
+
+// subagentRoleSlug maps a profile slug to a built-in role. Custom slugs are not
+// built-in roles, so they fall back to the generic worker prompt; the profile's
+// own instructions are still appended via the CustomPrompt option.
+func subagentRoleSlug(slug string) string {
+	if prompts.IsSubagentRole(slug) {
+		return slug
+	}
+	return prompts.SubagentWorker
+}
+
+func agentProfilePrompt(ctx context.Context, n *Node, slug string) string {
+	if slug == "" {
+		return ""
+	}
+	profiles, err := n.store.ListAgentProfiles(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, ap := range profiles {
+		if ap.Slug == slug {
+			return ap.SystemPrompt
+		}
+	}
+	return ""
+}
+
+func loadSkillInfos(ctx context.Context, n *Node) []prompts.SkillInfo {
+	skills, err := n.store.ListSkills(ctx)
+	if err != nil {
+		return nil
+	}
+	out := make([]prompts.SkillInfo, 0, len(skills))
+	for _, sk := range skills {
+		if !sk.Enabled {
+			continue
+		}
+		out = append(out, prompts.SkillInfo{
+			Name:        sk.Name,
+			Description: sk.Description,
+			Path:        filepath.Join(n.cfg.DataDir, "skills", sk.Name, "SKILL.md"),
+		})
+	}
+	return out
+}
+
+// loadMCPNamespaceSummary asks the extension builder for its live MCP namespace
+// summary when it exposes one. When extensions are attached but expose no
+// summary, it returns nothing because PrepareSession already injects the
+// mcp_tools section itself; only standalone runners fall back to the store.
+func loadMCPNamespaceSummary(ctx context.Context, n *Node) string {
+	type namespaceSummarizer interface {
+		MCPNamespaceSummary() string
+	}
+	if s, ok := n.cfg.Extensions.(namespaceSummarizer); ok {
+		return strings.TrimSpace(s.MCPNamespaceSummary())
+	}
+	if n.cfg.Extensions != nil {
+		return ""
+	}
+
+	servers, err := n.store.ListMCPServers(ctx)
+	if err != nil || len(servers) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("Enabled MCP namespaces are reachable lazily through the `codemode` tool via `searchTools`, `describeTool`, and `tools.<namespace>.<tool>`:\n")
+	for _, srv := range servers {
+		if !srv.Enabled {
+			continue
+		}
+		mode := srv.HostMode
+		if mode == "" {
+			mode = "local"
+		}
+		fmt.Fprintf(&sb, "- %s (%s)\n", srv.Name, mode)
+	}
+	return strings.TrimSpace(sb.String())
 }

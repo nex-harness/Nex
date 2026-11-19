@@ -72,7 +72,7 @@ export interface AppState {
 
   rightTabs: WorkbenchTab[];
   activeRightTabId: string;
-  bottomTerminals: Array<{ id: string; title: string; ptyId: string }>;
+  bottomTerminals: Array<{ id: string; title: string; ptyId: string; createdAt: number }>;
   activeBottomTermId: string;
 
   openSettings: (section?: SettingsSectionId) => void;
@@ -262,6 +262,62 @@ export const useNexStore = create<AppState>((set, get) => ({
       }
     });
 
+    // ZCode-style per-frame event coalescing buffer: at most ONE Zustand commit per animation frame!
+    const pendingEvents = new Map<string, { runnerId: string; rows: RawSessionEventRow[] }>();
+    let flushScheduled = false;
+
+    const flushPendingEvents = () => {
+      flushScheduled = false;
+      if (pendingEvents.size === 0) return;
+      const batch = Array.from(pendingEvents.entries());
+      pendingEvents.clear();
+
+      let shouldRefreshGit = false;
+      let shouldRefreshData = false;
+
+      set((state) => {
+        const nextStreams = { ...state.streams };
+        for (const [sid, group] of batch) {
+          let cur = nextStreams[sid] || emptyStreamState();
+          const prevApproval = cur.pendingApproval;
+          for (const raw of group.rows) {
+            cur = applySessionEvent(cur, group.runnerId, raw);
+            if (raw.event_type === 'tool_execution_end') shouldRefreshGit = true;
+            if (raw.event_type === 'agent_end') {
+              shouldRefreshGit = true;
+              shouldRefreshData = true;
+            }
+          }
+          if (cur.pendingApproval && cur.pendingApproval !== prevApproval) {
+            void hostBridge.notifyApprovalRequested({
+              sessionId: sid,
+              runnerName: group.runnerId,
+              toolName: cur.pendingApproval.toolName,
+            });
+          }
+          nextStreams[sid] = cur;
+        }
+        return { streams: nextStreams };
+      });
+
+      if (shouldRefreshGit) void get().refreshGitSummary(false);
+      if (shouldRefreshData) void get().refreshInitialData();
+    };
+
+    const scheduleFrameFlush = (immediate: boolean) => {
+      if (immediate) {
+        flushPendingEvents();
+        return;
+      }
+      if (flushScheduled) return;
+      flushScheduled = true;
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(flushPendingEvents);
+      } else {
+        setTimeout(flushPendingEvents, 16);
+      }
+    };
+
     wsClient.onFrame((env) => {
       if (env.type === 'runner.status') {
         void get().refreshInitialData();
@@ -272,24 +328,15 @@ export const useNexStore = create<AppState>((set, get) => ({
         const sid = raw.session_id || env.session_id || '';
         if (!sid) return;
         const rid = env.runner_id || get().selectedRunnerId;
-        set((state) => {
-          const prev = state.streams[sid] || emptyStreamState();
-          const updated = applySessionEvent(prev, rid, raw);
-          if (updated.pendingApproval && updated.pendingApproval !== prev.pendingApproval) {
-            void hostBridge.notifyApprovalRequested({
-              sessionId: sid,
-              runnerName: rid,
-              toolName: updated.pendingApproval.toolName,
-            });
-          }
-          return { streams: { ...state.streams, [sid]: updated } };
-        });
-        if (raw.event_type === 'tool_execution_end' || raw.event_type === 'agent_end') {
-          void get().refreshGitSummary(false);
-          if (raw.event_type === 'agent_end') {
-            void get().refreshInitialData();
-          }
+        let group = pendingEvents.get(sid);
+        if (!group) {
+          group = { runnerId: rid, rows: [] };
+          pendingEvents.set(sid, group);
         }
+        group.rows.push(raw);
+
+        const isHighFreqDelta = raw.event_type === 'message_update' || raw.event_type === 'tool_execution_update';
+        scheduleFrameFlush(!isHighFreqDelta);
       }
     });
 
@@ -643,7 +690,7 @@ export const useNexStore = create<AppState>((set, get) => ({
     const id = `bterm_${ptyId.slice(0, 8)}`;
     set((s) => ({
       showBottomPanel: true,
-      bottomTerminals: [...s.bottomTerminals, { id, title: 'Nex', ptyId }],
+      bottomTerminals: [...s.bottomTerminals, { id, title: 'Nex', ptyId, createdAt: Date.now() }],
       activeBottomTermId: id,
     }));
   },

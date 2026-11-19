@@ -16,6 +16,7 @@ import {
   FolderTree,
   GitPullRequest,
   Hand,
+  ListTodo,
   LoaderCircle,
   PanelLeft,
   PanelRight,
@@ -32,7 +33,7 @@ import {
   SquareTerminal,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { emptyStreamState } from '../core/reducer';
 import { useNexStore } from '../core/store';
 import { ChatTurnItem, ToolCallCard } from '../core/types';
@@ -297,6 +298,26 @@ function ToolSummaryRow({ tc, dense = true }: { tc: ToolCallCard; dense?: boolea
     );
   }
 
+  if (tc.name === 'todo_write' || tc.name === 'todo_read') {
+    const rawTodos = Array.isArray(args.todos) ? (args.todos as Array<{ content?: string; status?: string }>) : [];
+    const doneCount = rawTodos.filter((it) => it.status === 'completed').length;
+    const activeTodo = rawTodos.find((it) => it.status === 'in_progress') || rawTodos[0];
+    return (
+      <div className={`group/tool inline-flex max-w-full items-center gap-2 py-0.5 text-left ${rowClass}`}>
+        <ListTodo className="size-3.5 shrink-0 text-foreground-subtlest" />
+        <span className="shrink-0 font-medium text-foreground-subtle">
+          {locale === 'en-US' ? 'Updated plan' : '更新进度清单'}
+        </span>
+        {activeTodo?.content && <span className="min-w-0 truncate text-foreground-subtle">{activeTodo.content}</span>}
+        {rawTodos.length > 0 && (
+          <span className="shrink-0 font-mono text-ui-xs tabular-nums text-foreground-subtlest">
+            {doneCount}/{rawTodos.length}
+          </span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex max-w-full flex-col">
       <button
@@ -402,13 +423,22 @@ function ChangeSummaryCard({ item }: { item: ChatTurnItem }) {
   );
 }
 
+function cleanUserDisplayText(raw: string): string {
+  const goalMatch = /<untrusted_objective>\s*([\s\S]*?)\s*<\/untrusted_objective>/i.exec(raw);
+  if (goalMatch && goalMatch[1]) {
+    return `/goal ${goalMatch[1].trim()}`;
+  }
+  return raw.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, '').trim() || raw;
+}
+
 function UserBubble({ text }: { text: string }) {
   const locale = useNexStore((s) => s.locale);
   const setComposerText = useNexStore((s) => s.setComposerText);
   const [copied, setCopied] = useState(false);
+  const displayText = cleanUserDisplayText(text);
 
   const copy = () => {
-    void navigator.clipboard?.writeText(text);
+    void navigator.clipboard?.writeText(displayText);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1400);
   };
@@ -416,7 +446,7 @@ function UserBubble({ text }: { text: string }) {
   return (
     <div className="group flex flex-col items-end">
       <div className="max-w-xl whitespace-pre-wrap break-words rounded-2xl bg-black/[0.045] px-4 py-2.5 text-ui-base text-foreground dark:bg-white/[0.08]">
-        {text}
+        {displayText}
       </div>
       <div className="mt-0.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <button
@@ -992,42 +1022,88 @@ function Composer({
 }
 
 const WATERMARK_PATHS = ['M22 24h88L74 62H8z', 'M120 24h64l-44 96H82z', 'M120 24l44 96'];
+const EMPTY_STREAM = emptyStreamState();
+
+const MemoTurnItem = memo(function MemoTurnItemImpl({
+  item,
+  locale,
+  registerRef,
+}: {
+  item: ChatTurnItem;
+  locale: 'zh-CN' | 'en-US';
+  registerRef: (id: string, el: HTMLDivElement | null) => void;
+}) {
+  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const workExpanded = manualOpen ?? Boolean(item.streaming);
+
+  return (
+    <div
+      ref={(el) => registerRef(item.id, el)}
+      style={{ contain: 'layout style' }}
+      className={`flex flex-col ${item.role === 'user' ? 'items-end' : 'items-start'}`}
+    >
+      {item.role === 'user' ? (
+        <UserBubble text={item.text} />
+      ) : (
+        <div className="min-w-0 w-full space-y-2.5">
+          {(item.thinking || item.toolCalls.length > 0) && (
+            <WorkGroup
+              item={item}
+              locale={locale}
+              open={workExpanded}
+              onToggle={() => setManualOpen((prev) => !(prev ?? Boolean(item.streaming)))}
+            />
+          )}
+
+          {item.text && <MarkdownRenderer content={item.text} streaming={Boolean(item.streaming)} />}
+
+          <ChangeSummaryCard item={item} />
+
+          {item.streaming && !item.thinking && item.toolCalls.length === 0 && !item.text && (
+            <div className="flex items-center gap-1.5 text-ui-xs text-foreground-subtlest">
+              <LoaderCircle className="size-3 animate-spin" />
+              <span>{locale === 'en-US' ? 'Generating…' : '正在流式生成...'}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
 
 export function ConversationPane() {
-  const {
-    locale,
-    sidebarVisible,
-    sidePaneVisible,
-    showBottomPanel,
-    runners,
-    models,
-    sessions,
-    selectedRunnerId,
-    selectedWorkspacePath,
-    selectedProviderId,
-    selectedModelId,
-    thinkingEffort,
-    permissionMode,
-    activeSessionId,
-    composerText,
-    streams,
-    pinnedSessionIds,
-    toggleSidebar,
-    toggleSidePane,
-    toggleBottomPanel,
-    setComposerText,
-    setSelectedRunner,
-    setSelectedModel,
-    setThinkingEffort,
-    setPermissionMode,
-    sendPromptOrSteer,
-    abortActiveSession,
-    togglePinSession,
-    renameSession,
-    archiveSession,
-  } = useNexStore();
+  const locale = useNexStore((s) => s.locale);
+  const sidebarVisible = useNexStore((s) => s.sidebarVisible);
+  const sidePaneVisible = useNexStore((s) => s.sidePaneVisible);
+  const showBottomPanel = useNexStore((s) => s.showBottomPanel);
+  const runners = useNexStore((s) => s.runners);
+  const models = useNexStore((s) => s.models);
+  const sessions = useNexStore((s) => s.sessions);
+  const selectedRunnerId = useNexStore((s) => s.selectedRunnerId);
+  const selectedWorkspacePath = useNexStore((s) => s.selectedWorkspacePath);
+  const selectedProviderId = useNexStore((s) => s.selectedProviderId);
+  const selectedModelId = useNexStore((s) => s.selectedModelId);
+  const thinkingEffort = useNexStore((s) => s.thinkingEffort);
+  const permissionMode = useNexStore((s) => s.permissionMode);
+  const activeSessionId = useNexStore((s) => s.activeSessionId);
+  const composerText = useNexStore((s) => s.composerText);
+  const pinnedSessionIds = useNexStore((s) => s.pinnedSessionIds);
+  const currentStream = useNexStore((s) => (s.activeSessionId ? s.streams[s.activeSessionId] || EMPTY_STREAM : EMPTY_STREAM));
 
-  const [workOpen, setWorkOpen] = useState<Record<string, boolean>>({});
+  const toggleSidebar = useNexStore((s) => s.toggleSidebar);
+  const toggleSidePane = useNexStore((s) => s.toggleSidePane);
+  const toggleBottomPanel = useNexStore((s) => s.toggleBottomPanel);
+  const setComposerText = useNexStore((s) => s.setComposerText);
+  const setSelectedRunner = useNexStore((s) => s.setSelectedRunner);
+  const setSelectedModel = useNexStore((s) => s.setSelectedModel);
+  const setThinkingEffort = useNexStore((s) => s.setThinkingEffort);
+  const setPermissionMode = useNexStore((s) => s.setPermissionMode);
+  const sendPromptOrSteer = useNexStore((s) => s.sendPromptOrSteer);
+  const abortActiveSession = useNexStore((s) => s.abortActiveSession);
+  const togglePinSession = useNexStore((s) => s.togglePinSession);
+  const renameSession = useNexStore((s) => s.renameSession);
+  const archiveSession = useNexStore((s) => s.archiveSession);
+
   const [headerMenu, setHeaderMenu] = useState<'session' | 'help' | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState('');
@@ -1035,30 +1111,54 @@ export function ConversationPane() {
   const [scrolledUp, setScrolledUp] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const followingRef = useRef(true);
   const headerMenuRef = useRef<HTMLDivElement | null>(null);
   const turnRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const currentStream = (activeSessionId && streams[activeSessionId]) || emptyStreamState();
   const activeSession = sessions.find((s) => s.id === activeSessionId);
-  const activeRunner = runners.find((r) => r.id === selectedRunnerId);
   const activeModelMeta = models.find((m) => m.provider_id === selectedProviderId && m.id === selectedModelId);
 
   const isDraft = currentStream.items.length === 0 && !activeSessionId;
   const items = currentStream.items;
 
+  const registerTurnRef = useCallback((id: string, el: HTMLDivElement | null) => {
+    turnRefs.current[id] = el;
+  }, []);
+
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
+    followingRef.current = true;
     setScrolledUp(false);
+    if (behavior === 'auto') {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior });
+    }
   }, []);
 
+  // Reset bottom-following intent when switching sessions
   useEffect(() => {
-    if (!scrolledUp) {
-      const el = scrollRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
-    }
-  }, [currentStream.items.length, currentStream.lastSeq, scrolledUp]);
+    followingRef.current = true;
+    setScrolledUp(false);
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [activeSessionId]);
+
+  // ZCode ResizeObserver Scroll Anchor: tokens never drive scroll directly; ResizeObserver sticks cleanly when height grows!
+  useEffect(() => {
+    const contentEl = contentRef.current;
+    const scrollEl = scrollRef.current;
+    if (!contentEl || !scrollEl || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      if (followingRef.current) {
+        scrollEl.scrollTop = scrollEl.scrollHeight;
+      }
+    });
+    ro.observe(contentEl);
+    return () => ro.disconnect();
+  }, [isDraft]);
 
   useEffect(() => {
     if (!headerMenu) return;
@@ -1074,11 +1174,6 @@ export function ConversationPane() {
 
   const sessionTitle = activeSession?.title || (locale === 'en-US' ? 'New task' : '新任务');
   const pinned = Boolean(activeSessionId && pinnedSessionIds[activeSessionId]);
-
-  const toggleWork = (item: ChatTurnItem) => {
-    const current = workOpen[item.id] ?? Boolean(item.streaming);
-    setWorkOpen((p) => ({ ...p, [item.id]: !current }));
-  };
 
   const commitRename = async () => {
     const next = renameDraft.trim();
@@ -1316,9 +1411,20 @@ export function ConversationPane() {
         <div
           ref={scrollRef}
           data-testid="chat-stream"
+          onWheelCapture={(e) => {
+            if (e.deltaY < 0) {
+              followingRef.current = false;
+            }
+          }}
           onScroll={(e) => {
             const el = e.currentTarget;
-            setScrolledUp(el.scrollHeight - el.scrollTop - el.clientHeight > 120);
+            const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+            if (distFromBottom <= 48) {
+              followingRef.current = true;
+              if (scrolledUp) setScrolledUp(false);
+            } else if (!followingRef.current && !scrolledUp) {
+              setScrolledUp(true);
+            }
           }}
           className="absolute inset-0 overflow-y-auto px-4 py-5 sm:px-8"
         >
@@ -1384,41 +1490,9 @@ export function ConversationPane() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto max-w-3xl space-y-5">
+            <div ref={contentRef} className="mx-auto max-w-3xl space-y-5">
               {items.map((item) => (
-                <div
-                  key={item.id}
-                  ref={(el) => {
-                    turnRefs.current[item.id] = el;
-                  }}
-                  className={`flex flex-col ${item.role === 'user' ? 'items-end' : 'items-start'}`}
-                >
-                  {item.role === 'user' ? (
-                    <UserBubble text={item.text} />
-                  ) : (
-                    <div className="min-w-0 w-full space-y-2.5">
-                      {(item.thinking || item.toolCalls.length > 0) && (
-                        <WorkGroup
-                          item={item}
-                          locale={locale}
-                          open={workOpen[item.id] ?? Boolean(item.streaming)}
-                          onToggle={() => toggleWork(item)}
-                        />
-                      )}
-
-                      {item.text && <MarkdownRenderer content={item.text} />}
-
-                      <ChangeSummaryCard item={item} />
-
-                      {item.streaming && !item.thinking && item.toolCalls.length === 0 && (
-                        <div className="flex items-center gap-1.5 text-ui-xs text-foreground-subtlest">
-                          <LoaderCircle className="size-3 animate-spin" />
-                          <span>{locale === 'en-US' ? 'Generating…' : '正在流式生成...'}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <MemoTurnItem key={item.id} item={item} locale={locale} registerRef={registerTurnRef} />
               ))}
             </div>
           )}

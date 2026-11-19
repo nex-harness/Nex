@@ -29,7 +29,7 @@ func (t *WriteTool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
 		Name:        "write",
 		Category:    "system",
-		Description: "Create a new file or overwrite an existing file with exact content, creating parent directories if needed.",
+		Description: "Create a new file, or replace an existing file in full, with the exact `content` provided. Parent directories are created automatically and the write is atomic.\n\n- Use `write` only for new files or complete rewrites. For partial or targeted changes to an existing file, prefer `edit`, which preserves the rest of the file and returns a diff.\n- `content` must be the complete final file body; this tool does not append.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {

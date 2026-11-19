@@ -29,7 +29,7 @@ type SpawnRequest struct {
 	TargetRunnerID   string `json:"target_runner_id,omitempty"` // Phase 1: empty / local Runner; reserved for RemoteSpawner
 	AgentType        string `json:"agent_type"`                 // "explore" (read-only) | "worker" (read-write) | custom slug
 	Prompt           string `json:"prompt"`
-	Isolation        string `json:"isolation,omitempty"`        // "shared" (default) | "worktree"
+	Isolation        string `json:"isolation,omitempty"` // "shared" (default) | "worktree"
 	RunInBackground  bool   `json:"run_in_background,omitempty"`
 	WorkDir          string `json:"work_dir"`
 }
@@ -265,7 +265,7 @@ func (t *subagentTool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
 		Name:        "subagent",
 		Category:    "system",
-		Description: "Spawn an isolated concurrent subagent ('explore' for fast read-only search, 'worker' for code edits with optional 'worktree' git isolation).",
+		Description: "Delegate a self-contained task to a concurrent subagent running in its own session.\n\n- Use `subagent` for broad, multi-file exploration or for parallel independent tasks; it is usually not worth it for a single file or a quick lookup you could do directly.\n- `agent_type: \"explore\"` is read-only and optimized for fast search. `agent_type: \"worker\"` can edit code; add `isolation: \"worktree\"` for parallel edits that must not conflict.\n- Give the subagent a self-contained prompt: it cannot see this conversation, so include the goal, relevant paths, and constraints.\n- The subagent's report is NOT shown to the user directly. Relay the key findings in your own final answer.\n- Use `send_message` to steer a running subagent or continue a finished one.\n- Never fabricate a subagent's background result; if it has not reported yet, say so.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -316,7 +316,7 @@ func (t *sendMessageTool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
 		Name:        "send_message",
 		Category:    "system",
-		Description: "Send a steering message to a running background subagent or resume a completed subagent by agent_id.",
+		Description: "Send a follow-up or steering message to a subagent by `agent_id`.\n\n- If the subagent is still running, the message is delivered as steering that redirects its current work.\n- If it has finished, the message resumes that subagent's existing session with its full history, instead of spawning a new one.\n- Always relay the resulting findings to the user yourself; the subagent's output is not surfaced to them directly.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {

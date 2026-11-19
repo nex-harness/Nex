@@ -167,3 +167,117 @@ func TestGlobAndGrepRespectGitignore(t *testing.T) {
 		t.Fatalf("expected matches in grep:\n%s", sRes.Output)
 	}
 }
+
+func TestTodoWriteAndReadRoundTrip(t *testing.T) {
+	store := NewTodoStore()
+	wt := NewTodoWriteTool(store)
+	rt := NewTodoReadTool(store)
+
+	// Fresh store reads as an empty list, never null or an error.
+	emptyRes, err := rt.Execute(context.Background(), "", nil, nil)
+	if err != nil || emptyRes.IsError {
+		t.Fatalf("todo_read on empty store failed: %+v err=%v", emptyRes, err)
+	}
+	if strings.TrimSpace(emptyRes.Output) != "[]" {
+		t.Fatalf("expected empty JSON array, got %q", emptyRes.Output)
+	}
+
+	writeRes, err := wt.Execute(context.Background(), "", json.RawMessage(`{
+		"todos": [
+			{"content": "  read the spec  ", "status": "completed", "priority": "high"},
+			{"content": "implement builder", "status": "in_progress", "priority": "high"},
+			{"content": "add tests", "status": "pending", "priority": "low"},
+			{"content": "   ", "status": "pending", "priority": "low"}
+		]
+	}`), nil)
+	if err != nil || writeRes.IsError {
+		t.Fatalf("todo_write failed: %+v err=%v", writeRes, err)
+	}
+
+	items := store.Get()
+	if len(items) != 3 {
+		t.Fatalf("expected blank entries to be dropped, got %d: %+v", len(items), items)
+	}
+	if items[0].Content != "read the spec" {
+		t.Fatalf("expected content to be trimmed, got %q", items[0].Content)
+	}
+	if got := writeRes.Metadata["completed"]; got != 1 {
+		t.Fatalf("expected 1 completed, got %v", got)
+	}
+	if got := writeRes.Metadata["in_progress"]; got != 1 {
+		t.Fatalf("expected 1 in_progress, got %v", got)
+	}
+	if got := writeRes.Metadata["pending"]; got != 1 {
+		t.Fatalf("expected 1 pending, got %v", got)
+	}
+
+	// Normalization: unknown status becomes pending, unknown priority becomes medium.
+	_, _ = wt.Execute(context.Background(), "", json.RawMessage(`{
+		"todos": [{"content": "unknowns", "status": "blocked", "priority": "urgent"}]
+	}`), nil)
+	items = store.Get()
+	if len(items) != 1 || items[0].Status != "pending" || items[0].Priority != "medium" {
+		t.Fatalf("expected status/priority normalization, got %+v", items)
+	}
+
+	// Each call replaces the whole list rather than appending.
+	readRes, err := rt.Execute(context.Background(), "", nil, nil)
+	if err != nil || readRes.IsError {
+		t.Fatalf("todo_read failed: %+v err=%v", readRes, err)
+	}
+	if !strings.Contains(readRes.Output, "unknowns") || strings.Contains(readRes.Output, "implement builder") {
+		t.Fatalf("expected list replacement semantics, got:\n%s", readRes.Output)
+	}
+}
+
+func TestTodoWriteRejectsInvalidArguments(t *testing.T) {
+	wt := NewTodoWriteTool(NewTodoStore())
+	res, err := wt.Execute(context.Background(), "", json.RawMessage(`{"todos": "not-an-array"}`), nil)
+	if err != nil {
+		t.Fatalf("expected soft error result, got hard error: %v", err)
+	}
+	if !res.IsError || !strings.Contains(res.Output, "invalid todo_write arguments") {
+		t.Fatalf("expected invalid-arguments error, got %+v", res)
+	}
+}
+
+func TestToolDefinitionsKeepNamesAndSchemas(t *testing.T) {
+	// Tool names and JSON schema property names are part of the model-facing
+	// contract; other subsystems and clients depend on them staying stable.
+	want := map[string][]string{
+		"read":       {"file_path", "offset", "limit"},
+		"write":      {"file_path", "content"},
+		"edit":       {"file_path", "old_string", "new_string", "replace_all"},
+		"bash":       {"command", "description", "timeout_ms", "cwd"},
+		"grep":       {"pattern", "path", "include", "case_insensitive", "limit"},
+		"glob":       {"pattern", "path", "limit"},
+		"todo_write": {"todos"},
+		"todo_read":  {},
+	}
+	todoStore := NewTodoStore()
+	all := []Tool{
+		NewReadTool(), NewWriteTool(), NewEditTool(), NewBashTool(),
+		NewGrepTool(), NewGlobTool(), NewTodoWriteTool(todoStore), NewTodoReadTool(todoStore),
+	}
+	for _, tool := range all {
+		def := tool.Definition()
+		if def.Name != tool.Name() {
+			t.Fatalf("Definition().Name %q != Name() %q", def.Name, tool.Name())
+		}
+		props, ok := want[def.Name]
+		if !ok {
+			t.Fatalf("unexpected tool %q", def.Name)
+		}
+		if strings.TrimSpace(def.Description) == "" {
+			t.Fatalf("tool %q has an empty description", def.Name)
+		}
+		if !json.Valid(def.InputSchema) {
+			t.Fatalf("tool %q has an invalid input schema: %s", def.Name, def.InputSchema)
+		}
+		for _, p := range props {
+			if !strings.Contains(string(def.InputSchema), `"`+p+`"`) {
+				t.Fatalf("tool %q schema is missing property %q: %s", def.Name, p, def.InputSchema)
+			}
+		}
+	}
+}

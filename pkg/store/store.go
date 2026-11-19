@@ -53,6 +53,9 @@ func Open(dataDir string) (*Store, error) {
 	_ = os.Chmod(mainPath, 0o600)
 	_ = os.Chmod(archivePath, 0o600)
 
+	// Compact any legacy per-token transient delta rows so historical sessions open instantaneously.
+	_, _ = mainDB.Exec(`DELETE FROM session_events WHERE event_type IN ('message_update', 'tool_execution_update')`)
+
 	return &Store{
 		dataDir:     dataDir,
 		mainPath:    mainPath,

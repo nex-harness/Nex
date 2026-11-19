@@ -92,9 +92,9 @@ func (t *Tool) IsReadOnly(_ json.RawMessage) bool {
 
 func (t *Tool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
-		Name:     "codemode",
-		Category: "mcp",
-		Description: "Run async JavaScript in an isolated zero-privilege memory sandbox to discover and orchestrate MCP tools concurrently via searchTools(query), describeTool(name), and await tools.<namespace>.<tool>(args). Filter intermediate data inside the script and return concise results.",
+		Name:        "codemode",
+		Category:    "mcp",
+		Description: "Run async JavaScript in an isolated, zero-privilege goja sandbox to discover and orchestrate MCP tools concurrently.\n\n- The sandbox has no filesystem, process, or network access of its own. Its only capabilities are `searchTools(query)`, `describeTool(name)`, `tools.<namespace>.<tool>(args)` (async), `callTool(\"<ns>.<tool>\", args)`, `text(value)`, and `store(k,v)` / `load(k)` for values that must survive across calls.\n- Discover first: call `searchTools` to find candidate tools, then `describeTool` for exact argument schemas before invoking them.\n- Run independent calls in parallel with `Promise.all([tools.ns.a(...), tools.ns.b(...)])`, then filter and reduce the noisy JSON inside the script and return only a concise result.\n- Every inner `tools.*` call still passes through plugin hooks and the permission system; a denial surfaces as a rejected promise, so handle it rather than retrying blindly.\n- Optional first line `// @options: {\"timeout_ms\": 30000, \"max_output_bytes\": 16384}` tunes limits for heavier scripts.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {

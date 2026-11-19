@@ -1,5 +1,5 @@
 import { Check, Copy, SquareTerminal, WrapText } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { memo, type ReactNode, useState } from 'react';
 import { useNexStore } from '../core/store';
 
 const KEYWORDS = new Set([
@@ -183,7 +183,7 @@ function highlightCode(code: string): ReactNode {
   );
 }
 
-function CodeBlock({ lang, code }: { lang: string; code: string }) {
+function CodeBlock({ lang, code, streaming = false }: { lang: string; code: string; streaming?: boolean }) {
   const locale = useNexStore((s) => s.locale);
   const [copied, setCopied] = useState(false);
   const [wrap, setWrap] = useState(false);
@@ -238,7 +238,8 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
             wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
           }`}
         >
-          <code>{highlightCode(code)}</code>
+          {/* ZCode Streaming Markdown Rule: disable expensive regex syntax highlighting while actively streaming! */}
+          <code>{streaming || code.length > 24000 ? code : highlightCode(code)}</code>
         </pre>
       </div>
     </div>
@@ -295,7 +296,13 @@ function splitTableCells(line: string): string[] {
   return t.split('|').map((c) => c.trim());
 }
 
-export function MarkdownRenderer({ content }: { content: string }) {
+export const MarkdownRenderer = memo(function MarkdownRendererImpl({
+  content,
+  streaming = false,
+}: {
+  content: string;
+  streaming?: boolean;
+}) {
   if (!content) return null;
 
   const blocks: ReactNode[] = [];
@@ -450,13 +457,23 @@ export function MarkdownRenderer({ content }: { content: string }) {
     if (match.index > lastIndex) {
       renderProseSegment(content.slice(lastIndex, match.index));
     }
-    blocks.push(<CodeBlock key={keySeq++} lang={match[1]} code={match[2].replace(/\n$/, '')} />);
+    blocks.push(
+      <CodeBlock key={keySeq++} lang={match[1]} code={match[2].replace(/\n$/, '')} streaming={streaming} />,
+    );
     lastIndex = match.index + match[0].length;
   }
 
   if (lastIndex < content.length) {
-    renderProseSegment(content.slice(lastIndex));
+    const tail = content.slice(lastIndex);
+    // Tolerate unclosed fenced code blocks mid-stream (ZCode incomplete-markdown rule)
+    const unclosedFence = /^([\s\S]*?)```([a-zA-Z0-9_-]*)\n([\s\S]*)$/.exec(tail);
+    if (unclosedFence) {
+      if (unclosedFence[1]) renderProseSegment(unclosedFence[1]);
+      blocks.push(<CodeBlock key={keySeq++} lang={unclosedFence[2]} code={unclosedFence[3]} streaming={true} />);
+    } else {
+      renderProseSegment(tail);
+    }
   }
 
   return <div className="min-w-0 space-y-1">{blocks}</div>;
-}
+});

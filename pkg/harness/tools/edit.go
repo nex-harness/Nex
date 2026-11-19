@@ -32,7 +32,7 @@ func (t *EditTool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
 		Name:        "edit",
 		Category:    "system",
-		Description: "Replace a specific snippet in a file. Automatically preserves UTF-8 BOM and CRLF/LF line endings, and emits a unified diff.",
+		Description: "Replace an exact string in a file. Preserves the file's UTF-8 BOM and its CRLF/LF line endings, and returns a unified diff.\n\n- `old_string` must match the file exactly and be unique; if it appears more than once, include more surrounding context or set `replace_all: true`.\n- Strip the `read` line-number prefix (for example `6d\\t` or `     6\\t`) before matching: match on the raw line text, not the numbered display.\n- `new_string` is the replacement text; set it to an empty string to delete the matched snippet.\n- Do NOT re-read the file immediately after editing to verify; the returned diff and line counts are the verification.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {

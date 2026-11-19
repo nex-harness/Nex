@@ -22,10 +22,10 @@ type IgnoreMatcher struct {
 }
 
 type ignoreRule struct {
-	negate  bool
-	dirOnly bool
+	negate   bool
+	dirOnly  bool
 	anchored bool
-	re      *regexp.Regexp
+	re       *regexp.Regexp
 }
 
 // LoadIgnoreMatcher parses root .gitignore (if present) plus standard VCS ignores (.git).
@@ -194,7 +194,7 @@ func (t *GlobTool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
 		Name:        "glob",
 		Category:    "system",
-		Description: "Find files by glob pattern (e.g. '**/*.go', 'pkg/**/*.ts'), automatically respecting .gitignore.",
+		Description: "Find files by glob pattern (for example `**/*.go` or `pkg/**/*.ts`). Fast, pure-Go traversal that automatically respects `.gitignore` and skips `.git`.\n\n- Use `glob` to locate files; prefer it over shell `find`.\n- Add `path` to scope the search to a subdirectory, and `limit` to cap large result sets.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -304,7 +304,7 @@ func (t *GrepTool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
 		Name:        "grep",
 		Category:    "system",
-		Description: "Search file contents using regular expressions, skipping binary files and .gitignore paths.",
+		Description: "Search file contents with a regular expression. Returns `path:line: text` matches, automatically skips binary files, large files, `.git`, and `.gitignore` paths.\n\n- Prefer `grep` over shell `grep`/`rg`: it is fast, pure Go, and needs no external binary.\n- Use `include` to filter by filename (for example `*.go`), `path` to scope to a directory or single file, and `case_insensitive` when casing should not matter.\n- Narrow with a specific pattern; if a search is noisy, search the directory you actually care about.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {

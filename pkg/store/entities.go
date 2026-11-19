@@ -366,11 +366,12 @@ func (s *Store) AppendSessionEvent(ctx context.Context, ev SessionEvent, enqueue
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if ev.Seq == 0 {
-		var maxSeq sql.NullInt64
-		if err := tx.QueryRowContext(ctx, `SELECT MAX(seq) FROM session_events WHERE session_id = ?`, ev.SessionID).Scan(&maxSeq); err != nil {
-			return ev, err
-		}
+	var maxSeq sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT MAX(seq) FROM session_events WHERE session_id = ?`, ev.SessionID).Scan(&maxSeq); err != nil {
+		return ev, err
+	}
+	// Guarantee strictly monotonic sequence numbers even if Runner's local seq counter started lower than Server's history!
+	if ev.Seq == 0 || ev.Seq <= uint64(maxSeq.Int64) {
 		ev.Seq = uint64(maxSeq.Int64) + 1
 	}
 	if ev.CreatedAt == 0 {

@@ -50,25 +50,28 @@ interface ProjectGroup {
   sessions: SessionRecord[];
 }
 
+function SessionRunningDot({ sessionId, status }: { sessionId: string; status: string }) {
+  const running = useNexStore((s) => Boolean(s.streams[sessionId]?.running) || status === 'running');
+  if (!running) return null;
+  return <span className="size-1.5 animate-pulse rounded-full bg-brand-blue" />;
+}
+
 export function ProjectSidebar() {
-  const {
-    locale,
-    mainView,
-    settingsSection,
-    sessions,
-    activeSessionId,
-    streams,
-    pinnedSessionIds,
-    startNewSession,
-    selectSession,
-    renameSession,
-    archiveSession,
-    deleteSession,
-    togglePinSession,
-    toggleSidebar,
-    openSettings,
-    closeSettings,
-  } = useNexStore();
+  const locale = useNexStore((s) => s.locale);
+  const mainView = useNexStore((s) => s.mainView);
+  const settingsSection = useNexStore((s) => s.settingsSection);
+  const sessions = useNexStore((s) => s.sessions);
+  const activeSessionId = useNexStore((s) => s.activeSessionId);
+  const pinnedSessionIds = useNexStore((s) => s.pinnedSessionIds);
+  const startNewSession = useNexStore((s) => s.startNewSession);
+  const selectSession = useNexStore((s) => s.selectSession);
+  const renameSession = useNexStore((s) => s.renameSession);
+  const archiveSession = useNexStore((s) => s.archiveSession);
+  const deleteSession = useNexStore((s) => s.deleteSession);
+  const togglePinSession = useNexStore((s) => s.togglePinSession);
+  const toggleSidebar = useNexStore((s) => s.toggleSidebar);
+  const openSettings = useNexStore((s) => s.openSettings);
+  const closeSettings = useNexStore((s) => s.closeSettings);
 
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -161,7 +164,6 @@ export function ProjectSidebar() {
 
     const active = mainView === 'workspace' && sess.id === activeSessionId;
     const pinned = Boolean(pinnedSessionIds[sess.id]);
-    const isRunning = streams[sess.id]?.running || sess.status === 'running';
 
     return (
       <div
@@ -179,7 +181,7 @@ export function ProjectSidebar() {
         </span>
 
         <span className="flex shrink-0 items-center gap-1.5 text-ui-xs tabular-nums text-foreground-subtlest group-hover:hidden">
-          {isRunning && <span className="size-1.5 animate-pulse rounded-full bg-brand-blue" />}
+          <SessionRunningDot sessionId={sess.id} status={sess.status} />
           {formatRelativeShort(sess.last_active_at || sess.updated_at)}
         </span>
 
@@ -237,7 +239,6 @@ export function ProjectSidebar() {
     if (editingId === sess.id) return renderEditingRow(sess);
 
     const active = mainView === 'workspace' && sess.id === activeSessionId;
-    const isRunning = streams[sess.id]?.running || sess.status === 'running';
 
     return (
       <div
@@ -266,7 +267,7 @@ export function ProjectSidebar() {
         </span>
 
         <span className="flex shrink-0 items-center gap-1.5 text-ui-xs tabular-nums text-foreground-subtlest">
-          {isRunning && <span className="size-1.5 animate-pulse rounded-full bg-brand-blue" />}
+          <SessionRunningDot sessionId={sess.id} status={sess.status} />
           {formatRelativeShort(sess.last_active_at || sess.updated_at)}
         </span>
       </div>

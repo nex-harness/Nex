@@ -174,6 +174,23 @@ export interface TurnTelemetry {
   recorded_at: number;
 }
 
+export interface TodoItem {
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  priority?: 'high' | 'medium' | 'low';
+}
+
+export interface GoalEntry {
+  id: string;
+  index: number;
+  title: string;
+  status: 'running' | 'completed';
+  startedAt: number;
+  completedAt?: number;
+  completedTodos: number;
+  totalTodos: number;
+}
+
 export interface ToolCallCard {
   id: string;
   name: string;

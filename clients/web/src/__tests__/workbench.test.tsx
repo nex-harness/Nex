@@ -117,4 +117,230 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     fireEvent.click(screen.getByTestId('settings-back-btn'));
     expect(screen.getByTestId('chat-stream')).toBeTruthy();
   });
+
+  it('preserves frozen history item object references across high-frequency streaming deltas (ZCode O(tail) rule)', () => {
+    let st = emptyStreamState();
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 1,
+      turn_idx: 1,
+      event_type: 'message_end',
+      payload: { message: { role: 'user', content: [{ type: 'text', text: 'hello' }] } },
+    });
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 2,
+      turn_idx: 1,
+      event_type: 'message_end',
+      payload: { message: { role: 'assistant', content: [{ type: 'text', text: 'first reply' }] } },
+    });
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 3,
+      turn_idx: 2,
+      event_type: 'message_end',
+      payload: { message: { role: 'user', content: [{ type: 'text', text: '再执行一遍' }] } },
+    });
+
+    const frozenTurn0 = st.items[0];
+    const frozenTurn1 = st.items[1];
+    const frozenTurn2 = st.items[2];
+
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 4,
+      turn_idx: 2,
+      event_type: 'agent_start',
+      payload: {},
+    });
+
+    for (let i = 0; i < 100; i++) {
+      st = applySessionEvent(st, 'run_1', {
+        session_id: 's1',
+        seq: 0, // transient live delta
+        turn_idx: 2,
+        event_type: 'message_update',
+        payload: { delta_kind: 'text', delta: `chunk_${i} ` },
+      });
+    }
+
+    // All historical turns MUST retain identical object references so React.memo skips them in O(1)!
+    expect(st.items[0]).toBe(frozenTurn0);
+    expect(st.items[1]).toBe(frozenTurn1);
+    expect(st.items[2]).toBe(frozenTurn2);
+    expect(st.items[3].text).toContain('chunk_99');
+  });
+
+  it('populates state.todos strictly from todo_write tool calls (and ignores read/bash noise)', () => {
+    let st = emptyStreamState();
+
+    // Non-todo tool activity must NEVER leak into Progress.
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 1,
+      turn_idx: 1,
+      event_type: 'tool_execution_end',
+      payload: {
+        tool_call_id: 'call_read',
+        tool_name: 'read',
+        tool_result: { output: 'a/b/c.ts', is_error: false },
+      },
+    });
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 2,
+      turn_idx: 1,
+      event_type: 'tool_execution_end',
+      payload: {
+        tool_call_id: 'call_bash',
+        tool_name: 'bash',
+        tool_result: { output: 'ok', is_error: false },
+      },
+    });
+    expect(st.todos).toHaveLength(0);
+
+    // todo_write replaces the whole list from arguments.todos.
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 3,
+      turn_idx: 1,
+      event_type: 'tool_execution_start',
+      payload: {
+        tool_call_id: 'call_todo_1',
+        tool_name: 'todo_write',
+        tool_args: {
+          todos: [
+            { content: 'Explore layout', status: 'completed', priority: 'high' },
+            { content: 'Implement panel', status: 'in_progress', priority: 'medium' },
+            { content: 'Run tests', status: 'pending', priority: 'low' },
+          ],
+        },
+      },
+    });
+    expect(st.todos).toHaveLength(3);
+    expect(st.todos[1]).toEqual({ content: 'Implement panel', status: 'in_progress', priority: 'medium' });
+
+    // CamelCase TodoWrite arrives through message_end tool_call blocks.
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 4,
+      turn_idx: 1,
+      event_type: 'message_end',
+      payload: {
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_call',
+              tool_call_id: 'call_todo_2',
+              tool_name: 'TodoWrite',
+              arguments: {
+                todos: [
+                  { content: 'Explore layout', status: 'completed' },
+                  { content: 'Implement panel', status: 'completed' },
+                  { content: 'Run tests', status: 'completed' },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    });
+    expect(st.todos.filter((t) => t.status === 'completed')).toHaveLength(3);
+
+    // tool_result.metadata.todos wins on tool_execution_end.
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 5,
+      turn_idx: 1,
+      event_type: 'tool_execution_end',
+      payload: {
+        tool_call_id: 'call_todo_2',
+        tool_name: 'TodoWrite',
+        tool_result: {
+          output: 'Updated todo list',
+          metadata: { todos: [{ content: 'Only one left', status: 'pending' }] },
+        },
+      },
+    });
+    expect(st.todos).toHaveLength(1);
+    expect(st.todos[0].content).toBe('Only one left');
+  });
+
+  it('populates state.goals from /goal user messages and completes them on agent_end', () => {
+    let st = emptyStreamState();
+
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 1,
+      turn_idx: 1,
+      event_type: 'message_end',
+      payload: { message: { role: 'user', content: [{ type: 'text', text: '普通消息，不应产生 Goal' }] } },
+    });
+    expect(st.goals).toHaveLength(0);
+
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 2,
+      turn_idx: 1,
+      event_type: 'message_end',
+      payload: { message: { role: 'user', content: [{ type: 'text', text: '/goal 完成 SettingsPage 对齐' }] } },
+    });
+    expect(st.goals).toHaveLength(1);
+    expect(st.goals[0].index).toBe(1);
+    expect(st.goals[0].title).toBe('完成 SettingsPage 对齐');
+    expect(st.goals[0].status).toBe('running');
+    expect(st.goals[0].startedAt).toBeGreaterThan(0);
+
+    // todo_write progress syncs onto the active goal iteration.
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 3,
+      turn_idx: 1,
+      event_type: 'tool_execution_end',
+      payload: {
+        tool_call_id: 'call_todo',
+        tool_name: 'todo_write',
+        tool_result: {
+          output: 'ok',
+          metadata: {
+            todos: [
+              { content: 'a', status: 'completed' },
+              { content: 'b', status: 'pending' },
+            ],
+          },
+        },
+      },
+    });
+    expect(st.goals[0].completedTodos).toBe(1);
+    expect(st.goals[0].totalTodos).toBe(2);
+
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 4,
+      turn_idx: 1,
+      event_type: 'agent_end',
+      payload: {},
+    });
+    expect(st.goals[0].status).toBe('completed');
+    expect(st.goals[0].completedAt).toBeGreaterThan(0);
+
+    // A second objective appends iteration 2 wrapped in <untrusted_objective>.
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's1',
+      seq: 5,
+      turn_idx: 2,
+      event_type: 'message_end',
+      payload: {
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: '<untrusted_objective>Iteration 4</untrusted_objective>' }],
+        },
+      },
+    });
+    expect(st.goals).toHaveLength(2);
+    expect(st.goals[1].index).toBe(2);
+    expect(st.goals[1].title).toBe('Iteration 4');
+    expect(st.goals[1].status).toBe('running');
+  });
 });

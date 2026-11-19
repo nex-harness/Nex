@@ -159,6 +159,20 @@ func (s *Server) ingestRunnerSessionEvent(ctx context.Context, rc *runnerConn, e
 		return
 	}
 
+	// ZCode Persistence Rule: transient streaming deltas (message_update / tool_execution_update)
+	// are broadcast live in memory ONLY and never persisted as 1-char rows in SQLite!
+	if ev.EventType == "message_update" || ev.EventType == "tool_execution_update" {
+		if ev.CreatedAt == 0 {
+			ev.CreatedAt = time.Now().UnixMilli()
+		}
+		outEnv, _ := protocol.NewEnvelope(protocol.TypeSessionEvent, ev)
+		outEnv.SessionID = ev.SessionID
+		outEnv.RunnerID = rc.id
+		outEnv.Seq = ev.Seq
+		s.broadcastSessionEvent(ctx, ev.SessionID, outEnv)
+		return
+	}
+
 	// Ensure session row exists on Server (including offline Cron or Subagent sessions created on Runner!)
 	var evPayload struct {
 		SessionMeta *store.SessionRecord `json:"session_meta,omitempty"`

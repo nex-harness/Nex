@@ -22,9 +22,10 @@ const (
 )
 
 type bashArgs struct {
-	Command   string `json:"command"`
-	TimeoutMS int    `json:"timeout_ms,omitempty"`
-	Cwd       string `json:"cwd,omitempty"`
+	Command     string `json:"command"`
+	Description string `json:"description,omitempty"`
+	TimeoutMS   int    `json:"timeout_ms,omitempty"`
+	Cwd         string `json:"cwd,omitempty"`
 }
 
 // BashTool executes shell commands with streaming output and cross-platform process-tree cleanup.
@@ -40,11 +41,12 @@ func (t *BashTool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
 		Name:        "bash",
 		Category:    "system",
-		Description: "Execute a shell command in the workspace with streaming output and automatic process-tree cleanup on timeout or cancellation.",
+		Description: "Execute a shell command in the workspace. Streams output, enforces a timeout, and terminates the entire process tree on timeout or cancellation.\n\n- Prefer the dedicated tools when one fits: use `read`/`write`/`edit` for files and `grep`/`glob` for searching, instead of `cat`, `head`, `tail`, `sed`, `awk`, `grep`, or `find`.\n- Prefer absolute paths and set `cwd` rather than relying on the shell's current directory.\n- Always provide a concise `description` of what the command does (5-10 words).\n- Reserve `bash` for work the other tools cannot do: builds, tests, package managers, git, and process control.\n\n# Git\n- Never use interactive flags (`-i`, such as `git rebase -i` or `git add -i`); they are unsupported in this environment.\n- Use the `gh` CLI for GitHub operations such as pull requests and issues.\n- Commit or push only when the user asks. If you are on the default branch, create a branch first.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
 				"command": {"type": "string", "description": "Shell command to execute"},
+				"description": {"type": "string", "description": "Concise human-readable description of what this command does (5-10 words)"},
 				"timeout_ms": {"type": "integer", "description": "Timeout in milliseconds (default 120000, max 600000)"},
 				"cwd": {"type": "string", "description": "Optional working directory relative to workspace"}
 			},
