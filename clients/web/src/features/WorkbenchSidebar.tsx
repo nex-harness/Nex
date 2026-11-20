@@ -25,7 +25,7 @@ import { DirEntry, FilePreview, WorkbenchTab, WorkbenchTabKind } from '../core/t
 import { wsClient } from '../core/wsClient';
 import { formatMsg } from '../i18n/messages';
 import { GhosttyTerminal } from './GhosttyTerminal';
-import { MarkdownRenderer } from './MarkdownRenderer';
+import { highlightSourceLine, MarkdownRenderer } from './MarkdownRenderer';
 
 const TAB_ICON: Record<WorkbenchTabKind, ReactNode> = {
   new_tab: <Plus className="size-3.5" />,
@@ -59,12 +59,21 @@ export function WorkbenchSidebar() {
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const activeTab = rightTabs.find((t) => t.id === activeRightTabId) || rightTabs[0];
 
+  useEffect(() => {
+    if (!plusMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPlusMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [plusMenuOpen]);
+
   const menuItems: Array<{ kind: WorkbenchTabKind; label: string; icon: ReactNode }> = [
     { kind: 'new_tab', label: formatMsg(locale, 'sidePane.newTab'), icon: <Plus className="size-3.5" /> },
-    { kind: 'side_chat', label: 'Side conversation', icon: <MessageSquare className="size-3.5" /> },
-    { kind: 'review', label: 'Review', icon: <FileDiff className="size-3.5" /> },
-    { kind: 'files', label: 'Files', icon: <Folder className="size-3.5" /> },
-    { kind: 'terminal', label: 'Terminal', icon: <SquareTerminal className="size-3.5" /> },
+    { kind: 'side_chat', label: locale === 'en-US' ? 'Side conversation' : '辅助对话', icon: <MessageSquare className="size-3.5" /> },
+    { kind: 'review', label: locale === 'en-US' ? 'Review' : '审查', icon: <FileDiff className="size-3.5" /> },
+    { kind: 'files', label: locale === 'en-US' ? 'Files' : '文件', icon: <Folder className="size-3.5" /> },
+    { kind: 'terminal', label: locale === 'en-US' ? 'Terminal' : '终端', icon: <SquareTerminal className="size-3.5" /> },
   ];
 
   return (
@@ -98,7 +107,10 @@ export function WorkbenchSidebar() {
             {plusMenuOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setPlusMenuOpen(false)} />
-                <div className="absolute left-0 top-8 z-50 w-52 space-y-0.5 rounded-lg border border-border bg-menu p-1 shadow-md">
+                <div
+                  data-testid="workbench-plus-menu"
+                  className="zcode-popover-down absolute right-0 top-8 z-50 w-52 max-w-[calc(100vw-24px)] space-y-0.5 rounded-xl border border-border bg-menu p-1 shadow-lg"
+                >
                   {menuItems.map((m) => (
                     <button
                       key={m.kind}
@@ -521,7 +533,9 @@ function FilePreviewPanel({
               >
                 {idx + 1}
               </span>
-              <span className="whitespace-pre pr-4 text-foreground">{line}</span>
+              <span className="whitespace-pre pr-4 text-foreground">
+                {highlightSourceLine(line, idx, preview.preview_as === 'markdown' ? 'markdown' : 'code')}
+              </span>
             </div>
           ))}
         </div>

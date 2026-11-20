@@ -1,7 +1,8 @@
-import { Trash2 } from 'lucide-react';
+import { ChevronRight, Trash2 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { apiFetch } from '../core/protocol';
 import { useNexStore } from '../core/store';
+import { CodeEditorWithHighlight, HighlightedCode, MarkdownRenderer } from './MarkdownRenderer';
 import {
   SectionHeading,
   SettingsGroupCard,
@@ -179,12 +180,12 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
               isEn ? 'Appended when this subagent is spawned.' : '派生子智能体时注入的系统提示词。'
             }
           >
-            <textarea
-              rows={3}
+            <CodeEditorWithHighlight
+              rows={4}
+              language="markdown"
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
+              onChange={setPrompt}
               placeholder={isEn ? 'Role-specific system prompt...' : '角色专属 System Prompt...'}
-              className={areaClass}
             />
           </Field>
           <div className="flex justify-end">
@@ -415,11 +416,14 @@ export function SkillsAndPluginsSection({
   const [skBody, setSkBody] = useState(
     '# Code Audit Skill\n\n1. Check goroutine leaks\n2. Verify SQL parameterization',
   );
+  const [skPreview, setSkPreview] = useState(false);
+  const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
 
   const [plName, setPlName] = useState('safety-guard');
   const [plTS, setPlTS] = useState(
     `export default function (nex: any) {\n  nex.on("tool_call", (ev: any) => {\n    if (ev.toolName === "bash" && String(ev.input.command).includes("rm -rf /")) {\n      return { block: true, reason: "Blocked destructive root command" };\n    }\n  });\n}`,
   );
+  const [expandedPlugin, setExpandedPlugin] = useState<string | null>(null);
 
   if (mode === 'skills') {
     const saveSkill = async () => {
@@ -470,14 +474,45 @@ export function SkillsAndPluginsSection({
             </Field>
           </div>
           <div className="space-y-3 px-5 py-4">
-            <Field label={isEn ? 'Markdown body' : 'Markdown 内容'}>
-              <textarea
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-ui-xs text-foreground-subtle">
+                {isEn ? 'Markdown body' : 'Markdown 内容'}
+              </span>
+              <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-ui-xs">
+                <button
+                  type="button"
+                  onClick={() => setSkPreview(false)}
+                  className={`rounded-md px-2 py-0.5 font-medium transition-colors ${
+                    !skPreview ? 'bg-popover text-foreground shadow-xs' : 'text-foreground-subtle hover:text-foreground'
+                  }`}
+                >
+                  {isEn ? 'Edit' : '编辑'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSkPreview(true)}
+                  className={`rounded-md px-2 py-0.5 font-medium transition-colors ${
+                    skPreview ? 'bg-popover text-foreground shadow-xs' : 'text-foreground-subtle hover:text-foreground'
+                  }`}
+                >
+                  {isEn ? 'Preview' : '预览'}
+                </button>
+              </div>
+            </div>
+            {skPreview ? (
+              <div className="min-h-[150px] rounded-lg border border-border bg-surface/60 px-4 py-3">
+                <MarkdownRenderer content={skBody} streaming={false} />
+              </div>
+            ) : (
+              <CodeEditorWithHighlight
+                testId="skill-md-editor"
                 rows={6}
+                language="markdown"
                 value={skBody}
-                onChange={(e) => setSkBody(e.target.value)}
-                className={`${areaClass} font-mono`}
+                onChange={setSkBody}
+                placeholder="# Skill title..."
               />
-            </Field>
+            )}
             <div className="flex justify-end">
               <SaveButton
                 label={isEn ? 'Save skill' : '保存并下发'}
@@ -493,29 +528,50 @@ export function SkillsAndPluginsSection({
           {skills.length === 0 ? (
             <EmptyRow>{isEn ? 'No custom skills yet.' : '暂未添加自定义技能。'}</EmptyRow>
           ) : (
-            skills.map((s) => (
-              <div key={s.name} className="flex items-center justify-between gap-3 px-5 py-3.5">
-                <div className="min-w-0">
-                  <span className="font-mono text-ui-base font-medium text-foreground">
-                    ${s.name}
-                  </span>
-                  <p className="truncate text-ui-sm text-foreground-subtle">{s.description}</p>
+            skills.map((s) => {
+              const isOpen = expandedSkill === s.name;
+              return (
+                <div key={s.name} className="px-5 py-3.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedSkill(isOpen ? null : s.name)}
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                    >
+                      <ChevronRight
+                        className={`size-3.5 shrink-0 text-foreground-subtlest transition-transform ${
+                          isOpen ? 'rotate-90' : ''
+                        }`}
+                      />
+                      <div className="min-w-0">
+                        <span className="font-mono text-ui-base font-medium text-foreground">
+                          ${s.name}
+                        </span>
+                        <p className="truncate text-ui-sm text-foreground-subtle">{s.description}</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await apiFetch(`/api/v1/skills/${encodeURIComponent(s.name)}`, {
+                          method: 'DELETE',
+                        });
+                        await refreshRegistries();
+                      }}
+                      aria-label={isEn ? 'Delete skill' : '删除技能'}
+                      className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                  {isOpen && s.content_md && (
+                    <div className="mt-3 pl-5">
+                      <HighlightedCode code={s.content_md} language="markdown" className="max-h-72 text-ui-xs" />
+                    </div>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await apiFetch(`/api/v1/skills/${encodeURIComponent(s.name)}`, {
-                      method: 'DELETE',
-                    });
-                    await refreshRegistries();
-                  }}
-                  aria-label={isEn ? 'Delete skill' : '删除技能'}
-                  className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
-                >
-                  <Trash2 className="size-4" />
-                </button>
-              </div>
-            ))
+              );
+            })
           )}
         </SettingsGroupCard>
       </div>
@@ -555,11 +611,13 @@ export function SkillsAndPluginsSection({
               className={settingsMonoInputClass}
             />
           </Field>
-          <textarea
+          <CodeEditorWithHighlight
+            testId="plugin-ts-editor"
             rows={8}
+            language="ts"
             value={plTS}
-            onChange={(e) => setPlTS(e.target.value)}
-            className={`${areaClass} font-mono text-ui-xs`}
+            onChange={setPlTS}
+            placeholder="export default function (nex: any) { ... }"
           />
           <div className="flex justify-end">
             <SaveButton
@@ -578,31 +636,52 @@ export function SkillsAndPluginsSection({
         {plugins.length === 0 ? (
           <EmptyRow>{isEn ? 'No dynamic plugins installed.' : '暂未安装动态插件。'}</EmptyRow>
         ) : (
-          plugins.map((p) => (
-            <div key={p.name} className="flex items-center justify-between gap-3 px-5 py-3.5">
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                <span className="font-mono text-ui-base font-medium text-foreground">{p.name}</span>
-                {p.compiled_js_hash ? (
-                  <span className="shrink-0 rounded-md bg-success-surface px-1.5 py-0.5 font-mono text-ui-xs text-success-surface-fg">
-                    sha256:{p.compiled_js_hash.slice(0, 10)}
-                  </span>
-                ) : null}
+          plugins.map((p) => {
+            const isOpen = expandedPlugin === p.name;
+            return (
+              <div key={p.name} className="px-5 py-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedPlugin(isOpen ? null : p.name)}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  >
+                    <ChevronRight
+                      className={`size-3.5 shrink-0 text-foreground-subtlest transition-transform ${
+                        isOpen ? 'rotate-90' : ''
+                      }`}
+                    />
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      <span className="font-mono text-ui-base font-medium text-foreground">{p.name}</span>
+                      {p.compiled_js_hash ? (
+                        <span className="shrink-0 rounded-md bg-success-surface px-1.5 py-0.5 font-mono text-ui-xs text-success-surface-fg">
+                          sha256:{p.compiled_js_hash.slice(0, 10)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await apiFetch(`/api/v1/plugins/${encodeURIComponent(p.name)}`, {
+                        method: 'DELETE',
+                      });
+                      await refreshRegistries();
+                    }}
+                    aria-label={isEn ? 'Delete plugin' : '删除插件'}
+                    className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+                {isOpen && p.source_ts && (
+                  <div className="mt-3 pl-5">
+                    <HighlightedCode code={p.source_ts} language="ts" className="max-h-72 text-ui-xs" />
+                  </div>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  await apiFetch(`/api/v1/plugins/${encodeURIComponent(p.name)}`, {
-                    method: 'DELETE',
-                  });
-                  await refreshRegistries();
-                }}
-                aria-label={isEn ? 'Delete plugin' : '删除插件'}
-                className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
-              >
-                <Trash2 className="size-4" />
-              </button>
-            </div>
-          ))
+            );
+          })
         )}
       </SettingsGroupCard>
     </div>

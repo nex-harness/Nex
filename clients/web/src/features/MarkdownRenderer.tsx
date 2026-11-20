@@ -1,5 +1,5 @@
 import { Check, Copy, SquareTerminal, WrapText } from 'lucide-react';
-import { memo, type ReactNode, useState } from 'react';
+import { type CSSProperties, memo, type ReactNode, useRef, useState } from 'react';
 import { useNexStore } from '../core/store';
 
 const KEYWORDS = new Set([
@@ -94,16 +94,126 @@ const KEYWORDS = new Set([
   'chmod',
 ]);
 
+const TYPES = new Set([
+  'any',
+  'unknown',
+  'never',
+  'boolean',
+  'number',
+  'object',
+  'symbol',
+  'bigint',
+  'Promise',
+  'Record',
+  'Array',
+  'Map',
+  'Set',
+  'Error',
+  'Date',
+  'RegExp',
+  'Partial',
+  'Required',
+  'Readonly',
+  'Context',
+  'error',
+  'byte',
+  'rune',
+  'int64',
+  'uint64',
+  'float64',
+]);
+
 const TOKEN_RE =
   /(#[^\n]*)|(\/\/[^\n]*)|(`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b([A-Za-z_$][\w$]*)\b|(--?[A-Za-z][\w-]*)|(\b\d+(?:\.\d+)?\b)/g;
 
 const TOKEN_CLASS = {
-  comment: 'text-foreground-subtlest',
+  comment: 'text-foreground-subtlest italic',
   string: 'text-sky-600 dark:text-sky-400',
+  jsonKey: 'text-violet-600 dark:text-violet-400',
   keyword: 'text-rose-600 dark:text-rose-400',
+  type: 'text-emerald-600 dark:text-emerald-400',
+  func: 'text-blue-600 dark:text-blue-400',
   flag: 'text-teal-600 dark:text-teal-400',
   number: 'text-amber-600 dark:text-amber-400',
 } as const;
+
+const MD_INLINE_RE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\[[^\]]+\]\([^)]+\))/g;
+
+function highlightMarkdownLine(line: string, lineKey: number): ReactNode[] {
+  if (/^\s*```/.test(line)) {
+    return [
+      <span key={`${lineKey}-fence`} className={TOKEN_CLASS.flag}>
+        {line}
+      </span>,
+    ];
+  }
+  if (/^\s*#{1,6}\s/.test(line)) {
+    return [
+      <span key={`${lineKey}-h`} className="font-semibold text-blue-600 dark:text-blue-400">
+        {line}
+      </span>,
+    ];
+  }
+  if (/^\s*>\s/.test(line)) {
+    return [
+      <span key={`${lineKey}-bq`} className="italic text-foreground-subtle">
+        {line}
+      </span>,
+    ];
+  }
+
+  const nodes: ReactNode[] = [];
+  let rest = line;
+  let seq = 0;
+
+  // Highlight leading list marker (`- `, `* `, `1. `)
+  const listMatch = /^(\s*(?:[-*+]|\d+\.)\s+)(.*)$/.exec(line);
+  if (listMatch) {
+    nodes.push(
+      <span key={`${lineKey}-lm`} className={TOKEN_CLASS.number}>
+        {listMatch[1]}
+      </span>,
+    );
+    rest = listMatch[2];
+  }
+
+  const re = new RegExp(MD_INLINE_RE.source, 'g');
+  let cursor = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(rest)) !== null) {
+    if (m.index > cursor) nodes.push(rest.slice(cursor, m.index));
+    if (m[1]) {
+      nodes.push(
+        <span key={`${lineKey}-${seq++}`} className={TOKEN_CLASS.string}>
+          {m[0]}
+        </span>,
+      );
+    } else if (m[2]) {
+      nodes.push(
+        <span key={`${lineKey}-${seq++}`} className="font-semibold text-amber-600 dark:text-amber-400">
+          {m[0]}
+        </span>,
+      );
+    } else if (m[3]) {
+      nodes.push(
+        <span key={`${lineKey}-${seq++}`} className={TOKEN_CLASS.type}>
+          {m[0]}
+        </span>,
+      );
+    }
+    cursor = m.index + m[0].length;
+  }
+  if (cursor < rest.length) nodes.push(rest.slice(cursor));
+  return nodes;
+}
+
+export function highlightSourceLine(line: string, lineKey: number, language?: string): ReactNode[] {
+  const lang = (language || '').trim().toLowerCase();
+  if (lang === 'markdown' || lang === 'md') {
+    return highlightMarkdownLine(line, lineKey);
+  }
+  return highlightLine(line, lineKey);
+}
 
 function highlightLine(line: string, lineKey: number): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -131,21 +241,36 @@ function highlightLine(line: string, lineKey: number): ReactNode[] {
         </span>,
       );
     } else if (match[3]) {
+      const after = line.slice(start + token.length);
+      const isJsonKey = /^\s*:/.test(after);
       nodes.push(
-        <span key={`${lineKey}-${seq++}`} className={TOKEN_CLASS.string}>
+        <span key={`${lineKey}-${seq++}`} className={isJsonKey ? TOKEN_CLASS.jsonKey : TOKEN_CLASS.string}>
           {token}
         </span>,
       );
     } else if (match[4]) {
-      nodes.push(
-        KEYWORDS.has(token) ? (
+      const afterChar = line[start + token.length];
+      if (KEYWORDS.has(token)) {
+        nodes.push(
           <span key={`${lineKey}-${seq++}`} className={TOKEN_CLASS.keyword}>
             {token}
-          </span>
-        ) : (
-          token
-        ),
-      );
+          </span>,
+        );
+      } else if (TYPES.has(token)) {
+        nodes.push(
+          <span key={`${lineKey}-${seq++}`} className={TOKEN_CLASS.type}>
+            {token}
+          </span>,
+        );
+      } else if (afterChar === '(') {
+        nodes.push(
+          <span key={`${lineKey}-${seq++}`} className={TOKEN_CLASS.func}>
+            {token}
+          </span>,
+        );
+      } else {
+        nodes.push(token);
+      }
     } else if (match[5]) {
       nodes.push(
         <span key={`${lineKey}-${seq++}`} className={TOKEN_CLASS.flag}>
@@ -169,17 +294,115 @@ function highlightLine(line: string, lineKey: number): ReactNode[] {
   return nodes;
 }
 
-function highlightCode(code: string): ReactNode {
+function highlightCode(code: string, language?: string): ReactNode {
   const lines = code.split('\n');
   return (
     <>
       {lines.map((line, idx) => (
         <span key={idx}>
-          {highlightLine(line, idx)}
+          {highlightSourceLine(line, idx, language)}
           {idx < lines.length - 1 ? '\n' : null}
         </span>
       ))}
     </>
+  );
+}
+
+export function HighlightedCode({
+  code,
+  language,
+  className = '',
+  style,
+}: {
+  code: string;
+  language?: string;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  return (
+    <pre
+      className={`overflow-x-auto rounded-lg border border-border bg-surface p-3 font-mono text-ui-sm leading-relaxed text-foreground ${className}`}
+      style={style}
+    >
+      <code data-highlighted-lang={language || 'code'}>{highlightCode(code, language)}</code>
+    </pre>
+  );
+}
+
+/**
+ * Lightweight syntax-highlighted code editor using a scroll-synchronized highlighted `<pre>`
+ * behind a transparent-text `<textarea>` (zero external editor bundle overhead).
+ */
+export function CodeEditorWithHighlight({
+  value,
+  onChange,
+  language = 'ts',
+  rows = 8,
+  placeholder,
+  className = '',
+  testId,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  language?: string;
+  rows?: number;
+  placeholder?: string;
+  className?: string;
+  testId?: string;
+}) {
+  const preRef = useRef<HTMLPreElement | null>(null);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const syncScroll = () => {
+    if (preRef.current && taRef.current) {
+      preRef.current.scrollTop = taRef.current.scrollTop;
+      preRef.current.scrollLeft = taRef.current.scrollLeft;
+    }
+  };
+
+  const minHeightPx = Math.max(96, rows * 21 + 24);
+
+  return (
+    <div
+      className={`relative overflow-hidden rounded-lg border border-border bg-input focus-within:border-border-hover ${className}`}
+      style={{ minHeight: `${minHeightPx}px` }}
+    >
+      <pre
+        ref={preRef}
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 m-0 overflow-hidden whitespace-pre-wrap break-words p-3 font-mono text-ui-xs leading-[1.6] text-foreground"
+      >
+        <code data-highlighted-lang={language}>
+          {value ? highlightCode(value, language) : <span className="text-foreground-subtlest">{placeholder || ''}</span>}
+          {value.endsWith('\n') ? ' ' : ''}
+        </code>
+      </pre>
+      <textarea
+        ref={taRef}
+        data-testid={testId}
+        rows={rows}
+        value={value}
+        spellCheck={false}
+        onScroll={syncScroll}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Tab') {
+            e.preventDefault();
+            const el = e.currentTarget;
+            const start = el.selectionStart;
+            const end = el.selectionEnd;
+            const next = value.slice(0, start) + '  ' + value.slice(end);
+            onChange(next);
+            window.requestAnimationFrame(() => {
+              el.selectionStart = el.selectionEnd = start + 2;
+            });
+          }
+        }}
+        placeholder=""
+        style={{ minHeight: `${minHeightPx}px`, WebkitTextFillColor: 'transparent' }}
+        className="relative z-10 block h-full w-full resize-y bg-transparent p-3 font-mono text-ui-xs leading-[1.6] text-transparent caret-foreground outline-none selection:bg-brand-blue/25"
+      />
+    </div>
   );
 }
 
@@ -239,7 +462,7 @@ function CodeBlock({ lang, code, streaming = false }: { lang: string; code: stri
           }`}
         >
           {/* ZCode Streaming Markdown Rule: disable expensive regex syntax highlighting while actively streaming! */}
-          <code>{streaming || code.length > 24000 ? code : highlightCode(code)}</code>
+          <code>{streaming || code.length > 24000 ? code : highlightCode(code, language)}</code>
         </pre>
       </div>
     </div>

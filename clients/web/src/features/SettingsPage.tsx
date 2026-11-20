@@ -34,6 +34,7 @@ import { useNexStore } from '../core/store';
 import { ModelMeta, ProviderRecord, SettingsSectionId, UserPreferences } from '../core/types';
 import { hostBridge } from '../host/bridge';
 import { formatMsg, type MessageKey } from '../i18n/messages';
+import { HighlightedCode } from './MarkdownRenderer';
 import { ArchivesSettingsSection, UsageAnalyticsSection } from './SettingsAnalyticsArchive';
 import {
   AgentsSettingsSection,
@@ -672,15 +673,11 @@ function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
           <div className="text-ui-base font-medium text-foreground">
             {isEn ? 'Live preview' : '实时预览'}
           </div>
-          <pre
-            className="overflow-x-auto rounded-lg border border-border bg-surface p-3 text-ui-sm leading-relaxed text-foreground"
+          <HighlightedCode
+            language="ts"
             style={{ fontFamily: monoFont || undefined, fontSize: `${Math.max(11, uiFontPx - 1)}px` }}
-          >
-{`export async function reviewPatch(patch: string) {
-  const diff = await readDiff(patch);
-  return diff.hunks.map((hunk) => hunk.header);
-}`}
-          </pre>
+            code={`export async function reviewPatch(patch: string) {\n  const diff = await readDiff(patch);\n  return diff.hunks.map((hunk) => hunk.header);\n}`}
+          />
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-4">

@@ -2473,6 +2473,7 @@ export function ConversationPane() {
   const [renameDraft, setRenameDraft] = useState('');
   const [copiedId, setCopiedId] = useState(false);
   const [scrolledUp, setScrolledUp] = useState(false);
+  const [activeTurnId, setActiveTurnId] = useState('');
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -2488,6 +2489,28 @@ export function ConversationPane() {
 
   const registerTurnRef = useCallback((id: string, el: HTMLDivElement | null) => {
     turnRefs.current[id] = el;
+  }, []);
+
+  const jumpToTurn = useCallback((id: string) => {
+    const el = turnRefs.current[id];
+    const scrollEl = scrollRef.current;
+    if (!el) return;
+    followingRef.current = false;
+    setActiveTurnId(id);
+    if (scrollEl) {
+      const elRect = el.getBoundingClientRect();
+      const scrollRect = scrollEl.getBoundingClientRect();
+      const targetTop = Math.max(0, scrollEl.scrollTop + (elRect.top - scrollRect.top) - 20);
+      if (typeof scrollEl.scrollTo === 'function') {
+        scrollEl.scrollTo({ top: targetTop, behavior: 'smooth' });
+      } else {
+        scrollEl.scrollTop = targetTop;
+      }
+      const distFromBottom = scrollEl.scrollHeight - targetTop - scrollEl.clientHeight;
+      setScrolledUp(distFromBottom > 120);
+    } else if (typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }, []);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
@@ -2625,7 +2648,11 @@ export function ConversationPane() {
   return (
     <section className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
       {isDraft ? (
-        <header className="flex h-12 shrink-0 items-center justify-between px-4">
+        <header
+          className={`flex h-12 shrink-0 items-center justify-between pr-4 transition-[padding] duration-200 ${
+            sidebarVisible ? 'pl-4' : 'pl-[132px]'
+          }`}
+        >
           <div className="flex min-w-0 items-center gap-1">
             {sidebarVisible && (
               <button
@@ -2642,7 +2669,12 @@ export function ConversationPane() {
           {headerControls}
         </header>
       ) : (
-        <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4">
+        <header
+          data-testid="conversation-header"
+          className={`flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background pr-4 transition-[padding] duration-200 ${
+            sidebarVisible ? 'pl-4' : 'pl-[132px]'
+          }`}
+        >
           <div className="flex min-w-0 items-center gap-1.5">
             {sidebarVisible && (
               <button
@@ -2793,6 +2825,22 @@ export function ConversationPane() {
             } else if (!followingRef.current && !scrolledUp) {
               setScrolledUp(true);
             }
+            const scrollRect = el.getBoundingClientRect();
+            const probeY = scrollRect.top + scrollRect.height * 0.25;
+            let closestId = '';
+            let closestDist = Number.POSITIVE_INFINITY;
+            for (const it of items) {
+              const node = turnRefs.current[it.id];
+              if (!node) continue;
+              const d = Math.abs(node.getBoundingClientRect().top - probeY);
+              if (d < closestDist) {
+                closestDist = d;
+                closestId = it.id;
+              }
+            }
+            if (closestId && closestId !== activeTurnId) {
+              setActiveTurnId(closestId);
+            }
           }}
           className="absolute inset-0 overflow-y-auto px-4 py-5 sm:px-8"
         >
@@ -2872,19 +2920,42 @@ export function ConversationPane() {
 
         {/* Left-edge turn tick navigator */}
         {!isDraft && items.length > 0 && (
-          <div className="absolute left-3 top-1/2 hidden -translate-y-1/2 flex-col items-center gap-2 lg:flex">
-            {items.map((item, idx) => (
-              <button
-                key={item.id}
-                type="button"
-                title={`Turn ${idx + 1}`}
-                onClick={() => {
-                  const el = turnRefs.current[item.id];
-                  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }}
-                className="h-[1.5px] w-2.5 bg-foreground/20 transition-all duration-150 hover:w-4 hover:bg-foreground"
-              />
-            ))}
+          <div
+            data-testid="turn-tick-rail"
+            className="absolute left-1.5 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-start gap-0.5 lg:flex"
+          >
+            {items.map((item, idx) => {
+              const isActive = activeTurnId ? activeTurnId === item.id : idx === items.length - 1;
+              const rawPreview = item.role === 'user' ? cleanUserDisplayText(item.text) : item.text || item.thinking || '';
+              const preview = rawPreview.replace(/\s+/g, ' ').trim().slice(0, 36);
+              const label = `${item.role === 'user' ? (locale === 'en-US' ? 'You' : '我') : 'Nex'} #${idx + 1}${
+                preview ? ` · ${preview}` : ''
+              }`;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  data-testid={`turn-tick-${idx}`}
+                  title={label}
+                  aria-label={label}
+                  onClick={() => jumpToTurn(item.id)}
+                  className="group/tick relative flex h-4 cursor-pointer items-center px-1.5 focus:outline-none"
+                >
+                  <span
+                    className={`block h-[2px] rounded-full transition-all duration-150 ${
+                      isActive
+                        ? 'w-4 bg-brand-blue'
+                        : item.role === 'user'
+                          ? 'w-3 bg-foreground/35 group-hover/tick:w-5 group-hover/tick:bg-foreground'
+                          : 'w-2 bg-foreground/20 group-hover/tick:w-4 group-hover/tick:bg-foreground/80'
+                    }`}
+                  />
+                  <span className="pointer-events-none absolute left-full ml-1.5 hidden max-w-[200px] truncate whitespace-nowrap rounded-md border border-border bg-popover px-2 py-0.5 text-ui-xs text-foreground shadow-md group-hover/tick:block">
+                    {label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
 

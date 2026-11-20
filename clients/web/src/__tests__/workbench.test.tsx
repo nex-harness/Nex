@@ -861,4 +861,84 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(useNexStore.getState().composerText).toBe('参考一下 #sess_weather_ref ');
     expect(screen.getByTestId('composer-session-refs')).toBeTruthy();
   });
+
+  it('supports turn tick scroll, collapsed-sidebar header padding, right-aligned workbench + menu, and settings syntax highlighting', () => {
+    useNexStore.setState({
+      locale: 'zh-CN',
+      mainView: 'workspace',
+      sidebarVisible: false,
+      sidePaneVisible: true,
+      activeSessionId: 'sess_nav_1',
+      sessions: [
+        {
+          id: 'sess_nav_1',
+          runner_id: 'run_1',
+          depth: 0,
+          title: '查一下明天北京的天气',
+          workspace_path: '/tmp/ws',
+          agent_profile_slug: 'main',
+          model_id: 'group/grok-4.7',
+          provider_id: 'openai',
+          permission_mode: 'full_access',
+          status: 'idle',
+          latest_context_tokens: 1000,
+          context_window_limit: 500000,
+          created_at: 1000,
+          updated_at: 2000,
+          last_active_at: 2000,
+        },
+      ],
+      streams: {
+        sess_nav_1: {
+          lastSeq: 2,
+          running: false,
+          items: [
+            { id: 'usr_1', seq: 1, role: 'user', text: 'First turn', thinking: '', toolCalls: [] },
+            { id: 'ast_2', seq: 2, role: 'assistant', text: 'Second turn', thinking: '', toolCalls: [] },
+          ],
+          latestTelemetry: null,
+          turnTelemetries: [],
+          uiBadges: {},
+          pendingApproval: null,
+          pendingUIPrompt: null,
+          todos: [],
+          goals: [],
+        },
+      },
+    });
+
+    const { rerender } = render(<App />);
+
+    // 1. Collapsed sidebar header has left clearance (`pl-[132px]`) so DesktopTopOverlay does not overlap title
+    const header = screen.getByTestId('conversation-header');
+    expect(header.className).toContain('pl-[132px]');
+
+    // 2. Turn tick rail exists and clicking tick 0 triggers smooth scroll
+    const scrollEl = screen.getByTestId('chat-stream');
+    const scrollToSpy = vi.fn();
+    scrollEl.scrollTo = scrollToSpy;
+    fireEvent.click(screen.getByTestId('turn-tick-0'));
+    expect(scrollToSpy).toHaveBeenCalledTimes(1);
+
+    // 3. Right workbench '+' menu is anchored to right-0 (never clipped off-screen)
+    fireEvent.click(screen.getByTestId('workbench-plus-btn'));
+    const plusMenu = screen.getByTestId('workbench-plus-menu');
+    expect(plusMenu.className).toContain('right-0');
+    expect(plusMenu.className).not.toContain('left-0');
+
+    // 4. Settings Appearance / Plugins / Skills render syntax-highlighted code
+    useNexStore.setState({ mainView: 'settings', settingsSection: 'appearance' });
+    rerender(<App />);
+    expect(document.querySelector('[data-highlighted-lang="ts"]')).toBeTruthy();
+
+    useNexStore.setState({ settingsSection: 'plugins' });
+    rerender(<App />);
+    expect(screen.getByTestId('plugin-ts-editor')).toBeTruthy();
+    expect(document.querySelector('[data-highlighted-lang="ts"]')).toBeTruthy();
+
+    useNexStore.setState({ settingsSection: 'skills' });
+    rerender(<App />);
+    expect(screen.getByTestId('skill-md-editor')).toBeTruthy();
+    expect(document.querySelector('[data-highlighted-lang="markdown"]')).toBeTruthy();
+  });
 });
