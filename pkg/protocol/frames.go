@@ -30,6 +30,7 @@ const (
 	TypeSessionEvent    = "session.event"
 	TypeSessionForkSync = "session.fork_sync"
 	TypeSessionRewind   = "session.rewind"
+	TypeMemorySync      = "memory.sync"
 
 	// Remote Approval & Remote Plugin UI (ctx.ui)
 	TypeApprovalResolve = "approval.resolve"
@@ -102,18 +103,34 @@ type RunnerHelloPayload struct {
 	SyncedConfigRev  int64    `json:"synced_config_rev"`
 }
 
+// MemoryConfigSync distributes memory automation preferences from Server to Runners.
+type MemoryConfigSync struct {
+	AutoExtract bool   `json:"auto_extract"`
+	ProviderID  string `json:"provider_id,omitempty"`
+	ModelID     string `json:"model_id,omitempty"`
+}
+
+// MemorySyncPayload synchronizes a Runner-created/deleted memory back to Server (and live Web clients).
+type MemorySyncPayload struct {
+	Action   string              `json:"action"` // "upsert" | "delete" | "refresh"
+	Record   *store.MemoryRecord `json:"record,omitempty"`
+	MemoryID string              `json:"memory_id,omitempty"`
+}
+
 // ConfigSnapshot carries centralized configuration down to an autonomous Runner.
 type ConfigSnapshot struct {
-	ConfigRev     int64                   `json:"config_rev"`
-	ServerBaseURL string                  `json:"server_base_url,omitempty"`
-	Providers     []store.ProviderRecord  `json:"providers,omitempty"`
-	Models        []ai.ModelMeta          `json:"models,omitempty"`
-	AgentProfiles []store.AgentProfile    `json:"agent_profiles,omitempty"`
-	Skills        []store.SkillRecord     `json:"skills,omitempty"`
-	Plugins       []store.PluginRecord    `json:"plugins,omitempty"`
-	MCPServers    []store.MCPServerRecord `json:"mcp_servers,omitempty"`
-	CronJobs      []store.CronJobRecord   `json:"cron_jobs,omitempty"`
-	Memories      []store.MemoryRecord    `json:"memories,omitempty"`
+	ConfigRev      int64                   `json:"config_rev"`
+	ServerBaseURL  string                  `json:"server_base_url,omitempty"`
+	Providers      []store.ProviderRecord  `json:"providers,omitempty"`
+	Models         []ai.ModelMeta          `json:"models,omitempty"`
+	AgentProfiles  []store.AgentProfile    `json:"agent_profiles,omitempty"`
+	Skills         []store.SkillRecord     `json:"skills,omitempty"`
+	Plugins        []store.PluginRecord    `json:"plugins,omitempty"`
+	MCPServers     []store.MCPServerRecord `json:"mcp_servers,omitempty"`
+	CronJobs       []store.CronJobRecord   `json:"cron_jobs,omitempty"`
+	Memories       []store.MemoryRecord    `json:"memories,omitempty"`
+	MemoriesSynced bool                    `json:"memories_synced,omitempty"`
+	MemorySettings *MemoryConfigSync       `json:"memory_settings,omitempty"`
 }
 
 // RunnerWelcomePayload acknowledges Runner registration and optionally pushes updated config.

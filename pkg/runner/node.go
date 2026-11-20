@@ -79,6 +79,7 @@ type Node struct {
 	pendingApproval map[string]chan protocol.ApprovalResolvePayload
 	pendingUI       map[string]chan protocol.UIResolvePayload
 	pendingRPC      map[string]chan protocol.Envelope
+	memoryCfg       protocol.MemoryConfigSync
 }
 
 // NewNode initializes an autonomous Runner and its local SQLite + CAS store.
@@ -383,8 +384,17 @@ func (n *Node) ApplyConfigSnapshot(ctx context.Context, snap *protocol.ConfigSna
 	for _, cj := range snap.CronJobs {
 		_, _ = n.store.UpsertCronJob(ctx, cj)
 	}
-	for _, mem := range snap.Memories {
-		_, _ = n.store.UpsertMemory(ctx, mem)
+	if snap.MemoriesSynced {
+		_, _ = n.store.ReplaceAllMemories(ctx, snap.Memories)
+	} else {
+		for _, mem := range snap.Memories {
+			_, _ = n.store.UpsertMemory(ctx, mem)
+		}
+	}
+	if snap.MemorySettings != nil {
+		n.mu.Lock()
+		n.memoryCfg = *snap.MemorySettings
+		n.mu.Unlock()
 	}
 	if n.cfg.Extensions != nil {
 		n.cfg.Extensions.OnSnapshotApplied(ctx, snap)

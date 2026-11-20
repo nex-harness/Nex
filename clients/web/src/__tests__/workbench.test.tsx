@@ -1016,7 +1016,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(useNexStore.getState().followUpQueues['sess_b1']?.length).toBe(0);
   });
 
-  it('renders Plan Mode approval bar and Memory settings management section', () => {
+  it('renders Plan Mode approval bar and Memory settings management section', async () => {
     useNexStore.setState({
       locale: 'zh-CN',
       mainView: 'workspace',
@@ -1079,11 +1079,47 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     fireEvent.click(screen.getByTestId('approve-plan-btn'));
     expect(useNexStore.getState().permissionMode).toBe('full_access');
 
-    // 2. Settings -> Memory section renders saved memories & editor
-    useNexStore.setState({ mainView: 'settings', settingsSection: 'memories' });
+    // 2. Settings -> Memory section renders saved memories, engine settings, and consolidate action
+    const consolidateSpy = vi.fn().mockResolvedValue({
+      before_count: 2,
+      after_count: 1,
+      summary: 'Merged duplicate Go build preferences',
+      memories: [
+        {
+          id: 'mem_1',
+          scope: 'global',
+          category: 'preference',
+          title: '纯 Go 静态构建',
+          content: '始终使用 CGO_ENABLED=0 构建二进制',
+          created_at: 1000,
+          updated_at: 2000,
+        },
+      ],
+    });
+    useNexStore.setState({
+      mainView: 'settings',
+      settingsSection: 'memories',
+      consolidateMemories: consolidateSpy,
+      memories: [
+        ...useNexStore.getState().memories,
+        {
+          id: 'mem_2',
+          scope: 'global',
+          category: 'preference',
+          title: '静态编译',
+          content: '禁用 CGO',
+          created_at: 1100,
+          updated_at: 2100,
+        },
+      ],
+    });
     rerender(<App />);
     expect(screen.getByTestId('memory-title-input')).toBeTruthy();
+    expect(screen.getByTestId('memory-auto-extract-toggle')).toBeTruthy();
+    expect(screen.getByTestId('memory-model-select')).toBeTruthy();
     expect(screen.getByText('纯 Go 静态构建')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('consolidate-memories-btn'));
+    await waitFor(() => expect(consolidateSpy).toHaveBeenCalledTimes(1));
   });
 
   it('supports Cmd+K command palette, Markdown export, and turn-level file rewind', async () => {

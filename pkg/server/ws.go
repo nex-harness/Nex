@@ -139,6 +139,9 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 		case protocol.TypeMCPRemoteCall:
 			go s.handleRunnerRemoteMCPCall(ctx, rc, env)
 
+		case protocol.TypeMemorySync:
+			go s.handleRunnerMemorySync(ctx, env)
+
 		case protocol.TypePTYClosed:
 			s.broadcastToAllClients(ctx, env)
 		}
@@ -261,6 +264,34 @@ func (s *Server) handleRunnerRemoteMCPCall(ctx context.Context, rc *runnerConn, 
 	replyEnv, _ := protocol.NewEnvelope(protocol.TypeMCPRemoteResult, respPayload)
 	replyEnv.ReplyTo = env.ID
 	_ = rc.sendJSON(ctx, replyEnv)
+}
+
+func (s *Server) handleRunnerMemorySync(ctx context.Context, env protocol.Envelope) {
+	var p protocol.MemorySyncPayload
+	if err := json.Unmarshal(env.Payload, &p); err != nil {
+		return
+	}
+	switch p.Action {
+	case "upsert":
+		if p.Record == nil || strings.TrimSpace(p.Record.Title) == "" || strings.TrimSpace(p.Record.Content) == "" {
+			return
+		}
+		if _, err := s.store.UpsertMemory(ctx, *p.Record); err != nil {
+			return
+		}
+	case "delete":
+		if strings.TrimSpace(p.MemoryID) == "" {
+			return
+		}
+		if err := s.store.DeleteMemory(ctx, p.MemoryID); err != nil {
+			return
+		}
+	default:
+		return
+	}
+	s.BroadcastConfigSync(ctx)
+	notifyEnv, _ := protocol.NewEnvelope(protocol.TypeMemorySync, protocol.MemorySyncPayload{Action: "refresh"})
+	s.broadcastToAllClients(ctx, notifyEnv)
 }
 
 func (s *Server) handleClientWS(w http.ResponseWriter, r *http.Request) {

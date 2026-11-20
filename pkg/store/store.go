@@ -101,12 +101,15 @@ func (s *Store) DataDir() string { return s.dataDir }
 // --- Preferences & Config Revision ---
 
 type UserPreferences struct {
-	Theme                string `json:"theme"`                  // "dark" | "light" | "system"
-	CodeTheme            string `json:"code_theme"`             // e.g. "github-dark"
-	FontFamily           string `json:"font_family"`            // UI body font
-	MonoFontFamily       string `json:"mono_font_family"`       // Code & terminal font
-	ExpandThinking       bool   `json:"expand_thinking"`        // Auto-expand thinking blocks
+	Theme                string `json:"theme"`                   // "dark" | "light" | "system"
+	CodeTheme            string `json:"code_theme"`              // e.g. "github-dark"
+	FontFamily           string `json:"font_family"`             // UI body font
+	MonoFontFamily       string `json:"mono_font_family"`        // Code & terminal font
+	ExpandThinking       bool   `json:"expand_thinking"`         // Auto-expand thinking blocks
 	AutoArchiveAfterDays int    `json:"auto_archive_after_days"` // 0 = disabled
+	MemoryAutoExtract    bool   `json:"memory_auto_extract"`     // Background auto-extract after turns
+	MemoryProviderID     string `json:"memory_provider_id"`      // Optional dedicated provider for extract/dream
+	MemoryModelID        string `json:"memory_model_id"`         // Optional dedicated fast model for extract/dream
 }
 
 func DefaultUserPreferences() UserPreferences {
@@ -117,6 +120,9 @@ func DefaultUserPreferences() UserPreferences {
 		MonoFontFamily:       "JetBrains Mono, Menlo, monospace",
 		ExpandThinking:       false,
 		AutoArchiveAfterDays: 30,
+		MemoryAutoExtract:    false,
+		MemoryProviderID:     "",
+		MemoryModelID:        "",
 	}
 }
 

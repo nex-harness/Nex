@@ -387,12 +387,38 @@ func TestWebSearchPDFExitPlanAndMemoryTools(t *testing.T) {
 
 	ms := NewMemorySaveTool(st, dir)
 	ml := NewMemoryListTool(st, dir)
+	mr := NewMemoryReadTool(st, dir)
+	md := NewMemoryDeleteTool(st)
+
+	// Rejects secret-like API key material
+	secRes, err := ms.Execute(context.Background(), dir, json.RawMessage(`{"title":"OpenAI Key","content":"Use sk-proj-abcdefghijklmnopqrstuvwxyz123456"}`), nil)
+	if err != nil || !secRes.IsError || !strings.Contains(secRes.Output, "secret") {
+		t.Fatalf("expected secret refusal, got %+v err=%v", secRes, err)
+	}
+
 	mRes, err := ms.Execute(context.Background(), dir, json.RawMessage(`{"scope":"global","category":"preference","title":"Static Go","content":"Always use CGO_ENABLED=0"}`), nil)
 	if err != nil || mRes.IsError {
 		t.Fatalf("memory_save failed: %+v err=%v", mRes, err)
 	}
+	savedID, _ := mRes.Metadata["memory_id"].(string)
 	lRes, err := ml.Execute(context.Background(), dir, json.RawMessage(`{}`), nil)
 	if err != nil || lRes.IsError || !strings.Contains(lRes.Output, "Always use CGO_ENABLED=0") {
 		t.Fatalf("memory_list failed: %+v err=%v", lRes, err)
+	}
+	rRes, err := mr.Execute(context.Background(), dir, json.RawMessage(`{"ids":["`+savedID+`"]}`), nil)
+	if err != nil || rRes.IsError || !strings.Contains(rRes.Output, "Always use CGO_ENABLED=0") {
+		t.Fatalf("memory_read by id failed: %+v err=%v", rRes, err)
+	}
+	rqRes, err := mr.Execute(context.Background(), dir, json.RawMessage(`{"query":"CGO_ENABLED"}`), nil)
+	if err != nil || rqRes.IsError || !strings.Contains(rqRes.Output, "Static Go") {
+		t.Fatalf("memory_read by query failed: %+v err=%v", rqRes, err)
+	}
+	dRes, err := md.Execute(context.Background(), dir, json.RawMessage(`{"id":"`+savedID+`"}`), nil)
+	if err != nil || dRes.IsError {
+		t.Fatalf("memory_delete failed: %+v err=%v", dRes, err)
+	}
+	afterDel, _ := ml.Execute(context.Background(), dir, json.RawMessage(`{}`), nil)
+	if !strings.Contains(afterDel.Output, "No persistent memories") {
+		t.Fatalf("expected empty memories after delete, got %q", afterDel.Output)
 	}
 }

@@ -56,6 +56,9 @@ export interface UserPreferences {
   mono_font_family: string;
   expand_thinking: boolean;
   auto_archive_after_days: number;
+  memory_auto_extract?: boolean;
+  memory_provider_id?: string;
+  memory_model_id?: string;
 }
 
 export interface AgentProfile {

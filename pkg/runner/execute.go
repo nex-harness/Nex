@@ -341,6 +341,7 @@ func (n *Node) ExecutePrompt(
 
 	sessionTools, bgCleanup := tools.DefaultCodingToolsWithCleanup()
 	defer bgCleanup()
+	memStore := &runnerMemoryStore{node: n}
 	sessionTools = append(sessionTools,
 		tools.NewAskUserQuestionTool(&sessionUIBridge{
 			node:      n,
@@ -348,8 +349,10 @@ func (n *Node) ExecutePrompt(
 			hasUI:     hasUI,
 		}),
 		tools.NewReadSessionContextTool(sessionLookup, sessRec.ID),
-		tools.NewMemorySaveTool(n.store, workDir),
-		tools.NewMemoryListTool(n.store, workDir),
+		tools.NewMemorySaveTool(memStore, workDir),
+		tools.NewMemoryListTool(memStore, workDir),
+		tools.NewMemoryReadTool(memStore, workDir),
+		tools.NewMemoryDeleteTool(memStore),
 	)
 
 	var hooks agent.Hooks
@@ -574,12 +577,15 @@ func (n *Node) ExecutePrompt(
 	userMsg := ai.Message{Role: ai.RoleUser, Content: blocks}
 
 	reply, runErr := loop.Run(runCtx, &userMsg)
-	if runErr == nil && len(history) == 0 && sessRec.Depth == 0 && triggerSource == "chat" && n.cfg.ProviderOverride == nil && len([]rune(strings.TrimSpace(p.Text))) > 16 {
+	if runErr == nil && sessRec.Depth == 0 && triggerSource == "chat" && n.cfg.ProviderOverride == nil {
 		assistantSummary := ""
 		if reply != nil {
 			assistantSummary = reply.PlainText()
 		}
-		go n.generateSessionTitleAsync(sessRec.ID, prov, modelID, p.Text, assistantSummary)
+		if len(history) == 0 && len([]rune(strings.TrimSpace(p.Text))) > 16 {
+			go n.generateSessionTitleAsync(sessRec.ID, prov, modelID, p.Text, assistantSummary)
+		}
+		go n.extractMemoriesAsync(workDir, p.Text, assistantSummary, provID, modelID)
 	}
 	return reply, runErr
 }
@@ -757,11 +763,7 @@ func loadMemoryLines(ctx context.Context, n *Node, workDir string) []string {
 	if err != nil || len(mems) == 0 {
 		return nil
 	}
-	out := make([]string, 0, len(mems))
-	for _, m := range mems {
-		out = append(out, fmt.Sprintf("[%s/%s] %s: %s", m.Scope, m.Category, m.Title, m.Content))
-	}
-	return out
+	return formatMemoryPromptLines(mems)
 }
 
 // loadMCPNamespaceSummary asks the extension builder for its live MCP namespace

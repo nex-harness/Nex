@@ -266,8 +266,11 @@ func buildMetaContext(opts SessionOptions) string {
 
 	if len(opts.Memories) > 0 {
 		sb.WriteString("\n\n# Long-term memories\n")
-		sb.WriteString("Persistent preferences and project facts recalled from prior sessions (update or add new ones via `memory_save` when the user shares durable preferences or architectural decisions):\n")
-		memBudget := 8 * 1024
+		sb.WriteString("Persistent preferences and project facts recalled from prior sessions.\n")
+		sb.WriteString("- Use `memory_read` (by `ids` or `query`) when only the compact index is shown and you need full details.\n")
+		sb.WriteString("- Use `memory_save` when the user states durable preferences, conventions, or architectural decisions (never save secrets/keys).\n")
+		sb.WriteString("- Use `memory_delete` if an existing memory is confirmed obsolete or wrong.\n")
+		memBudget := 16 * 1024
 		for _, m := range opts.Memories {
 			line := "- " + strings.TrimSpace(m) + "\n"
 			if len(line) > memBudget {

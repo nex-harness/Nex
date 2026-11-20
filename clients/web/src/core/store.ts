@@ -126,6 +126,10 @@ export interface AppState {
   searchSessions: (query: string) => Promise<SessionSearchHit[]>;
   exportSessionMarkdown: (sessionId: string) => Promise<{ filename: string; markdown: string } | null>;
   rewindSessionFiles: (sessionId: string, beforeSeq: number) => Promise<RewindResult | null>;
+  consolidateMemories: (opts?: {
+    providerId?: string;
+    modelId?: string;
+  }) => Promise<{ before_count: number; after_count: number; summary: string; memories: MemoryRecord[] } | null>;
   sendPromptOrSteer: (overrideText?: string, mode?: 'follow_up' | 'steer') => void;
   queueFollowUp: (text: string) => void;
   removeFollowUp: (sessionId: string, id: string) => void;
@@ -481,6 +485,10 @@ export const useNexStore = create<AppState>((set, get) => ({
     wsClient.onFrame((env) => {
       if (env.type === 'runner.status') {
         void get().refreshInitialData();
+        return;
+      }
+      if (env.type === 'memory.sync') {
+        void get().refreshRegistries();
         return;
       }
       if (env.type === 'session.event' && env.payload) {
@@ -1284,5 +1292,26 @@ export const useNexStore = create<AppState>((set, get) => ({
     } catch {
       return null;
     }
+  },
+
+  consolidateMemories: async (opts) => {
+    const res = await apiFetch<{
+      before_count: number;
+      after_count: number;
+      summary: string;
+      memories: MemoryRecord[];
+    }>('/api/v1/memories/consolidate', {
+      method: 'POST',
+      body: JSON.stringify({
+        provider_id: opts?.providerId || undefined,
+        model_id: opts?.modelId || undefined,
+      }),
+    });
+    if (res && Array.isArray(res.memories)) {
+      set({ memories: res.memories });
+    } else {
+      await get().refreshRegistries();
+    }
+    return res;
   },
 }));

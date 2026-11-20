@@ -251,17 +251,24 @@ func (s *Server) buildConfigSnapshot(ctx context.Context, runnerID string) (*pro
 	}
 
 	memories, _ := s.store.ListMemories(ctx, "")
+	prefs, _ := s.store.GetUserPreferences(ctx)
 	return &protocol.ConfigSnapshot{
-		ConfigRev:     rev,
-		ServerBaseURL: s.cfg.PublicBaseURL,
-		Providers:     sanitizedProviders,
-		Models:        models,
-		AgentProfiles: profiles,
-		Skills:        skills,
-		Plugins:       plugins,
-		MCPServers:    mcps,
-		CronJobs:      crons,
-		Memories:      memories,
+		ConfigRev:      rev,
+		ServerBaseURL:  s.cfg.PublicBaseURL,
+		Providers:      sanitizedProviders,
+		Models:         models,
+		AgentProfiles:  profiles,
+		Skills:         skills,
+		Plugins:        plugins,
+		MCPServers:     mcps,
+		CronJobs:       crons,
+		Memories:       memories,
+		MemoriesSynced: true,
+		MemorySettings: &protocol.MemoryConfigSync{
+			AutoExtract: prefs.MemoryAutoExtract,
+			ProviderID:  prefs.MemoryProviderID,
+			ModelID:     prefs.MemoryModelID,
+		},
 	}, nil
 }
 

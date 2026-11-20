@@ -54,6 +54,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/cron", s.handleCronJobs)
 	s.mux.HandleFunc("/api/v1/cron/", s.handleCronDelete)
 	s.mux.HandleFunc("/api/v1/memories", s.handleMemories)
+	s.mux.HandleFunc("/api/v1/memories/consolidate", s.handleMemoryConsolidate)
 	s.mux.HandleFunc("/api/v1/memories/", s.handleMemoryDelete)
 
 	// Embedded Web UI SPA fallback
@@ -123,6 +124,7 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		if prefs.AutoArchiveAfterDays > 0 {
 			_, _ = s.store.ArchiveIdleSessions(r.Context(), time.Duration(prefs.AutoArchiveAfterDays)*24*time.Hour, time.Now())
 		}
+		s.BroadcastConfigSync(r.Context())
 		writeJSON(w, http.StatusOK, prefs)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)

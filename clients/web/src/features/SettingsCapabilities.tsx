@@ -1,4 +1,4 @@
-import { ChevronRight, Trash2 } from 'lucide-react';
+import { ChevronRight, LoaderCircle, Pencil, Search, Sparkles, Trash2 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { apiFetch } from '../core/protocol';
 import { useNexStore } from '../core/store';
@@ -840,20 +840,78 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
 /* -------------------------------------------------------------------------- */
 
 export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {
-  const { locale, memories, selectedWorkspacePath, refreshRegistries } = useNexStore();
+  const {
+    locale,
+    memories,
+    preferences,
+    providers,
+    models,
+    selectedWorkspacePath,
+    refreshInitialData,
+    refreshRegistries,
+    consolidateMemories,
+  } = useNexStore();
   const isEn = locale === 'en-US';
 
+  const [editingId, setEditingId] = useState('');
   const [scope, setScope] = useState<'global' | 'project'>('global');
   const [category, setCategory] = useState<'preference' | 'architecture' | 'convention' | 'fact'>('preference');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [filterScope, setFilterScope] = useState<'all' | 'global' | 'project'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [consolidating, setConsolidating] = useState(false);
+
+  const enabledProviderIds = new Set(providers.filter((p) => p.enabled).map((p) => p.id));
+  const selectableModels = models.filter((m) => enabledProviderIds.size === 0 || enabledProviderIds.has(m.provider_id));
+  const currentMemModelValue =
+    preferences.memory_provider_id && preferences.memory_model_id
+      ? `${preferences.memory_provider_id}::${preferences.memory_model_id}`
+      : '';
+
+  const saveMemoryPreferences = async (patch: Partial<typeof preferences>) => {
+    const next = { ...preferences, ...patch };
+    useNexStore.setState({ preferences: next });
+    await apiFetch('/api/v1/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(next),
+    });
+    await refreshInitialData();
+    onFlash(isEn ? 'Memory engine settings updated & synced' : '记忆引擎配置已更新并同步至所有节点');
+  };
+
+  const runConsolidate = async () => {
+    if (consolidating || memories.length < 2) return;
+    setConsolidating(true);
+    try {
+      const res = await consolidateMemories({
+        providerId: preferences.memory_provider_id || undefined,
+        modelId: preferences.memory_model_id || undefined,
+      });
+      if (res) {
+        onFlash(
+          isEn
+            ? `Consolidated ${res.before_count} → ${res.after_count}: ${res.summary}`
+            : `记忆整理完成（${res.before_count} → ${res.after_count} 条）：${res.summary}`,
+        );
+      }
+    } catch (err) {
+      onFlash(
+        isEn
+          ? `Consolidation failed: ${err instanceof Error ? err.message : String(err)}`
+          : `记忆整理失败：${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setConsolidating(false);
+    }
+  };
 
   const saveMemory = async () => {
     if (!title.trim() || !content.trim()) return;
     await apiFetch('/api/v1/memories', {
       method: 'POST',
       body: JSON.stringify({
+        id: editingId || undefined,
         scope,
         workspace_path: scope === 'project' ? selectedWorkspacePath : '',
         category,
@@ -861,21 +919,142 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
         content: content.trim(),
       }),
     });
+    setEditingId('');
     setTitle('');
     setContent('');
     await refreshRegistries();
     onFlash(isEn ? 'Memory saved and synced to runners' : '长期记忆已保存并同步至所有节点');
   };
 
+  const startEdit = (m: (typeof memories)[number]) => {
+    setEditingId(m.id);
+    setScope(m.scope === 'project' ? 'project' : 'global');
+    setCategory(
+      (m.category === 'preference' || m.category === 'architecture' || m.category === 'convention' || m.category === 'fact'
+        ? m.category
+        : 'fact') as 'preference' | 'architecture' | 'convention' | 'fact',
+    );
+    setTitle(m.title);
+    setContent(m.content);
+  };
+
   const removeMemory = async (id: string) => {
     await apiFetch(`/api/v1/memories/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (editingId === id) {
+      setEditingId('');
+      setTitle('');
+      setContent('');
+    }
     await refreshRegistries();
   };
 
-  const visibleMemories = memories.filter((m) => filterScope === 'all' || m.scope === filterScope);
+  const qLower = searchQuery.trim().toLowerCase();
+  const visibleMemories = memories.filter((m) => {
+    if (filterScope !== 'all' && m.scope !== filterScope) return false;
+    if (!qLower) return true;
+    return (
+      m.title.toLowerCase().includes(qLower) ||
+      m.content.toLowerCase().includes(qLower) ||
+      m.category.toLowerCase().includes(qLower)
+    );
+  });
 
   return (
     <div className="space-y-6">
+      {/* Memory Engine Automation & Dream Consolidation Card */}
+      <SettingsGroupCard>
+        <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <div className="text-ui-base font-medium text-foreground">
+              {isEn ? 'Background auto-extraction' : '对话后后台自动提取记忆'}
+            </div>
+            <p className="text-ui-xs text-foreground-subtlest">
+              {isEn
+                ? 'Asynchronously distills durable preferences & conventions after chat turns (secrets automatically blocked). Large memory banks use compact index + on-demand memory_read.'
+                : '每轮对话结束后在后台异步提炼偏好与架构事实（自动拦截密钥），记忆较多时以轻量索引注入并由模型按需调用 memory_read。'}
+            </p>
+          </div>
+          <label className="inline-flex cursor-pointer items-center gap-2 text-ui-sm text-foreground">
+            <input
+              type="checkbox"
+              data-testid="memory-auto-extract-toggle"
+              checked={Boolean(preferences.memory_auto_extract)}
+              onChange={(e) => void saveMemoryPreferences({ memory_auto_extract: e.target.checked })}
+              className="size-4 accent-brand-blue"
+            />
+            <span>{preferences.memory_auto_extract ? (isEn ? 'Enabled' : '已开启') : isEn ? 'Disabled' : '已关闭'}</span>
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-end justify-between gap-4 border-t border-border px-5 py-4">
+          <div className="min-w-[240px] flex-1">
+            <Field
+              label={isEn ? 'Dedicated model for extraction & consolidation' : '记忆提取与整理专用模型'}
+              description={
+                isEn
+                  ? 'Optional fast/low-cost model. Leave default to follow the active session model.'
+                  : '可选指定高速低价模型（如 Flash）；留空则跟随当前对话模型。'
+              }
+            >
+              <select
+                data-testid="memory-model-select"
+                value={currentMemModelValue}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (!val) {
+                    void saveMemoryPreferences({ memory_provider_id: '', memory_model_id: '' });
+                  } else {
+                    const [pid, mid] = val.split('::');
+                    void saveMemoryPreferences({ memory_provider_id: pid, memory_model_id: mid });
+                  }
+                }}
+                className={settingsSelectClass}
+              >
+                <option value="">{isEn ? 'Follow active session model' : '跟随当前对话模型'}</option>
+                {selectableModels.map((m) => (
+                  <option key={`${m.provider_id}::${m.id}`} value={`${m.provider_id}::${m.id}`}>
+                    {m.display_name || m.id} ({m.provider_id})
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          <button
+            type="button"
+            data-testid="consolidate-memories-btn"
+            disabled={consolidating || memories.length < 2}
+            onClick={() => void runConsolidate()}
+            title={
+              memories.length < 2
+                ? isEn
+                  ? 'Requires at least 2 memories'
+                  : '至少需要 2 条记忆才能整理去重'
+                : isEn
+                  ? 'Deduplicate, merge conflicts, and tighten saved memories'
+                  : '使用模型自动去重合并冲突并精炼记忆库'
+            }
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 text-ui-sm font-medium text-foreground transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            {consolidating ? (
+              <LoaderCircle className="size-3.5 animate-spin text-brand-blue" />
+            ) : (
+              <Sparkles className="size-3.5 text-brand-blue" />
+            )}
+            <span>
+              {consolidating
+                ? isEn
+                  ? 'Consolidating…'
+                  : '正在整理…'
+                : isEn
+                  ? 'Consolidate / Dream'
+                  : '一键整理去重 (Dream)'}
+            </span>
+          </button>
+        </div>
+      </SettingsGroupCard>
+
+      {/* Add / Edit Memory Card */}
       <SettingsGroupCard>
         <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-3">
           <Field label={isEn ? 'Scope' : '作用域'}>
@@ -926,8 +1105,32 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
               }
             />
           </Field>
-          <div className="flex justify-end">
-            <SaveButton label={isEn ? 'Save memory' : '保存记忆'} onClick={() => void saveMemory()} />
+          <div className="flex items-center justify-end gap-2">
+            {editingId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingId('');
+                  setTitle('');
+                  setContent('');
+                }}
+                className="h-8 rounded-lg border border-border px-3 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+              >
+                {isEn ? 'Cancel edit' : '取消编辑'}
+              </button>
+            )}
+            <SaveButton
+              label={
+                editingId
+                  ? isEn
+                    ? 'Update memory'
+                    : '更新记忆'
+                  : isEn
+                    ? 'Save memory'
+                    : '保存记忆'
+              }
+              onClick={() => void saveMemory()}
+            />
           </div>
         </div>
       </SettingsGroupCard>
@@ -936,29 +1139,40 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
         <SectionHeading
           title={isEn ? `Saved memories (${visibleMemories.length})` : `已保存记忆 (${visibleMemories.length})`}
         />
-        <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-ui-xs">
-          {(['all', 'global', 'project'] as const).map((sc) => (
-            <button
-              key={sc}
-              type="button"
-              onClick={() => setFilterScope(sc)}
-              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                filterScope === sc ? 'bg-popover text-foreground shadow-xs' : 'text-foreground-subtle hover:text-foreground'
-              }`}
-            >
-              {sc === 'all'
-                ? isEn
-                  ? 'All'
-                  : '全部'
-                : sc === 'global'
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-foreground-subtlest" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={isEn ? 'Filter memories…' : '搜索记忆…'}
+              className="h-7 w-44 rounded-lg border border-border bg-input pl-8 pr-2.5 text-ui-xs text-foreground placeholder-foreground-subtlest"
+            />
+          </div>
+          <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-ui-xs">
+            {(['all', 'global', 'project'] as const).map((sc) => (
+              <button
+                key={sc}
+                type="button"
+                onClick={() => setFilterScope(sc)}
+                className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                  filterScope === sc ? 'bg-popover text-foreground shadow-xs' : 'text-foreground-subtle hover:text-foreground'
+                }`}
+              >
+                {sc === 'all'
                   ? isEn
-                    ? 'Global'
-                    : '全局'
-                  : isEn
-                    ? 'Project'
-                    : '项目'}
-            </button>
-          ))}
+                    ? 'All'
+                    : '全部'
+                  : sc === 'global'
+                    ? isEn
+                      ? 'Global'
+                      : '全局'
+                    : isEn
+                      ? 'Project'
+                      : '项目'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -966,8 +1180,8 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
         {visibleMemories.length === 0 ? (
           <EmptyRow>
             {isEn
-              ? 'No memories saved yet. Add one above or ask Nex to remember something via memory_save.'
-              : '暂无长期记忆。可在上方添加，或在对话中直接让 Nex 记住你的偏好（调用 memory_save）。'}
+              ? 'No memories saved yet. Add one above, enable auto-extraction, or ask Nex via memory_save.'
+              : '暂无长期记忆。可在上方添加、开启后台自动提取，或在对话中让 Nex 调用 memory_save。'}
           </EmptyRow>
         ) : (
           visibleMemories.map((m) => (
@@ -975,6 +1189,7 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
               <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-ui-base font-medium text-foreground">{m.title}</span>
+                  <MetaBadge mono>{m.id}</MetaBadge>
                   <MetaBadge mono>{m.scope}</MetaBadge>
                   <MetaBadge mono>{m.category}</MetaBadge>
                 </div>
@@ -983,14 +1198,24 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
                   <p className="font-mono text-ui-xs text-foreground-subtlest">{m.workspace_path}</p>
                 ) : null}
               </div>
-              <button
-                type="button"
-                onClick={() => void removeMemory(m.id)}
-                aria-label={isEn ? 'Delete memory' : '删除记忆'}
-                className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
-              >
-                <Trash2 className="size-4" />
-              </button>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => startEdit(m)}
+                  aria-label={isEn ? 'Edit memory' : '编辑记忆'}
+                  className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void removeMemory(m.id)}
+                  aria-label={isEn ? 'Delete memory' : '删除记忆'}
+                  className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
             </div>
           ))
         )}
