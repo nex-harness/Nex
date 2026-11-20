@@ -72,6 +72,7 @@ export function ProjectSidebar() {
   const toggleSidebar = useNexStore((s) => s.toggleSidebar);
   const openSettings = useNexStore((s) => s.openSettings);
   const closeSettings = useNexStore((s) => s.closeSettings);
+  const setQuickSearchOpen = useNexStore((s) => s.setQuickSearchOpen);
 
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -390,6 +391,19 @@ export function ProjectSidebar() {
             <span className="truncate">{formatMsg(locale, 'sidebar.newTask')}</span>
           </span>
           <span className="shrink-0 text-ui-xs text-foreground-subtlest">⌘ N</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="open-command-palette-btn"
+          onClick={() => setQuickSearchOpen(true)}
+          className="flex h-8 w-full items-center justify-between rounded-lg px-2.5 transition-colors hover:bg-hover"
+        >
+          <span className="flex items-center gap-2.5 text-ui-base font-normal text-foreground">
+            <Search className="size-4 shrink-0" />
+            <span className="truncate">{isZh ? '全局搜索与指令' : 'Search & commands'}</span>
+          </span>
+          <span className="shrink-0 text-ui-xs text-foreground-subtlest">⌘ K</span>
         </button>
 
         <button

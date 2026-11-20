@@ -243,6 +243,20 @@ CREATE TABLE IF NOT EXISTS memories (
 );
 
 CREATE INDEX IF NOT EXISTS idx_memories_scope_ws ON memories(scope, workspace_path, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS file_checkpoints (
+    id             TEXT PRIMARY KEY,
+    session_id     TEXT NOT NULL,
+    event_seq      INTEGER NOT NULL DEFAULT 0,
+    tool_call_id   TEXT NOT NULL DEFAULT '',
+    file_path      TEXT NOT NULL,
+    existed        INTEGER NOT NULL DEFAULT 1,
+    blob_hash      TEXT NOT NULL DEFAULT '',
+    created_at     INTEGER NOT NULL,
+    UNIQUE(session_id, event_seq, file_path)
+);
+
+CREATE INDEX IF NOT EXISTS idx_file_checkpoints_sess ON file_checkpoints(session_id, event_seq);
 `
 
 const archiveSchemaSQL = `

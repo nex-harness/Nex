@@ -13,6 +13,7 @@ import {
   CircleHelp,
   Copy,
   Cpu,
+  Download,
   Ellipsis,
   FileText,
   Folder,
@@ -34,6 +35,7 @@ import {
   PinOff,
   Plug,
   Plus,
+  RotateCcw,
   Search,
   Settings,
   ShieldAlert,
@@ -2446,16 +2448,22 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
 }) {
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
   const [copiedReply, setCopiedReply] = useState(false);
+  const [rewindArmed, setRewindArmed] = useState(false);
+  const [rewinding, setRewinding] = useState(false);
+  const [rewindNotice, setRewindNotice] = useState('');
   const activeSessionId = useNexStore((s) => s.activeSessionId);
   const permissionMode = useNexStore((s) => s.permissionMode);
   const setPermissionMode = useNexStore((s) => s.setPermissionMode);
   const setComposerText = useNexStore((s) => s.setComposerText);
   const sendPromptOrSteer = useNexStore((s) => s.sendPromptOrSteer);
   const forkSession = useNexStore((s) => s.forkSession);
+  const rewindSessionFiles = useNexStore((s) => s.rewindSessionFiles);
   const expandThinking = useNexStore((s) => s.preferences.expand_thinking);
   const defaultOpen = Boolean(item.streaming) || Boolean(expandThinking && item.thinking);
   const workExpanded = manualOpen ?? defaultOpen;
   const hasExitPlanCall = item.toolCalls.some((tc) => tc.name === 'exit_plan_mode');
+  const hasFileMutations = item.toolCalls.some((tc) => tc.name === 'write' || tc.name === 'edit');
+  const rewindBeforeSeq = item.startSeq || item.seq || 0;
   const showPlanApproval =
     isLast && !item.streaming && (hasExitPlanCall || (permissionMode === 'plan' && Boolean(item.text)));
 
@@ -2549,6 +2557,65 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
                   <span>{locale === 'en-US' ? 'Fork here' : '从此分支'}</span>
                 </button>
               )}
+              {activeSessionId && hasFileMutations && rewindBeforeSeq > 0 && (
+                <button
+                  type="button"
+                  data-testid={`rewind-turn-${rewindBeforeSeq}`}
+                  disabled={rewinding}
+                  onClick={async () => {
+                    if (!rewindArmed) {
+                      setRewindArmed(true);
+                      window.setTimeout(() => setRewindArmed(false), 4000);
+                      return;
+                    }
+                    setRewindArmed(false);
+                    setRewinding(true);
+                    const res = await rewindSessionFiles(activeSessionId, rewindBeforeSeq);
+                    setRewinding(false);
+                    if (res) {
+                      const restoredCount = (res.restored_files?.length || 0) + (res.deleted_files?.length || 0);
+                      setRewindNotice(
+                        restoredCount > 0
+                          ? locale === 'en-US'
+                            ? `Rewound ${restoredCount} file(s)`
+                            : `已回滚 ${restoredCount} 个文件`
+                          : locale === 'en-US'
+                            ? 'No checkpoints to rewind'
+                            : '没有可回滚的文件快照',
+                      );
+                      window.setTimeout(() => setRewindNotice(''), 4000);
+                    }
+                  }}
+                  className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs transition-colors ${
+                    rewindArmed
+                      ? 'bg-amber-500/15 font-medium text-amber-600 dark:text-amber-400'
+                      : 'text-foreground-subtlest hover:bg-hover hover:text-foreground'
+                  }`}
+                >
+                  <RotateCcw className="size-3" />
+                  <span>
+                    {rewinding
+                      ? locale === 'en-US'
+                        ? 'Rewinding…'
+                        : '回滚中…'
+                      : rewindArmed
+                        ? locale === 'en-US'
+                          ? 'Confirm rewind files?'
+                          : '确认回滚此轮文件?'
+                        : locale === 'en-US'
+                          ? 'Rewind files'
+                          : '回滚文件'}
+                  </span>
+                </button>
+              )}
+              {rewindNotice && (
+                <span
+                  data-testid="rewind-notice"
+                  className="rounded-md bg-success/12 px-2 py-0.5 text-ui-xs font-medium text-success"
+                >
+                  {rewindNotice}
+                </span>
+              )}
             </div>
           )}
 
@@ -2597,6 +2664,7 @@ export function ConversationPane() {
   const togglePinSession = useNexStore((s) => s.togglePinSession);
   const renameSession = useNexStore((s) => s.renameSession);
   const archiveSession = useNexStore((s) => s.archiveSession);
+  const exportSessionMarkdown = useNexStore((s) => s.exportSessionMarkdown);
 
   const [headerMenu, setHeaderMenu] = useState<'session' | 'help' | null>(null);
   const [renaming, setRenaming] = useState(false);
@@ -2892,6 +2960,18 @@ export function ConversationPane() {
                       >
                         <Pencil className="size-3.5 shrink-0 text-foreground-subtle" />
                         <span>{formatMsg(locale, 'taskList.rename')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="export-markdown-btn"
+                        onClick={() => {
+                          if (activeSessionId) void exportSessionMarkdown(activeSessionId);
+                          setHeaderMenu(null);
+                        }}
+                        className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-ui-sm text-foreground hover:bg-menu-hover"
+                      >
+                        <Download className="size-3.5 shrink-0 text-foreground-subtle" />
+                        <span>{locale === 'en-US' ? 'Export Markdown' : '导出 Markdown'}</span>
                       </button>
                       <button
                         type="button"

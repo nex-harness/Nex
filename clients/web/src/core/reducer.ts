@@ -190,6 +190,7 @@ export function applySessionEvent(
     }
     const created: ChatTurnItem = {
       id: `ast_${ev.seq || Date.now()}`,
+      startSeq: ev.seq > 0 ? ev.seq : undefined,
       role: 'assistant',
       text: '',
       thinking: '',

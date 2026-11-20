@@ -225,6 +225,7 @@ export interface ComposerAttachment {
 export interface ChatTurnItem {
   id: string;
   seq?: number;
+  startSeq?: number;
   role: 'user' | 'assistant';
   text: string;
   thinking: string;
@@ -371,6 +372,21 @@ export interface MemoryRecord {
   content: string;
   created_at: number;
   updated_at: number;
+}
+
+export interface SessionSearchHit {
+  session: SessionRecord;
+  match_type: 'title' | 'workspace' | 'message';
+  snippet: string;
+  matched_seq?: number;
+}
+
+export interface RewindResult {
+  session_id: string;
+  before_seq: number;
+  restored_files: string[];
+  deleted_files: string[];
+  errors?: string[];
 }
 
 export type SettingsSectionId =

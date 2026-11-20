@@ -1085,4 +1085,102 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(screen.getByTestId('memory-title-input')).toBeTruthy();
     expect(screen.getByText('纯 Go 静态构建')).toBeTruthy();
   });
+
+  it('supports Cmd+K command palette, Markdown export, and turn-level file rewind', async () => {
+    const rewindSpy = vi.fn().mockResolvedValue({
+      session_id: 'sess_b3',
+      before_seq: 10,
+      restored_files: ['/tmp/ws/main.go'],
+      deleted_files: [],
+    });
+    const exportSpy = vi.fn().mockResolvedValue({
+      filename: 'Batch-3-Test.md',
+      markdown: '# Batch 3 Test',
+    });
+
+    useNexStore.setState({
+      mainView: 'workspace',
+      locale: 'zh-CN',
+      activeSessionId: 'sess_b3',
+      quickSearchOpen: false,
+      rewindSessionFiles: rewindSpy,
+      exportSessionMarkdown: exportSpy,
+      sessions: [
+        {
+          id: 'sess_b3',
+          runner_id: 'run_1',
+          depth: 0,
+          title: 'Batch 3 Test',
+          workspace_path: '/tmp/ws',
+          agent_profile_slug: 'main',
+          model_id: 'group/grok-4.7',
+          provider_id: 'openai',
+          permission_mode: 'full_access',
+          status: 'idle',
+          latest_context_tokens: 1000,
+          context_window_limit: 500000,
+          created_at: 1000,
+          updated_at: 2000,
+          last_active_at: 2000,
+        },
+      ],
+      streams: {
+        sess_b3: {
+          lastSeq: 12,
+          running: false,
+          items: [
+            { id: 'usr_9', seq: 9, role: 'user', text: 'Update main.go', thinking: '', toolCalls: [] },
+            {
+              id: 'ast_10',
+              startSeq: 10,
+              seq: 12,
+              role: 'assistant',
+              text: 'Updated main.go.',
+              thinking: '',
+              toolCalls: [
+                {
+                  id: 'tc_edit_1',
+                  name: 'edit',
+                  argsText: JSON.stringify({ path: 'main.go', old_text: 'a', new_text: 'b' }),
+                  status: 'completed',
+                  streamOutput: '',
+                  finalOutput: 'edited main.go',
+                },
+              ],
+            },
+          ],
+          latestTelemetry: null,
+          turnTelemetries: [],
+          uiBadges: {},
+          pendingApproval: null,
+          pendingUIPrompt: null,
+          todos: [],
+          goals: [],
+        },
+      },
+    });
+
+    render(<App />);
+
+    // 1. Cmd+K opens CommandPaletteModal and can trigger Export Markdown
+    fireEvent.keyDown(window, { key: 'k', metaKey: true });
+    expect(screen.getByTestId('command-palette-modal')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('palette-item-cmd-export-md'));
+    expect(exportSpy).toHaveBeenCalledWith('sess_b3');
+    expect(screen.queryByTestId('command-palette-modal')).toBeNull();
+
+    // 2. Session header menu exposes Export Markdown button
+    fireEvent.click(screen.getByTestId('session-menu-btn'));
+    expect(screen.getByTestId('export-markdown-btn')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('export-markdown-btn'));
+    expect(exportSpy).toHaveBeenCalledTimes(2);
+
+    // 3. Two-step file rewind confirmation triggers rewindSessionFiles(sessionId, startSeq)
+    const rewindBtn = screen.getByTestId('rewind-turn-10');
+    fireEvent.click(rewindBtn);
+    expect(rewindBtn.textContent).toContain('确认回滚');
+    fireEvent.click(rewindBtn);
+    await waitFor(() => expect(rewindSpy).toHaveBeenCalledWith('sess_b3', 10));
+    expect(screen.getByTestId('rewind-notice').textContent).toContain('已回滚 1 个文件');
+  });
 });

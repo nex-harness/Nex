@@ -2,6 +2,7 @@ import { Plus, SquareTerminal, X } from 'lucide-react';
 import { type PointerEvent as ReactPointerEvent, useEffect, useState } from 'react';
 import { emptyStreamState } from './core/reducer';
 import { useNexStore } from './core/store';
+import { CommandPaletteModal } from './features/CommandPaletteModal';
 import { ApprovalModal, UIPromptModal } from './features/ControlModals';
 import { ConversationPane } from './features/ConversationPane';
 import { DesktopTopOverlay } from './features/DesktopTopOverlay';
@@ -49,8 +50,19 @@ export function App() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const onResize = () => setViewportWidth(window.innerWidth);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        const st = useNexStore.getState();
+        st.setQuickSearchOpen(!st.quickSearchOpen);
+      }
+    };
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, []);
 
   const effectiveSidePaneWidth = Math.min(
@@ -117,6 +129,7 @@ export function App() {
     return (
       <div className="zcode-view-enter h-dvh w-screen overflow-hidden">
         <SettingsPage />
+        <CommandPaletteModal />
         {pendingApproval && <ApprovalModal approval={pendingApproval} />}
         {pendingUIPrompt && <UIPromptModal prompt={pendingUIPrompt} />}
       </div>
@@ -253,7 +266,8 @@ export function App() {
         </div>
       )}
 
-      {/* Blocking Interaction Dialogs */}
+      {/* Command Palette & Blocking Interaction Dialogs */}
+      <CommandPaletteModal />
       {pendingApproval && <ApprovalModal approval={pendingApproval} />}
       {pendingUIPrompt && <UIPromptModal prompt={pendingUIPrompt} />}
     </div>

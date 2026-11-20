@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -230,5 +232,124 @@ func TestStoreBlobsRegistriesArchiveAndStats(t *testing.T) {
 	}
 	if st.HasBlob(ctx, rawTraceHash) || st.HasBlob(ctx, sysHash) {
 		t.Fatalf("expected orphaned CAS .zst blobs to be reclaimed after permanent delete!")
+	}
+}
+
+func TestFileCheckpointRewindSearchAndExport(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open store: %v", err)
+	}
+	defer st.Close()
+
+	workDir := t.TempDir()
+	existingFile := filepath.Join(workDir, "app.go")
+	createdFile := filepath.Join(workDir, "new_feature.go")
+	if err := os.WriteFile(existingFile, []byte("v1 original\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sess, err := st.CreateOrUpdateSession(ctx, SessionRecord{
+		ID:            "sess_cp_1",
+		RunnerID:      "run_local",
+		Title:         "Refactor Auth Middleware",
+		WorkspacePath: workDir,
+		ModelID:       "claude-sonnet-4-5",
+		ProviderID:    "anthropic",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Turn 1 (seq 10): edit existingFile from v1 -> v2
+	if err := st.RecordFileCheckpoint(ctx, sess.ID, 10, "tc_1", existingFile); err != nil {
+		t.Fatalf("RecordFileCheckpoint seq 10: %v", err)
+	}
+	if err := os.WriteFile(existingFile, []byte("v2 after turn 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Turn 2 (seq 20): edit existingFile v2 -> v3 AND create createdFile
+	if err := st.RecordFileCheckpoint(ctx, sess.ID, 20, "tc_2", existingFile); err != nil {
+		t.Fatalf("RecordFileCheckpoint seq 20 existing: %v", err)
+	}
+	if err := st.RecordFileCheckpoint(ctx, sess.ID, 20, "tc_3", createdFile); err != nil {
+		t.Fatalf("RecordFileCheckpoint seq 20 created: %v", err)
+	}
+	if err := os.WriteFile(existingFile, []byte("v3 after turn 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(createdFile, []byte("brand new file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Rewind Turn 2 (beforeSeq=20): existingFile -> v2, createdFile -> deleted
+	rw2, err := st.RewindSessionFiles(ctx, sess.ID, 20)
+	if err != nil {
+		t.Fatalf("RewindSessionFiles(20): %v", err)
+	}
+	if len(rw2.RestoredFiles) != 1 || rw2.RestoredFiles[0] != existingFile {
+		t.Fatalf("expected existingFile restored, got %+v", rw2)
+	}
+	if len(rw2.DeletedFiles) != 1 || rw2.DeletedFiles[0] != createdFile {
+		t.Fatalf("expected createdFile deleted, got %+v", rw2)
+	}
+	got, _ := os.ReadFile(existingFile)
+	if string(got) != "v2 after turn 1\n" {
+		t.Fatalf("expected v2 content after rewinding turn 2, got %q", string(got))
+	}
+	if _, statErr := os.Stat(createdFile); !os.IsNotExist(statErr) {
+		t.Fatalf("expected createdFile to be deleted after rewind")
+	}
+
+	// Rewind Turn 1 (beforeSeq=10): existingFile -> v1 original
+	rw1, err := st.RewindSessionFiles(ctx, sess.ID, 10)
+	if err != nil {
+		t.Fatalf("RewindSessionFiles(10): %v", err)
+	}
+	if len(rw1.RestoredFiles) != 1 {
+		t.Fatalf("expected 1 restored file on turn 1 rewind, got %+v", rw1)
+	}
+	got, _ = os.ReadFile(existingFile)
+	if string(got) != "v1 original\n" {
+		t.Fatalf("expected v1 original content after rewinding turn 1, got %q", string(got))
+	}
+
+	// Append conversation events and verify Full-Text Search & Markdown Export
+	_, _ = st.AppendSessionEvent(ctx, SessionEvent{
+		SessionID: sess.ID,
+		TurnIdx:   1,
+		EventType: "message_end",
+		Payload:   json.RawMessage(`{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"Please fix the JWT clock skew validation bug in middleware"}]}}`),
+	}, false)
+	_, _ = st.AppendSessionEvent(ctx, SessionEvent{
+		SessionID: sess.ID,
+		TurnIdx:   1,
+		EventType: "message_end",
+		Payload:   json.RawMessage(`{"type":"message_end","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Checking leeway setting"},{"type":"text","text":"Updated leeway to 30 seconds in auth.go."}]}}`),
+	}, false)
+
+	hits, err := st.SearchSessions(ctx, "clock skew", 10)
+	if err != nil {
+		t.Fatalf("SearchSessions: %v", err)
+	}
+	if len(hits) != 1 || hits[0].Session.ID != sess.ID || hits[0].MatchType != "message" || !strings.Contains(hits[0].Snippet, "clock skew") {
+		t.Fatalf("unexpected search hits: %+v", hits)
+	}
+
+	md, filename, err := st.ExportSessionMarkdown(ctx, sess.ID)
+	if err != nil {
+		t.Fatalf("ExportSessionMarkdown: %v", err)
+	}
+	if filename != "Refactor-Auth-Middleware.md" {
+		t.Fatalf("unexpected filename: %q", filename)
+	}
+	if !strings.Contains(md, "# Refactor Auth Middleware") ||
+		!strings.Contains(md, "## User") ||
+		!strings.Contains(md, "JWT clock skew") ||
+		!strings.Contains(md, "<summary>Thinking</summary>") ||
+		!strings.Contains(md, "Updated leeway to 30 seconds") {
+		t.Fatalf("unexpected markdown export:\n%s", md)
 	}
 }

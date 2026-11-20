@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -727,6 +729,9 @@ func (l *Loop) executeSingleTool(ctx context.Context, turnNo int, call ai.Conten
 		ToolArgs:   args,
 	})
 
+	// Capture file-level checkpoint right BEFORE write/edit modifies disk so any turn can be rewound!
+	l.recordPreEditCheckpoint(ctx, turnNo, call.ToolName, call.ToolCallID, args)
+
 	res, err := toolImpl.Execute(ctx, l.cfg.WorkDir, args, func(delta string) {
 		l.emit(Event{
 			Type:       EventToolExecutionUpdate,
@@ -762,4 +767,36 @@ func (l *Loop) executeSingleTool(ctx context.Context, turnNo int, call ai.Conten
 		ToolResult: &resCopy,
 	})
 	return res, err
+}
+
+func (l *Loop) recordPreEditCheckpoint(ctx context.Context, turnNo int, toolName, toolCallID string, args json.RawMessage) {
+	if l.cfg.Store == nil || l.cfg.SessionID == "" {
+		return
+	}
+	if toolName != "write" && toolName != "edit" {
+		return
+	}
+	var parsed struct {
+		Path     string `json:"path"`
+		FilePath string `json:"file_path"`
+	}
+	if err := json.Unmarshal(args, &parsed); err != nil {
+		return
+	}
+	target := strings.TrimSpace(parsed.Path)
+	if target == "" {
+		target = strings.TrimSpace(parsed.FilePath)
+	}
+	if target == "" {
+		return
+	}
+	absPath := target
+	if !filepath.IsAbs(absPath) && l.cfg.WorkDir != "" {
+		absPath = filepath.Join(l.cfg.WorkDir, absPath)
+	}
+	seq, err := l.cfg.Store.LatestSessionSeq(ctx, l.cfg.SessionID)
+	if err != nil || seq == 0 {
+		seq = uint64(max(1, turnNo))
+	}
+	_ = l.cfg.Store.RecordFileCheckpoint(ctx, l.cfg.SessionID, seq, toolCallID, absPath)
 }

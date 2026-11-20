@@ -29,6 +29,7 @@ const (
 	TypeSessionAbort    = "session.abort"
 	TypeSessionEvent    = "session.event"
 	TypeSessionForkSync = "session.fork_sync"
+	TypeSessionRewind   = "session.rewind"
 
 	// Remote Approval & Remote Plugin UI (ctx.ui)
 	TypeApprovalResolve = "approval.resolve"
@@ -204,6 +205,13 @@ type MCPRemoteResultPayload struct {
 type OutboxAckPayload struct {
 	SessionID string `json:"session_id"`
 	AckSeq    uint64 `json:"ack_seq"`
+}
+
+// SessionRewindPayload asks a Runner to list file checkpoints or rewind modified files prior to BeforeSeq.
+type SessionRewindPayload struct {
+	Action    string `json:"action"` // "list" | "rewind"
+	SessionID string `json:"session_id"`
+	BeforeSeq uint64 `json:"before_seq,omitempty"`
 }
 
 // --- Binary Fast-Path Frame for libghostty Remote PTY ---

@@ -17,8 +17,10 @@ import {
   PluginRecord,
   ProviderRecord,
   QueuedFollowUp,
+  RewindResult,
   RunnerRecord,
   SessionRecord,
+  SessionSearchHit,
   SettingsSectionId,
   SkillRecord,
   ThinkingEffort,
@@ -121,6 +123,9 @@ export interface AppState {
     sessionId: string,
     opts?: { upToSeq?: number; beforeSeq?: number; title?: string; prefillText?: string },
   ) => Promise<string | null>;
+  searchSessions: (query: string) => Promise<SessionSearchHit[]>;
+  exportSessionMarkdown: (sessionId: string) => Promise<{ filename: string; markdown: string } | null>;
+  rewindSessionFiles: (sessionId: string, beforeSeq: number) => Promise<RewindResult | null>;
   sendPromptOrSteer: (overrideText?: string, mode?: 'follow_up' | 'steer') => void;
   queueFollowUp: (text: string) => void;
   removeFollowUp: (sessionId: string, id: string) => void;
@@ -1183,5 +1188,101 @@ export const useNexStore = create<AppState>((set, get) => ({
         showBottomPanel: rem.length > 0 ? s.showBottomPanel : false,
       };
     });
+  },
+
+  searchSessions: async (query) => {
+    const q = query.trim();
+    try {
+      const hits = await apiFetch<SessionSearchHit[]>(
+        `/api/v1/sessions/search?q=${encodeURIComponent(q)}&limit=20`,
+      );
+      if (Array.isArray(hits)) return hits;
+    } catch {
+      // fallback to in-memory session title/workspace filter
+    }
+    const lower = q.toLowerCase();
+    return get()
+      .sessions.filter(
+        (s) =>
+          !lower ||
+          s.title.toLowerCase().includes(lower) ||
+          (s.workspace_path || '').toLowerCase().includes(lower),
+      )
+      .slice(0, 20)
+      .map((s) => ({
+        session: s,
+        match_type: 'title' as const,
+        snippet: s.workspace_path || '',
+      }));
+  },
+
+  exportSessionMarkdown: async (sessionId) => {
+    if (!sessionId) return null;
+    let payload: { filename: string; markdown: string } | null = null;
+    try {
+      const res = await apiFetch<{ filename?: string; markdown?: string }>(
+        `/api/v1/sessions/${encodeURIComponent(sessionId)}/export?format=json`,
+      );
+      if (res && typeof res.markdown === 'string') {
+        payload = {
+          filename: res.filename || `${sessionId}.md`,
+          markdown: res.markdown,
+        };
+      }
+    } catch {
+      // client-side fallback from active stream items
+    }
+    if (!payload) {
+      const sess = get().sessions.find((s) => s.id === sessionId);
+      const stream = get().streams[sessionId];
+      const title = sess?.title || 'Nex Conversation';
+      const lines: string[] = [`# ${title}`, ''];
+      if (sess?.model_id) lines.push(`- **Model**: \`${sess.model_id}\``);
+      if (sess?.workspace_path) lines.push(`- **Workspace**: \`${sess.workspace_path}\``);
+      lines.push('', '---', '');
+      for (const item of stream?.items || []) {
+        lines.push(item.role === 'user' ? '## User' : '## Assistant', '');
+        if (item.thinking) {
+          lines.push('<details>', '<summary>Thinking</summary>', '', item.thinking, '', '</details>', '');
+        }
+        if (item.text) lines.push(item.text, '');
+      }
+      const safeName = title.replace(/[/\\:*?"<>|]/g, '-').trim().slice(0, 64) || sessionId;
+      payload = { filename: `${safeName}.md`, markdown: lines.join('\n') };
+    }
+
+    if (typeof document !== 'undefined' && typeof Blob !== 'undefined' && typeof URL !== 'undefined') {
+      try {
+        const blob = new Blob([payload.markdown], { type: 'text/markdown;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = payload.filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch {
+        // ignore download error in headless test envs
+      }
+    }
+    return payload;
+  },
+
+  rewindSessionFiles: async (sessionId, beforeSeq) => {
+    if (!sessionId) return null;
+    try {
+      const res = await apiFetch<RewindResult>(
+        `/api/v1/sessions/${encodeURIComponent(sessionId)}/rewind`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ before_seq: beforeSeq }),
+        },
+      );
+      void get().refreshGitSummary(false);
+      return res;
+    } catch {
+      return null;
+    }
   },
 }));

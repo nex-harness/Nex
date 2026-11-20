@@ -37,6 +37,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/runners", s.handleRunners)
 	s.mux.HandleFunc("/api/v1/runners/", s.handleRunnerSubroutes)
 	s.mux.HandleFunc("/api/v1/sessions", s.handleSessions)
+	s.mux.HandleFunc("/api/v1/sessions/search", s.handleSessionSearch)
 	s.mux.HandleFunc("/api/v1/sessions/", s.handleSessionSubroutes)
 	s.mux.HandleFunc("/api/v1/archives", s.handleArchives)
 	s.mux.HandleFunc("/api/v1/archives/", s.handleArchiveSubroutes)
@@ -559,9 +560,129 @@ func (s *Server) handleSessionSubroutes(w http.ResponseWriter, r *http.Request) 
 			"copied_events": len(copied),
 		})
 
+	case "export":
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		md, filename, err := s.store.ExportSessionMarkdown(r.Context(), sessID)
+		if err != nil {
+			writeErr(w, http.StatusNotFound, err)
+			return
+		}
+		if r.URL.Query().Get("format") == "json" {
+			writeJSON(w, http.StatusOK, map[string]string{
+				"filename": filename,
+				"markdown": md,
+			})
+			return
+		}
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		if r.URL.Query().Get("download") == "1" {
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(md))
+
+	case "checkpoints":
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		sess, err := s.store.GetSession(r.Context(), sessID)
+		if err != nil {
+			writeErr(w, http.StatusNotFound, err)
+			return
+		}
+		if sess.RunnerID != "" {
+			if env, eErr := protocol.NewEnvelope(protocol.TypeSessionRewind, protocol.SessionRewindPayload{
+				Action:    "list",
+				SessionID: sessID,
+			}); eErr == nil {
+				env.RunnerID = sess.RunnerID
+				env.SessionID = sessID
+				if reply, rErr := s.callRunnerRPC(r.Context(), sess.RunnerID, env, 8*time.Second); rErr == nil && reply.Type != protocol.TypeError {
+					w.Header().Set("Content-Type", "application/json; charset=utf-8")
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write(reply.Payload)
+					return
+				}
+			}
+		}
+		cps, err := s.store.ListFileCheckpoints(r.Context(), sessID)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		if cps == nil {
+			cps = []store.FileCheckpoint{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"checkpoints": cps})
+
+	case "rewind":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		sess, err := s.store.GetSession(r.Context(), sessID)
+		if err != nil {
+			writeErr(w, http.StatusNotFound, err)
+			return
+		}
+		var body struct {
+			BeforeSeq uint64 `json:"before_seq"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if sess.RunnerID != "" {
+			if env, eErr := protocol.NewEnvelope(protocol.TypeSessionRewind, protocol.SessionRewindPayload{
+				Action:    "rewind",
+				SessionID: sessID,
+				BeforeSeq: body.BeforeSeq,
+			}); eErr == nil {
+				env.RunnerID = sess.RunnerID
+				env.SessionID = sessID
+				if reply, rErr := s.callRunnerRPC(r.Context(), sess.RunnerID, env, 15*time.Second); rErr == nil {
+					if reply.Type == protocol.TypeError {
+						w.Header().Set("Content-Type", "application/json; charset=utf-8")
+						w.WriteHeader(http.StatusBadRequest)
+						_, _ = w.Write(reply.Payload)
+						return
+					}
+					w.Header().Set("Content-Type", "application/json; charset=utf-8")
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write(reply.Payload)
+					return
+				}
+			}
+		}
+		res, err := s.store.RewindSessionFiles(r.Context(), sessID, body.BeforeSeq)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
+}
+
+func (s *Server) handleSessionSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	q := r.URL.Query().Get("q")
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	hits, err := s.store.SearchSessions(r.Context(), q, limit)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	if hits == nil {
+		hits = []store.SessionSearchHit{}
+	}
+	writeJSON(w, http.StatusOK, hits)
 }
 
 func (s *Server) handleArchives(w http.ResponseWriter, r *http.Request) {

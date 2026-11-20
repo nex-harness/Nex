@@ -486,6 +486,41 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 			_ = n.sendEnvelope(ctx, reply)
 		}()
 
+	case protocol.TypeSessionRewind:
+		go func() {
+			var p protocol.SessionRewindPayload
+			var reply protocol.Envelope
+			if err := json.Unmarshal(env.Payload, &p); err != nil {
+				reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": err.Error()})
+			} else {
+				sessID := p.SessionID
+				if sessID == "" {
+					sessID = env.SessionID
+				}
+				switch p.Action {
+				case "list":
+					cps, err := n.store.ListFileCheckpoints(ctx, sessID)
+					if err != nil {
+						reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": err.Error()})
+					} else {
+						if cps == nil {
+							cps = []store.FileCheckpoint{}
+						}
+						reply, _ = protocol.NewEnvelope(protocol.TypeSessionRewind, map[string]any{"checkpoints": cps})
+					}
+				default:
+					res, err := n.store.RewindSessionFiles(ctx, sessID, p.BeforeSeq)
+					if err != nil {
+						reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": err.Error()})
+					} else {
+						reply, _ = protocol.NewEnvelope(protocol.TypeSessionRewind, res)
+					}
+				}
+			}
+			reply.ReplyTo = env.ID
+			_ = n.sendEnvelope(ctx, reply)
+		}()
+
 	case protocol.TypeApprovalResolve:
 		var ar protocol.ApprovalResolvePayload
 		if json.Unmarshal(env.Payload, &ar) == nil && ar.ApprovalID != "" {
