@@ -5,6 +5,7 @@ export interface SessionStreamState {
   running: boolean;
   items: ChatTurnItem[];
   latestTelemetry: TurnTelemetry | null;
+  turnTelemetries: TurnTelemetry[];
   uiBadges: Record<string, string>;
   pendingApproval: PendingApproval | null;
   pendingUIPrompt: PendingUIPrompt | null;
@@ -18,6 +19,7 @@ export function emptyStreamState(): SessionStreamState {
     running: false,
     items: [],
     latestTelemetry: null,
+    turnTelemetries: [],
     uiBadges: {},
     pendingApproval: null,
     pendingUIPrompt: null,
@@ -122,6 +124,7 @@ export function applySessionEvent(
   let items = prev.items;
   let running = prev.running;
   let latestTelemetry = prev.latestTelemetry;
+  let turnTelemetries = prev.turnTelemetries || [];
   let uiBadges = prev.uiBadges;
   let pendingApproval = prev.pendingApproval;
   let pendingUIPrompt = prev.pendingUIPrompt;
@@ -452,7 +455,19 @@ export function applySessionEvent(
 
     case 'turn_end':
       if (p.telemetry) {
-        latestTelemetry = p.telemetry as TurnTelemetry;
+        const tel = p.telemetry as TurnTelemetry;
+        latestTelemetry = tel;
+        const idx = turnTelemetries.findIndex(
+          (t) =>
+            (tel.raw_trace_blob_hash && t.raw_trace_blob_hash === tel.raw_trace_blob_hash && t.turn_idx === tel.turn_idx) ||
+            (tel.recorded_at > 0 && t.recorded_at === tel.recorded_at && t.turn_idx === tel.turn_idx),
+        );
+        if (idx >= 0) {
+          turnTelemetries = turnTelemetries.slice();
+          turnTelemetries[idx] = tel;
+        } else {
+          turnTelemetries = [...turnTelemetries, tel];
+        }
       }
       break;
 
@@ -471,6 +486,7 @@ export function applySessionEvent(
     running,
     items,
     latestTelemetry,
+    turnTelemetries,
     uiBadges,
     pendingApproval,
     pendingUIPrompt,

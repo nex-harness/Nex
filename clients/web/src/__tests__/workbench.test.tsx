@@ -743,4 +743,122 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(screen.queryByTestId('composer-thought-slider')).toBeNull();
     expect(screen.getByTestId('composer-thought-unsupported')).toBeTruthy();
   });
+
+  it('closes ContextPopover on outside click/Escape, merges system prompt inspection, and supports # session references', () => {
+    useNexStore.setState({
+      locale: 'zh-CN',
+      activeSessionId: 'sess_active_1',
+      sessions: [
+        {
+          id: 'sess_active_1',
+          runner_id: 'run_1',
+          depth: 0,
+          title: 'Current Task',
+          workspace_path: '/tmp/ws',
+          agent_profile_slug: 'main',
+          model_id: 'group/grok-4.7',
+          provider_id: 'openai',
+          permission_mode: 'full_access',
+          status: 'idle',
+          latest_context_tokens: 15400,
+          context_window_limit: 500000,
+          created_at: 1000,
+          updated_at: 2000,
+          last_active_at: 2000,
+        },
+        {
+          id: 'sess_weather_ref',
+          runner_id: 'run_1',
+          depth: 0,
+          title: '北京明天天气查询',
+          workspace_path: '/tmp/ws',
+          agent_profile_slug: 'main',
+          model_id: 'group/grok-4.7',
+          provider_id: 'openai',
+          permission_mode: 'full_access',
+          status: 'idle',
+          latest_context_tokens: 4000,
+          context_window_limit: 500000,
+          created_at: 1000,
+          updated_at: 1900,
+          last_active_at: 1900,
+        },
+      ],
+      streams: {
+        sess_active_1: {
+          lastSeq: 2,
+          running: false,
+          items: [
+            { id: 'usr_1', seq: 1, role: 'user', text: 'Hi', thinking: '', toolCalls: [] },
+            { id: 'ast_2', seq: 2, role: 'assistant', text: 'Hello!', thinking: '', toolCalls: [] },
+          ],
+          latestTelemetry: {
+            id: 'tel_1',
+            session_id: 'sess_active_1',
+            turn_idx: 1,
+            runner_id: 'run_1',
+            provider_id: 'openai',
+            model_id: 'group/grok-4.7',
+            trigger_source: 'chat',
+            context_window: 500000,
+            total_context_tokens: 15400,
+            window_utilization_pct: 3.1,
+            input_tokens: 14000,
+            output_tokens: 1400,
+            reasoning_tokens: 120,
+            cache_read_tokens: 1000,
+            cache_write_tokens: 0,
+            cache_hit_rate_pct: 7.5,
+            estimated_cost_usd: 0.0322,
+            cache_saved_usd: 0.001,
+            breakdown: [
+              { category: 'messages', bytes: 1000, tokens: 10000, pct: 69.7, blob_hash: 'hash_msg' },
+              { category: 'system_tools', bytes: 500, tokens: 3500, pct: 23.4, blob_hash: 'hash_tools' },
+              { category: 'system_prompt', bytes: 200, tokens: 600, pct: 3.7, blob_hash: 'hash_sys' },
+            ],
+            system_prompt_blob_hash: 'hash_sys',
+            raw_trace_blob_hash: 'hash_trace',
+            ttft_ms: 400,
+            duration_ms: 1200,
+            recorded_at: 1700000000,
+          },
+          turnTelemetries: [],
+          uiBadges: {},
+          pendingApproval: null,
+          pendingUIPrompt: null,
+          todos: [],
+          goals: [],
+        },
+      },
+      composerText: '',
+    });
+
+    render(<App />);
+
+    // 1. Open ContextPopover -> no redundant "查看系统提示词" button; trajectory button exists; clicking outside closes it
+    fireEvent.click(screen.getByTestId('context-ring-btn'));
+    expect(screen.getByTestId('context-popover')).toBeTruthy();
+    expect(screen.queryByText('查看系统提示词')).toBeNull();
+    expect(screen.getByTestId('open-trajectory-btn')).toBeTruthy();
+    expect(screen.getByTestId('context-cat-system_prompt')).toBeTruthy();
+
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByTestId('context-popover')).toBeNull();
+
+    // Re-open and close with Escape
+    fireEvent.click(screen.getByTestId('context-ring-btn'));
+    expect(screen.getByTestId('context-popover')).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('context-popover')).toBeNull();
+
+    // 2. Typing `#` opens session reference autocomplete and inserts `#sess_weather_ref `
+    const input = screen.getByTestId('composer-input') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '参考一下 #天气', selectionStart: 8 } });
+    expect(screen.getByTestId('composer-session-menu')).toBeTruthy();
+    expect(screen.getByTestId('session-ref-option-0').textContent).toContain('北京明天天气查询');
+
+    fireEvent.mouseDown(screen.getByTestId('session-ref-option-0'));
+    expect(useNexStore.getState().composerText).toBe('参考一下 #sess_weather_ref ');
+    expect(screen.getByTestId('composer-session-refs')).toBeTruthy();
+  });
 });

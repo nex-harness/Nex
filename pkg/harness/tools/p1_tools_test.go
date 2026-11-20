@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nex-harness/nex/pkg/protocol"
+	"github.com/nex-harness/nex/pkg/store"
 )
 
 func TestFileStateTrackerReadBeforeEditAndStaleDetection(t *testing.T) {
@@ -248,5 +249,63 @@ func TestAskUserQuestionTool(t *testing.T) {
 	res, err = tool.Execute(context.Background(), "", json.RawMessage(`{"question":"API token?"}`), nil)
 	if err != nil || !res.IsError || !strings.Contains(res.Output, "headless") {
 		t.Fatalf("expected headless error without default, got %+v err=%v", res, err)
+	}
+}
+
+type mockSessionLookup struct {
+	recs map[string]*store.SessionRecord
+	evs  map[string][]store.SessionEvent
+}
+
+func (m *mockSessionLookup) GetSession(_ context.Context, id string) (*store.SessionRecord, error) {
+	if r, ok := m.recs[id]; ok {
+		return r, nil
+	}
+	return nil, os.ErrNotExist
+}
+
+func (m *mockSessionLookup) ListSessionEventsAfter(_ context.Context, sessionID string, _ uint64) ([]store.SessionEvent, error) {
+	return m.evs[sessionID], nil
+}
+
+func TestReadSessionContextAndReferences(t *testing.T) {
+	refs := ExtractSessionReferences("Compare #sess_alpha-1 with #session_beta.2 and #sess_alpha-1 again")
+	if len(refs) != 2 || refs[0] != "sess_alpha-1" || refs[1] != "session_beta.2" {
+		t.Fatalf("unexpected refs: %+v", refs)
+	}
+
+	lookup := &mockSessionLookup{
+		recs: map[string]*store.SessionRecord{
+			"sess_alpha-1": {ID: "sess_alpha-1", Title: "Weather Discussion", WorkspacePath: "/tmp/ws", ModelID: "grok-4.7"},
+		},
+		evs: map[string][]store.SessionEvent{
+			"sess_alpha-1": {
+				{Seq: 1, EventType: "message_end", Payload: json.RawMessage(`{"message":{"role":"user","content":[{"type":"text","text":"What is Beijing weather tomorrow?"}]}}`)},
+				{Seq: 2, EventType: "message_end", Payload: json.RawMessage(`{"message":{"role":"assistant","content":[{"type":"text","text":"Beijing tomorrow will be sunny, 0 to 5C."}]}}`)},
+			},
+		},
+	}
+
+	reminder := BuildReferencedSessionReminder(context.Background(), lookup, "Please check #sess_alpha-1")
+	if !strings.Contains(reminder, "sess_alpha-1 (Weather Discussion)") || !strings.Contains(reminder, "read_session_context") {
+		t.Fatalf("unexpected reminder:\n%s", reminder)
+	}
+
+	tool := NewReadSessionContextTool(lookup, "sess_current")
+	if !tool.IsReadOnly(nil) || tool.Name() != "read_session_context" {
+		t.Fatalf("expected read-only read_session_context tool")
+	}
+
+	res, err := tool.Execute(context.Background(), "", json.RawMessage(`{"session_id":"#sess_alpha-1","query":"Beijing"}`), nil)
+	if err != nil || res.IsError {
+		t.Fatalf("read_session_context failed: %+v err=%v", res, err)
+	}
+	if !strings.Contains(res.Output, "Weather Discussion") || !strings.Contains(res.Output, "sunny, 0 to 5C") {
+		t.Fatalf("unexpected transcript output:\n%s", res.Output)
+	}
+
+	missing, err := tool.Execute(context.Background(), "", json.RawMessage(`{"session_id":"sess_nope"}`), nil)
+	if err != nil || !missing.IsError {
+		t.Fatalf("expected missing session error, got %+v err=%v", missing, err)
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -328,13 +330,25 @@ func (n *Node) ExecutePrompt(
 	// Build System Sections (stable cached core + Skills + MCP + volatile meta context)
 	sections := buildPromptSections(parentCtx, n, sessRec, workDir, triggerSource)
 
+	sessionLookup := &runnerSessionLookup{node: n}
+	if refReminder := tools.BuildReferencedSessionReminder(parentCtx, sessionLookup, p.Text); refReminder != "" {
+		sections = append(sections, ai.SystemSection{
+			Category: agent.CatMetaContext,
+			Name:     "referenced_sessions",
+			Content:  refReminder,
+		})
+	}
+
 	sessionTools, bgCleanup := tools.DefaultCodingToolsWithCleanup()
 	defer bgCleanup()
-	sessionTools = append(sessionTools, tools.NewAskUserQuestionTool(&sessionUIBridge{
-		node:      n,
-		sessionID: sessRec.ID,
-		hasUI:     hasUI,
-	}))
+	sessionTools = append(sessionTools,
+		tools.NewAskUserQuestionTool(&sessionUIBridge{
+			node:      n,
+			sessionID: sessRec.ID,
+			hasUI:     hasUI,
+		}),
+		tools.NewReadSessionContextTool(sessionLookup, sessRec.ID),
+	)
 
 	var hooks agent.Hooks
 	var extCleanup func()
@@ -654,6 +668,93 @@ func loadSkillInfos(ctx context.Context, n *Node) []prompts.SkillInfo {
 // summary when it exposes one. When extensions are attached but expose no
 // summary, it returns nothing because PrepareSession already injects the
 // mcp_tools section itself; only standalone runners fall back to the store.
+type runnerSessionLookup struct {
+	node *Node
+}
+
+func (l *runnerSessionLookup) serverHTTPBase() string {
+	wsURL := strings.TrimSpace(l.node.cfg.ServerWSURL)
+	if wsURL == "" {
+		return ""
+	}
+	u, err := url.Parse(wsURL)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	scheme := "http"
+	if u.Scheme == "wss" || u.Scheme == "https" {
+		scheme = "https"
+	}
+	return scheme + "://" + u.Host
+}
+
+func (l *runnerSessionLookup) GetSession(ctx context.Context, id string) (*store.SessionRecord, error) {
+	if rec, err := l.node.store.GetSession(ctx, id); err == nil && rec != nil {
+		return rec, nil
+	}
+	base := l.serverHTTPBase()
+	if base == "" {
+		return nil, fmt.Errorf("session %q not found", id)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/sessions", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", ai.DefaultUserAgent)
+	if l.node.cfg.AuthToken != "" {
+		req.Header.Set("Authorization", "Bearer "+l.node.cfg.AuthToken)
+	}
+	resp, err := l.node.hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server session lookup HTTP %d", resp.StatusCode)
+	}
+	var list []store.SessionRecord
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		return nil, err
+	}
+	for i := range list {
+		if list[i].ID == id {
+			return &list[i], nil
+		}
+	}
+	return nil, fmt.Errorf("session %q not found", id)
+}
+
+func (l *runnerSessionLookup) ListSessionEventsAfter(ctx context.Context, sessionID string, afterSeq uint64) ([]store.SessionEvent, error) {
+	if evs, err := l.node.store.ListSessionEventsAfter(ctx, sessionID, afterSeq); err == nil && len(evs) > 0 {
+		return evs, nil
+	}
+	base := l.serverHTTPBase()
+	if base == "" {
+		return nil, nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/api/v1/sessions/%s/events?after_seq=%d", base, url.PathEscape(sessionID), afterSeq), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", ai.DefaultUserAgent)
+	if l.node.cfg.AuthToken != "" {
+		req.Header.Set("Authorization", "Bearer "+l.node.cfg.AuthToken)
+	}
+	resp, err := l.node.hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server events lookup HTTP %d", resp.StatusCode)
+	}
+	var evs []store.SessionEvent
+	if err := json.NewDecoder(resp.Body).Decode(&evs); err != nil {
+		return nil, err
+	}
+	return evs, nil
+}
+
 func loadMCPNamespaceSummary(ctx context.Context, n *Node) string {
 	type namespaceSummarizer interface {
 		MCPNamespaceSummary() string

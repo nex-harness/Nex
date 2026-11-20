@@ -1,10 +1,10 @@
-import { X } from 'lucide-react';
-import { useState } from 'react';
-import { createPortal } from 'react-dom';
+import { Activity, ChevronRight } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { apiFetchText, formatCompactTokens } from '../core/protocol';
 import { useNexStore } from '../core/store';
 import { TurnTelemetry } from '../core/types';
 import { formatMsg, type MessageKey } from '../i18n/messages';
+import { ContextInspectorModal, ModelTrajectoryModal } from './ModelTrajectoryModal';
 
 interface CategoryMeta {
   labelKey: MessageKey;
@@ -22,28 +22,91 @@ const CATEGORY_META: Array<{ key: string; meta: CategoryMeta }> = [
 
 export function ContextWindowsButton({
   telemetry,
+  turnTelemetries = [],
+  sessionTitle,
   contextLimit,
 }: {
   telemetry: TurnTelemetry | null;
+  turnTelemetries?: TurnTelemetry[];
+  sessionTitle?: string;
   contextLimit: number;
 }) {
   const locale = useNexStore((s) => s.locale);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [traceModal, setTraceModal] = useState<{ title: string; content: string } | null>(null);
+  const [inspectorModal, setInspectorModal] = useState<{
+    category: string;
+    title: string;
+    colorVar: string;
+    tokens?: number;
+    content: string;
+  } | null>(null);
+  const [trajectoryOpen, setTrajectoryOpen] = useState(false);
   const [loadingBlob, setLoadingBlob] = useState(false);
+
+  // Close popover on outside click or Escape key
+  useEffect(() => {
+    if (!open) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
 
   const used = telemetry?.total_context_tokens || 0;
   const limit = telemetry?.context_window || contextLimit || 200000;
   const pct = limit > 0 ? Math.min(100, Number(((used * 100) / limit).toFixed(1))) : 0;
 
-  const inspectBlob = async (title: string, hash?: string) => {
-    if (!hash) return;
+  const allTelemetries =
+    turnTelemetries.length > 0 ? turnTelemetries : telemetry ? [telemetry] : [];
+  const hasTrajectory = allTelemetries.some((t) => Boolean(t.raw_trace_blob_hash));
+
+  const inspectCategory = async (
+    category: string,
+    title: string,
+    colorVar: string,
+    tokens: number | undefined,
+    hash?: string,
+    fallbackTraceHash?: string,
+  ) => {
+    const targetHash = hash || fallbackTraceHash;
+    if (!targetHash) return;
+    setOpen(false);
     setLoadingBlob(true);
     try {
-      const txt = await apiFetchText(`/api/v1/blobs/${hash}`);
-      setTraceModal({ title, content: txt });
+      let txt = await apiFetchText(`/api/v1/blobs/${targetHash}`);
+      // Older sessions without a standalone messages blob fall back to extracting `.messages` from raw trace
+      if (!hash && fallbackTraceHash && category === 'messages') {
+        try {
+          const parsed = JSON.parse(txt);
+          if (parsed && Array.isArray(parsed.messages)) {
+            txt = JSON.stringify(parsed.messages, null, 2);
+          }
+        } catch {
+          // Keep raw text as fallback
+        }
+      }
+      setInspectorModal({ category, title, colorVar, tokens, content: txt });
     } catch (e) {
-      setTraceModal({ title, content: `Failed to fetch trace blob: ${(e as Error).message}` });
+      setInspectorModal({
+        category,
+        title,
+        colorVar,
+        tokens,
+        content: `Failed to fetch context blob: ${(e as Error).message}`,
+      });
     } finally {
       setLoadingBlob(false);
     }
@@ -56,15 +119,18 @@ export function ContextWindowsButton({
   const dashOffset = circ - (pct / 100) * circ;
 
   return (
-    <div className="relative inline-flex items-center">
+    <div ref={rootRef} className="relative inline-flex items-center">
       <button
         type="button"
         data-testid="context-ring-btn"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         title={`${formatMsg(locale, 'chat.contextUsage.title')}: ${formatCompactTokens(used)} / ${formatCompactTokens(
           limit,
         )} (${pct}%)`}
-        className="flex size-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+        className={`flex size-7 items-center justify-center rounded-lg transition-colors hover:bg-hover hover:text-foreground ${
+          open ? 'bg-hover text-foreground' : 'text-foreground-subtle'
+        }`}
       >
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
           <circle cx={center} cy={center} r={radius} stroke="var(--color-border-hover)" strokeWidth="1.6" fill="none" />
@@ -111,84 +177,92 @@ export function ContextWindowsButton({
             {CATEGORY_META.map(({ key, meta }) => {
               const found = telemetry?.breakdown?.find((b) => b.category === key);
               const itemPct = found ? found.pct : 0;
+              const blobHash =
+                found?.blob_hash || (key === 'system_prompt' ? telemetry?.system_prompt_blob_hash : undefined);
+              const fallbackTrace = key === 'messages' ? telemetry?.raw_trace_blob_hash : undefined;
+              const clickable = Boolean(blobHash || fallbackTrace);
+              const label = formatMsg(locale, meta.labelKey);
               return (
-                <div
+                <button
                   key={key}
-                  onClick={() => found?.blob_hash && void inspectBlob(formatMsg(locale, meta.labelKey), found.blob_hash)}
-                  className={`flex items-center justify-between rounded-md px-1.5 py-1 ${
-                    found?.blob_hash ? 'cursor-pointer hover:bg-menu-hover' : ''
+                  type="button"
+                  disabled={!clickable || loadingBlob}
+                  data-testid={`context-cat-${key}`}
+                  onClick={() =>
+                    clickable && void inspectCategory(key, label, meta.colorVar, found?.tokens, blobHash, fallbackTrace)
+                  }
+                  title={
+                    found?.tokens
+                      ? `${label}: ${formatCompactTokens(found.tokens)} tokens (${itemPct.toFixed(1)}%)`
+                      : label
+                  }
+                  className={`group flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${
+                    clickable ? 'cursor-pointer hover:bg-menu-hover' : 'cursor-default opacity-75'
                   }`}
                 >
                   <span className="flex min-w-0 items-center gap-2 text-foreground">
                     <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: meta.colorVar }} />
-                    <span className="truncate">{formatMsg(locale, meta.labelKey)}</span>
+                    <span className="truncate">{label}</span>
                   </span>
-                  <span className="shrink-0 font-mono text-ui-xs tabular-nums text-foreground-subtle">
-                    {itemPct.toFixed(1)}%
+                  <span className="flex shrink-0 items-center gap-1 font-mono text-ui-xs tabular-nums text-foreground-subtle">
+                    <span>{itemPct.toFixed(1)}%</span>
+                    {clickable && (
+                      <ChevronRight className="size-3.5 text-foreground-subtlest opacity-0 transition-opacity group-hover:opacity-100" />
+                    )}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
 
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              disabled={!telemetry?.system_prompt_blob_hash || loadingBlob}
-              onClick={() =>
-                void inspectBlob(formatMsg(locale, 'chat.contextUsage.systemPrompt'), telemetry?.system_prompt_blob_hash)
-              }
-              className="h-7 flex-1 rounded-lg border border-border bg-surface text-ui-sm font-medium text-foreground transition-colors hover:bg-surface-hover disabled:opacity-40"
-            >
-              {loadingBlob
-                ? locale === 'en-US'
-                  ? 'Loading...'
-                  : '加载中...'
-                : locale === 'en-US'
-                  ? 'Show system prompt'
-                  : '查看系统提示词'}
-            </button>
-            {telemetry?.raw_trace_blob_hash && (
+          {hasTrajectory && (
+            <div className="mt-3 border-t border-border/70 pt-2.5">
               <button
                 type="button"
+                data-testid="open-trajectory-btn"
                 disabled={loadingBlob}
-                onClick={() =>
-                  void inspectBlob(
-                    locale === 'en-US' ? 'Full Turn Trace (JSON)' : '完整轮次轨迹 (JSON)',
-                    telemetry.raw_trace_blob_hash,
-                  )
-                }
-                className="h-7 rounded-lg border border-border bg-surface px-2.5 text-ui-sm text-foreground-subtle transition-colors hover:bg-surface-hover hover:text-foreground"
+                onClick={() => {
+                  setOpen(false);
+                  setTrajectoryOpen(true);
+                }}
+                className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface text-ui-sm font-medium text-foreground transition-colors hover:bg-surface-hover disabled:opacity-40"
               >
-                {locale === 'en-US' ? 'Trace' : '轨迹'}
+                <Activity className="size-3.5 text-foreground-subtle" />
+                <span>
+                  {locale === 'en-US'
+                    ? allTelemetries.length > 1
+                      ? `Model Trajectory (${allTelemetries.length} calls)`
+                      : 'Model Trajectory'
+                    : allTelemetries.length > 1
+                      ? `查看调用轨迹（${allTelemetries.length} 次）`
+                      : '查看调用轨迹'}
+                </span>
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
-      {traceModal &&
-        typeof document !== 'undefined' &&
-        createPortal(
-          <div className="zcode-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-[1px]">
-            <div className="zcode-dialog-content flex max-h-[85vh] w-full max-w-4xl flex-col rounded-2xl border border-border bg-popover shadow-xl">
-              <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                <h3 className="text-ui-base font-semibold text-foreground">{traceModal.title}</h3>
-                <button
-                  type="button"
-                  onClick={() => setTraceModal(null)}
-                  className="flex size-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
-              <pre className="flex-1 overflow-auto p-4 font-mono text-ui-sm whitespace-pre-wrap text-foreground">
-                {traceModal.content}
-              </pre>
-            </div>
-          </div>,
-          document.body,
-        )}
+      {inspectorModal && (
+        <ContextInspectorModal
+          category={inspectorModal.category}
+          title={inspectorModal.title}
+          colorVar={inspectorModal.colorVar}
+          tokens={inspectorModal.tokens}
+          rawContent={inspectorModal.content}
+          locale={locale}
+          onClose={() => setInspectorModal(null)}
+        />
+      )}
+
+      {trajectoryOpen && (
+        <ModelTrajectoryModal
+          telemetries={allTelemetries}
+          sessionTitle={sessionTitle}
+          locale={locale}
+          onClose={() => setTrajectoryOpen(false)}
+        />
+      )}
     </div>
   );
 }

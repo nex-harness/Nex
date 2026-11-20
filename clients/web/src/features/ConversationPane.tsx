@@ -22,9 +22,11 @@ import {
   GitPullRequest,
   Globe,
   Hand,
+  Hash,
   ImagePlus,
   ListTodo,
   LoaderCircle,
+  MessageSquare,
   PanelLeft,
   PanelRight,
   Pencil,
@@ -573,6 +575,21 @@ function cleanUserDisplayText(raw: string): string {
   return raw.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, '').trim() || raw;
 }
 
+const SESSION_REF_REGEX = /#((?:sess|session)_[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)/g;
+
+function extractPromptSessionRefs(text: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const m of text.matchAll(SESSION_REF_REGEX)) {
+    const id = m[1];
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  return out;
+}
+
 function UserBubble({
   text,
   images,
@@ -584,10 +601,42 @@ function UserBubble({
 }) {
   const locale = useNexStore((s) => s.locale);
   const activeSessionId = useNexStore((s) => s.activeSessionId);
+  const sessions = useNexStore((s) => s.sessions);
+  const selectSession = useNexStore((s) => s.selectSession);
   const setComposerText = useNexStore((s) => s.setComposerText);
   const forkSession = useNexStore((s) => s.forkSession);
   const [copied, setCopied] = useState(false);
   const displayText = cleanUserDisplayText(text);
+
+  const renderRichUserText = (raw: string) => {
+    const parts: Array<string | { refId: string }> = [];
+    let last = 0;
+    for (const m of raw.matchAll(SESSION_REF_REGEX)) {
+      const idx = m.index ?? 0;
+      if (idx > last) parts.push(raw.slice(last, idx));
+      parts.push({ refId: m[1] });
+      last = idx + m[0].length;
+    }
+    if (last < raw.length) parts.push(raw.slice(last));
+    if (parts.length === 1 && typeof parts[0] === 'string') return raw;
+    return parts.map((p, i) => {
+      if (typeof p === 'string') return <span key={i}>{p}</span>;
+      const target = sessions.find((s) => s.id === p.refId);
+      const label = target?.title || p.refId;
+      return (
+        <button
+          key={i}
+          type="button"
+          onClick={() => void selectSession(p.refId)}
+          title={locale === 'en-US' ? `Open referenced session ${p.refId}` : `打开引用对话 ${p.refId}`}
+          className="mx-0.5 inline-flex max-w-[240px] items-center gap-1 rounded-md border border-brand-blue/30 bg-brand-blue/10 px-1.5 py-0.5 align-baseline text-ui-xs font-medium text-brand-blue transition-colors hover:bg-brand-blue/20"
+        >
+          <Hash className="size-3 shrink-0" />
+          <span className="truncate">{label}</span>
+        </button>
+      );
+    });
+  };
 
   const copy = () => {
     void navigator.clipboard?.writeText(displayText);
@@ -615,7 +664,7 @@ function UserBubble({
       )}
       {displayText && (
         <div className="max-w-xl whitespace-pre-wrap break-words rounded-2xl bg-black/[0.045] px-4 py-2.5 text-ui-base text-foreground dark:bg-white/[0.08]">
-          {displayText}
+          {renderRichUserText(displayText)}
         </div>
       )}
       <div className="mt-0.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
@@ -849,7 +898,7 @@ interface SlashCmdEntry {
 }
 
 interface AutocompleteTrigger {
-  kind: 'mention' | 'slash';
+  kind: 'mention' | 'slash' | 'session';
   query: string;
   replaceStart: number;
   replaceEnd: number;
@@ -879,6 +928,19 @@ function detectAutocomplete(text: string, cursor: number): AutocompleteTrigger |
       kind: 'mention',
       query,
       replaceStart: atPos,
+      replaceEnd: safeCursor,
+    };
+  }
+
+  // Inline `#session` conversation reference autocomplete (ZCode `#` parity)
+  const sessionMatch = /(?:^|\s)#([^\s#]*)$/.exec(before);
+  if (sessionMatch) {
+    const query = sessionMatch[1] || '';
+    const hashPos = safeCursor - query.length - 1;
+    return {
+      kind: 'session',
+      query,
+      replaceStart: hashPos,
       replaceEnd: safeCursor,
     };
   }
@@ -978,6 +1040,7 @@ function Composer({
 
   const providers = useNexStore((s) => s.providers);
   const sessions = useNexStore((s) => s.sessions);
+  const activeSessionId = useNexStore((s) => s.activeSessionId);
   const skills = useNexStore((s) => s.skills);
   const plugins = useNexStore((s) => s.plugins);
   const recentWorkspaces = useNexStore((s) => s.recentWorkspaces);
@@ -1201,6 +1264,28 @@ function Composer({
       .slice(0, 12);
   }, [acTrigger, slashCommands]);
 
+  const filteredSessions = useMemo(() => {
+    if (acTrigger?.kind !== 'session') return [];
+    const q = acTrigger.query.toLowerCase();
+    return sessions
+      .filter((s) => s.id !== activeSessionId && (s.depth ?? 0) === 0)
+      .filter(
+        (s) =>
+          !q ||
+          (s.title || '').toLowerCase().includes(q) ||
+          s.id.toLowerCase().includes(q) ||
+          (s.workspace_path || '').toLowerCase().includes(q),
+      )
+      .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))
+      .slice(0, 12);
+  }, [acTrigger, sessions, activeSessionId]);
+
+  const referencedSessionIds = useMemo(() => extractPromptSessionRefs(composerText), [composerText]);
+  const activeSessionTitle = useMemo(
+    () => sessions.find((s) => s.id === activeSessionId)?.title,
+    [sessions, activeSessionId],
+  );
+
   // Debounced workspace file search when `@` trigger is active
   useEffect(() => {
     if (acTrigger?.kind !== 'mention') {
@@ -1233,7 +1318,7 @@ function Composer({
 
   useEffect(() => {
     setActiveAcIdx(0);
-  }, [acTrigger?.kind, acTrigger?.query, mentionFiles.length, filteredSlashCommands.length]);
+  }, [acTrigger?.kind, acTrigger?.query, mentionFiles.length, filteredSlashCommands.length, filteredSessions.length]);
 
   const applyAutocompleteChoice = (insertValue: string) => {
     if (!acTrigger) return;
@@ -1261,8 +1346,19 @@ function Composer({
     }
   };
 
-  const acItemCount = acTrigger?.kind === 'slash' ? filteredSlashCommands.length : acTrigger?.kind === 'mention' ? mentionFiles.length : 0;
-  const showAcPopover = Boolean(acTrigger) && (acItemCount > 0 || (acTrigger?.kind === 'mention' && mentionLoading));
+  const acItemCount =
+    acTrigger?.kind === 'slash'
+      ? filteredSlashCommands.length
+      : acTrigger?.kind === 'mention'
+        ? mentionFiles.length
+        : acTrigger?.kind === 'session'
+          ? filteredSessions.length
+          : 0;
+  const showAcPopover =
+    Boolean(acTrigger) &&
+    (acItemCount > 0 ||
+      (acTrigger?.kind === 'mention' && mentionLoading) ||
+      acTrigger?.kind === 'session');
 
   const selectEffortByIndex = (idx: number) => {
     const opt = effortLevels[idx];
@@ -1331,7 +1427,13 @@ function Composer({
 
   const autocompletePopover = showAcPopover && acTrigger ? (
     <div
-      data-testid={acTrigger.kind === 'slash' ? 'composer-slash-menu' : 'composer-mention-menu'}
+      data-testid={
+        acTrigger.kind === 'slash'
+          ? 'composer-slash-menu'
+          : acTrigger.kind === 'session'
+            ? 'composer-session-menu'
+            : 'composer-mention-menu'
+      }
       className="zcode-popover-up absolute bottom-full left-0 right-0 z-50 mb-2 max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
     >
       <div className="flex items-center justify-between px-2 py-1 text-[11px] font-medium text-foreground-subtlest">
@@ -1340,9 +1442,13 @@ function Composer({
             ? locale === 'en-US'
               ? 'Commands & Skills'
               : '命令与技能'
-            : locale === 'en-US'
-              ? 'Workspace Files'
-              : '工作区文件'}
+            : acTrigger.kind === 'session'
+              ? locale === 'en-US'
+                ? 'Reference Session (#)'
+                : '引用其他对话 (#)'
+              : locale === 'en-US'
+                ? 'Workspace Files'
+                : '工作区文件'}
         </span>
         <span className="font-mono text-[10px]">↑↓ · Tab/Enter · Esc</span>
       </div>
@@ -1368,6 +1474,43 @@ function Composer({
             </span>
           </button>
         ))
+      ) : acTrigger.kind === 'session' ? (
+        filteredSessions.length === 0 ? (
+          <div className="px-2.5 py-2 text-ui-xs text-foreground-subtlest">
+            {locale === 'en-US' ? 'No other sessions to reference' : '暂无可引用的其他对话'}
+          </div>
+        ) : (
+          filteredSessions.map((sess, idx) => {
+            const folder = sess.workspace_path ? baseName(sess.workspace_path) : '';
+            const shortId = sess.id.length > 16 ? `${sess.id.slice(0, 14)}…` : sess.id;
+            return (
+              <button
+                key={sess.id}
+                type="button"
+                data-testid={`session-ref-option-${idx}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  applyAutocompleteChoice(`#${sess.id} `);
+                }}
+                onMouseEnter={() => setActiveAcIdx(idx)}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors ${
+                  idx === activeAcIdx ? 'bg-menu-hover text-foreground' : 'text-foreground hover:bg-menu-hover/60'
+                }`}
+              >
+                <MessageSquare className="size-3.5 shrink-0 text-brand-blue/80" />
+                <span className="min-w-0 flex-1 truncate text-ui-sm font-medium text-foreground">
+                  {sess.title || sess.id}
+                </span>
+                {folder && (
+                  <span className="hidden shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10px] text-foreground-subtlest sm:inline">
+                    {folder}
+                  </span>
+                )}
+                <span className="shrink-0 font-mono text-[10px] text-foreground-subtlest">{shortId}</span>
+              </button>
+            );
+          })
+        )
       ) : mentionLoading && mentionFiles.length === 0 ? (
         <div className="flex items-center gap-2 px-2.5 py-2 text-ui-xs text-foreground-subtlest">
           <LoaderCircle className="size-3.5 animate-spin" />
@@ -1398,6 +1541,34 @@ function Composer({
           );
         })
       )}
+    </div>
+  ) : null;
+
+  const referencedSessionStrip = referencedSessionIds.length > 0 ? (
+    <div data-testid="composer-session-refs" className="mb-1.5 flex flex-wrap gap-1.5">
+      {referencedSessionIds.map((refId) => {
+        const target = sessions.find((s) => s.id === refId);
+        return (
+          <span
+            key={refId}
+            className="inline-flex max-w-[260px] items-center gap-1 rounded-lg border border-brand-blue/30 bg-brand-blue/10 px-2 py-0.5 text-ui-xs text-brand-blue"
+          >
+            <Hash className="size-3 shrink-0" />
+            <span className="truncate font-medium">{target?.title || refId}</span>
+            <button
+              type="button"
+              aria-label={locale === 'en-US' ? 'Remove session reference' : '移除对话引用'}
+              onClick={() => {
+                const next = composerText.replace(new RegExp(`#${refId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s?`, 'g'), '');
+                setComposerText(next);
+              }}
+              className="ml-0.5 rounded p-0.5 transition-colors hover:bg-brand-blue/20"
+            >
+              <X className="size-2.5" />
+            </button>
+          </span>
+        );
+      })}
     </div>
   ) : null;
 
@@ -1446,6 +1617,7 @@ function Composer({
         }}
       />
       {attachmentStrip}
+      {referencedSessionStrip}
       <textarea
         ref={textareaRef}
         data-testid="composer-input"
@@ -1496,6 +1668,9 @@ function Composer({
               if (acTrigger.kind === 'slash') {
                 const chosen = filteredSlashCommands[activeAcIdx];
                 if (chosen) applyAutocompleteChoice(chosen.insertText);
+              } else if (acTrigger.kind === 'session') {
+                const chosenSess = filteredSessions[activeAcIdx];
+                if (chosenSess) applyAutocompleteChoice(`#${chosenSess.id} `);
               } else {
                 const chosenFile = mentionFiles[activeAcIdx];
                 if (chosenFile) applyAutocompleteChoice(`@${chosenFile} `);
@@ -1511,11 +1686,11 @@ function Composer({
         placeholder={
           isDraft
             ? locale === 'en-US'
-              ? 'Ask Nex anything, @ to add context, / for commands or capabilities'
-              : '向 Nex 提问，@ 添加上下文，/ 调用命令或能力'
+              ? 'Ask Nex anything, @ file, # session, / command'
+              : '向 Nex 提问，@ 引用文件，# 引用对话，/ 命令'
             : locale === 'en-US'
-              ? 'Ask for follow-up changes (@ file, / command, paste image)'
-              : '继续追问或提出修改建议（@ 引用文件，/ 命令，支持粘贴图片）'
+              ? 'Ask for follow-up (@ file, # session, / command, paste image)'
+              : '继续追问或提出修改建议（@ 引用文件，# 引用对话，/ 命令，支持粘贴图片）'
         }
         className={`${isDraft ? 'min-h-[58px]' : ''} w-full resize-none bg-transparent text-ui-base leading-relaxed text-foreground placeholder-foreground-subtlest`}
       />
@@ -1567,7 +1742,22 @@ function Composer({
               className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-sm text-foreground transition-colors hover:bg-menu-hover"
             >
               <AtSign className="size-3.5 shrink-0 text-foreground-subtle" />
-              <span>{locale === 'en-US' ? 'Reference a workspace file' : '引用工作区文件 (@)'}</span>
+              <span>{locale === 'en-US' ? 'Reference a workspace file (@)' : '引用工作区文件 (@)'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const next = `${composerText}#`;
+                setComposerText(next);
+                setCursorPos(next.length);
+                setAcDismissed(false);
+                setOpenMenu(null);
+                window.requestAnimationFrame(() => textareaRef.current?.focus());
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-sm text-foreground transition-colors hover:bg-menu-hover"
+            >
+              <Hash className="size-3.5 shrink-0 text-foreground-subtle" />
+              <span>{locale === 'en-US' ? 'Reference another session (#)' : '引用其他对话 (#)'}</span>
             </button>
             <button
               type="button"
@@ -1638,7 +1828,12 @@ function Composer({
 
       {/* Right: context ring + model/effort + send */}
       <div className="flex min-w-0 shrink items-center gap-0.5">
-        <ContextWindowsButton telemetry={stream.latestTelemetry} contextLimit={activeModelLimit} />
+        <ContextWindowsButton
+          telemetry={stream.latestTelemetry}
+          turnTelemetries={stream.turnTelemetries}
+          sessionTitle={activeSessionTitle}
+          contextLimit={activeModelLimit}
+        />
 
         <div className="min-w-0 shrink">
           <button

@@ -118,6 +118,11 @@ func BuildTurnTelemetry(
 	blobByCat := make(map[string]string)
 
 	if st != nil {
+		if len(msgBytes) > 0 && string(msgBytes) != "null" && string(msgBytes) != "[]" {
+			if h, _, err := st.PutBlob(ctx, msgBytes, "application/json", 0); err == nil {
+				blobByCat[CatMessages] = h
+			}
+		}
 		for _, cat := range []string{CatSystemPrompt, CatSystemTools, CatMCPTools, CatSkills, CatMetaContext} {
 			txt := contentByCat[cat].String()
 			if txt != "" {
