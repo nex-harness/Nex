@@ -941,4 +941,78 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(screen.getByTestId('skill-md-editor')).toBeTruthy();
     expect(document.querySelector('[data-highlighted-lang="markdown"]')).toBeTruthy();
   });
+
+  it('supports clickable file_path:line_number links and follow-up message queueing while running', () => {
+    const openFileSpy = vi.fn().mockResolvedValue(undefined);
+    useNexStore.setState({
+      locale: 'zh-CN',
+      mainView: 'workspace',
+      activeSessionId: 'sess_b1',
+      selectedRunnerId: 'run_1',
+      openFileInPreviewTab: openFileSpy,
+      followUpQueues: {},
+      sessions: [
+        {
+          id: 'sess_b1',
+          runner_id: 'run_1',
+          depth: 0,
+          title: 'Batch 1 Check',
+          workspace_path: '/tmp/ws',
+          agent_profile_slug: 'main',
+          model_id: 'group/grok-4.7',
+          provider_id: 'openai',
+          permission_mode: 'full_access',
+          status: 'running',
+          latest_context_tokens: 1000,
+          context_window_limit: 500000,
+          created_at: 1000,
+          updated_at: 2000,
+          last_active_at: 2000,
+        },
+      ],
+      streams: {
+        sess_b1: {
+          lastSeq: 2,
+          running: true,
+          items: [
+            { id: 'usr_1', seq: 1, role: 'user', text: 'Check server', thinking: '', toolCalls: [] },
+            {
+              id: 'ast_2',
+              seq: 2,
+              role: 'assistant',
+              text: 'See `pkg/server/ws.go:162` for the event router.',
+              thinking: '',
+              toolCalls: [],
+            },
+          ],
+          latestTelemetry: null,
+          turnTelemetries: [],
+          uiBadges: {},
+          pendingApproval: null,
+          pendingUIPrompt: null,
+          todos: [],
+          goals: [],
+        },
+      },
+      composerText: 'Next, run all tests',
+    });
+
+    render(<App />);
+
+    // 1. Clickable `file_path:line_number` pill opens preview at line 162
+    const fileBtn = document.querySelector('[data-file-ref="pkg/server/ws.go:162"]') as HTMLButtonElement;
+    expect(fileBtn).toBeTruthy();
+    fireEvent.click(fileBtn);
+    expect(openFileSpy).toHaveBeenCalledWith('pkg/server/ws.go', 162);
+
+    // 2. While running, clicking Send queues a follow-up (does not interrupt) and renders the queue strip
+    expect(screen.getByTestId('steer-now-btn')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('send-btn'));
+    expect(useNexStore.getState().followUpQueues['sess_b1']?.length).toBe(1);
+    expect(screen.getByTestId('followup-queue')).toBeTruthy();
+
+    // Removing the queued follow-up clears the queue
+    fireEvent.click(screen.getByTestId('followup-remove-0'));
+    expect(useNexStore.getState().followUpQueues['sess_b1']?.length).toBe(0);
+  });
 });

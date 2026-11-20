@@ -320,11 +320,18 @@ export interface SubagentInspectorData {
   resultText: string;
 }
 
+export interface QueuedFollowUp {
+  id: string;
+  text: string;
+  createdAt: number;
+}
+
 export interface WorkbenchTab {
   id: string;
   kind: WorkbenchTabKind;
   title: string;
   relPath?: string;
+  highlightLine?: number;
   preview?: FilePreview;
   ptyId?: string;
   sideSessionId?: string;

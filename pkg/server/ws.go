@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/coder/websocket"
@@ -170,6 +171,23 @@ func (s *Server) ingestRunnerSessionEvent(ctx context.Context, rc *runnerConn, e
 		outEnv.RunnerID = rc.id
 		outEnv.Seq = ev.Seq
 		s.broadcastSessionEvent(ctx, ev.SessionID, outEnv)
+		return
+	}
+
+	if ev.EventType == "session_title_updated" {
+		var titlePayload struct {
+			Title string `json:"title"`
+		}
+		if json.Unmarshal(ev.Payload, &titlePayload) == nil && strings.TrimSpace(titlePayload.Title) != "" {
+			if sess, gErr := s.store.GetSession(ctx, ev.SessionID); gErr == nil && sess != nil {
+				sess.Title = strings.TrimSpace(titlePayload.Title)
+				_, _ = s.store.CreateOrUpdateSession(ctx, *sess)
+			}
+			outEnv, _ := protocol.NewEnvelope(protocol.TypeSessionEvent, ev)
+			outEnv.SessionID = ev.SessionID
+			outEnv.RunnerID = rc.id
+			s.broadcastToAllClients(ctx, outEnv)
+		}
 		return
 	}
 

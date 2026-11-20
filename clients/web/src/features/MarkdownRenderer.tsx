@@ -469,14 +469,44 @@ function CodeBlock({ lang, code, streaming = false }: { lang: string; code: stri
   );
 }
 
+// Matches `path/to/file.go:42`, `App.tsx:10-24`, `pkg/ai/types.go:L18` without false-matching URLs or times (`10:30`)
+const FILE_LINE_REF_RE =
+  /^((?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,10}):L?(\d+)(?:[-–]L?(\d+))?$/;
+
+function parseFileLineRef(raw: string): { path: string; line: number } | null {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.includes('://') || trimmed.startsWith('http')) return null;
+  const m = FILE_LINE_REF_RE.exec(trimmed);
+  if (!m) return null;
+  const line = Number(m[2]);
+  if (!Number.isFinite(line) || line <= 0) return null;
+  return { path: m[1], line };
+}
+
 function renderInline(text: string, depth = 0): ReactNode[] {
   if (!text) return [];
   const tokens = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g);
   return tokens.map((tok, i) => {
     if (tok.startsWith('`') && tok.endsWith('`') && tok.length >= 2) {
+      const inner = tok.slice(1, -1);
+      const fileRef = parseFileLineRef(inner);
+      if (fileRef) {
+        return (
+          <button
+            key={i}
+            type="button"
+            data-file-ref={`${fileRef.path}:${fileRef.line}`}
+            title={`Open ${fileRef.path} at line ${fileRef.line}`}
+            onClick={() => void useNexStore.getState().openFileInPreviewTab(fileRef.path, fileRef.line)}
+            className="mx-0.5 inline-flex items-center rounded-md border border-brand-blue/25 bg-brand-blue/10 px-1.5 py-0.5 font-mono text-ui-xs text-brand-blue transition-colors hover:bg-brand-blue/20"
+          >
+            {inner}
+          </button>
+        );
+      }
       return (
         <code key={i} className="rounded-md bg-tag px-1.5 py-0.5 font-mono text-ui-sm text-foreground">
-          {tok.slice(1, -1)}
+          {inner}
         </code>
       );
     }

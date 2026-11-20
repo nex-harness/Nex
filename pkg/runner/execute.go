@@ -571,7 +571,92 @@ func (n *Node) ExecutePrompt(
 	blocks = append(blocks, p.Images...)
 	userMsg := ai.Message{Role: ai.RoleUser, Content: blocks}
 
-	return loop.Run(runCtx, &userMsg)
+	reply, runErr := loop.Run(runCtx, &userMsg)
+	if runErr == nil && len(history) == 0 && sessRec.Depth == 0 && triggerSource == "chat" && n.cfg.ProviderOverride == nil && len([]rune(strings.TrimSpace(p.Text))) > 16 {
+		assistantSummary := ""
+		if reply != nil {
+			assistantSummary = reply.PlainText()
+		}
+		go n.generateSessionTitleAsync(sessRec.ID, prov, modelID, p.Text, assistantSummary)
+	}
+	return reply, runErr
+}
+
+// generateSessionTitleAsync runs a lightweight low-cost sidecar completion (thinking off, no tools)
+// to replace the initial truncated prompt title with a concise session title.
+func (n *Node) generateSessionTitleAsync(sessionID string, prov ai.Provider, modelID, userText, assistantText string) {
+	if prov == nil || sessionID == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+
+	uClip := strings.TrimSpace(userText)
+	if runes := []rune(uClip); len(runes) > 400 {
+		uClip = string(runes[:400])
+	}
+	aClip := strings.TrimSpace(assistantText)
+	if runes := []rune(aClip); len(runes) > 300 {
+		aClip = string(runes[:300])
+	}
+
+	req := &ai.StreamRequest{
+		Model:           modelID,
+		SystemPrompt:    "Generate a concise conversation title (max 14 Chinese characters or 7 English words) matching the user's language. Return ONLY the plain title text without quotes, markdown, prefixes, or trailing punctuation.",
+		Messages:        []ai.Message{ai.NewUserTextMessage(fmt.Sprintf("User: %s\nAssistant: %s", uClip, aClip))},
+		MaxOutputTokens: 48,
+		ThinkingEffort:  "",
+	}
+	ch, err := prov.Stream(ctx, req)
+	if err != nil {
+		return
+	}
+	var sb strings.Builder
+	for ev := range ch {
+		if ev.Type == ai.StreamEventTextDelta {
+			sb.WriteString(ev.TextDelta)
+		} else if ev.Type == ai.StreamEventDone && ev.Message != nil && sb.Len() == 0 {
+			sb.WriteString(ev.Message.PlainText())
+		}
+	}
+	clean := cleanGeneratedTitle(sb.String())
+	if clean == "" {
+		return
+	}
+	if rec, gErr := n.store.GetSession(ctx, sessionID); gErr == nil && rec != nil {
+		rec.Title = clean
+		_, _ = n.store.CreateOrUpdateSession(ctx, *rec)
+	}
+	payloadBytes, _ := json.Marshal(map[string]any{
+		"type":  "session_title_updated",
+		"title": clean,
+	})
+	if n.IsOnline() {
+		ev := store.SessionEvent{
+			SessionID: sessionID,
+			EventType: "session_title_updated",
+			Payload:   payloadBytes,
+			CreatedAt: time.Now().UnixMilli(),
+		}
+		env, _ := protocol.NewEnvelope(protocol.TypeSessionEvent, ev)
+		env.SessionID = sessionID
+		env.RunnerID = n.cfg.RunnerID
+		_ = n.sendEnvelope(ctx, env)
+	}
+}
+
+func cleanGeneratedTitle(raw string) string {
+	s := strings.TrimSpace(raw)
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		s = strings.TrimSpace(s[:idx])
+	}
+	s = strings.Trim(s, "\"'`“”‘’《》【】[]#*-:： ")
+	s = strings.TrimRight(s, ".。!！?？")
+	s = strings.TrimSpace(s)
+	if runes := []rune(s); len(runes) > 40 {
+		s = string(runes[:40])
+	}
+	return s
 }
 
 // buildUserTurnText splits a raw prompt into a clean display/title label and the

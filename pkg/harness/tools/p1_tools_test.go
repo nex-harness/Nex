@@ -309,3 +309,24 @@ func TestReadSessionContextAndReferences(t *testing.T) {
 		t.Fatalf("expected missing session error, got %+v err=%v", missing, err)
 	}
 }
+
+func TestSpillLargeOutputToDisk(t *testing.T) {
+	small, path := SpillLargeOutput("grep", "short output", 1000)
+	if small != "short output" || path != "" {
+		t.Fatalf("expected small output untouched, got %q path=%q", small, path)
+	}
+
+	big := strings.Repeat("match line 1234567890\n", 500)
+	inline, spillPath := SpillLargeOutput("grep", big, 1024)
+	if spillPath == "" {
+		t.Fatalf("expected spillPath for oversized output")
+	}
+	defer os.Remove(spillPath)
+	if !strings.Contains(inline, spillPath) || !strings.Contains(inline, "output truncated") {
+		t.Fatalf("expected inline truncation notice with spill path, got:\n%s", inline)
+	}
+	raw, err := os.ReadFile(spillPath)
+	if err != nil || string(raw) != big {
+		t.Fatalf("expected full spilled output on disk, err=%v len=%d", err, len(raw))
+	}
+}

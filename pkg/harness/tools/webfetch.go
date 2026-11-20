@@ -173,9 +173,14 @@ func (t *WebFetchTool) Execute(ctx context.Context, _ string, rawArgs json.RawMe
 	}
 	t.mu.Unlock()
 
+	inline, spillPath := SpillLargeOutput("webfetch", formatted, maxChars)
+	meta := map[string]any{"url": rawURL, "status_code": resp.StatusCode, "cached": false}
+	if spillPath != "" {
+		meta["spill_path"] = spillPath
+	}
 	return Result{
-		Output:   truncateWebText(formatted, maxChars),
-		Metadata: map[string]any{"url": rawURL, "status_code": resp.StatusCode, "cached": false},
+		Output:   inline,
+		Metadata: meta,
 	}, nil
 }
 

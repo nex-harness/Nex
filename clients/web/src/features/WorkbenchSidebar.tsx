@@ -163,7 +163,11 @@ export function WorkbenchSidebar() {
         )}
 
         {activeTab?.kind === 'file_preview' && activeTab.preview && (
-          <FilePreviewPanel preview={activeTab.preview} onAddRef={appendComposerRef} />
+          <FilePreviewPanel
+            preview={activeTab.preview}
+            highlightLine={activeTab.highlightLine}
+            onAddRef={appendComposerRef}
+          />
         )}
 
         {activeTab?.kind === 'review' && (
@@ -461,12 +465,26 @@ function FilesTreePanel({
 
 function FilePreviewPanel({
   preview,
+  highlightLine,
   onAddRef,
 }: {
   preview: FilePreview;
+  highlightLine?: number;
   onAddRef: (ref: string) => void;
 }) {
-  const [rawView, setRawView] = useState(false);
+  const [rawView, setRawView] = useState(Boolean(highlightLine));
+
+  useEffect(() => {
+    if (highlightLine && highlightLine > 0) {
+      setRawView(true);
+      window.requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-preview-line="${preview.rel_path}:${highlightLine}"]`);
+        if (el && typeof (el as HTMLElement).scrollIntoView === 'function') {
+          (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+    }
+  }, [highlightLine, preview.rel_path]);
 
   if (preview.preview_as === 'binary') {
     return (
@@ -524,20 +542,34 @@ function FilePreviewPanel({
         </div>
       ) : (
         <div className="overflow-x-auto py-2 font-mono text-[12.5px] leading-5">
-          {lines.map((line, idx) => (
-            <div key={idx} className="flex hover:bg-hover">
-              <span
-                onClick={() => onAddRef(`@${preview.rel_path}:L${idx + 1}`)}
-                title="点击行号引用至输入框"
-                className="w-11 shrink-0 cursor-pointer select-none pr-3 text-right tabular-nums text-foreground-subtlest hover:text-brand-blue"
+          {lines.map((line, idx) => {
+            const lineNo = idx + 1;
+            const isHighlighted = highlightLine === lineNo;
+            return (
+              <div
+                key={idx}
+                data-preview-line={`${preview.rel_path}:${lineNo}`}
+                className={`flex ${
+                  isHighlighted
+                    ? 'border-l-2 border-brand-blue bg-brand-blue/15'
+                    : 'hover:bg-hover'
+                }`}
               >
-                {idx + 1}
-              </span>
-              <span className="whitespace-pre pr-4 text-foreground">
-                {highlightSourceLine(line, idx, preview.preview_as === 'markdown' ? 'markdown' : 'code')}
-              </span>
-            </div>
-          ))}
+                <span
+                  onClick={() => onAddRef(`@${preview.rel_path}:L${lineNo}`)}
+                  title="点击行号引用至输入框"
+                  className={`w-11 shrink-0 cursor-pointer select-none pr-3 text-right tabular-nums hover:text-brand-blue ${
+                    isHighlighted ? 'font-semibold text-brand-blue' : 'text-foreground-subtlest'
+                  }`}
+                >
+                  {lineNo}
+                </span>
+                <span className="whitespace-pre pr-4 text-foreground">
+                  {highlightSourceLine(line, idx, preview.preview_as === 'markdown' ? 'markdown' : 'code')}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

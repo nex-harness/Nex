@@ -448,5 +448,11 @@ func (t *GrepTool) Execute(ctx context.Context, workDir string, rawArgs json.Raw
 	if len(results) == 0 {
 		return Result{Output: "(no matches found)"}, nil
 	}
-	return Result{Output: strings.Join(results, "\n")}, nil
+	joined := strings.Join(results, "\n")
+	inline, spillPath := SpillLargeOutput("grep", joined, defaultSpillMaxChars)
+	var meta map[string]any
+	if spillPath != "" {
+		meta = map[string]any{"spill_path": spillPath, "total_matches": len(results)}
+	}
+	return Result{Output: inline, Metadata: meta}, nil
 }

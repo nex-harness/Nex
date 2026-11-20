@@ -15,6 +15,7 @@ import {
   ModelMeta,
   PluginRecord,
   ProviderRecord,
+  QueuedFollowUp,
   RunnerRecord,
   SessionRecord,
   SettingsSectionId,
@@ -76,6 +77,7 @@ export interface AppState {
   composerAttachments: ComposerAttachment[];
 
   streams: Record<string, SessionStreamState>;
+  followUpQueues: Record<string, QueuedFollowUp[]>;
   gitSummary: GitSummary | null;
 
   rightTabs: WorkbenchTab[];
@@ -117,7 +119,10 @@ export interface AppState {
     sessionId: string,
     opts?: { upToSeq?: number; beforeSeq?: number; title?: string; prefillText?: string },
   ) => Promise<string | null>;
-  sendPromptOrSteer: (overrideText?: string) => void;
+  sendPromptOrSteer: (overrideText?: string, mode?: 'follow_up' | 'steer') => void;
+  queueFollowUp: (text: string) => void;
+  removeFollowUp: (sessionId: string, id: string) => void;
+  promoteFollowUpToSteer: (sessionId: string, id: string) => void;
   abortActiveSession: () => void;
   resolveApproval: (approvalId: string, approved: boolean) => void;
   resolveUIPrompt: (requestId: string, confirmed: boolean, value: string, canceled?: boolean) => void;
@@ -130,7 +135,7 @@ export interface AppState {
   openRightTab: (kind: WorkbenchTabKind, title?: string) => Promise<void>;
   closeRightTab: (tabId: string) => void;
   setActiveRightTab: (tabId: string) => void;
-  openFileInPreviewTab: (relPath: string) => Promise<void>;
+  openFileInPreviewTab: (relPath: string, line?: number) => Promise<void>;
   listWorkspaceDir: (relPath: string) => Promise<DirEntry[]>;
   browseRunnerDirs: (runnerId: string, dirPath?: string, includeHidden?: boolean) => Promise<BrowseDirsResult>;
   searchWorkspaceFiles: (query: string) => Promise<string[]>;
@@ -226,6 +231,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   composerAttachments: [],
 
   streams: {},
+  followUpQueues: {},
   gitSummary: null,
 
   rightTabs: [{ id: 'tab_launcher', kind: 'new_tab', title: '新标签页', closable: true }],
@@ -375,18 +381,28 @@ export const useNexStore = create<AppState>((set, get) => ({
 
       let shouldRefreshGit = false;
       let shouldRefreshData = false;
+      const endedSessions: string[] = [];
 
       set((state) => {
         const nextStreams = { ...state.streams };
+        let nextSessions = state.sessions;
         for (const [sid, group] of batch) {
           let cur = nextStreams[sid] || emptyStreamState();
           const prevApproval = cur.pendingApproval;
           for (const raw of group.rows) {
+            if (raw.event_type === 'session_title_updated') {
+              const newTitle = String((raw.payload || {}).title || '').trim();
+              if (newTitle) {
+                nextSessions = nextSessions.map((s) => (s.id === sid ? { ...s, title: newTitle } : s));
+              }
+              continue;
+            }
             cur = applySessionEvent(cur, group.runnerId, raw);
             if (raw.event_type === 'tool_execution_end') shouldRefreshGit = true;
             if (raw.event_type === 'agent_end') {
               shouldRefreshGit = true;
               shouldRefreshData = true;
+              endedSessions.push(sid);
             }
           }
           if (cur.pendingApproval && cur.pendingApproval !== prevApproval) {
@@ -398,8 +414,43 @@ export const useNexStore = create<AppState>((set, get) => ({
           }
           nextStreams[sid] = cur;
         }
-        return { streams: nextStreams };
+        return nextSessions !== state.sessions
+          ? { streams: nextStreams, sessions: nextSessions }
+          : { streams: nextStreams };
       });
+
+      // Automatically drain next queued follow-up message once the session run completes
+      for (const sid of endedSessions) {
+        const q = get().followUpQueues[sid];
+        if (q && q.length > 0) {
+          const [nextItem, ...rest] = q;
+          set((st) => ({
+            followUpQueues: {
+              ...st.followUpQueues,
+              [sid]: rest,
+            },
+          }));
+          const stNow = get();
+          const activeModel = stNow.models.find(
+            (m) => m.provider_id === stNow.selectedProviderId && m.id === stNow.selectedModelId,
+          );
+          const effectiveThinkingEffort = resolveEffectiveEffort(activeModel, stNow.thinkingEffort);
+          wsClient.sendEnvelope(
+            'session.prompt',
+            {
+              session_id: sid,
+              runner_id: stNow.selectedRunnerId,
+              workspace_path: stNow.selectedWorkspacePath || undefined,
+              provider_id: stNow.selectedProviderId,
+              model_id: stNow.selectedModelId,
+              thinking_effort: effectiveThinkingEffort,
+              permission_mode: stNow.permissionMode,
+              text: nextItem.text,
+            },
+            { session_id: sid, runner_id: stNow.selectedRunnerId },
+          );
+        }
+      }
 
       if (shouldRefreshGit) void get().refreshGitSummary(false);
       if (shouldRefreshData) void get().refreshInitialData();
@@ -580,7 +631,7 @@ export const useNexStore = create<AppState>((set, get) => ({
     return forked.id;
   },
 
-  sendPromptOrSteer: (overrideText) => {
+  sendPromptOrSteer: (overrideText, mode = 'follow_up') => {
     const s = get();
     const text = (overrideText ?? s.composerText).trim();
     const attachments = overrideText === undefined ? s.composerAttachments : [];
@@ -590,7 +641,21 @@ export const useNexStore = create<AppState>((set, get) => ({
     const currentStream = sessionId ? s.streams[sessionId] : undefined;
 
     if (sessionId && currentStream?.running) {
-      wsClient.sendEnvelope('session.steer', { text }, { session_id: sessionId, runner_id: s.selectedRunnerId });
+      if (mode === 'steer') {
+        wsClient.sendEnvelope('session.steer', { text }, { session_id: sessionId, runner_id: s.selectedRunnerId });
+      } else {
+        const entry: QueuedFollowUp = {
+          id: `fu_${crypto.randomUUID().slice(0, 8)}`,
+          text,
+          createdAt: Date.now(),
+        };
+        set((prev) => ({
+          followUpQueues: {
+            ...prev.followUpQueues,
+            [sessionId]: [...(prev.followUpQueues[sessionId] || []), entry],
+          },
+        }));
+      }
       if (overrideText === undefined) set({ composerText: '', composerAttachments: [] });
       return;
     }
@@ -634,6 +699,38 @@ export const useNexStore = create<AppState>((set, get) => ({
       { session_id: sessionId, runner_id: s.selectedRunnerId },
     );
     if (overrideText === undefined) set({ composerText: '', composerAttachments: [] });
+  },
+
+  queueFollowUp: (text) => {
+    get().sendPromptOrSteer(text, 'follow_up');
+  },
+
+  removeFollowUp: (sessionId, id) => {
+    set((prev) => ({
+      followUpQueues: {
+        ...prev.followUpQueues,
+        [sessionId]: (prev.followUpQueues[sessionId] || []).filter((item) => item.id !== id),
+      },
+    }));
+  },
+
+  promoteFollowUpToSteer: (sessionId, id) => {
+    const s = get();
+    const list = s.followUpQueues[sessionId] || [];
+    const target = list.find((item) => item.id === id);
+    if (!target) return;
+    set((prev) => ({
+      followUpQueues: {
+        ...prev.followUpQueues,
+        [sessionId]: (prev.followUpQueues[sessionId] || []).filter((item) => item.id !== id),
+      },
+    }));
+    const cur = s.streams[sessionId];
+    if (cur?.running) {
+      wsClient.sendEnvelope('session.steer', { text: target.text }, { session_id: sessionId, runner_id: s.selectedRunnerId });
+    } else {
+      get().sendPromptOrSteer(target.text, 'steer');
+    }
   },
 
   abortActiveSession: () => {
@@ -783,11 +880,18 @@ export const useNexStore = create<AppState>((set, get) => ({
 
   setActiveRightTab: (tabId) => set({ activeRightTabId: tabId }),
 
-  openFileInPreviewTab: async (relPath) => {
+  openFileInPreviewTab: async (relPath, line) => {
     set({ sidePaneVisible: true });
-    const existing = get().rightTabs.find((t) => t.kind === 'file_preview' && t.relPath === relPath);
+    const cleanRel = relPath.replace(/^\.\//, '');
+    const existing = get().rightTabs.find((t) => t.kind === 'file_preview' && t.relPath === cleanRel);
     if (existing) {
-      set({ activeRightTabId: existing.id });
+      set((s) => ({
+        activeRightTabId: existing.id,
+        rightTabs:
+          typeof line === 'number'
+            ? s.rightTabs.map((t) => (t.id === existing.id ? { ...t, highlightLine: line } : t))
+            : s.rightTabs,
+      }));
       return;
     }
     const resp = await wsClient.requestRPC<
@@ -797,7 +901,7 @@ export const useNexStore = create<AppState>((set, get) => ({
       'workspace.req',
       {
         action: 'fs_read_preview',
-        rel_path: relPath,
+        rel_path: cleanRel,
         workspace_path: get().selectedWorkspacePath || undefined,
       },
       { runner_id: get().selectedRunnerId },
@@ -808,8 +912,9 @@ export const useNexStore = create<AppState>((set, get) => ({
     const tab: WorkbenchTab = {
       id,
       kind: 'file_preview',
-      title: preview.name || relPath,
-      relPath,
+      title: preview.name || cleanRel,
+      relPath: cleanRel,
+      highlightLine: line,
       preview,
       closable: true,
     };

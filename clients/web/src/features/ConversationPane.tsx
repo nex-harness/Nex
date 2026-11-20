@@ -42,6 +42,7 @@ import {
   Square,
   SquareTerminal,
   X,
+  Zap,
 } from 'lucide-react';
 import { type CSSProperties, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clampEffortIndex, formatEffortLabel, resolveEffortLevels } from '../core/effort';
@@ -1017,7 +1018,7 @@ function Composer({
   setSelectedModel: (providerId: string, modelId: string) => void;
   setThinkingEffort: (effort: ThinkingEffort) => void;
   setPermissionMode: (mode: 'full_access' | 'interactive' | 'read_only') => void;
-  sendPromptOrSteer: (overrideText?: string) => void;
+  sendPromptOrSteer: (overrideText?: string, mode?: 'follow_up' | 'steer') => void;
   abortActiveSession: () => void;
   composerText: string;
 }) {
@@ -1050,6 +1051,10 @@ function Composer({
   const addComposerAttachment = useNexStore((s) => s.addComposerAttachment);
   const removeComposerAttachment = useNexStore((s) => s.removeComposerAttachment);
   const searchWorkspaceFiles = useNexStore((s) => s.searchWorkspaceFiles);
+  const followUpQueues = useNexStore((s) => s.followUpQueues);
+  const removeFollowUp = useNexStore((s) => s.removeFollowUp);
+  const promoteFollowUpToSteer = useNexStore((s) => s.promoteFollowUpToSteer);
+  const activeFollowUps = activeSessionId ? followUpQueues[activeSessionId] || [] : [];
 
   useEffect(() => {
     if (!openMenu) {
@@ -1680,7 +1685,7 @@ function Composer({
           }
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
-            sendPromptOrSteer();
+            sendPromptOrSteer(undefined, e.altKey ? 'steer' : 'follow_up');
           }
         }}
         placeholder={
@@ -2142,16 +2147,36 @@ function Composer({
             <Square className="size-3.5" />
           </button>
         ) : (
-          <button
-            type="button"
-            data-testid="send-btn"
-            disabled={!canSend}
-            onClick={() => sendPromptOrSteer()}
-            title={formatMsg(locale, isRunning ? 'chat.steer' : 'chat.send')}
-            className="ml-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-all hover:bg-foreground/90 active:scale-95 disabled:bg-foreground/20 disabled:text-background/70"
-          >
-            <ArrowUp className="size-4" />
-          </button>
+          <div className="ml-0.5 flex items-center gap-1">
+            {isRunning && canSend && (
+              <button
+                type="button"
+                data-testid="steer-now-btn"
+                onClick={() => sendPromptOrSteer(undefined, 'steer')}
+                title={locale === 'en-US' ? 'Steer immediately (Alt+Enter)' : '立即打断引导 (Alt+Enter)'}
+                className="flex h-7 shrink-0 items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/10 px-2 text-ui-xs font-medium text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+              >
+                <Zap className="size-3" />
+                <span>{locale === 'en-US' ? 'Steer' : '引导'}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              data-testid="send-btn"
+              disabled={!canSend}
+              onClick={() => sendPromptOrSteer(undefined, 'follow_up')}
+              title={
+                isRunning
+                  ? locale === 'en-US'
+                    ? 'Queue follow-up (runs after current turn)'
+                    : '排队发送（当前轮完成后自动继续）'
+                  : formatMsg(locale, 'chat.send')
+              }
+              className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-all hover:bg-foreground/90 active:scale-95 disabled:bg-foreground/20 disabled:text-background/70"
+            >
+              <ArrowUp className="size-4" />
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -2174,6 +2199,49 @@ function Composer({
     },
   };
 
+  const followUpQueueStrip = activeFollowUps.length > 0 && activeSessionId ? (
+    <div
+      data-testid="followup-queue"
+      className="mb-2 space-y-1 rounded-xl border border-border/80 bg-surface/70 p-2"
+    >
+      <div className="flex items-center justify-between px-1 text-[11px] font-medium text-foreground-subtlest">
+        <span>
+          {locale === 'en-US'
+            ? `Queued follow-ups (${activeFollowUps.length}) — runs after current turn`
+            : `待执行队列（${activeFollowUps.length}）— 当前轮完成后自动继续`}
+        </span>
+      </div>
+      {activeFollowUps.map((qItem, idx) => (
+        <div
+          key={qItem.id}
+          className="flex items-center gap-2 rounded-lg border border-border/60 bg-card px-2.5 py-1.5 text-ui-xs"
+        >
+          <span className="shrink-0 font-mono text-[10px] text-foreground-subtlest">#{idx + 1}</span>
+          <span className="min-w-0 flex-1 truncate text-foreground">{qItem.text}</span>
+          <button
+            type="button"
+            data-testid={`followup-steer-${idx}`}
+            onClick={() => promoteFollowUpToSteer(activeSessionId, qItem.id)}
+            title={locale === 'en-US' ? 'Interrupt & steer now' : '立即打断并引导'}
+            className="inline-flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] font-medium text-amber-600 transition-colors hover:bg-amber-500/15 dark:text-amber-400"
+          >
+            <Zap className="size-3" />
+            <span>{locale === 'en-US' ? 'Steer' : '立即引导'}</span>
+          </button>
+          <button
+            type="button"
+            data-testid={`followup-remove-${idx}`}
+            onClick={() => removeFollowUp(activeSessionId, qItem.id)}
+            aria-label={locale === 'en-US' ? 'Remove queued follow-up' : '移除排队消息'}
+            className="flex size-5 shrink-0 items-center justify-center rounded text-foreground-subtlest transition-colors hover:bg-hover hover:text-destructive"
+          >
+            <X className="size-3" />
+          </button>
+        </div>
+      ))}
+    </div>
+  ) : null;
+
   const card = (
     <div
       {...dropProps}
@@ -2182,6 +2250,7 @@ function Composer({
       }`}
     >
       {autocompletePopover}
+      {followUpQueueStrip}
       {textarea}
       {toolbar}
     </div>
