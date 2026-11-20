@@ -209,16 +209,58 @@ func (n *Node) loadSessionMessages(ctx context.Context, sessionID string) []ai.M
 	}
 	var msgs []ai.Message
 	for _, ev := range evs {
-		if ev.EventType == string(agent.EventMessageEnd) {
+		switch ev.EventType {
+		case string(agent.EventCompaction):
+			var parsed struct {
+				CompactedMessages []ai.Message `json:"compacted_messages"`
+			}
+			if json.Unmarshal(ev.Payload, &parsed) == nil && len(parsed.CompactedMessages) > 0 {
+				msgs = make([]ai.Message, len(parsed.CompactedMessages))
+				copy(msgs, parsed.CompactedMessages)
+			}
+		case string(agent.EventMessageEnd):
 			var parsed struct {
 				Message *ai.Message `json:"message"`
 			}
 			if json.Unmarshal(ev.Payload, &parsed) == nil && parsed.Message != nil {
 				msgs = append(msgs, *parsed.Message)
 			}
+		case string(agent.EventToolExecutionEnd):
+			var parsed struct {
+				ToolCallID string        `json:"tool_call_id"`
+				ToolName   string        `json:"tool_name"`
+				ToolResult *tools.Result `json:"tool_result"`
+			}
+			if json.Unmarshal(ev.Payload, &parsed) == nil && parsed.ToolCallID != "" && parsed.ToolResult != nil {
+				msgs = append(msgs, ai.NewToolResultMessage(
+					parsed.ToolCallID,
+					parsed.ToolName,
+					parsed.ToolResult.Output,
+					parsed.ToolResult.IsError,
+					parsed.ToolResult.ExtraBlocks...,
+				))
+			}
 		}
 	}
 	return msgs
+}
+
+type slashCommandExecutor interface {
+	HasCommand(name string) bool
+	ExecuteCommand(ctx context.Context, name, args string) error
+}
+
+func parseSlashCommand(raw string) (name, args string, ok bool) {
+	trimmed := strings.TrimSpace(raw)
+	if !strings.HasPrefix(trimmed, "/") || len(trimmed) < 2 {
+		return "", "", false
+	}
+	rest := trimmed[1:]
+	idx := strings.IndexAny(rest, " \t\n\r")
+	if idx < 0 {
+		return strings.TrimSpace(rest), "", true
+	}
+	return strings.TrimSpace(rest[:idx]), strings.TrimSpace(rest[idx+1:]), true
 }
 
 // ExecutePrompt runs a full Agent Loop turn cycle for a chat prompt, subagent task, or autonomous cron job.
@@ -283,7 +325,14 @@ func (n *Node) ExecutePrompt(
 	// Build System Sections (stable cached core + Skills + MCP + volatile meta context)
 	sections := buildPromptSections(parentCtx, n, sessRec, workDir, triggerSource)
 
-	sessionTools := tools.DefaultCodingTools()
+	sessionTools, bgCleanup := tools.DefaultCodingToolsWithCleanup()
+	defer bgCleanup()
+	sessionTools = append(sessionTools, tools.NewAskUserQuestionTool(&sessionUIBridge{
+		node:      n,
+		sessionID: sessRec.ID,
+		hasUI:     hasUI,
+	}))
+
 	var hooks agent.Hooks
 	var extCleanup func()
 	if n.cfg.Extensions != nil {
@@ -330,6 +379,80 @@ func (n *Node) ExecutePrompt(
 		}
 		raw, _ := json.Marshal(enrichedEvent{Event: ev, SessionMeta: metaPtr})
 		n.recordAndEmitSessionEvent(context.Background(), sessRec.ID, ev.TurnIdx, string(ev.Type), raw, hashes)
+	}
+
+	// Handle built-in `/compact [focus]` command immediately without invoking a normal coding turn
+	if focus, isCompact := agent.ParseCompactCommand(p.Text); isCompact {
+		defer func() {
+			sessRec.Status = "idle"
+			_, _ = n.store.CreateOrUpdateSession(context.Background(), *sessRec)
+		}()
+		emitRaw(agent.Event{Type: agent.EventAgentStart})
+		userMsg := ai.NewUserTextMessage(p.Text)
+		emitRaw(agent.Event{Type: agent.EventMessageEnd, Message: &userMsg})
+
+		var replyText string
+		if len(history) <= 2 {
+			replyText = "Context is already compact (fewer than 3 messages in history)."
+		} else {
+			beforeTokens := agent.EstimateContextTokens(nil, "", nil, history)
+			compacted, summary, cErr := agent.CompactMessages(runCtx, prov, modelID, history, focus)
+			if cErr != nil {
+				replyText = fmt.Sprintf("Context compaction failed: %v", cErr)
+			} else {
+				afterTokens := agent.EstimateContextTokens(nil, "", nil, compacted)
+				var summaryMsg *ai.Message
+				if len(compacted) > 0 {
+					m := compacted[0]
+					summaryMsg = &m
+				}
+				emitRaw(agent.Event{
+					Type:              agent.EventCompaction,
+					Reason:            "manual",
+					Delta:             summary,
+					Message:           summaryMsg,
+					CompactedMessages: compacted,
+				})
+				replyText = fmt.Sprintf("Compacted session context (%d -> %d messages, ~%d -> ~%d tokens).\n\n%s", len(history), len(compacted), beforeTokens, afterTokens, summary)
+			}
+		}
+		replyMsg := ai.Message{
+			Role:      ai.RoleAssistant,
+			Content:   []ai.ContentBlock{ai.TextBlock(replyText)},
+			Timestamp: time.Now().UnixMilli(),
+		}
+		emitRaw(agent.Event{Type: agent.EventMessageEnd, Message: &replyMsg})
+		emitRaw(agent.Event{Type: agent.EventAgentEnd})
+		return &replyMsg, nil
+	}
+
+	// Dispatch plugin-registered `/slash` commands (e.g., `/deploy-check`) when not `/goal`
+	if _, isGoal := prompts.ParseGoalCommand(p.Text); !isGoal {
+		if cmdName, cmdArgs, isSlash := parseSlashCommand(p.Text); isSlash {
+			if cmdExec, ok := hooks.(slashCommandExecutor); ok && cmdExec.HasCommand(cmdName) {
+				defer func() {
+					sessRec.Status = "idle"
+					_, _ = n.store.CreateOrUpdateSession(context.Background(), *sessRec)
+				}()
+				emitRaw(agent.Event{Type: agent.EventAgentStart})
+				userMsg := ai.NewUserTextMessage(p.Text)
+				emitRaw(agent.Event{Type: agent.EventMessageEnd, Message: &userMsg})
+
+				cmdErr := cmdExec.ExecuteCommand(runCtx, cmdName, cmdArgs)
+				replyText := fmt.Sprintf("Executed command `/%s`.", cmdName)
+				if cmdErr != nil {
+					replyText = fmt.Sprintf("Command `/%s` failed: %v", cmdName, cmdErr)
+				}
+				replyMsg := ai.Message{
+					Role:      ai.RoleAssistant,
+					Content:   []ai.ContentBlock{ai.TextBlock(replyText)},
+					Timestamp: time.Now().UnixMilli(),
+				}
+				emitRaw(agent.Event{Type: agent.EventMessageEnd, Message: &replyMsg})
+				emitRaw(agent.Event{Type: agent.EventAgentEnd})
+				return &replyMsg, cmdErr
+			}
+		}
 	}
 
 	flushPendingLocked := func() {
@@ -459,9 +582,10 @@ func buildUserTurnText(raw string) (title, modelText string) {
 // Skills and MCP namespaces are collected here so the cached core stays stable.
 func buildPromptSections(ctx context.Context, n *Node, sessRec *store.SessionRecord, workDir, triggerSource string) []ai.SystemSection {
 	opts := prompts.SessionOptions{
-		RunnerID: n.cfg.RunnerID,
-		WorkDir:  workDir,
-		Now:      time.Now(),
+		RunnerID:       n.cfg.RunnerID,
+		WorkDir:        workDir,
+		PermissionMode: sessRec.PermissionMode,
+		Now:            time.Now(),
 	}
 
 	isSubagent := sessRec.Depth > 0 || triggerSource == "subagent"

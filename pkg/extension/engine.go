@@ -40,15 +40,16 @@ type SlashCommand struct {
 
 // Registry collects hooks, custom tools, and slash commands across both Go and TS plugins for a Session.
 type Registry struct {
-	mu            sync.Mutex
-	workDir       string
-	ui            UIBridge
-	stateKV       map[string]any
-	contextHooks  []func(ctx context.Context, msgs []ai.Message) ([]ai.Message, error)
-	toolCallHooks []func(ctx context.Context, toolName string, args json.RawMessage) (agent.ToolCallDecision, error)
-	toolResHooks  []func(ctx context.Context, toolName string, args json.RawMessage, res tools.Result) (agent.ToolResultMutation, error)
-	customTools   []tools.Tool
-	commands      map[string]SlashCommand
+	mu             sync.Mutex
+	workDir        string
+	ui             UIBridge
+	stateKV        map[string]any
+	sysPromptHooks []func(ctx context.Context, sections []ai.SystemSection) ([]ai.SystemSection, error)
+	contextHooks   []func(ctx context.Context, msgs []ai.Message) ([]ai.Message, error)
+	toolCallHooks  []func(ctx context.Context, toolName string, args json.RawMessage) (agent.ToolCallDecision, error)
+	toolResHooks   []func(ctx context.Context, toolName string, args json.RawMessage, res tools.Result) (agent.ToolResultMutation, error)
+	customTools    []tools.Tool
+	commands       map[string]SlashCommand
 }
 
 // NewRegistry initializes a per-session extension registry.
@@ -59,6 +60,12 @@ func NewRegistry(workDir string, ui UIBridge) *Registry {
 		stateKV:  make(map[string]any),
 		commands: make(map[string]SlashCommand),
 	}
+}
+
+func (r *Registry) OnSystemPromptHook(fn func(ctx context.Context, sections []ai.SystemSection) ([]ai.SystemSection, error)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sysPromptHooks = append(r.sysPromptHooks, fn)
 }
 
 func (r *Registry) OnContextBuildHook(fn func(ctx context.Context, msgs []ai.Message) ([]ai.Message, error)) {
@@ -111,6 +118,14 @@ func (r *Registry) Commands() []SlashCommand {
 	return out
 }
 
+func (r *Registry) HasCommand(name string) bool {
+	name = strings.TrimPrefix(strings.TrimSpace(name), "/")
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.commands[name]
+	return ok
+}
+
 func (r *Registry) ExecuteCommand(ctx context.Context, name, args string) error {
 	name = strings.TrimPrefix(strings.TrimSpace(name), "/")
 	r.mu.Lock()
@@ -122,7 +137,22 @@ func (r *Registry) ExecuteCommand(ctx context.Context, name, args string) error 
 	return cmd.Handler(ctx, args)
 }
 
-// Implement agent.Hooks interface on *Registry
+// Implement agent.Hooks & agent.SystemPromptHook interfaces on *Registry
+
+func (r *Registry) OnSystemPrompt(ctx context.Context, sections []ai.SystemSection) ([]ai.SystemSection, error) {
+	r.mu.Lock()
+	hooks := append([]func(context.Context, []ai.SystemSection) ([]ai.SystemSection, error)(nil), r.sysPromptHooks...)
+	r.mu.Unlock()
+	cur := append([]ai.SystemSection(nil), sections...)
+	for _, fn := range hooks {
+		next, err := fn(ctx, cur)
+		if err != nil {
+			continue
+		}
+		cur = next
+	}
+	return cur, nil
+}
 
 func (r *Registry) OnContextBuild(ctx context.Context, messages []ai.Message) ([]ai.Message, error) {
 	cur := messages
@@ -301,6 +331,60 @@ func (r *Registry) LoadTSPlugin(pluginName, sourceTS, compiledJS string) error {
 	nexAPI := vm.NewObject()
 	_ = nexAPI.Set("on", func(hookName string, fn goja.Callable) {
 		switch hookName {
+		case "system_prompt", "before_agent_start":
+			r.OnSystemPromptHook(func(ctx context.Context, sections []ai.SystemSection) ([]ai.SystemSection, error) {
+				vmMu.Lock()
+				defer vmMu.Unlock()
+				var combined strings.Builder
+				secExport := make([]map[string]any, 0, len(sections))
+				for _, s := range sections {
+					if combined.Len() > 0 && s.Content != "" {
+						combined.WriteString("\n\n")
+					}
+					combined.WriteString(s.Content)
+					secExport = append(secExport, map[string]any{
+						"category": s.Category,
+						"name":     s.Name,
+						"content":  s.Content,
+					})
+				}
+				ev := map[string]any{
+					"systemPrompt": combined.String(),
+					"sections":     secExport,
+				}
+				ret, err := invokeJS(vm, fn, vm.ToValue(ev), buildPluginCtx(ctx))
+				if err != nil || ret == nil {
+					return sections, nil
+				}
+				out := append([]ai.SystemSection(nil), sections...)
+				switch v := ret.(type) {
+				case string:
+					if strings.TrimSpace(v) != "" {
+						out = append(out, ai.SystemSection{
+							Category: "meta_context",
+							Name:     "plugin:" + pluginName,
+							Content:  strings.TrimSpace(v),
+						})
+					}
+				case map[string]any:
+					if ap, ok := v["appendSystemPrompt"].(string); ok && strings.TrimSpace(ap) != "" {
+						out = append(out, ai.SystemSection{
+							Category: "meta_context",
+							Name:     "plugin:" + pluginName,
+							Content:  strings.TrimSpace(ap),
+						})
+					}
+					if sp, ok := v["systemPrompt"].(string); ok && strings.TrimSpace(sp) != "" && sp != combined.String() {
+						out = append(out, ai.SystemSection{
+							Category: "meta_context",
+							Name:     "plugin:" + pluginName,
+							Content:  strings.TrimSpace(sp),
+						})
+					}
+				}
+				return out, nil
+			})
+
 		case "tool_call":
 			r.OnToolCallHook(func(ctx context.Context, toolName string, args json.RawMessage) (agent.ToolCallDecision, error) {
 				vmMu.Lock()

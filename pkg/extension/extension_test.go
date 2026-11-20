@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nex-harness/nex/pkg/ai"
 	"github.com/nex-harness/nex/pkg/harness/tools"
 	"github.com/nex-harness/nex/pkg/protocol"
 )
@@ -119,5 +120,26 @@ func TestTSPluginHooksSlashCommandCustomToolAndRemoteUI(t *testing.T) {
 	tRes, _ := pTools[0].Execute(ctx, "", json.RawMessage(`{"msg":"ok"}`), nil)
 	if tRes.Output != "plugin:ok" {
 		t.Fatalf("unexpected custom tool output: %q", tRes.Output)
+	}
+	if !reg.HasCommand("deploy-check") || !reg.HasCommand("/deploy-check") || reg.HasCommand("unknown") {
+		t.Fatalf("HasCommand returned unexpected results")
+	}
+
+	// 6. SystemPrompt hook (before_agent_start) appends dynamic meta_context section
+	sysPlugin := `
+	export default function (nex: any) {
+		nex.on("before_agent_start", (ev: any) => {
+			if (ev.systemPrompt.includes("BasePrompt")) {
+				return { appendSystemPrompt: "Dynamic policy from TS plugin" };
+			}
+		});
+	}
+	`
+	if err := reg.LoadTSPlugin("sys-hook", sysPlugin, ""); err != nil {
+		t.Fatalf("LoadTSPlugin sys-hook failed: %v", err)
+	}
+	outSecs, err := reg.OnSystemPrompt(ctx, []ai.SystemSection{{Category: "system_prompt", Content: "BasePrompt"}})
+	if err != nil || len(outSecs) != 2 || !strings.Contains(outSecs[1].Content, "Dynamic policy from TS plugin") {
+		t.Fatalf("unexpected OnSystemPrompt result: %+v err=%v", outSecs, err)
 	}
 }

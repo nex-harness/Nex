@@ -20,9 +20,15 @@ type readArgs struct {
 }
 
 // ReadTool reads text files with line numbers or image files as base64 multimodal blocks.
-type ReadTool struct{}
+type ReadTool struct {
+	tracker *FileStateTracker
+}
 
 func NewReadTool() *ReadTool { return &ReadTool{} }
+
+func NewReadToolWithTracker(tracker *FileStateTracker) *ReadTool {
+	return &ReadTool{tracker: tracker}
+}
 
 func (t *ReadTool) Name() string     { return "read" }
 func (t *ReadTool) Category() string { return "system" }
@@ -106,6 +112,7 @@ func (t *ReadTool) Execute(_ context.Context, workDir string, rawArgs json.RawMe
 	if err != nil {
 		return Result{Output: fmt.Sprintf("read %s failed: %v", args.FilePath, err), IsError: true}, nil
 	}
+	t.tracker.RecordRead(absPath, info)
 
 	if mime := detectImageMime(absPath, raw); mime != "" {
 		b64 := base64.StdEncoding.EncodeToString(raw)

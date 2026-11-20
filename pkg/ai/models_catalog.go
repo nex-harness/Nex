@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"slices"
 	"sort"
+	"strings"
 )
 
 //go:embed models_seed.json
@@ -32,7 +33,27 @@ type ModelMeta struct {
 	SupportsTools     bool         `json:"supports_tools"`
 	SupportsReasoning bool         `json:"supports_reasoning"`
 	SupportsCaching   bool         `json:"supports_caching"`
+	ReasoningLevels   []string     `json:"reasoning_levels,omitempty"`
 	Pricing           ModelPricing `json:"pricing"`
+}
+
+// DefaultReasoningLevels returns the ordered reasoning effort levels supported by a model.
+// Levels are strictly ordered from lowest (off) to highest (high/xhigh/max).
+func DefaultReasoningLevels(m ModelMeta) []string {
+	if len(m.ReasoningLevels) > 0 {
+		return m.ReasoningLevels
+	}
+	idLower := strings.ToLower(m.ID)
+	if strings.Contains(idLower, "claude") && (strings.Contains(idLower, "opus") || strings.Contains(idLower, "sonnet") || strings.Contains(idLower, "4")) {
+		return []string{"off", "low", "medium", "high", "max"}
+	}
+	if strings.Contains(idLower, "gpt-5") || strings.Contains(idLower, "codex") || strings.Contains(idLower, "o3") || strings.Contains(idLower, "o4") {
+		return []string{"off", "low", "medium", "high", "xhigh"}
+	}
+	if m.SupportsReasoning || m.Source == "custom" {
+		return []string{"off", "low", "medium", "high"}
+	}
+	return []string{"off", "low", "medium", "high"}
 }
 
 // NewProvider instantiates a streaming Provider for the given Driver.
@@ -40,6 +61,12 @@ func NewProvider(driver Driver, baseURL, apiKey string, httpClient *http.Client)
 	switch driver {
 	case DriverOpenAIResponses:
 		return NewOpenAIResponsesProvider(OpenAIResponsesConfig{
+			BaseURL:    baseURL,
+			APIKey:     apiKey,
+			HTTPClient: httpClient,
+		}), nil
+	case DriverOpenAIChat:
+		return NewOpenAIChatProvider(OpenAIChatConfig{
 			BaseURL:    baseURL,
 			APIKey:     apiKey,
 			HTTPClient: httpClient,
@@ -60,6 +87,11 @@ func EmbeddedModelsCatalog() ([]ModelMeta, error) {
 	var out []ModelMeta
 	if err := json.Unmarshal(embeddedModelsSeed, &out); err != nil {
 		return nil, fmt.Errorf("ai: parse embedded models seed: %w", err)
+	}
+	for i := range out {
+		if len(out[i].ReasoningLevels) == 0 {
+			out[i].ReasoningLevels = DefaultReasoningLevels(out[i])
+		}
 	}
 	return out, nil
 }
@@ -127,7 +159,7 @@ func ParseModelsDevJSON(raw []byte) ([]ModelMeta, error) {
 				maxOut = 16384
 			}
 
-			result = append(result, ModelMeta{
+			meta := ModelMeta{
 				ID:                mID,
 				ProviderID:        provID,
 				DisplayName:       disp,
@@ -147,7 +179,9 @@ func ParseModelsDevJSON(raw []byte) ([]ModelMeta, error) {
 					CacheReadPer1M:  m.Cost.CacheRead,
 					CacheWritePer1M: m.Cost.CacheWrite,
 				},
-			})
+			}
+			meta.ReasoningLevels = DefaultReasoningLevels(meta)
+			result = append(result, meta)
 		}
 	}
 
@@ -185,4 +219,34 @@ func FetchModelsDevCatalog(ctx context.Context, client *http.Client, endpoint st
 		return nil, err
 	}
 	return ParseModelsDevJSON(raw)
+}
+
+// LookupModelMeta finds a model in catalog using exact match first, then
+// progressive slash-prefix backoff (e.g. "xxx/xx/xx/glm-5.3" -> "glm-5.3").
+func LookupModelMeta(catalog []ModelMeta, modelID string) (ModelMeta, bool) {
+	target := strings.TrimSpace(modelID)
+	if target == "" {
+		return ModelMeta{}, false
+	}
+
+	candidates := []string{target}
+	cur := target
+	for {
+		idx := strings.IndexByte(cur, '/')
+		if idx < 0 || idx+1 >= len(cur) {
+			break
+		}
+		cur = cur[idx+1:]
+		candidates = append(candidates, cur)
+	}
+
+	for _, cand := range candidates {
+		candLower := strings.ToLower(cand)
+		for _, m := range catalog {
+			if strings.ToLower(m.ID) == candLower {
+				return m, true
+			}
+		}
+	}
+	return ModelMeta{}, false
 }

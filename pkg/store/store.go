@@ -313,6 +313,7 @@ func (s *Store) GetModel(ctx context.Context, providerID, modelID string) (*ai.M
 	m.SupportsTools = tls == 1
 	m.SupportsReasoning = rsn == 1
 	m.SupportsCaching = cch == 1
+	m.ReasoningLevels = ai.DefaultReasoningLevels(m)
 	return &m, nil
 }
 
@@ -348,9 +349,23 @@ func (s *Store) ListModels(ctx context.Context, providerID string) ([]ai.ModelMe
 		m.SupportsTools = tls == 1
 		m.SupportsReasoning = rsn == 1
 		m.SupportsCaching = cch == 1
+		m.ReasoningLevels = ai.DefaultReasoningLevels(m)
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+func (s *Store) DeleteModel(ctx context.Context, providerID, id string) error {
+	var err error
+	if providerID != "" {
+		_, err = s.mainDB.ExecContext(ctx, `DELETE FROM models WHERE provider_id = ? AND id = ?`, providerID, id)
+	} else {
+		_, err = s.mainDB.ExecContext(ctx, `DELETE FROM models WHERE id = ?`, id)
+	}
+	if err == nil {
+		_, _ = s.BumpConfigRev(ctx)
+	}
+	return err
 }
 
 func b2i(v bool) int {

@@ -111,6 +111,10 @@ func thinkingBudgetForEffort(effort ThinkingEffort) int {
 		return 8192
 	case ThinkingHigh:
 		return 16000
+	case ThinkingXHigh:
+		return 24576
+	case ThinkingMax:
+		return 32768
 	default:
 		return 0
 	}

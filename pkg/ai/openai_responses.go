@@ -111,9 +111,13 @@ func buildResponsesPayload(req *StreamRequest) (map[string]any, error) {
 		out["prompt_cache_key"] = req.PromptCacheKey
 	}
 
-	if req.ThinkingEffort != ThinkingOff {
+	if req.ThinkingEffort != ThinkingOff && req.ThinkingEffort != "off" && req.ThinkingEffort != "none" {
+		effortVal := string(req.ThinkingEffort)
+		if req.ThinkingEffort == ThinkingMax {
+			effortVal = "xhigh"
+		}
 		out["reasoning"] = map[string]any{
-			"effort":  string(req.ThinkingEffort),
+			"effort":  effortVal,
 			"summary": "auto",
 		}
 		out["include"] = []string{"reasoning.encrypted_content"}

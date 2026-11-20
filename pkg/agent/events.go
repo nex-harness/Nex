@@ -29,6 +29,7 @@ const (
 	EventUIPromptResolved    EventType = "ui_prompt_resolved"
 	EventUIStatusUpdated     EventType = "ui_status_updated"
 	EventSubagentProgress    EventType = "subagent_progress"
+	EventCompaction          EventType = "compaction"
 )
 
 // Event represents a structured event emitted during an agent run.
@@ -44,8 +45,9 @@ type Event struct {
 	ToolResult    *tools.Result        `json:"tool_result,omitempty"`
 	ApprovalID    string               `json:"approval_id,omitempty"`
 	Approved      *bool                `json:"approved,omitempty"`
-	Reason        string               `json:"reason,omitempty"`
-	Telemetry     *store.TurnTelemetry `json:"telemetry,omitempty"`
+	Reason            string               `json:"reason,omitempty"`
+	CompactedMessages []ai.Message         `json:"compacted_messages,omitempty"`
+	Telemetry         *store.TurnTelemetry `json:"telemetry,omitempty"`
 	UIStatusKey   string               `json:"ui_status_key,omitempty"`
 	UIStatusBadge string               `json:"ui_status_badge,omitempty"`
 	Error         string               `json:"error,omitempty"`
@@ -91,9 +93,15 @@ type ToolResultMutation struct {
 	AppendText    string
 }
 
-// Hooks provides lifecycle interception points for the雙层 Extension/Plugin engine (pkg/extension).
+// Hooks provides lifecycle interception points for the dual-layer Extension/Plugin engine (pkg/extension).
 type Hooks interface {
 	OnContextBuild(ctx context.Context, messages []ai.Message) ([]ai.Message, error)
 	OnToolCall(ctx context.Context, toolName string, args json.RawMessage) (ToolCallDecision, error)
 	OnToolResult(ctx context.Context, toolName string, args json.RawMessage, res tools.Result) (ToolResultMutation, error)
+}
+
+// SystemPromptHook is an optional extension hook interface allowing plugins to inspect or
+// append dynamic sections to SystemSections before each LLM call (aligned with pi-agent).
+type SystemPromptHook interface {
+	OnSystemPrompt(ctx context.Context, sections []ai.SystemSection) ([]ai.SystemSection, error)
 }

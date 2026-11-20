@@ -42,17 +42,31 @@ func ResolvePath(workDir, targetPath string) string {
 	return filepath.Clean(filepath.Join(workDir, targetPath))
 }
 
-// DefaultCodingTools returns the core orthogonal coding tools inspired by pi-agent (including per-session TodoWrite/TodoRead).
+// DefaultCodingTools returns the core orthogonal coding tools inspired by pi-agent and ZCode
+// (including per-session FileStateTracker, BackgroundTaskManager, TodoStore, and WebFetch).
 func DefaultCodingTools() []Tool {
+	list, _ := DefaultCodingToolsWithCleanup()
+	return list
+}
+
+// DefaultCodingToolsWithCleanup returns the per-session coding tools and a cleanup function
+// that stops any lingering background shell tasks when the session run exits.
+func DefaultCodingToolsWithCleanup() ([]Tool, func()) {
 	todoStore := NewTodoStore()
-	return []Tool{
-		NewReadTool(),
-		NewWriteTool(),
-		NewEditTool(),
-		NewBashTool(),
+	tracker := NewFileStateTracker()
+	bgMgr := NewBackgroundTaskManager()
+	list := []Tool{
+		NewReadToolWithTracker(tracker),
+		NewWriteToolWithTracker(tracker),
+		NewEditToolWithTracker(tracker),
+		NewBashToolWithBackground(bgMgr),
 		NewGrepTool(),
 		NewGlobTool(),
 		NewTodoWriteTool(todoStore),
 		NewTodoReadTool(todoStore),
+		NewWebFetchTool(),
+		NewTaskOutputTool(bgMgr),
+		NewTaskStopTool(bgMgr),
 	}
+	return list, bgMgr.StopAll
 }

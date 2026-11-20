@@ -20,9 +20,15 @@ type editArgs struct {
 }
 
 // EditTool performs exact or whitespace-tolerant string replacement while preserving BOM and CRLF/LF endings.
-type EditTool struct{}
+type EditTool struct {
+	tracker *FileStateTracker
+}
 
 func NewEditTool() *EditTool { return &EditTool{} }
+
+func NewEditToolWithTracker(tracker *FileStateTracker) *EditTool {
+	return &EditTool{tracker: tracker}
+}
 
 func (t *EditTool) Name() string                      { return "edit" }
 func (t *EditTool) Category() string                  { return "system" }
@@ -61,9 +67,15 @@ func (t *EditTool) Execute(_ context.Context, workDir string, rawArgs json.RawMe
 	}
 
 	absPath := ResolvePath(workDir, args.FilePath)
+	unlock := t.tracker.LockFile(absPath)
+	defer unlock()
+
 	info, err := os.Stat(absPath)
 	if err != nil {
 		return Result{Output: fmt.Sprintf("cannot read %s: %v", args.FilePath, err), IsError: true}, nil
+	}
+	if guardErr := t.tracker.CheckBeforeModify(absPath, info, "editing"); guardErr != nil {
+		return Result{Output: guardErr.Error(), IsError: true}, nil
 	}
 	raw, err := os.ReadFile(absPath)
 	if err != nil {
@@ -128,6 +140,7 @@ func (t *EditTool) Execute(_ context.Context, workDir string, rawArgs json.RawMe
 	if err := os.WriteFile(absPath, finalBytes, info.Mode().Perm()); err != nil {
 		return Result{Output: fmt.Sprintf("write %s failed: %v", args.FilePath, err), IsError: true}, nil
 	}
+	t.tracker.RecordStat(absPath)
 
 	relName := args.FilePath
 	if workDir != "" {

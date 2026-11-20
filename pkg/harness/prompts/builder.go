@@ -66,13 +66,14 @@ type SessionOptions struct {
 	Arch     string // GOARCH; defaults to runtime.GOARCH
 	Now      time.Time
 
-	Skills        []SkillInfo
-	MCPNamespaces string
-	SubagentType  string // "" = main agent; "explore"/"worker" = subagent role
-	CustomPrompt  string // optional agent-profile instructions appended to the core
+	Skills         []SkillInfo
+	MCPNamespaces  string
+	SubagentType   string // "" = main agent; "explore"/"worker" = subagent role
+	CustomPrompt   string // optional agent-profile instructions appended to the core
+	PermissionMode string // "full_access" | "interactive" | "autonomous" | "read_only"
 
 	AgentsMDGlobalPath    string // defaults to ~/.nex/AGENTS.md
-	AgentsMDWorkspacePath string // defaults to <WorkDir>/AGENTS.md
+	AgentsMDWorkspacePath string // defaults to multi-level discovery from <WorkDir> up to git root
 
 	// Git overrides auto-detection when non-nil (used by tests).
 	Git *GitInfo
@@ -248,7 +249,19 @@ func buildMetaContext(opts SessionOptions) string {
 	sb.WriteString("- Platform: " + platform + "\n")
 	sb.WriteString("- Shell: " + shell + "\n")
 	sb.WriteString("- OS/Arch: " + platform + "/" + arch + "\n")
+	if mode := strings.TrimSpace(opts.PermissionMode); mode != "" {
+		sb.WriteString("- Permission mode: " + mode + "\n")
+	}
 	sb.WriteString("- Today's date: " + now.Format("2006-01-02"))
+
+	if strings.TrimSpace(opts.PermissionMode) == "read_only" {
+		sb.WriteString("\n\n# Plan Mode (Read-Only)\n")
+		sb.WriteString("This session is currently in read-only Plan Mode (`read_only`).\n")
+		sb.WriteString("- Mutating operations (`write`, `edit`, and state-changing `bash` commands) are blocked by the harness.\n")
+		sb.WriteString("- Use read-only tools (`read`, `grep`, `glob`, `webfetch`, and read-only `bash` inspection commands like `git status`, `git diff`, `git log`) to explore the codebase thoroughly.\n")
+		sb.WriteString("- If key requirements or architectural choices are ambiguous, use `ask_user_question` to clarify before finalizing your plan.\n")
+		sb.WriteString("- Deliver a clear, concrete implementation plan citing exact `file_path:line_number` references, trade-offs, and verification steps.")
+	}
 
 	if gitInfo.IsRepo {
 		sb.WriteString("\n\n# gitStatus\n")
@@ -272,8 +285,9 @@ func buildMetaContext(opts SessionOptions) string {
 	return strings.TrimRight(sb.String(), "\n")
 }
 
-// buildInstructions loads user-global and workspace AGENTS.md files with ZCode's
-// override preamble. Files are capped at 64KB each.
+// buildInstructions loads user-global (~/.nex/AGENTS.md) and multi-level workspace
+// AGENTS.md / CLAUDE.md files walking from the Git root down to WorkDir (outer-to-inner).
+// Total workspace instructions are capped at maxAgentsMDBytes (64KB).
 func buildInstructions(opts SessionOptions) string {
 	globalPath := strings.TrimSpace(opts.AgentsMDGlobalPath)
 	if globalPath == "" {
@@ -281,14 +295,59 @@ func buildInstructions(opts SessionOptions) string {
 			globalPath = filepath.Join(home, ".nex", "AGENTS.md")
 		}
 	}
-	workspacePath := strings.TrimSpace(opts.AgentsMDWorkspacePath)
-	if workspacePath == "" && strings.TrimSpace(opts.WorkDir) != "" {
-		workspacePath = filepath.Join(opts.WorkDir, "AGENTS.md")
+	global := readCapped(globalPath, maxAgentsMDBytes)
+
+	type docEntry struct {
+		label   string
+		content string
+	}
+	var workspaceDocs []docEntry
+	remaining := maxAgentsMDBytes
+
+	if explicit := strings.TrimSpace(opts.AgentsMDWorkspacePath); explicit != "" {
+		if content := readCapped(explicit, remaining); content != "" {
+			workspaceDocs = append(workspaceDocs, docEntry{label: filepath.Base(explicit), content: content})
+		}
+	} else if workDir := strings.TrimSpace(opts.WorkDir); workDir != "" {
+		dirs := instructionSearchDirs(workDir)
+		seen := make(map[string]bool)
+		if globalPath != "" {
+			if abs, err := filepath.Abs(globalPath); err == nil {
+				seen[abs] = true
+			}
+		}
+		for _, dir := range dirs {
+			if remaining <= 0 {
+				break
+			}
+			for _, fname := range []string{"AGENTS.md", "CLAUDE.md"} {
+				if remaining <= 0 {
+					break
+				}
+				candidate := filepath.Join(dir, fname)
+				abs, err := filepath.Abs(candidate)
+				if err != nil {
+					abs = candidate
+				}
+				if seen[abs] {
+					continue
+				}
+				content := readCapped(candidate, remaining)
+				if content == "" {
+					continue
+				}
+				seen[abs] = true
+				remaining -= len(content)
+				label := fname
+				if rel, rErr := filepath.Rel(workDir, candidate); rErr == nil && rel != "" && rel != fname {
+					label = filepath.ToSlash(rel)
+				}
+				workspaceDocs = append(workspaceDocs, docEntry{label: label, content: content})
+			}
+		}
 	}
 
-	global := readCapped(globalPath, maxAgentsMDBytes)
-	workspace := readCapped(workspacePath, maxAgentsMDBytes)
-	if global == "" && workspace == "" {
+	if global == "" && len(workspaceDocs) == 0 {
 		return ""
 	}
 
@@ -298,10 +357,59 @@ func buildInstructions(opts SessionOptions) string {
 	if global != "" {
 		sb.WriteString("\n\n## Global instructions (~/.nex/AGENTS.md)\n\n" + global)
 	}
-	if workspace != "" {
-		sb.WriteString("\n\n## Workspace instructions (AGENTS.md)\n\n" + workspace)
+	for _, doc := range workspaceDocs {
+		sb.WriteString("\n\n## Workspace instructions (" + doc.label + ")\n\n" + doc.content)
 	}
 	return sb.String()
+}
+
+// findGitRoot walks upward from workDir looking for a .git directory or file (worktree).
+func findGitRoot(workDir string) string {
+	dir, err := filepath.Abs(workDir)
+	if err != nil {
+		dir = filepath.Clean(workDir)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+// instructionSearchDirs returns directories from the Git root down to workDir (outer-to-inner),
+// or just [workDir] if workDir is not inside a Git repository.
+func instructionSearchDirs(workDir string) []string {
+	absWork, err := filepath.Abs(workDir)
+	if err != nil {
+		absWork = filepath.Clean(workDir)
+	}
+	gitRoot := findGitRoot(absWork)
+	if gitRoot == "" {
+		return []string{absWork}
+	}
+	var rev []string
+	cur := absWork
+	for {
+		rev = append(rev, cur)
+		if cur == gitRoot {
+			break
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			break
+		}
+		cur = parent
+	}
+	// Reverse to outer-to-inner order (repo root first, active workDir last)
+	for i, j := 0, len(rev)-1; i < j; i, j = i+1, j-1 {
+		rev[i], rev[j] = rev[j], rev[i]
+	}
+	return rev
 }
 
 // ReadGitSnapshot performs the bounded (<1s per command) git probe used by meta
@@ -311,7 +419,7 @@ func ReadGitSnapshot(workDir string) GitInfo {
 	if workDir == "" {
 		return GitInfo{}
 	}
-	if _, err := os.Stat(filepath.Join(workDir, ".git")); err != nil {
+	if findGitRoot(workDir) == "" {
 		return GitInfo{}
 	}
 	info := GitInfo{IsRepo: true}

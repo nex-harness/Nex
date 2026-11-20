@@ -370,3 +370,57 @@ func TestFormatGoalTurnPrompt(t *testing.T) {
 		t.Fatal("empty goal summary should fall back to a neutral label")
 	}
 }
+
+func TestBuildSystemSectionsPlanModeAndMultiLevelAgentsCLAUDE(t *testing.T) {
+	repoRoot := t.TempDir()
+	// Simulate git repo root
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	subDir := filepath.Join(repoRoot, "services", "api")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(filepath.Join(repoRoot, "AGENTS.md"), []byte("ROOT_AGENT_RULE"), 0o644)
+	_ = os.WriteFile(filepath.Join(repoRoot, "CLAUDE.md"), []byte("ROOT_CLAUDE_RULE"), 0o644)
+	_ = os.WriteFile(filepath.Join(repoRoot, "services", "AGENTS.md"), []byte("SERVICES_AGENT_RULE"), 0o644)
+	_ = os.WriteFile(filepath.Join(subDir, "CLAUDE.md"), []byte("API_CLAUDE_RULE"), 0o644)
+
+	sections := BuildSystemSections(SessionOptions{
+		WorkDir:            subDir,
+		PermissionMode:     "read_only",
+		AgentsMDGlobalPath: filepath.Join(t.TempDir(), "nonexistent.md"),
+		Git:                &GitInfo{IsRepo: true, Branch: "main"},
+		Now:                time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC),
+	})
+
+	core, ok := findSection(sections, CategorySystemPrompt)
+	if !ok || core.Content != StableCorePrompt() {
+		t.Fatalf("core system_prompt must remain byte-identical even in read_only Plan Mode")
+	}
+
+	meta, ok := findSection(sections, CategoryMetaContext)
+	if !ok {
+		t.Fatal("missing meta_context")
+	}
+	for _, want := range []string{
+		"# Plan Mode (Read-Only)",
+		"Permission mode: read_only",
+		"ROOT_AGENT_RULE",
+		"ROOT_CLAUDE_RULE",
+		"SERVICES_AGENT_RULE",
+		"API_CLAUDE_RULE",
+	} {
+		if !strings.Contains(meta.Content, want) {
+			t.Fatalf("meta_context missing %q:\n%s", want, meta.Content)
+		}
+	}
+
+	// Verify outer-to-inner ordering (root first, deepest subDir last)
+	rootIdx := strings.Index(meta.Content, "ROOT_AGENT_RULE")
+	svcIdx := strings.Index(meta.Content, "SERVICES_AGENT_RULE")
+	apiIdx := strings.Index(meta.Content, "API_CLAUDE_RULE")
+	if !(rootIdx < svcIdx && svcIdx < apiIdx) {
+		t.Fatalf("expected outer-to-inner instruction order, got indices root=%d svc=%d api=%d", rootIdx, svcIdx, apiIdx)
+	}
+}

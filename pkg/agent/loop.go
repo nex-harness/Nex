@@ -27,15 +27,18 @@ type LoopConfig struct {
 	ThinkingEffort  ai.ThinkingEffort
 	MaxOutputTokens int
 	MaxTurns        int
-	ContextWindow   int
-	Pricing         ai.ModelPricing
-	PermissionMode  PermissionMode
-	TriggerSource   string // "chat" | "subagent" | "cron"
-	Tools           []tools.Tool
-	Approver        Approver
-	Hooks           Hooks
-	Store           *store.Store
-	OnEvent         EventSink
+	ContextWindow      int
+	Pricing            ai.ModelPricing
+	PermissionMode     PermissionMode
+	TriggerSource      string // "chat" | "subagent" | "cron"
+	MaxRetries         int    // 0 defaults to 3; <0 disables retries
+	RetryBaseDelay     time.Duration
+	DisableAutoCompact bool
+	Tools              []tools.Tool
+	Approver           Approver
+	Hooks              Hooks
+	Store              *store.Store
+	OnEvent            EventSink
 }
 
 // Loop implements the pi-agent-style stateful Agent Loop with Steer and FollowUp control queues.
@@ -45,6 +48,7 @@ type Loop struct {
 	toolDefs []ai.ToolDefinition
 
 	mu        sync.Mutex
+	emitMu    sync.Mutex
 	messages  []ai.Message
 	steerQ    []ai.Message
 	followUpQ []ai.Message
@@ -142,7 +146,9 @@ func (l *Loop) appendMessage(m ai.Message) {
 
 func (l *Loop) emit(ev Event) {
 	if l.cfg.OnEvent != nil {
+		l.emitMu.Lock()
 		l.cfg.OnEvent(ev)
+		l.emitMu.Unlock()
 	}
 }
 
@@ -173,6 +179,12 @@ func (l *Loop) Run(ctx context.Context, promptMsg *ai.Message) (*ai.Message, err
 
 	var lastAssistant *ai.Message
 	turnsThisRun := 0
+	maxRetries := l.cfg.MaxRetries
+	if maxRetries == 0 {
+		maxRetries = 3
+	} else if maxRetries < 0 {
+		maxRetries = 0
+	}
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -190,73 +202,122 @@ func (l *Loop) Run(ctx context.Context, promptMsg *ai.Message) (*ai.Message, err
 		l.mu.Lock()
 		l.turnIdx++
 		turnNo := l.turnIdx
-		reqMsgs := make([]ai.Message, len(l.messages))
-		copy(reqMsgs, l.messages)
 		l.mu.Unlock()
 
-		if l.cfg.Hooks != nil {
-			modified, err := l.cfg.Hooks.OnContextBuild(ctx, reqMsgs)
-			if err != nil {
-				return lastAssistant, err
+		// Resolve SystemSections (allowing optional plugin SystemPromptHook mutations)
+		activeSections := l.cfg.SystemSections
+		if sph, ok := l.cfg.Hooks.(SystemPromptHook); ok && sph != nil {
+			if modSecs, sErr := sph.OnSystemPrompt(ctx, activeSections); sErr == nil {
+				activeSections = modSecs
 			}
-			reqMsgs = modified
 		}
 
-		// Inject final wrap-up notice if hitting MaxTurns ceiling
-		activeTools := l.toolDefs
-		if turnsThisRun >= l.cfg.MaxTurns {
-			activeTools = nil
-			reqMsgs = append(reqMsgs, ai.NewUserTextMessage("[System notice: maximum turn budget reached; summarize findings now without further tool calls.]"))
+		// Pre-flight Context Compaction (Tier 1: Microcompact >=65%, Tier 2: Auto-Compact >=85%)
+		if !l.cfg.DisableAutoCompact && l.cfg.ContextWindow > 0 {
+			l.maybePreFlightCompact(ctx, turnNo, activeSections)
 		}
 
 		l.emit(Event{Type: EventTurnStart, TurnIdx: turnNo})
 
-		req := &ai.StreamRequest{
-			Model:           l.cfg.Model,
-			SystemPrompt:    l.cfg.SystemPrompt,
-			SystemSections:  l.cfg.SystemSections,
-			Messages:        reqMsgs,
-			Tools:           activeTools,
-			MaxOutputTokens: l.cfg.MaxOutputTokens,
-			ThinkingEffort:  l.cfg.ThinkingEffort,
-			PromptCacheKey:  l.cfg.SessionID,
-		}
-
-		startTS := time.Now()
-		var firstTokenTS time.Time
-
-		streamCh, err := l.cfg.Provider.Stream(ctx, req)
-		if err != nil {
-			l.emit(Event{Type: EventTurnEnd, TurnIdx: turnNo, Error: err.Error()})
-			return lastAssistant, err
-		}
-
-		l.emit(Event{Type: EventMessageStart, TurnIdx: turnNo})
-
 		var assistantMsg *ai.Message
 		var turnUsage ai.Usage
 		var streamErr error
+		var startTS, firstTokenTS time.Time
+		var req *ai.StreamRequest
+		compactedOnOverflow := false
 
-		for sev := range streamCh {
-			if firstTokenTS.IsZero() && (sev.Type == ai.StreamEventTextDelta || sev.Type == ai.StreamEventThinkingDelta || sev.Type == ai.StreamEventToolCallStart) {
-				firstTokenTS = time.Now()
-			}
-			switch sev.Type {
-			case ai.StreamEventTextDelta:
-				l.emit(Event{Type: EventMessageUpdate, TurnIdx: turnNo, DeltaKind: "text", Delta: sev.TextDelta})
-			case ai.StreamEventThinkingDelta:
-				l.emit(Event{Type: EventMessageUpdate, TurnIdx: turnNo, DeltaKind: "thinking", Delta: sev.ThinkingDelta})
-			case ai.StreamEventToolCallDelta:
-				l.emit(Event{Type: EventMessageUpdate, TurnIdx: turnNo, DeltaKind: "toolcall", ToolCallID: sev.ToolCallID, ToolName: sev.ToolName, Delta: sev.ArgsDelta})
-			case ai.StreamEventDone:
-				assistantMsg = sev.Message
-				turnUsage = sev.Usage
-			case ai.StreamEventError:
-				streamErr = sev.Err
-			}
-		}
+	attemptTurn:
+		for retryAttempt := 0; ; {
+			l.mu.Lock()
+			reqMsgs := make([]ai.Message, len(l.messages))
+			copy(reqMsgs, l.messages)
+			l.mu.Unlock()
 
-		if streamErr != nil {
+			if l.cfg.Hooks != nil {
+				modified, err := l.cfg.Hooks.OnContextBuild(ctx, reqMsgs)
+				if err != nil {
+					l.emit(Event{Type: EventTurnEnd, TurnIdx: turnNo, Error: err.Error()})
+					return lastAssistant, err
+				}
+				reqMsgs = modified
+			}
+
+			// Inject final wrap-up notice if hitting MaxTurns ceiling
+			activeTools := l.toolDefs
+			if turnsThisRun >= l.cfg.MaxTurns {
+				activeTools = nil
+				reqMsgs = append(reqMsgs, ai.NewUserTextMessage("[System notice: maximum turn budget reached; summarize findings now without further tool calls.]"))
+			}
+
+			req = &ai.StreamRequest{
+				Model:           l.cfg.Model,
+				SystemPrompt:    l.cfg.SystemPrompt,
+				SystemSections:  activeSections,
+				Messages:        reqMsgs,
+				Tools:           activeTools,
+				MaxOutputTokens: l.cfg.MaxOutputTokens,
+				ThinkingEffort:  l.cfg.ThinkingEffort,
+				PromptCacheKey:  l.cfg.SessionID,
+			}
+
+			startTS = time.Now()
+			firstTokenTS = time.Time{}
+			assistantMsg = nil
+			turnUsage = ai.Usage{}
+			streamErr = nil
+			emittedAnyDelta := false
+
+			streamCh, err := l.cfg.Provider.Stream(ctx, req)
+			if err != nil {
+				streamErr = err
+			} else {
+				l.emit(Event{Type: EventMessageStart, TurnIdx: turnNo})
+				for sev := range streamCh {
+					if firstTokenTS.IsZero() && (sev.Type == ai.StreamEventTextDelta || sev.Type == ai.StreamEventThinkingDelta || sev.Type == ai.StreamEventToolCallStart) {
+						firstTokenTS = time.Now()
+					}
+					switch sev.Type {
+					case ai.StreamEventTextDelta:
+						emittedAnyDelta = true
+						l.emit(Event{Type: EventMessageUpdate, TurnIdx: turnNo, DeltaKind: "text", Delta: sev.TextDelta})
+					case ai.StreamEventThinkingDelta:
+						emittedAnyDelta = true
+						l.emit(Event{Type: EventMessageUpdate, TurnIdx: turnNo, DeltaKind: "thinking", Delta: sev.ThinkingDelta})
+					case ai.StreamEventToolCallDelta:
+						emittedAnyDelta = true
+						l.emit(Event{Type: EventMessageUpdate, TurnIdx: turnNo, DeltaKind: "toolcall", ToolCallID: sev.ToolCallID, ToolName: sev.ToolName, Delta: sev.ArgsDelta})
+					case ai.StreamEventDone:
+						assistantMsg = sev.Message
+						turnUsage = sev.Usage
+					case ai.StreamEventError:
+						streamErr = sev.Err
+					}
+				}
+			}
+
+			if streamErr == nil {
+				break attemptTurn
+			}
+
+			// Overflow auto-recovery: compact history once and retry immediately!
+			if !compactedOnOverflow && !l.cfg.DisableAutoCompact && IsContextOverflowError(streamErr) {
+				compactedOnOverflow = true
+				if l.forceCompact(ctx, turnNo, "context_overflow") {
+					continue attemptTurn
+				}
+			}
+
+			// Transient 429/5xx/network retry with exponential backoff (only if no partial tokens were streamed yet)
+			if !emittedAnyDelta && retryAttempt < maxRetries && IsRetryableProviderError(streamErr) {
+				delay := RetryDelay(retryAttempt, l.cfg.RetryBaseDelay)
+				retryAttempt++
+				if sleepErr := sleepWithContext(ctx, delay); sleepErr != nil {
+					l.emit(Event{Type: EventTurnEnd, TurnIdx: turnNo, Error: sleepErr.Error()})
+					return lastAssistant, sleepErr
+				}
+				continue attemptTurn
+			}
+
 			l.emit(Event{Type: EventTurnEnd, TurnIdx: turnNo, Error: streamErr.Error()})
 			return lastAssistant, streamErr
 		}
@@ -336,34 +397,183 @@ func (l *Loop) Run(ctx context.Context, promptMsg *ai.Message) (*ai.Message, err
 	}
 }
 
+func (l *Loop) maybePreFlightCompact(ctx context.Context, turnNo int, activeSections []ai.SystemSection) {
+	if l.cfg.ContextWindow <= 0 {
+		return
+	}
+	l.mu.Lock()
+	snapshot := make([]ai.Message, len(l.messages))
+	copy(snapshot, l.messages)
+	l.mu.Unlock()
+
+	estTokens := EstimateContextTokens(activeSections, l.cfg.SystemPrompt, l.toolDefs, snapshot)
+	ratio := float64(estTokens) / float64(l.cfg.ContextWindow)
+	if ratio < microcompactThresholdPct {
+		return
+	}
+
+	// Tier 1 (>=65%): zero-LLM microcompaction of bulky old tool outputs
+	pruned, count := MicrocompactMessages(snapshot, microcompactKeepRecent)
+	if count > 0 {
+		l.mu.Lock()
+		l.messages = pruned
+		l.mu.Unlock()
+		snapshot = pruned
+		estTokens = EstimateContextTokens(activeSections, l.cfg.SystemPrompt, l.toolDefs, snapshot)
+		ratio = float64(estTokens) / float64(l.cfg.ContextWindow)
+	}
+
+	// Tier 2 (>=85%): full LLM-backed compaction with deterministic fallback
+	if ratio >= autoCompactThresholdPct {
+		l.forceCompact(ctx, turnNo, "auto_compact")
+	}
+}
+
+func (l *Loop) forceCompact(ctx context.Context, turnNo int, reason string) bool {
+	l.mu.Lock()
+	snapshot := make([]ai.Message, len(l.messages))
+	copy(snapshot, l.messages)
+	l.mu.Unlock()
+
+	if len(snapshot) <= 2 {
+		return false
+	}
+
+	compacted, summary, err := CompactMessages(ctx, l.cfg.Provider, l.cfg.Model, snapshot, "")
+	if err != nil || len(compacted) == 0 {
+		return false
+	}
+	// Check whether anything actually shrank (either message count or byte size)
+	beforeTokens := EstimateContextTokens(nil, "", nil, snapshot)
+	afterTokens := EstimateContextTokens(nil, "", nil, compacted)
+	if len(compacted) >= len(snapshot) && afterTokens >= beforeTokens {
+		return false
+	}
+
+	l.mu.Lock()
+	l.messages = compacted
+	l.mu.Unlock()
+
+	cp := make([]ai.Message, len(compacted))
+	copy(cp, compacted)
+	var summaryMsg *ai.Message
+	if len(cp) > 0 {
+		m := cp[0]
+		summaryMsg = &m
+	}
+	l.emit(Event{
+		Type:              EventCompaction,
+		TurnIdx:           turnNo,
+		Reason:            reason,
+		Delta:             summary,
+		Message:           summaryMsg,
+		CompactedMessages: cp,
+	})
+	return true
+}
+
+func (l *Loop) isCallReadOnly(call ai.ContentBlock) bool {
+	toolImpl, exists := l.toolMap[call.ToolName]
+	if !exists {
+		return false
+	}
+	args := call.Arguments
+	if len(args) == 0 {
+		args = json.RawMessage(`{}`)
+	}
+	return toolImpl.IsReadOnly(args)
+}
+
 func (l *Loop) executeToolBatch(ctx context.Context, turnNo int, calls []ai.ContentBlock) ([]ai.Message, error) {
 	var collectedSteers []ai.Message
 
-	for i, call := range calls {
+	skipRemaining := func(from int) {
+		for j := from; j < len(calls); j++ {
+			c := calls[j]
+			skipMsg := ai.NewToolResultMessage(c.ToolCallID, c.ToolName, "[Skipped: interrupted by user steering message]", true)
+			l.appendMessage(skipMsg)
+			skipRes := tools.Result{Output: skipMsg.PlainText(), IsError: true}
+			l.emit(Event{
+				Type:       EventToolExecutionEnd,
+				TurnIdx:    turnNo,
+				ToolCallID: c.ToolCallID,
+				ToolName:   c.ToolName,
+				ToolResult: &skipRes,
+			})
+		}
+	}
+
+	for i := 0; i < len(calls); {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 
-		// Check Steer queue BEFORE starting subsequent tool in batch (pi-agent interrupt semantics)
+		// Check Steer queue BEFORE starting subsequent tool or parallel read-only group
 		if i > 0 {
 			if steers := l.popSteer(); len(steers) > 0 {
 				collectedSteers = append(collectedSteers, steers...)
 			}
 		}
 		if len(collectedSteers) > 0 {
-			skipMsg := ai.NewToolResultMessage(call.ToolCallID, call.ToolName, "[Skipped: interrupted by user steering message]", true)
-			l.appendMessage(skipMsg)
-			skipRes := tools.Result{Output: skipMsg.PlainText(), IsError: true}
-			l.emit(Event{
-				Type:       EventToolExecutionEnd,
-				TurnIdx:    turnNo,
-				ToolCallID: call.ToolCallID,
-				ToolName:   call.ToolName,
-				ToolResult: &skipRes,
-			})
+			skipRemaining(i)
+			break
+		}
+
+		// Group consecutive read-only tool calls for parallel execution
+		if l.isCallReadOnly(calls[i]) {
+			end := i + 1
+			for end < len(calls) && l.isCallReadOnly(calls[end]) {
+				end++
+			}
+			group := calls[i:end]
+			if len(group) == 1 {
+				res, err := l.executeSingleTool(ctx, turnNo, group[0])
+				if err != nil && ctx.Err() != nil {
+					return nil, err
+				}
+				if err != nil {
+					res = tools.Result{Output: fmt.Sprintf("tool execution error: %v", err), IsError: true}
+				}
+				trMsg := ai.NewToolResultMessage(group[0].ToolCallID, group[0].ToolName, res.Output, res.IsError, res.ExtraBlocks...)
+				l.appendMessage(trMsg)
+			} else {
+				type batchOutcome struct {
+					res tools.Result
+					err error
+				}
+				outcomes := make([]batchOutcome, len(group))
+				var wg sync.WaitGroup
+				for idx, c := range group {
+					wg.Add(1)
+					go func(slot int, blk ai.ContentBlock) {
+						defer wg.Done()
+						r, e := l.executeSingleTool(ctx, turnNo, blk)
+						outcomes[slot] = batchOutcome{res: r, err: e}
+					}(idx, c)
+				}
+				wg.Wait()
+				for idx, out := range outcomes {
+					if out.err != nil && ctx.Err() != nil {
+						return nil, out.err
+					}
+					res := out.res
+					if out.err != nil {
+						res = tools.Result{Output: fmt.Sprintf("tool execution error: %v", out.err), IsError: true}
+					}
+					trMsg := ai.NewToolResultMessage(group[idx].ToolCallID, group[idx].ToolName, res.Output, res.IsError, res.ExtraBlocks...)
+					l.appendMessage(trMsg)
+				}
+			}
+
+			if steers := l.popSteer(); len(steers) > 0 {
+				collectedSteers = append(collectedSteers, steers...)
+			}
+			i = end
 			continue
 		}
 
+		// Mutating or unknown tool: run serially
+		call := calls[i]
 		res, err := l.executeSingleTool(ctx, turnNo, call)
 		if err != nil && ctx.Err() != nil {
 			return nil, err
@@ -379,6 +589,7 @@ func (l *Loop) executeToolBatch(ctx context.Context, turnNo int, calls []ai.Cont
 		if steers := l.popSteer(); len(steers) > 0 {
 			collectedSteers = append(collectedSteers, steers...)
 		}
+		i++
 	}
 
 	return collectedSteers, nil
@@ -397,11 +608,20 @@ func (l *Loop) executeSingleTool(ctx context.Context, turnNo int, call ai.Conten
 		args = json.RawMessage(`{}`)
 	}
 
+	// 0. Pre-execution JSON Schema Validation (catches malformed/missing arguments before hooks or approval prompts)
+	if err := ValidateToolArguments(toolImpl.Definition().InputSchema, args); err != nil {
+		res := tools.Result{Output: fmt.Sprintf("invalid arguments for %s: %v", call.ToolName, err), IsError: true}
+		l.emit(Event{Type: EventToolExecutionEnd, TurnIdx: turnNo, ToolCallID: call.ToolCallID, ToolName: call.ToolName, ToolResult: &res})
+		return res, nil
+	}
+
 	// 1. Plugin / Extension Pre-Tool Hook
 	if l.cfg.Hooks != nil {
 		dec, err := l.cfg.Hooks.OnToolCall(ctx, call.ToolName, args)
 		if err != nil {
-			return tools.Result{Output: "hook error: " + err.Error(), IsError: true}, nil
+			res := tools.Result{Output: "hook error: " + err.Error(), IsError: true}
+			l.emit(Event{Type: EventToolExecutionEnd, TurnIdx: turnNo, ToolCallID: call.ToolCallID, ToolName: call.ToolName, ToolResult: &res})
+			return res, nil
 		}
 		if dec.Block {
 			reason := dec.Reason
@@ -520,6 +740,9 @@ func (l *Loop) executeSingleTool(ctx context.Context, turnNo int, call ai.Conten
 			}
 		}
 	}
+
+	// 4. Hard Output Size Guard (prevents any single tool output from overflowing context)
+	res.Output = GuardToolOutput(res.Output, DefaultMaxToolOutputBytes)
 
 	resCopy := res
 	l.emit(Event{

@@ -10,6 +10,7 @@ type Driver string
 
 const (
 	DriverOpenAIResponses Driver = "openai_responses" // OpenAI / Codex /v1/responses API
+	DriverOpenAIChat      Driver = "openai_chat"      // OpenAI-compatible /v1/chat/completions API
 	DriverAnthropic       Driver = "anthropic"        // Anthropic /v1/messages API
 )
 
@@ -150,6 +151,8 @@ const (
 	ThinkingLow    ThinkingEffort = "low"
 	ThinkingMedium ThinkingEffort = "medium"
 	ThinkingHigh   ThinkingEffort = "high"
+	ThinkingXHigh  ThinkingEffort = "xhigh"
+	ThinkingMax    ThinkingEffort = "max"
 )
 
 // SystemSection represents a categorized segment of the assembled system instructions,

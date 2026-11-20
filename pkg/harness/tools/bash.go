@@ -22,33 +22,50 @@ const (
 )
 
 type bashArgs struct {
-	Command     string `json:"command"`
-	Description string `json:"description,omitempty"`
-	TimeoutMS   int    `json:"timeout_ms,omitempty"`
-	Cwd         string `json:"cwd,omitempty"`
+	Command         string `json:"command"`
+	Description     string `json:"description,omitempty"`
+	TimeoutMS       int    `json:"timeout_ms,omitempty"`
+	Cwd             string `json:"cwd,omitempty"`
+	RunInBackground bool   `json:"run_in_background,omitempty"`
 }
 
 // BashTool executes shell commands with streaming output and cross-platform process-tree cleanup.
-type BashTool struct{}
+type BashTool struct {
+	bgMgr *BackgroundTaskManager
+}
 
 func NewBashTool() *BashTool { return &BashTool{} }
 
-func (t *BashTool) Name() string                      { return "bash" }
-func (t *BashTool) Category() string                  { return "system" }
-func (t *BashTool) IsReadOnly(_ json.RawMessage) bool { return false }
+func NewBashToolWithBackground(mgr *BackgroundTaskManager) *BashTool {
+	return &BashTool{bgMgr: mgr}
+}
+
+func (t *BashTool) Name() string     { return "bash" }
+func (t *BashTool) Category() string { return "system" }
+func (t *BashTool) IsReadOnly(rawArgs json.RawMessage) bool {
+	var args bashArgs
+	if err := json.Unmarshal(rawArgs, &args); err != nil {
+		return false
+	}
+	if args.RunInBackground {
+		return false
+	}
+	return IsReadOnlyBashCommand(args.Command)
+}
 
 func (t *BashTool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
 		Name:        "bash",
 		Category:    "system",
-		Description: "Execute a shell command in the workspace. Streams output, enforces a timeout, and terminates the entire process tree on timeout or cancellation.\n\n- Prefer the dedicated tools when one fits: use `read`/`write`/`edit` for files and `grep`/`glob` for searching, instead of `cat`, `head`, `tail`, `sed`, `awk`, `grep`, or `find`.\n- Prefer absolute paths and set `cwd` rather than relying on the shell's current directory.\n- Always provide a concise `description` of what the command does (5-10 words).\n- Reserve `bash` for work the other tools cannot do: builds, tests, package managers, git, and process control.\n\n# Git\n- Never use interactive flags (`-i`, such as `git rebase -i` or `git add -i`); they are unsupported in this environment.\n- Use the `gh` CLI for GitHub operations such as pull requests and issues.\n- Commit or push only when the user asks. If you are on the default branch, create a branch first.",
+		Description: "Execute a shell command in the workspace. Streams output, enforces a timeout, and terminates the entire process tree on timeout or cancellation.\n\n- Prefer the dedicated tools when one fits: use `read`/`write`/`edit` for files and `grep`/`glob` for searching, instead of `cat`, `head`, `tail`, `sed`, `awk`, `grep`, or `find`.\n- Prefer absolute paths and set `cwd` rather than relying on the shell's current directory.\n- Always provide a concise `description` of what the command does (5-10 words).\n- Set `run_in_background: true` for long-running servers/watchers, then inspect via `task_output` and terminate via `task_stop`.\n- Reserve `bash` for work the other tools cannot do: builds, tests, package managers, git, and process control.\n\n# Git\n- Never use interactive flags (`-i`, such as `git rebase -i` or `git add -i`); they are unsupported in this environment.\n- Use the `gh` CLI for GitHub operations such as pull requests and issues.\n- Commit or push only when the user asks. If you are on the default branch, create a branch first.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
 				"command": {"type": "string", "description": "Shell command to execute"},
 				"description": {"type": "string", "description": "Concise human-readable description of what this command does (5-10 words)"},
 				"timeout_ms": {"type": "integer", "description": "Timeout in milliseconds (default 120000, max 600000)"},
-				"cwd": {"type": "string", "description": "Optional working directory relative to workspace"}
+				"cwd": {"type": "string", "description": "Optional working directory relative to workspace"},
+				"run_in_background": {"type": "boolean", "description": "Run command asynchronously in the background and return a task_id for task_output/task_stop"}
 			},
 			"required": ["command"]
 		}`),
@@ -80,6 +97,21 @@ func (t *BashTool) Execute(ctx context.Context, workDir string, rawArgs json.Raw
 		if st, err := os.Stat(execDir); err != nil || !st.IsDir() {
 			return Result{Output: fmt.Sprintf("working directory %s does not exist", execDir), IsError: true}, nil
 		}
+	}
+
+	if args.RunInBackground {
+		if t.bgMgr == nil {
+			return Result{Output: "run_in_background is not enabled for this bash tool instance", IsError: true}, nil
+		}
+		var bgTimeout time.Duration
+		if args.TimeoutMS > 0 {
+			bgTimeout = time.Duration(timeoutMS) * time.Millisecond
+		}
+		taskID := t.bgMgr.Start(execDir, args.Command, bgTimeout)
+		return Result{
+			Output:   fmt.Sprintf("Started background task %s. Use `task_output` with task_id=%q to read output or `task_stop` to terminate.", taskID, taskID),
+			Metadata: map[string]any{"task_id": taskID, "background": true},
+		}, nil
 	}
 
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)

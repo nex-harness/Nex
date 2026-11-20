@@ -17,9 +17,15 @@ type writeArgs struct {
 }
 
 // WriteTool creates or atomically overwrites a file in the workspace.
-type WriteTool struct{}
+type WriteTool struct {
+	tracker *FileStateTracker
+}
 
 func NewWriteTool() *WriteTool { return &WriteTool{} }
+
+func NewWriteToolWithTracker(tracker *FileStateTracker) *WriteTool {
+	return &WriteTool{tracker: tracker}
+}
 
 func (t *WriteTool) Name() string                      { return "write" }
 func (t *WriteTool) Category() string                  { return "system" }
@@ -51,6 +57,9 @@ func (t *WriteTool) Execute(_ context.Context, workDir string, rawArgs json.RawM
 	}
 
 	absPath := ResolvePath(workDir, args.FilePath)
+	unlock := t.tracker.LockFile(absPath)
+	defer unlock()
+
 	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 		return Result{Output: fmt.Sprintf("mkdir parent failed: %v", err), IsError: true}, nil
 	}
@@ -58,6 +67,9 @@ func (t *WriteTool) Execute(_ context.Context, workDir string, rawArgs json.RawM
 	perm := os.FileMode(0o644)
 	var oldContent string
 	if info, err := os.Stat(absPath); err == nil && !info.IsDir() {
+		if guardErr := t.tracker.CheckBeforeModify(absPath, info, "overwriting"); guardErr != nil {
+			return Result{Output: guardErr.Error(), IsError: true}, nil
+		}
 		perm = info.Mode().Perm()
 		if prev, err := os.ReadFile(absPath); err == nil && !isBinaryBytes(prev) {
 			oldContent = strings.ReplaceAll(string(prev), "\r\n", "\n")
@@ -74,6 +86,7 @@ func (t *WriteTool) Execute(_ context.Context, workDir string, rawArgs json.RawM
 			return Result{Output: fmt.Sprintf("write %s failed: %v", args.FilePath, err2), IsError: true}, nil
 		}
 	}
+	t.tracker.RecordStat(absPath)
 
 	newNorm := strings.ReplaceAll(args.Content, "\r\n", "\n")
 	relName := args.FilePath

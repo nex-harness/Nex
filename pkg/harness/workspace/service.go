@@ -27,12 +27,28 @@ const (
 
 // Request dispatches workspace FS and Git Review actions on a Runner.
 type Request struct {
-	Action        string `json:"action"` // "fs_list" | "fs_search" | "fs_read_preview" | "git_summary" | "git_diff"
+	Action        string `json:"action"` // "fs_list" | "fs_browse_dirs" | "fs_search" | "fs_read_preview" | "git_summary" | "git_diff"
 	WorkspacePath string `json:"workspace_path,omitempty"`
 	RelPath       string `json:"rel_path,omitempty"`
 	Query         string `json:"query,omitempty"`
 	DiffMode      string `json:"diff_mode,omitempty"` // "working" | "staged" | "unstaged" | "head"
 	Limit         int    `json:"limit,omitempty"`
+	IncludeHidden bool   `json:"include_hidden,omitempty"`
+}
+
+// BrowseDirEntry describes a subdirectory in the host/runner directory browser.
+type BrowseDirEntry struct {
+	Name      string `json:"name"`
+	Path      string `json:"path"`
+	IsSymlink bool   `json:"is_symlink,omitempty"`
+}
+
+// BrowseDirsResult returns the current browsed directory, parent, home dir, and subdirectories.
+type BrowseDirsResult struct {
+	CurrentPath string           `json:"current_path"`
+	ParentPath  string           `json:"parent_path"`
+	HomePath    string           `json:"home_path"`
+	Entries     []BrowseDirEntry `json:"entries"`
 }
 
 // DirEntry describes a single node in the lazy-loaded Files tree.
@@ -130,6 +146,8 @@ func (s *Service) HandleRequest(ctx context.Context, defaultWorkDir string, rawP
 	switch req.Action {
 	case "fs_list":
 		resp, err = s.ListDir(ctx, root, req.RelPath)
+	case "fs_browse_dirs":
+		resp, err = s.BrowseDirs(ctx, root, req.IncludeHidden)
 	case "fs_search":
 		resp, err = s.SearchFiles(ctx, root, req.Query, req.Limit)
 	case "fs_read_preview":
@@ -145,6 +163,88 @@ func (s *Service) HandleRequest(ctx context.Context, defaultWorkDir string, rawP
 		return nil, err
 	}
 	return json.Marshal(resp)
+}
+
+// BrowseDirs lists subdirectories of an arbitrary path on the Runner host so users can
+// pick a project/workspace directory without typing paths manually.
+func (s *Service) BrowseDirs(_ context.Context, targetPath string, includeHidden bool) (*BrowseDirsResult, error) {
+	homeDir, _ := os.UserHomeDir()
+	raw := strings.TrimSpace(targetPath)
+	if raw == "" {
+		raw = homeDir
+	}
+	if raw == "" {
+		if wd, err := os.Getwd(); err == nil {
+			raw = wd
+		}
+	}
+	if homeDir != "" {
+		if raw == "~" {
+			raw = homeDir
+		} else if strings.HasPrefix(raw, "~/") || strings.HasPrefix(raw, "~\\") {
+			raw = filepath.Join(homeDir, raw[2:])
+		}
+	}
+	absPath, err := filepath.Abs(raw)
+	if err != nil {
+		return nil, fmt.Errorf("resolve directory %q: %w", raw, err)
+	}
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("cannot access %q: %w", absPath, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("path %q is not a directory", absPath)
+	}
+
+	dirEntries, err := os.ReadDir(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("read directory %q: %w", absPath, err)
+	}
+
+	entries := make([]BrowseDirEntry, 0, len(dirEntries))
+	const maxEntries = 500
+	for _, d := range dirEntries {
+		name := d.Name()
+		if !includeHidden && strings.HasPrefix(name, ".") {
+			continue
+		}
+		isSymlink := d.Type()&os.ModeSymlink != 0
+		isDir := d.IsDir()
+		fullPath := filepath.Join(absPath, name)
+		if !isDir && isSymlink {
+			if targetInfo, statErr := os.Stat(fullPath); statErr == nil && targetInfo.IsDir() {
+				isDir = true
+			}
+		}
+		if !isDir {
+			continue
+		}
+		entries = append(entries, BrowseDirEntry{
+			Name:      name,
+			Path:      fullPath,
+			IsSymlink: isSymlink,
+		})
+		if len(entries) >= maxEntries {
+			break
+		}
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
+	})
+
+	parent := filepath.Dir(absPath)
+	if parent == absPath {
+		parent = ""
+	}
+
+	return &BrowseDirsResult{
+		CurrentPath: absPath,
+		ParentPath:  parent,
+		HomePath:    homeDir,
+		Entries:     entries,
+	}, nil
 }
 
 // ListDir lists a single directory level lazily, sorting folders before files and marking .gitignore status.

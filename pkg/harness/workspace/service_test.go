@@ -105,3 +105,56 @@ func TestWorkspaceTreeSearchPreviewTraversalGuardAndGitDiff(t *testing.T) {
 		t.Fatalf("missing unified diff for pkg/main.go: %+v", gitSum.Files)
 	}
 }
+
+func TestBrowseDirs(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(root, "alpha"), 0o755)
+	_ = os.MkdirAll(filepath.Join(root, "Beta"), 0o755)
+	_ = os.MkdirAll(filepath.Join(root, ".hidden-dir"), 0o755)
+	_ = os.WriteFile(filepath.Join(root, "plain.txt"), []byte("hi"), 0o644)
+
+	linkTarget := filepath.Join(root, "alpha")
+	_ = os.Symlink(linkTarget, filepath.Join(root, "alpha-link"))
+
+	svc := NewService()
+
+	// Default excludes hidden directories and files, keeps dirs and dir-symlinks sorted case-insensitively.
+	res, err := svc.BrowseDirs(ctx, root, false)
+	if err != nil {
+		t.Fatalf("BrowseDirs failed: %v", err)
+	}
+	if res.CurrentPath == "" || res.ParentPath == "" {
+		t.Fatalf("expected non-empty current/parent path: %+v", res)
+	}
+	if len(res.Entries) != 3 {
+		t.Fatalf("expected 3 visible dir entries (alpha, alpha-link, Beta), got %+v", res.Entries)
+	}
+	if res.Entries[0].Name != "alpha" || res.Entries[1].Name != "alpha-link" || !res.Entries[1].IsSymlink || res.Entries[2].Name != "Beta" {
+		t.Fatalf("unexpected entries ordering/flags: %+v", res.Entries)
+	}
+
+	// IncludeHidden=true reveals .hidden-dir via HandleRequest RPC path as well.
+	raw, err := svc.HandleRequest(ctx, root, json.RawMessage(`{"action":"fs_browse_dirs","include_hidden":true}`))
+	if err != nil {
+		t.Fatalf("HandleRequest fs_browse_dirs failed: %v", err)
+	}
+	var rpcRes BrowseDirsResult
+	if err := json.Unmarshal(raw, &rpcRes); err != nil {
+		t.Fatalf("unmarshal BrowseDirsResult: %v", err)
+	}
+	foundHidden := false
+	for _, e := range rpcRes.Entries {
+		if e.Name == ".hidden-dir" {
+			foundHidden = true
+		}
+	}
+	if !foundHidden {
+		t.Fatalf("expected .hidden-dir when include_hidden=true: %+v", rpcRes.Entries)
+	}
+
+	// Non-directory file path returns error.
+	if _, err := svc.BrowseDirs(ctx, filepath.Join(root, "plain.txt"), false); err == nil {
+		t.Fatalf("expected error for non-directory path")
+	}
+}

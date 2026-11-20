@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"path"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nex-harness/nex/pkg/ai"
+	"github.com/nex-harness/nex/pkg/protocol"
 	"github.com/nex-harness/nex/pkg/store"
 )
 
@@ -26,8 +28,13 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/providers", s.handleProviders)
 	s.mux.HandleFunc("/api/v1/providers/", s.handleProviderDelete)
 	s.mux.HandleFunc("/api/v1/models", s.handleModels)
+	s.mux.HandleFunc("/api/v1/models/", s.handleModelDelete)
 	s.mux.HandleFunc("/api/v1/models/sync", s.handleModelsSync)
+	s.mux.HandleFunc("/api/v1/models/fetch-remote", s.handleModelsFetchRemote)
+	s.mux.HandleFunc("/api/v1/models/lookup", s.handleModelLookup)
+	s.mux.HandleFunc("/api/v1/models/test", s.handleModelTest)
 	s.mux.HandleFunc("/api/v1/runners", s.handleRunners)
+	s.mux.HandleFunc("/api/v1/runners/", s.handleRunnerSubroutes)
 	s.mux.HandleFunc("/api/v1/sessions", s.handleSessions)
 	s.mux.HandleFunc("/api/v1/sessions/", s.handleSessionSubroutes)
 	s.mux.HandleFunc("/api/v1/archives", s.handleArchives)
@@ -205,7 +212,143 @@ func (s *Server) handleModelsSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.BroadcastConfigSync(r.Context())
-	writeJSON(w, http.StatusOK, map[string]any{"synced_count": len(filtered)})
+	writeJSON(w, http.StatusOK, map[string]any{"synced": len(filtered), "total_catalog": len(catalog)})
+}
+
+func (s *Server) handleModelsFetchRemote(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		BaseURL string `json:"base_url"`
+		APIKey  string `json:"api_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	base := strings.TrimRight(strings.TrimSpace(body.BaseURL), "/")
+	if base == "" {
+		writeErr(w, http.StatusBadRequest, errors.New("base_url is required"))
+		return
+	}
+	endpoint := base + "/models"
+	if !strings.HasSuffix(base, "/v1") {
+		endpoint = base + "/v1/models"
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if strings.TrimSpace(body.APIKey) != "" {
+		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(body.APIKey))
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "upstream /v1/models returned HTTP " + strconv.Itoa(resp.StatusCode)})
+		return
+	}
+	var payload struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	ids := make([]string, 0, len(payload.Data))
+	for _, item := range payload.Data {
+		if strings.TrimSpace(item.ID) != "" {
+			ids = append(ids, item.ID)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"models": ids})
+}
+
+func (s *Server) handleModelLookup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	modelID := strings.TrimSpace(r.URL.Query().Get("model_id"))
+	if modelID == "" && r.Method == http.MethodPost {
+		var body struct {
+			ModelID string `json:"model_id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		modelID = strings.TrimSpace(body.ModelID)
+	}
+	if modelID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "model_id is required"})
+		return
+	}
+	// Try live models.dev first with short timeout, fallback to embedded seed.
+	catalog, err := ai.FetchModelsDevCatalog(r.Context(), s.client, "")
+	if err != nil || len(catalog) == 0 {
+		catalog, _ = ai.EmbeddedModelsCatalog()
+	}
+	if meta, ok := ai.LookupModelMeta(catalog, modelID); ok {
+		writeJSON(w, http.StatusOK, map[string]any{"found": true, "meta": meta})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"found": false})
+}
+
+func (s *Server) handleModelTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Driver  string `json:"driver"`
+		BaseURL string `json:"base_url"`
+		APIKey  string `json:"api_key"`
+		ModelID string `json:"model_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	prov, err := ai.NewProvider(ai.Driver(body.Driver), body.BaseURL, body.APIKey, s.client)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	start := time.Now()
+	ch, err := prov.Stream(r.Context(), &ai.StreamRequest{
+		Model:        body.ModelID,
+		SystemPrompt: "Reply with OK.",
+		Messages: []ai.Message{
+			{Role: ai.RoleUser, Content: []ai.ContentBlock{{Type: ai.BlockText, Text: "ping"}}},
+		},
+		MaxOutputTokens: 16,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "latency_ms": time.Since(start).Milliseconds()})
+		return
+	}
+	var out strings.Builder
+	var streamErr string
+	for ev := range ch {
+		if ev.Type == ai.StreamEventTextDelta {
+			out.WriteString(ev.TextDelta)
+		} else if ev.Type == ai.StreamEventError && ev.Err != nil {
+			streamErr = ev.Err.Error()
+		}
+	}
+	if streamErr != "" {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": streamErr, "latency_ms": time.Since(start).Milliseconds()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "reply": strings.TrimSpace(out.String()), "latency_ms": time.Since(start).Milliseconds()})
 }
 
 func (s *Server) handleRunners(w http.ResponseWriter, r *http.Request) {
@@ -219,6 +362,46 @@ func (s *Server) handleRunners(w http.ResponseWriter, r *http.Request) {
 		list[i].AuthToken = ""
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+func (s *Server) handleRunnerSubroutes(w http.ResponseWriter, r *http.Request) {
+	rest := strings.TrimPrefix(r.URL.Path, "/api/v1/runners/")
+	runnerID, action, _ := strings.Cut(rest, "/")
+	if runnerID == "" || action != "dirs" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	reqPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	includeHidden := r.URL.Query().Get("include_hidden") == "1" || r.URL.Query().Get("include_hidden") == "true"
+
+	env, err := protocol.NewEnvelope(protocol.TypeWorkspaceReq, map[string]any{
+		"action":         "fs_browse_dirs",
+		"workspace_path": reqPath,
+		"include_hidden": includeHidden,
+	})
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	env.RunnerID = runnerID
+	resp, err := s.callRunnerRPC(r.Context(), runnerID, env, 15*time.Second)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	if resp.Type == protocol.TypeError {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(resp.Payload)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(resp.Payload)
 }
 
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
@@ -600,6 +783,24 @@ func (s *Server) deleteRegistryHandler(w http.ResponseWriter, r *http.Request, p
 
 func (s *Server) handleProviderDelete(w http.ResponseWriter, r *http.Request) {
 	s.deleteRegistryHandler(w, r, "/api/v1/providers/", "providers", "id")
+}
+func (s *Server) handleModelDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/models/")
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	provID := r.URL.Query().Get("provider_id")
+	if err := s.store.DeleteModel(r.Context(), provID, id); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.BroadcastConfigSync(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": id})
 }
 func (s *Server) handleAgentDelete(w http.ResponseWriter, r *http.Request) {
 	s.deleteRegistryHandler(w, r, "/api/v1/agents/", "agent_profiles", "slug")
