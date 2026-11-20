@@ -613,6 +613,16 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
         continue;
       }
 
+      if (trimmed.startsWith('###### ') || trimmed.startsWith('##### ')) {
+        const text = trimmed.replace(/^#{5,6}\s+/, '');
+        blocks.push(
+          <h5 key={keySeq++} className="mt-2.5 mb-1 text-ui-sm font-semibold text-foreground">
+            {renderInline(text)}
+          </h5>,
+        );
+        i++;
+        continue;
+      }
       if (trimmed.startsWith('#### ')) {
         blocks.push(
           <h4 key={keySeq++} className="mt-3 mb-1 text-ui-base font-semibold text-foreground">
@@ -687,14 +697,18 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
       }
 
       const paraLines: string[] = [];
-      while (
-        i < lines.length &&
-        lines[i].trim() !== '' &&
-        !lines[i].trim().startsWith('#') &&
-        !lines[i].trim().startsWith('> ') &&
-        !(lines[i].trim().includes('|') && i + 1 < lines.length && isTableSeparator(lines[i + 1])) &&
-        !/^([-*]|\d+\.)\s+/.test(lines[i].trim())
-      ) {
+      while (i < lines.length) {
+        const curTrim = lines[i].trim();
+        if (
+          paraLines.length > 0 &&
+          (curTrim === '' ||
+            /^#{1,6}\s+/.test(curTrim) ||
+            curTrim.startsWith('> ') ||
+            (curTrim.includes('|') && i + 1 < lines.length && isTableSeparator(lines[i + 1])) ||
+            /^([-*]|\d+\.)\s+/.test(curTrim))
+        ) {
+          break;
+        }
         paraLines.push(lines[i]);
         i++;
       }

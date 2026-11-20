@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
+import { MarkdownRenderer } from '../features/MarkdownRenderer';
 import { decodePTYBinaryFrame, encodePTYBinaryFrame, PTY_BINARY_STDOUT } from '../core/protocol';
 import { applySessionEvent, emptyStreamState } from '../core/reducer';
 import { persistActiveSessionId, readPersistedSessionId, useNexStore } from '../core/store';
@@ -1298,5 +1299,16 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     } finally {
       useNexStore.setState({ bootstrap: origBootstrap, authEnabled: false, authenticated: true });
     }
+  });
+
+  it('does not hang or OOM-crash MarkdownRenderer on partial streaming headings (##, #, #tag, #####)', () => {
+    const samples = ['##', '#', '###', '#hashtag', '##### Level 5 Heading', 'line 1\n##\nline 2'];
+    for (const s of samples) {
+      const { unmount } = render(<MarkdownRenderer content={s} streaming />);
+      unmount();
+    }
+    render(<MarkdownRenderer content={'##### Deep Title\n\n#tag-line'} />);
+    expect(screen.getByText('Deep Title')).toBeTruthy();
+    expect(screen.getByText('#tag-line')).toBeTruthy();
   });
 });
