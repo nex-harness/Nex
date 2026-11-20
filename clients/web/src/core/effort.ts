@@ -1,4 +1,4 @@
-import { formatMsg, MessageKey } from '../i18n/messages';
+import { formatMsg, type LocaleCode, type MessageKey } from '../i18n/messages';
 import { ModelMeta, ThinkingEffort } from './types';
 
 export interface EffortLevelOption {
@@ -28,7 +28,7 @@ const DEFAULT_EFFORT_LEVELS: EffortLevelOption[] = [
   EFFORT_CATALOG.high,
 ];
 
-export function formatEffortLabel(opt: EffortLevelOption | undefined, locale: 'zh-CN' | 'en-US'): string {
+export function formatEffortLabel(opt: EffortLevelOption | undefined, locale: LocaleCode): string {
   if (!opt) return '';
   if (opt.labelKey) return formatMsg(locale, opt.labelKey);
   return opt.customLabel || String(opt.value || '');

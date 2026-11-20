@@ -1,3 +1,4 @@
+import { formatMsg } from '../i18n/messages';
 import { ArchiveRestore, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { apiFetch, formatCompactTokens } from '../core/protocol';
@@ -26,9 +27,9 @@ const EMPTY_USAGE: UsageSummary = {
 };
 
 const WINDOWS = [
-  { id: 'today' as const, zh: '今天', en: 'Today' },
-  { id: '7d' as const, zh: '近 7 天', en: '7 days' },
-  { id: '30d' as const, zh: '近 30 天', en: '30 days' },
+  { id: 'today' as const, labelKey: 'analytics.window.today' as const },
+  { id: '7d' as const, labelKey: 'analytics.window.7d' as const },
+  { id: '30d' as const, labelKey: 'analytics.window.30d' as const },
 ];
 
 function MetricCard({
@@ -57,7 +58,6 @@ function MetricCard({
 
 export function UsageAnalyticsSection() {
   const { locale, runners, selectedRunnerId, todaySummary } = useNexStore();
-  const isEn = locale === 'en-US';
 
   const [runnerFilter, setRunnerFilter] = useState<string>('');
   const [windowTab, setWindowTab] = useState<'today' | '7d' | '30d'>('today');
@@ -90,7 +90,7 @@ export function UsageAnalyticsSection() {
                   : 'text-foreground-subtle hover:text-foreground'
               }`}
             >
-              {isEn ? w.en : w.zh}
+              {formatMsg(locale, w.labelKey)}
             </button>
           ))}
         </div>
@@ -98,10 +98,10 @@ export function UsageAnalyticsSection() {
         <select
           value={runnerFilter}
           onChange={(e) => setRunnerFilter(e.target.value)}
-          aria-label={isEn ? 'Filter by runner' : '按设备筛选'}
+          aria-label={formatMsg(locale, 'analytics.filterByRunner')}
           className={`${settingsSelectClass} h-8 w-full max-w-[220px] text-ui-sm`}
         >
-          <option value="">{isEn ? 'All runners' : '全部设备'}</option>
+          <option value="">{formatMsg(locale, 'analytics.allRunners')}</option>
           {runners.map((r) => (
             <option key={r.id} value={r.id}>
               {r.name} ({r.os}/{r.arch})
@@ -112,57 +112,49 @@ export function UsageAnalyticsSection() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
-          label={isEn ? 'Total tokens' : '总消耗 Token'}
+          label={formatMsg(locale, 'analytics.totalTokens')}
           value={formatCompactTokens(stats.total_tokens)}
-          hint={isEn ? `${stats.turn_count} model turns` : `共 ${stats.turn_count} 轮模型推理`}
+          hint={formatMsg(locale, 'analytics.modelTurns', { turn_count: stats.turn_count })}
         />
         <MetricCard
-          label={isEn ? 'Estimated cost' : '预计开销'}
+          label={formatMsg(locale, 'analytics.estimatedCost')}
           value={`$${stats.estimated_cost_usd.toFixed(4)}`}
           hint={
-            isEn
-              ? `Cache saved $${stats.cache_saved_usd.toFixed(4)}`
-              : `Prompt Cache 已省 $${stats.cache_saved_usd.toFixed(4)}`
+            formatMsg(locale, 'analytics.cacheSaved', { v: stats.cache_saved_usd.toFixed(4) })
           }
           tone="success"
         />
         <MetricCard
-          label={isEn ? 'Cache hit rate' : '缓存命中率'}
+          label={formatMsg(locale, 'analytics.cacheHitRate')}
           value={`${stats.cache_hit_rate_pct.toFixed(1)}%`}
           hint={
-            isEn
-              ? `${formatCompactTokens(stats.cache_read_tokens)} tok read`
-              : `命中 ${formatCompactTokens(stats.cache_read_tokens)} tok`
+            formatMsg(locale, 'analytics.tokRead', { v: formatCompactTokens(stats.cache_read_tokens) })
           }
           tone="accent"
         />
         <MetricCard
-          label={isEn ? 'Source breakdown' : '来源分布'}
+          label={formatMsg(locale, 'analytics.sourceBreakdown')}
           value={formatCompactTokens(
             (stats.by_source_tokens?.chat || 0) +
               (stats.by_source_tokens?.subagent || 0) +
               (stats.by_source_tokens?.cron || 0),
           )}
           hint={
-            isEn
-              ? `Chat ${formatCompactTokens(stats.by_source_tokens?.chat || 0)} · Sub ${formatCompactTokens(
+            formatMsg(locale, 'analytics.chatSubCron', { v: formatCompactTokens(stats.by_source_tokens?.chat || 0), v2: formatCompactTokens(
                   stats.by_source_tokens?.subagent || 0,
-                )} · Cron ${formatCompactTokens(stats.by_source_tokens?.cron || 0)}`
-              : `对话 ${formatCompactTokens(stats.by_source_tokens?.chat || 0)} · 子智能体 ${formatCompactTokens(
-                  stats.by_source_tokens?.subagent || 0,
-                )} · 定时 ${formatCompactTokens(stats.by_source_tokens?.cron || 0)}`
+                ), v3: formatCompactTokens(stats.by_source_tokens?.cron || 0) })
           }
         />
       </div>
 
       <div className="space-y-3">
         <h3 className="text-ui-base font-medium text-foreground">
-          {isEn ? 'Model usage breakdown' : '模型用量与成本排行'}
+          {formatMsg(locale, 'analytics.modelUsageBreakdown')}
         </h3>
         <SettingsGroupCard>
           {stats.models.length === 0 ? (
             <div className="px-5 py-10 text-center text-ui-sm text-foreground-subtlest">
-              {isEn ? 'No model calls in this window.' : '所选时间窗内暂无模型调用。'}
+              {formatMsg(locale, 'analytics.noModelCallsInThis')}
             </div>
           ) : (
             stats.models.map((m) => {
@@ -176,7 +168,7 @@ export function UsageAnalyticsSection() {
                         {m.provider_id}
                       </span>
                       <span className="text-ui-xs text-foreground-subtlest">
-                        {isEn ? `${m.turn_count} turns` : `${m.turn_count} 轮`}
+                        {formatMsg(locale, 'analytics.turns', { turn_count: m.turn_count })}
                       </span>
                     </div>
                     <div className="font-mono text-ui-sm tabular-nums text-foreground">
@@ -206,7 +198,6 @@ export function ArchivesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
     unarchiveSession,
     deleteArchivedPermanently,
   } = useNexStore();
-  const isEn = locale === 'en-US';
 
   const [days, setDays] = useState(preferences.auto_archive_after_days);
   const [search, setSearch] = useState('');
@@ -229,9 +220,7 @@ export function ArchivesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
     }).catch(() => {});
     await refreshInitialData();
     onFlash(
-      isEn
-        ? `Auto-archive policy updated (${days} days)`
-        : `自动归档策略已更新（闲置满 ${days} 天自动迁入 archive.db）`,
+      formatMsg(locale, 'analytics.autoArchivePolicyUpdatedDays', { days }),
     );
   };
 
@@ -239,11 +228,9 @@ export function ArchivesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
     <div className="space-y-6">
       <SettingsGroupCard>
         <SettingsRow
-          label={isEn ? 'Auto-archive policy' : '自动归档策略'}
+          label={formatMsg(locale, 'analytics.autoArchivePolicy')}
           description={
-            isEn
-              ? 'Idle sessions move from main.db to archive.db. Historical stats are preserved.'
-              : '闲置超过指定天数的会话将从热库 main.db 原子迁移至冷库 archive.db，历史统计不受影响。'
+            formatMsg(locale, 'analytics.idleSessionsMoveFromMain')
           }
         >
           <input
@@ -254,14 +241,14 @@ export function ArchivesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
             className="h-9 w-20 rounded-lg border border-border bg-input px-3 font-mono text-ui-base tabular-nums text-foreground"
           />
           <span className="shrink-0 text-ui-sm text-foreground-subtle">
-            {isEn ? 'days' : '天'}
+            {formatMsg(locale, 'analytics.days')}
           </span>
           <button
             type="button"
             onClick={() => void savePolicy()}
             className="h-8 shrink-0 rounded-lg bg-primary px-3.5 text-ui-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
-            {isEn ? 'Save' : '保存'}
+            {formatMsg(locale, 'common.save')}
           </button>
         </SettingsRow>
       </SettingsGroupCard>
@@ -271,37 +258,31 @@ export function ArchivesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={isEn ? 'Search archived sessions' : '搜索已归档会话'}
+            placeholder={formatMsg(locale, 'analytics.searchArchivedSessions')}
             className={`${settingsInputClass} h-7 border-0 bg-transparent p-0 text-ui-sm`}
           />
         </div>
         <select
           value={sortOrder}
           onChange={(e) => setSortOrder(e.target.value as 'updated' | 'created')}
-          aria-label={isEn ? 'Sort order' : '排序方式'}
+          aria-label={formatMsg(locale, 'analytics.sortOrder')}
           className={`${settingsSelectClass} h-8 w-full max-w-[180px] text-ui-sm`}
         >
-          <option value="updated">{isEn ? 'Last updated' : '更新时间'}</option>
-          <option value="created">{isEn ? 'Created' : '创建时间'}</option>
+          <option value="updated">{formatMsg(locale, 'analytics.lastUpdated')}</option>
+          <option value="created">{formatMsg(locale, 'analytics.created')}</option>
         </select>
       </div>
 
       <div className="space-y-3">
         <h3 className="text-ui-base font-medium text-foreground">
-          {isEn
-            ? `Archived sessions (${visibleSessions.length})`
-            : `已归档会话 (${visibleSessions.length})`}
+          {formatMsg(locale, 'analytics.archivedSessions', { length: visibleSessions.length })}
         </h3>
         <SettingsGroupCard>
           {visibleSessions.length === 0 ? (
             <div className="px-5 py-10 text-center text-ui-sm text-foreground-subtlest">
               {archivedSessions.length === 0
-                ? isEn
-                  ? 'No archived sessions in archive.db.'
-                  : '冷库 archive.db 暂无已归档会话。'
-                : isEn
-                  ? 'No archived sessions match your search.'
-                  : '没有匹配的归档会话。'}
+                ? formatMsg(locale, 'analytics.noArchivedSessionsInArchive')
+                : formatMsg(locale, 'analytics.noArchivedSessionsMatchYour')}
             </div>
           ) : (
             visibleSessions.map((s) => (
@@ -321,30 +302,26 @@ export function ArchivesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
                     onClick={async () => {
                       await unarchiveSession(s.id);
                       onFlash(
-                        isEn
-                          ? `Restored "${s.title}"`
-                          : `已将 "${s.title}" 无损恢复至活跃工作区`,
+                        formatMsg(locale, 'analytics.restored', { title: s.title }),
                       );
                     }}
                     className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-ui-sm text-foreground transition-colors hover:bg-hover"
                   >
                     <ArchiveRestore className="size-3.5" />
-                    <span>{isEn ? 'Unarchive' : '取消归档'}</span>
+                    <span>{formatMsg(locale, 'taskList.unarchive')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={async () => {
                       await deleteArchivedPermanently(s.id);
                       onFlash(
-                        isEn
-                          ? 'Session permanently deleted'
-                          : '已永久删除会话并回收底层孤立 CAS Blobs',
+                        formatMsg(locale, 'analytics.sessionPermanentlyDeleted'),
                       );
                     }}
                     className="flex h-8 items-center gap-1.5 rounded-lg bg-destructive-surface px-3 text-ui-sm font-medium text-destructive-surface-fg transition-opacity hover:opacity-90"
                   >
                     <Trash2 className="size-3.5" />
-                    <span>{isEn ? 'Permanently delete' : '永久删除'}</span>
+                    <span>{formatMsg(locale, 'analytics.permanentlyDelete')}</span>
                   </button>
                 </div>
               </div>

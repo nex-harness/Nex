@@ -1,3 +1,4 @@
+import { applyDocumentLocale, detectBrowserLocale, formatMsg, type LocaleCode } from '../i18n/messages';
 import { create } from 'zustand';
 import { hostBridge } from '../host/bridge';
 import { resolveEffectiveEffort } from './effort';
@@ -86,7 +87,7 @@ export interface AppState {
   authChecked: boolean;
   authEnabled: boolean;
   authenticated: boolean;
-  locale: 'zh-CN' | 'en-US';
+  locale: LocaleCode;
   mainView: 'workspace' | 'settings';
   settingsSection: SettingsSectionId;
   sidebarVisible: boolean;
@@ -134,7 +135,7 @@ export interface AppState {
 
   openSettings: (section?: SettingsSectionId) => void;
   closeSettings: () => void;
-  setLocale: (loc: 'zh-CN' | 'en-US') => void;
+  setLocale: (loc: LocaleCode) => void;
   togglePinSession: (sessionId: string) => void;
   toggleSidebar: () => void;
   toggleSidePane: () => void;
@@ -217,12 +218,15 @@ const DEFAULT_PREFS: UserPreferences = {
   auto_archive_after_days: 30,
 };
 
+const INITIAL_LOCALE: LocaleCode = detectBrowserLocale(safeStorageGet('nex.locale'));
+applyDocumentLocale(INITIAL_LOCALE);
+
 export const useNexStore = create<AppState>((set, get) => ({
   wsConnected: false,
   authChecked: false,
   authEnabled: false,
   authenticated: true,
-  locale: (safeStorageGet('nex.locale') as 'zh-CN' | 'en-US') || 'zh-CN',
+  locale: INITIAL_LOCALE,
   mainView: 'workspace',
   settingsSection: 'general',
   sidebarVisible: true,
@@ -297,7 +301,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   followUpQueues: {},
   gitSummary: null,
 
-  rightTabs: [{ id: 'tab_launcher', kind: 'new_tab', title: '新标签页', closable: true }],
+  rightTabs: [{ id: 'tab_launcher', kind: 'new_tab', title: formatMsg(INITIAL_LOCALE, 'sidePane.newTab'), closable: true }],
   activeRightTabId: 'tab_launcher',
   bottomTerminals: [],
   activeBottomTermId: '',
@@ -309,6 +313,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   closeSettings: () => set({ mainView: 'workspace' }),
   setLocale: (loc) => {
     safeStorageSet('nex.locale', loc);
+    applyDocumentLocale(loc);
     set({ locale: loc });
   },
   togglePinSession: (sessionId) => {
@@ -328,7 +333,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         const launcherTab: WorkbenchTab = {
           id: `tab_${crypto.randomUUID().slice(0, 8)}`,
           kind: 'new_tab',
-          title: s.locale === 'en-US' ? 'New tab' : '新标签页',
+          title: formatMsg(s.locale, 'sidePane.newTab'),
           closable: true,
         };
         return { sidePaneVisible: true, rightTabs: [launcherTab], activeRightTabId: launcherTab.id };
@@ -478,6 +483,7 @@ export const useNexStore = create<AppState>((set, get) => ({
 
   bootstrap: async () => {
     hostBridge.setDeviceFontScale(hostBridge.getDeviceFontScale());
+    applyDocumentLocale(get().locale);
 
     setAuthRequiredHandler(() => {
       safeStorageRemove('nex.auth.token');
@@ -1013,12 +1019,12 @@ export const useNexStore = create<AppState>((set, get) => ({
     }
 
     const defaultTitles: Record<WorkbenchTabKind, string> = {
-      new_tab: get().locale === 'en-US' ? 'New tab' : '新标签页',
-      files: get().locale === 'en-US' ? 'Files' : '文件',
+      new_tab: formatMsg(get().locale, 'sidePane.newTab'),
+      files: formatMsg(get().locale, 'fileManager.title'),
       file_preview: 'Preview',
-      review: get().locale === 'en-US' ? 'Review' : '审查',
-      terminal: get().locale === 'en-US' ? 'Terminal' : '终端',
-      side_chat: get().locale === 'en-US' ? 'Side conversation' : '辅助对话',
+      review: formatMsg(get().locale, 'sidePane.review'),
+      terminal: formatMsg(get().locale, 'terminal.title'),
+      side_chat: formatMsg(get().locale, 'sidePane.selectionChat'),
       subagent: 'Subagent',
     };
     const tab: WorkbenchTab = {

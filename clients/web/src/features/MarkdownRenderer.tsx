@@ -1,3 +1,4 @@
+import { formatMsg } from '../i18n/messages';
 import { Check, Copy, SquareTerminal, WrapText } from 'lucide-react';
 import { type CSSProperties, memo, type ReactNode, useRef, useState } from 'react';
 import { useNexStore } from '../core/store';
@@ -432,12 +433,8 @@ function CodeBlock({ lang, code, streaming = false }: { lang: string; code: stri
             onClick={() => setWrap((v) => !v)}
             title={
               wrap
-                ? locale === 'en-US'
-                  ? 'Disable line wrap'
-                  : '关闭自动换行'
-                : locale === 'en-US'
-                  ? 'Wrap lines'
-                  : '自动换行'
+                ? formatMsg(locale, 'markdown.disableLineWrap')
+                : formatMsg(locale, 'markdown.wrapLines')
             }
             className={`flex size-6 items-center justify-center rounded-md transition-colors hover:bg-hover ${
               wrap ? 'bg-hover text-foreground' : 'text-foreground-subtle hover:text-foreground'
@@ -448,7 +445,7 @@ function CodeBlock({ lang, code, streaming = false }: { lang: string; code: stri
           <button
             type="button"
             onClick={onCopy}
-            title={locale === 'en-US' ? 'Copy code' : '复制代码'}
+            title={formatMsg(locale, 'markdown.copyCode')}
             className="flex size-6 items-center justify-center rounded-md text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
           >
             {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}

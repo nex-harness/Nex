@@ -114,7 +114,7 @@ export function DirectoryBrowserModal({
         listRef.current?.scrollTo({ top: 0 });
       } catch (err) {
         if (seq !== reqSeqRef.current) return;
-        setError((err as Error).message || (locale === 'en-US' ? 'Failed to read directory' : '无法读取该目录'));
+        setError((err as Error).message || (formatMsg(locale, 'dirBrowser.failedToReadDirectory')));
       } finally {
         if (seq === reqSeqRef.current) setLoading(false);
       }
@@ -208,7 +208,7 @@ export function DirectoryBrowserModal({
           <button
             type="button"
             onClick={onClose}
-            aria-label={locale === 'en-US' ? 'Close' : '关闭'}
+            aria-label={formatMsg(locale, 'common.close')}
             className="flex size-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
           >
             <X className="size-4" />
@@ -249,7 +249,7 @@ export function DirectoryBrowserModal({
               type="button"
               disabled={!parentPath || loading}
               onClick={() => parentPath && void loadDir(activeRunnerId, parentPath, showHidden)}
-              title={locale === 'en-US' ? 'Up one level' : '返回上一级'}
+              title={formatMsg(locale, 'dirBrowser.upOneLevel')}
               className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground disabled:opacity-40"
             >
               <ArrowUp className="size-3.5" />
@@ -308,7 +308,7 @@ export function DirectoryBrowserModal({
               type="button"
               disabled={loading}
               onClick={() => void loadDir(activeRunnerId, currentPath, showHidden)}
-              title={locale === 'en-US' ? 'Refresh' : '刷新'}
+              title={formatMsg(locale, 'common.refresh')}
               className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground disabled:opacity-40"
             >
               <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -445,7 +445,7 @@ export function DirectoryBrowserModal({
               onClick={onClose}
               className="h-8 rounded-lg border border-border px-3 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
             >
-              {locale === 'en-US' ? 'Cancel' : '取消'}
+              {formatMsg(locale, 'common.cancel')}
             </button>
             <button
               type="button"

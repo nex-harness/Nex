@@ -51,8 +51,7 @@ import { clampEffortIndex, formatEffortLabel, resolveEffortLevels } from '../cor
 import { emptyStreamState } from '../core/reducer';
 import { useNexStore } from '../core/store';
 import { ChatTurnItem, ModelMeta, ThinkingEffort, ToolCallCard } from '../core/types';
-import { formatMsg } from '../i18n/messages';
-import type { MessageKey } from '../i18n/messages';
+import { formatMsg, type LocaleCode, type MessageKey } from '../i18n/messages';
 import { ContextWindowsButton } from './ContextPopover';
 import { ConversationStatusPanel } from './ConversationStatusPanel';
 import { DirectoryBrowserModal } from './DirectoryBrowserModal';
@@ -170,12 +169,8 @@ function ToolSummaryRow({ tc, dense = true }: { tc: ToolCallCard; dense?: boolea
     const pattern = String(args.pattern || args.query || '');
     const summary =
       tc.name === 'grep'
-        ? locale === 'en-US'
-          ? `Find "${pattern}"`
-          : `查找 "${pattern}"`
-        : locale === 'en-US'
-          ? `List files matching ${pattern}`
-          : `列出匹配 ${pattern} 的文件`;
+        ? formatMsg(locale, 'chat.find', { pattern })
+        : formatMsg(locale, 'chat.listFilesMatching', { pattern });
     return (
       <div className="flex max-w-full flex-col">
         <button
@@ -297,7 +292,7 @@ function ToolSummaryRow({ tc, dense = true }: { tc: ToolCallCard; dense?: boolea
         >
           <Globe className="size-3.5 shrink-0 text-foreground-subtlest" />
           <span className="shrink-0 font-medium text-foreground-subtle">
-            {running ? (locale === 'en-US' ? 'Fetching' : '抓取中') : locale === 'en-US' ? 'Fetched' : '已抓取'}
+            {running ? (formatMsg(locale, 'chat.fetching')) : formatMsg(locale, 'chat.fetched')}
           </span>
           {url && <span className="min-w-0 truncate font-mono text-ui-sm text-foreground-subtle">{truncateText(url, 72)}</span>}
           {chevron()}
@@ -327,7 +322,7 @@ function ToolSummaryRow({ tc, dense = true }: { tc: ToolCallCard; dense?: boolea
         >
           <CircleHelp className="size-3.5 shrink-0 text-foreground-subtlest" />
           <span className="shrink-0 font-medium text-foreground-subtle">
-            {running ? (locale === 'en-US' ? 'Asking' : '等待回答') : locale === 'en-US' ? 'Asked' : '已询问'}
+            {running ? (formatMsg(locale, 'chat.asking')) : formatMsg(locale, 'chat.asked')}
           </span>
           {question && <span className="min-w-0 truncate text-foreground-subtle">{truncateText(question, 72)}</span>}
           {chevron()}
@@ -349,16 +344,10 @@ function ToolSummaryRow({ tc, dense = true }: { tc: ToolCallCard; dense?: boolea
     const taskId = String(args.task_id || '');
     const title =
       tc.name === 'task_stop'
-        ? locale === 'en-US'
-          ? 'Stopped task'
-          : '已停止后台任务'
+        ? formatMsg(locale, 'chat.stoppedTask')
         : running
-          ? locale === 'en-US'
-            ? 'Checking task'
-            : '读取后台任务'
-          : locale === 'en-US'
-            ? 'Checked task'
-            : '已读取后台任务';
+          ? formatMsg(locale, 'chat.checkingTask')
+          : formatMsg(locale, 'chat.checkedTask');
     return (
       <div className="flex max-w-full flex-col">
         <button
@@ -451,7 +440,7 @@ function ToolSummaryRow({ tc, dense = true }: { tc: ToolCallCard; dense?: boolea
       <div className={`group/tool inline-flex max-w-full items-center gap-2 py-0.5 text-left ${rowClass}`}>
         <ListTodo className="size-3.5 shrink-0 text-foreground-subtlest" />
         <span className="shrink-0 font-medium text-foreground-subtle">
-          {locale === 'en-US' ? 'Updated plan' : '更新进度清单'}
+          {formatMsg(locale, 'chat.updatedPlan')}
         </span>
         {activeTodo?.content && <span className="min-w-0 truncate text-foreground-subtle">{activeTodo.content}</span>}
         {rawTodos.length > 0 && (
@@ -631,7 +620,7 @@ function UserBubble({
           key={i}
           type="button"
           onClick={() => void selectSession(p.refId)}
-          title={locale === 'en-US' ? `Open referenced session ${p.refId}` : `打开引用对话 ${p.refId}`}
+          title={formatMsg(locale, 'chat.openReferencedSession', { refId: p.refId })}
           className="mx-0.5 inline-flex max-w-[240px] items-center gap-1 rounded-md border border-brand-blue/30 bg-brand-blue/10 px-1.5 py-0.5 align-baseline text-ui-xs font-medium text-brand-blue transition-colors hover:bg-brand-blue/20"
         >
           <Hash className="size-3 shrink-0" />
@@ -674,31 +663,31 @@ function UserBubble({
         <button
           type="button"
           onClick={copy}
-          title={locale === 'en-US' ? 'Copy' : '复制'}
+          title={formatMsg(locale, 'common.copy')}
           className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground"
         >
           {copied ? <Check className="zcode-reaction-pop size-3 text-success" /> : <Copy className="size-3" />}
-          <span>{copied ? (locale === 'en-US' ? 'Copied' : '已复制') : locale === 'en-US' ? 'Copy' : '复制'}</span>
+          <span>{copied ? (formatMsg(locale, 'common.copied')) : formatMsg(locale, 'common.copy')}</span>
         </button>
         <button
           type="button"
           onClick={() => setComposerText(displayText)}
-          title={locale === 'en-US' ? 'Edit in composer' : '在输入框中编辑'}
+          title={formatMsg(locale, 'chat.editInComposer')}
           className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground"
         >
           <Pencil className="size-3" />
-          <span>{locale === 'en-US' ? 'Edit' : '编辑'}</span>
+          <span>{formatMsg(locale, 'common.edit')}</span>
         </button>
         {activeSessionId && seq && seq > 0 && (
           <button
             type="button"
             data-testid={`fork-before-${seq}`}
             onClick={() => void forkSession(activeSessionId, { beforeSeq: seq, prefillText: displayText })}
-            title={locale === 'en-US' ? 'Branch & edit from before this message' : '从此处创建新分支并编辑重发'}
+            title={formatMsg(locale, 'chat.branchEditFromBeforeThis')}
             className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground"
           >
             <GitBranch className="size-3" />
-            <span>{locale === 'en-US' ? 'Branch & Edit' : '编辑分支'}</span>
+            <span>{formatMsg(locale, 'chat.branchEdit')}</span>
           </button>
         )}
       </div>
@@ -706,21 +695,21 @@ function UserBubble({
   );
 }
 
-function toolActivityLabel(tc: ToolCallCard, locale: 'zh-CN' | 'en-US'): string {
+function toolActivityLabel(tc: ToolCallCard, locale: LocaleCode): string {
   const args = parseToolArgs(tc);
-  const file = baseName(String(args.file_path || args.path || ''));
-  if (tc.name === 'read') return locale === 'en-US' ? `Reading ${file || 'file'}…` : `正在读取 ${file || '文件'}…`;
-  if (tc.name === 'edit') return locale === 'en-US' ? `Editing ${file || 'file'}…` : `正在编辑 ${file || '文件'}…`;
-  if (tc.name === 'write') return locale === 'en-US' ? `Writing ${file || 'file'}…` : `正在写入 ${file || '文件'}…`;
+  const file = baseName(String(args.file_path || args.path || '')) || formatMsg(locale, 'common.file');
+  if (tc.name === 'read') return formatMsg(locale, 'chat.activity.reading', { file });
+  if (tc.name === 'edit') return formatMsg(locale, 'chat.activity.editing', { file });
+  if (tc.name === 'write') return formatMsg(locale, 'chat.activity.writing', { file });
   if (tc.name === 'bash') {
     const cmd = truncateText(String(args.command || ''), 48);
-    return locale === 'en-US' ? `Running ${cmd}…` : `正在运行 ${cmd}…`;
+    return formatMsg(locale, 'chat.running', { cmd });
   }
   if (tc.name === 'grep' || tc.name === 'glob') {
-    return locale === 'en-US' ? 'Searching workspace…' : '正在搜索工作区…';
+    return formatMsg(locale, 'chat.searchingWorkspace');
   }
-  if (tc.name === 'subagent') return locale === 'en-US' ? 'Delegating to subagent…' : '正在委派子智能体…';
-  return locale === 'en-US' ? `Running ${tc.name}…` : `正在执行 ${tc.name}…`;
+  if (tc.name === 'subagent') return formatMsg(locale, 'chat.delegatingToSubagent');
+  return formatMsg(locale, 'chat.running2', { name: tc.name });
 }
 
 function WorkGroup({
@@ -730,7 +719,7 @@ function WorkGroup({
   onToggle,
 }: {
   item: ChatTurnItem;
-  locale: 'zh-CN' | 'en-US';
+  locale: LocaleCode;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -742,23 +731,15 @@ function WorkGroup({
   const shimmerText = activeTool
     ? toolActivityLabel(activeTool, locale)
     : item.thinking
-      ? locale === 'en-US'
-        ? 'Thinking…'
-        : '正在思考...'
-      : locale === 'en-US'
-        ? 'Working…'
-        : '正在执行...';
+      ? formatMsg(locale, 'chat.thinking')
+      : formatMsg(locale, 'chat.working');
 
   const hasThinking = Boolean(item.thinking && item.thinking.trim());
   const hasTools = item.toolCalls.length > 0;
   const completedLabel =
     hasThinking && !hasTools
-      ? locale === 'en-US'
-        ? 'Thought process'
-        : '思考过程'
-      : locale === 'en-US'
-        ? `Worked on ${stepCount} steps`
-        : `思考并执行了 ${stepCount} 步`;
+      ? formatMsg(locale, 'chat.thoughtProcess')
+      : formatMsg(locale, 'chat.workedOnSteps', { stepCount });
 
   return (
     <div className="min-w-0">
@@ -785,7 +766,7 @@ function WorkGroup({
               <div className="space-y-1">
                 {hasTools && (
                   <div className="text-ui-xs font-medium text-foreground-subtlest">
-                    {locale === 'en-US' ? 'Thinking' : '思考过程'}
+                    {formatMsg(locale, 'chat.thinking2')}
                   </div>
                 )}
                 <div className="max-h-72 overflow-auto whitespace-pre-wrap py-0.5 text-ui-sm leading-relaxed text-foreground-subtle">
@@ -865,31 +846,17 @@ function RollingLabel({ text, className = '' }: { text: string; className?: stri
   );
 }
 
-const CHIPS = {
-  'zh-CN': [
-    { icon: CalendarDays, label: '周报总结', prompt: '请根据当前工作区最近的改动，生成一份简洁的周报总结。' },
-    { icon: Bug, label: '排查报错', prompt: '请排查当前项目的报错与失败用例，定位根因并给出修复方案。' },
-    { icon: GitPullRequest, label: '代码审查', prompt: '请审查当前未提交的改动，指出潜在问题与优化点。' },
-    { icon: FolderTree, label: '架构梳理', prompt: '请梳理当前仓库的目录结构与关键入口模块。' },
-  ],
-  'en-US': [
-    { icon: CalendarDays, label: 'Weekly Summary', prompt: 'Summarize the recent changes in this workspace as a concise weekly report.' },
-    { icon: Bug, label: 'Error Fix', prompt: 'Investigate current errors and failing tests, find the root cause and propose a fix.' },
-    { icon: GitPullRequest, label: 'Code Review', prompt: 'Review the current uncommitted changes and flag potential issues.' },
-    { icon: FolderTree, label: 'Repo Overview', prompt: 'Give me an overview of this repository structure and key entry modules.' },
-  ],
-};
-
-const PROMPT_TEMPLATES_ZH = [
-  '请概览当前工作区的目录结构与关键入口模块。',
-  '请审查当前未提交的改动，指出潜在问题与优化点。',
-  '请运行测试并汇总失败用例与修复建议。',
+const CHIPS: Array<{ icon: typeof CalendarDays; labelKey: MessageKey; promptKey: MessageKey }> = [
+  { icon: CalendarDays, labelKey: 'chat.chip.weekly.label', promptKey: 'chat.chip.weekly.prompt' },
+  { icon: Bug, labelKey: 'chat.chip.bug.label', promptKey: 'chat.chip.bug.prompt' },
+  { icon: GitPullRequest, labelKey: 'chat.chip.review.label', promptKey: 'chat.chip.review.prompt' },
+  { icon: FolderTree, labelKey: 'chat.chip.arch.label', promptKey: 'chat.chip.arch.prompt' },
 ];
 
-const PROMPT_TEMPLATES_EN = [
-  'Give me an overview of this workspace structure and key entry modules.',
-  'Review the current uncommitted changes and flag potential issues.',
-  'Run the test suite and summarize failures with fix suggestions.',
+const PROMPT_TEMPLATE_KEYS: MessageKey[] = [
+  'chat.template.overview',
+  'chat.template.review',
+  'chat.template.tests',
 ];
 
 type ComposerMenu = 'plus' | 'model' | 'perm' | 'runner' | null;
@@ -1004,7 +971,7 @@ function Composer({
   composerText,
 }: {
   isDraft: boolean;
-  locale: 'zh-CN' | 'en-US';
+  locale: LocaleCode;
   stream: ReturnType<typeof emptyStreamState>;
   models: ReturnType<typeof useNexStore.getState>['models'];
   runners: ReturnType<typeof useNexStore.getState>['runners'];
@@ -1196,9 +1163,9 @@ function Composer({
   const projectLabel =
     (selectedWorkspacePath.split(/[\\/]/).filter(Boolean).pop() || '') ||
     activeRunner?.name ||
-    (locale === 'en-US' ? 'Select project' : '选择项目');
+    (formatMsg(locale, 'chat.selectProject'));
 
-  const templates = locale === 'en-US' ? PROMPT_TEMPLATES_EN : PROMPT_TEMPLATES_ZH;
+  const templates = useMemo(() => PROMPT_TEMPLATE_KEYS.map((k) => formatMsg(locale, k)), [locale]);
   const isRunning = stream.running;
   const canSend = (Boolean(composerText.trim()) || composerAttachments.length > 0) && Boolean(selectedRunnerId);
 
@@ -1214,29 +1181,23 @@ function Composer({
       {
         command: '/goal',
         insertText: '/goal ',
-        badge: locale === 'en-US' ? 'Built-in' : '内置',
+        badge: formatMsg(locale, 'chat.builtIn'),
         description:
-          locale === 'en-US'
-            ? 'Goal-driven thorough execution loop until deliverables are verified'
-            : '启动目标导向彻底执行闭环，直到交付物验证通过',
+          formatMsg(locale, 'chat.goalDrivenThoroughExecutionLoop'),
       },
       {
         command: '/plan',
         insertText: '/plan ',
-        badge: locale === 'en-US' ? 'Built-in' : '内置',
+        badge: formatMsg(locale, 'chat.builtIn'),
         description:
-          locale === 'en-US'
-            ? 'Switch to Plan Mode: explore read-only and draft a plan for approval'
-            : '切换计划模式：只读探索并先输出实施计划等待批准',
+          formatMsg(locale, 'chat.switchToPlanModeExplore'),
       },
       {
         command: '/compact',
         insertText: '/compact ',
-        badge: locale === 'en-US' ? 'Built-in' : '内置',
+        badge: formatMsg(locale, 'chat.builtIn'),
         description:
-          locale === 'en-US'
-            ? 'Compact conversation context (optional focus instructions)'
-            : '压缩当前会话上下文（可附带重点保留指令）',
+          formatMsg(locale, 'chat.compactConversationContextOptionalFocus'),
       },
     ];
 
@@ -1253,7 +1214,7 @@ function Composer({
           command: name,
           insertText: `${name} `,
           badge: pl.name || 'Plugin',
-          description: m[2] || (locale === 'en-US' ? `Plugin command from ${pl.name}` : `来自插件 ${pl.name} 的命令`),
+          description: m[2] || (formatMsg(locale, 'chat.pluginCommandFrom', { name: pl.name })),
         });
       }
     }
@@ -1265,7 +1226,7 @@ function Composer({
       seen.add(cmd);
       list.push({
         command: cmd,
-        insertText: locale === 'en-US' ? `Use skill "${sk.name}": ` : `使用技能「${sk.name}」：`,
+        insertText: formatMsg(locale, 'chat.useSkill', { name: sk.name }),
         badge: 'Skill',
         description: sk.description || sk.name,
       });
@@ -1389,7 +1350,7 @@ function Composer({
       <div className="max-h-64 overflow-y-auto p-1">
         {providers.length === 0 ? (
           <div className="px-2.5 py-3 text-ui-sm text-foreground-subtlest">
-            {locale === 'en-US' ? 'No providers configured' : '暂无已配置供应商'}
+            {formatMsg(locale, 'chat.noProvidersConfigured')}
           </div>
         ) : (
           providers.map((p) => {
@@ -1456,16 +1417,10 @@ function Composer({
       <div className="flex items-center justify-between px-2 py-1 text-[11px] font-medium text-foreground-subtlest">
         <span>
           {acTrigger.kind === 'slash'
-            ? locale === 'en-US'
-              ? 'Commands & Skills'
-              : '命令与技能'
+            ? formatMsg(locale, 'chat.commandsSkills')
             : acTrigger.kind === 'session'
-              ? locale === 'en-US'
-                ? 'Reference Session (#)'
-                : '引用其他对话 (#)'
-              : locale === 'en-US'
-                ? 'Workspace Files'
-                : '工作区文件'}
+              ? formatMsg(locale, 'chat.referenceSession')
+              : formatMsg(locale, 'chat.workspaceFiles')}
         </span>
         <span className="font-mono text-[10px]">↑↓ · Tab/Enter · Esc</span>
       </div>
@@ -1494,7 +1449,7 @@ function Composer({
       ) : acTrigger.kind === 'session' ? (
         filteredSessions.length === 0 ? (
           <div className="px-2.5 py-2 text-ui-xs text-foreground-subtlest">
-            {locale === 'en-US' ? 'No other sessions to reference' : '暂无可引用的其他对话'}
+            {formatMsg(locale, 'chat.noOtherSessionsToReference')}
           </div>
         ) : (
           filteredSessions.map((sess, idx) => {
@@ -1531,7 +1486,7 @@ function Composer({
       ) : mentionLoading && mentionFiles.length === 0 ? (
         <div className="flex items-center gap-2 px-2.5 py-2 text-ui-xs text-foreground-subtlest">
           <LoaderCircle className="size-3.5 animate-spin" />
-          <span>{locale === 'en-US' ? 'Searching files…' : '正在搜索文件…'}</span>
+          <span>{formatMsg(locale, 'chat.searchingFiles')}</span>
         </div>
       ) : (
         mentionFiles.map((relPath, idx) => {
@@ -1574,7 +1529,7 @@ function Composer({
             <span className="truncate font-medium">{target?.title || refId}</span>
             <button
               type="button"
-              aria-label={locale === 'en-US' ? 'Remove session reference' : '移除对话引用'}
+              aria-label={formatMsg(locale, 'chat.removeSessionReference')}
               onClick={() => {
                 const next = composerText.replace(new RegExp(`#${refId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s?`, 'g'), '');
                 setComposerText(next);
@@ -1607,7 +1562,7 @@ function Composer({
           </div>
           <button
             type="button"
-            aria-label={locale === 'en-US' ? 'Remove image' : '移除图片'}
+            aria-label={formatMsg(locale, 'chat.removeImage')}
             onClick={() => removeComposerAttachment(att.id)}
             className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full border border-border bg-popover text-foreground-subtle shadow-xs transition-colors hover:bg-destructive hover:text-white"
           >
@@ -1702,12 +1657,8 @@ function Composer({
         }}
         placeholder={
           isDraft
-            ? locale === 'en-US'
-              ? 'Ask Nex anything, @ file, # session, / command'
-              : '向 Nex 提问，@ 引用文件，# 引用对话，/ 命令'
-            : locale === 'en-US'
-              ? 'Ask for follow-up (@ file, # session, / command, paste image)'
-              : '继续追问或提出修改建议（@ 引用文件，# 引用对话，/ 命令，支持粘贴图片）'
+            ? formatMsg(locale, 'chat.askNexAnythingFileSession')
+            : formatMsg(locale, 'chat.askForFollowUpFile')
         }
         className={`${isDraft ? 'min-h-[58px]' : ''} w-full resize-none bg-transparent text-ui-base leading-relaxed text-foreground placeholder-foreground-subtlest`}
       />
@@ -1722,7 +1673,7 @@ function Composer({
           type="button"
           onClick={() => setOpenMenu((m) => (m === 'plus' ? null : 'plus'))}
           className="flex size-7 shrink-0 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
-          title={locale === 'en-US' ? 'Add prompt or context' : '添加提示或上下文'}
+          title={formatMsg(locale, 'chat.addPromptOrContext')}
         >
           <Plus className="size-4" />
         </button>
@@ -1759,7 +1710,7 @@ function Composer({
               className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-sm text-foreground transition-colors hover:bg-menu-hover"
             >
               <AtSign className="size-3.5 shrink-0 text-foreground-subtle" />
-              <span>{locale === 'en-US' ? 'Reference a workspace file (@)' : '引用工作区文件 (@)'}</span>
+              <span>{formatMsg(locale, 'chat.referenceAWorkspaceFile')}</span>
             </button>
             <button
               type="button"
@@ -1774,7 +1725,7 @@ function Composer({
               className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-sm text-foreground transition-colors hover:bg-menu-hover"
             >
               <Hash className="size-3.5 shrink-0 text-foreground-subtle" />
-              <span>{locale === 'en-US' ? 'Reference another session (#)' : '引用其他对话 (#)'}</span>
+              <span>{formatMsg(locale, 'chat.referenceAnotherSession')}</span>
             </button>
             <button
               type="button"
@@ -1786,7 +1737,7 @@ function Composer({
               className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-sm text-foreground transition-colors hover:bg-menu-hover"
             >
               <ImagePlus className="size-3.5 shrink-0 text-foreground-subtle" />
-              <span>{locale === 'en-US' ? 'Attach image (or paste)' : '上传图片（或直接粘贴）'}</span>
+              <span>{formatMsg(locale, 'chat.attachImageOrPaste')}</span>
             </button>
           </div>
         )}
@@ -1944,7 +1895,7 @@ function Composer({
                     className="flex h-8 w-full items-center gap-1.5 border-b border-border px-3 text-ui-sm text-foreground-subtle hover:bg-menu-hover"
                   >
                     <ChevronLeft className="size-3.5" />
-                    <span>{locale === 'en-US' ? 'Back' : '返回'}</span>
+                    <span>{formatMsg(locale, 'chat.back')}</span>
                   </button>
                   {providerListContent}
                 </div>
@@ -2136,7 +2087,7 @@ function Composer({
         {/* Automated-test compatible hidden selects (synced with the visual triggers) */}
         <select
           data-testid="model-select"
-          aria-label={locale === 'en-US' ? 'Model' : '模型'}
+          aria-label={formatMsg(locale, 'chat.model')}
           value={selectedProviderId && selectedModelId ? `${selectedProviderId}::${selectedModelId}` : ''}
           onChange={(e) => {
             const [pid, mid] = e.target.value.split('::');
@@ -2167,11 +2118,11 @@ function Composer({
                 type="button"
                 data-testid="steer-now-btn"
                 onClick={() => sendPromptOrSteer(undefined, 'steer')}
-                title={locale === 'en-US' ? 'Steer immediately (Alt+Enter)' : '立即打断引导 (Alt+Enter)'}
+                title={formatMsg(locale, 'chat.steerImmediatelyAltEnter')}
                 className="flex h-7 shrink-0 items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/10 px-2 text-ui-xs font-medium text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
               >
                 <Zap className="size-3" />
-                <span>{locale === 'en-US' ? 'Steer' : '引导'}</span>
+                <span>{formatMsg(locale, 'chat.steer2')}</span>
               </button>
             )}
             <button
@@ -2181,9 +2132,7 @@ function Composer({
               onClick={() => sendPromptOrSteer(undefined, 'follow_up')}
               title={
                 isRunning
-                  ? locale === 'en-US'
-                    ? 'Queue follow-up (runs after current turn)'
-                    : '排队发送（当前轮完成后自动继续）'
+                  ? formatMsg(locale, 'chat.queueFollowUpRunsAfter')
                   : formatMsg(locale, 'chat.send')
               }
               className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-all hover:bg-foreground/90 active:scale-95 disabled:bg-foreground/20 disabled:text-background/70"
@@ -2220,9 +2169,7 @@ function Composer({
     >
       <div className="flex items-center justify-between px-1 text-[11px] font-medium text-foreground-subtlest">
         <span>
-          {locale === 'en-US'
-            ? `Queued follow-ups (${activeFollowUps.length}) — runs after current turn`
-            : `待执行队列（${activeFollowUps.length}）— 当前轮完成后自动继续`}
+          {formatMsg(locale, 'chat.queuedFollowUpsRunsAfter', { length: activeFollowUps.length })}
         </span>
       </div>
       {activeFollowUps.map((qItem, idx) => (
@@ -2236,17 +2183,17 @@ function Composer({
             type="button"
             data-testid={`followup-steer-${idx}`}
             onClick={() => promoteFollowUpToSteer(activeSessionId, qItem.id)}
-            title={locale === 'en-US' ? 'Interrupt & steer now' : '立即打断并引导'}
+            title={formatMsg(locale, 'chat.interruptSteerNow')}
             className="inline-flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] font-medium text-amber-600 transition-colors hover:bg-amber-500/15 dark:text-amber-400"
           >
             <Zap className="size-3" />
-            <span>{locale === 'en-US' ? 'Steer' : '立即引导'}</span>
+            <span>{formatMsg(locale, 'chat.steer3')}</span>
           </button>
           <button
             type="button"
             data-testid={`followup-remove-${idx}`}
             onClick={() => removeFollowUp(activeSessionId, qItem.id)}
-            aria-label={locale === 'en-US' ? 'Remove queued follow-up' : '移除排队消息'}
+            aria-label={formatMsg(locale, 'chat.removeQueuedFollowUp')}
             className="flex size-5 shrink-0 items-center justify-center rounded text-foreground-subtlest transition-colors hover:bg-hover hover:text-destructive"
           >
             <X className="size-3" />
@@ -2324,7 +2271,7 @@ function Composer({
                     </div>
                   ) : filteredProjects.length === 0 ? (
                     <div className="px-2 py-3 text-center text-ui-sm text-foreground-subtlest">
-                      {locale === 'en-US' ? 'No matching projects' : '未找到匹配的项目'}
+                      {formatMsg(locale, 'chat.noMatchingProjects')}
                     </div>
                   ) : (
                     filteredProjects.map((proj) => {
@@ -2383,12 +2330,12 @@ function Composer({
 
             <select
               data-testid="runner-select"
-              aria-label={locale === 'en-US' ? 'Runner' : 'Runner'}
+              aria-label={formatMsg(locale, 'chat.runner')}
               value={selectedRunnerId}
               onChange={(e) => setSelectedRunner(e.target.value)}
               className="sr-only"
             >
-              {runners.length === 0 && <option value="">{locale === 'en-US' ? 'No runner' : '无 Runner'}</option>}
+              {runners.length === 0 && <option value="">{formatMsg(locale, 'chat.noRunner')}</option>}
               {runners.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
@@ -2443,7 +2390,7 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
 }: {
   item: ChatTurnItem;
   isLast: boolean;
-  locale: 'zh-CN' | 'en-US';
+  locale: LocaleCode;
   registerRef: (id: string, el: HTMLDivElement | null) => void;
 }) {
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
@@ -2498,16 +2445,16 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
               <div className="flex items-center gap-2 text-ui-sm text-foreground">
                 <ListTodo className="size-4 shrink-0 text-violet-600 dark:text-violet-400" />
                 <span className="font-medium">
-                  {locale === 'en-US' ? 'Plan ready for review' : '实施计划已就绪，确认后即可开始执行'}
+                  {formatMsg(locale, 'chat.planReadyForReview')}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setComposerText(locale === 'en-US' ? 'Please revise the plan: ' : '请调整计划：')}
+                  onClick={() => setComposerText(formatMsg(locale, 'chat.pleaseReviseThePlan'))}
                   className="h-7 rounded-lg border border-border bg-card px-2.5 text-ui-xs font-medium text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
                 >
-                  {locale === 'en-US' ? 'Revise plan' : '调整计划'}
+                  {formatMsg(locale, 'chat.revisePlan')}
                 </button>
                 <button
                   type="button"
@@ -2515,16 +2462,14 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
                   onClick={() => {
                     setPermissionMode('full_access');
                     sendPromptOrSteer(
-                      locale === 'en-US'
-                        ? 'Plan approved. Proceed with implementation step by step and verify all tests.'
-                        : '计划已批准，请按步骤开始实施并完成测试验证。',
+                      formatMsg(locale, 'chat.planApprovedProceedWithImplementation'),
                       'follow_up',
                     );
                   }}
                   className="inline-flex h-7 items-center gap-1 rounded-lg bg-violet-600 px-3 text-ui-xs font-medium text-white transition-opacity hover:opacity-90"
                 >
                   <Check className="size-3.5" />
-                  <span>{locale === 'en-US' ? 'Approve & execute' : '批准并开始执行'}</span>
+                  <span>{formatMsg(locale, 'chat.approveExecute')}</span>
                 </button>
               </div>
             </div>
@@ -2543,7 +2488,7 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
                   className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
                 >
                   {copiedReply ? <Check className="zcode-reaction-pop size-3 text-success" /> : <Copy className="size-3" />}
-                  <span>{copiedReply ? (locale === 'en-US' ? 'Copied' : '已复制') : locale === 'en-US' ? 'Copy' : '复制'}</span>
+                  <span>{copiedReply ? (formatMsg(locale, 'common.copied')) : formatMsg(locale, 'common.copy')}</span>
                 </button>
               )}
               {activeSessionId && item.seq && item.seq > 0 && (
@@ -2554,7 +2499,7 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
                   className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
                 >
                   <GitBranch className="size-3" />
-                  <span>{locale === 'en-US' ? 'Fork here' : '从此分支'}</span>
+                  <span>{formatMsg(locale, 'chat.forkHere')}</span>
                 </button>
               )}
               {activeSessionId && hasFileMutations && rewindBeforeSeq > 0 && (
@@ -2576,12 +2521,8 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
                       const restoredCount = (res.restored_files?.length || 0) + (res.deleted_files?.length || 0);
                       setRewindNotice(
                         restoredCount > 0
-                          ? locale === 'en-US'
-                            ? `Rewound ${restoredCount} file(s)`
-                            : `已回滚 ${restoredCount} 个文件`
-                          : locale === 'en-US'
-                            ? 'No checkpoints to rewind'
-                            : '没有可回滚的文件快照',
+                          ? formatMsg(locale, 'chat.rewoundFileS', { restoredCount })
+                          : formatMsg(locale, 'chat.noCheckpointsToRewind'),
                       );
                       window.setTimeout(() => setRewindNotice(''), 4000);
                     }
@@ -2595,16 +2536,10 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
                   <RotateCcw className="size-3" />
                   <span>
                     {rewinding
-                      ? locale === 'en-US'
-                        ? 'Rewinding…'
-                        : '回滚中…'
+                      ? formatMsg(locale, 'chat.rewinding')
                       : rewindArmed
-                        ? locale === 'en-US'
-                          ? 'Confirm rewind files?'
-                          : '确认回滚此轮文件?'
-                        : locale === 'en-US'
-                          ? 'Rewind files'
-                          : '回滚文件'}
+                        ? formatMsg(locale, 'chat.confirmRewindFiles')
+                        : formatMsg(locale, 'chat.rewindFiles')}
                   </span>
                 </button>
               )}
@@ -2622,7 +2557,7 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
           {item.streaming && !item.thinking && item.toolCalls.length === 0 && !item.text && (
             <div className="zcode-stream-in flex items-center gap-1.5 text-ui-xs text-foreground-subtlest">
               <LoaderCircle className="size-3 animate-spin" />
-              <span className="animated-gradient-text">{locale === 'en-US' ? 'Generating…' : '正在流式生成...'}</span>
+              <span className="animated-gradient-text">{formatMsg(locale, 'chat.generating')}</span>
             </div>
           )}
         </div>
@@ -2757,7 +2692,7 @@ export function ConversationPane() {
     return () => document.removeEventListener('mousedown', onDown);
   }, [headerMenu]);
 
-  const sessionTitle = activeSession?.title || (locale === 'en-US' ? 'New task' : '新任务');
+  const sessionTitle = activeSession?.title || (formatMsg(locale, 'chat.newTask'));
   const pinned = Boolean(activeSessionId && pinnedSessionIds[activeSessionId]);
 
   const commitRename = async () => {
@@ -2793,23 +2728,23 @@ export function ConversationPane() {
             <div className="px-1 pb-1.5 text-ui-sm font-medium text-foreground">{formatMsg(locale, 'header.help')}</div>
             <div className="space-y-1 px-1 text-ui-sm text-foreground-subtle">
               <div className="flex items-center justify-between gap-3">
-                <span>{locale === 'en-US' ? 'Send prompt' : '发送提示'}</span>
+                <span>{formatMsg(locale, 'chat.sendPrompt')}</span>
                 <kbd className="rounded bg-tag px-1.5 font-mono text-ui-xs">Enter</kbd>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span>{locale === 'en-US' ? 'New line' : '换行'}</span>
+                <span>{formatMsg(locale, 'chat.newLine')}</span>
                 <kbd className="rounded bg-tag px-1.5 font-mono text-ui-xs">Shift+Enter</kbd>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span>{locale === 'en-US' ? 'Cycle reasoning effort' : '切换推理强度'}</span>
+                <span>{formatMsg(locale, 'chat.cycleReasoningEffort')}</span>
                 <kbd className="rounded bg-tag px-1.5 font-mono text-ui-xs">^ T</kbd>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span>{locale === 'en-US' ? 'Reference file' : '引用文件'}</span>
+                <span>{formatMsg(locale, 'chat.referenceFile')}</span>
                 <kbd className="rounded bg-tag px-1.5 font-mono text-ui-xs">@</kbd>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span>{locale === 'en-US' ? 'Steer running agent' : '引导运行中的 Agent'}</span>
+                <span>{formatMsg(locale, 'chat.steerRunningAgent')}</span>
                 <kbd className="rounded bg-tag px-1.5 font-mono text-ui-xs">Enter</kbd>
               </div>
             </div>
@@ -2857,7 +2792,7 @@ export function ConversationPane() {
                 type="button"
                 data-testid="sidebar-toggle-btn"
                 onClick={toggleSidebar}
-                title={locale === 'en-US' ? 'Toggle sidebar' : '切换侧边栏'}
+                title={formatMsg(locale, 'chat.toggleSidebar')}
                 className="flex size-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
               >
                 <PanelLeft className="size-4" />
@@ -2879,7 +2814,7 @@ export function ConversationPane() {
                 type="button"
                 data-testid="sidebar-toggle-btn"
                 onClick={toggleSidebar}
-                title={locale === 'en-US' ? 'Toggle sidebar' : '切换侧边栏'}
+                title={formatMsg(locale, 'chat.toggleSidebar')}
                 className="flex size-7 shrink-0 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
               >
                 <PanelLeft className="size-4" />
@@ -2971,7 +2906,7 @@ export function ConversationPane() {
                         className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-ui-sm text-foreground hover:bg-menu-hover"
                       >
                         <Download className="size-3.5 shrink-0 text-foreground-subtle" />
-                        <span>{locale === 'en-US' ? 'Export Markdown' : '导出 Markdown'}</span>
+                        <span>{formatMsg(locale, 'chat.exportMarkdown')}</span>
                       </button>
                       <button
                         type="button"
@@ -2997,12 +2932,8 @@ export function ConversationPane() {
                         )}
                         <span>
                           {copiedId
-                            ? locale === 'en-US'
-                              ? 'Copied'
-                              : '已复制'
-                            : locale === 'en-US'
-                              ? 'Copy session ID'
-                              : '复制会话 ID'}
+                            ? formatMsg(locale, 'common.copied')
+                            : formatMsg(locale, 'chat.copySessionId')}
                         </span>
                       </button>
                     </>
@@ -3100,20 +3031,22 @@ export function ConversationPane() {
               />
 
               <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
-                {CHIPS[locale].map((chip, index) => {
+                {CHIPS.map((chip, index) => {
                   const Icon = chip.icon;
+                  const chipLabel = formatMsg(locale, chip.labelKey);
+                  const chipPrompt = formatMsg(locale, chip.promptKey);
                   return (
                     <button
-                      key={chip.label}
+                      key={chip.labelKey}
                       type="button"
                       style={{ '--zcode-draft-prompt-waterfall-delay': `${index * 45}ms` } as CSSProperties}
                       onClick={() => {
-                        setComposerText(chip.prompt);
+                        setComposerText(chipPrompt);
                       }}
                       className="zcode-draft-prompt-waterfall flex h-8 items-center gap-2 rounded-xl border border-border bg-card px-3.5 text-ui-sm text-foreground-subtle shadow-2xs transition-all duration-150 hover:-translate-y-px hover:border-border-hover hover:text-foreground hover:shadow-xs active:translate-y-0"
                     >
                       <Icon className="size-3.5 shrink-0" />
-                      <span>{chip.label}</span>
+                      <span>{chipLabel}</span>
                     </button>
                   );
                 })}
@@ -3144,7 +3077,7 @@ export function ConversationPane() {
               const isActive = activeTurnId ? activeTurnId === item.id : idx === items.length - 1;
               const rawPreview = item.role === 'user' ? cleanUserDisplayText(item.text) : item.text || item.thinking || '';
               const preview = rawPreview.replace(/\s+/g, ' ').trim().slice(0, 36);
-              const label = `${item.role === 'user' ? (locale === 'en-US' ? 'You' : '我') : 'Nex'} #${idx + 1}${
+              const label = `${item.role === 'user' ? (formatMsg(locale, 'chat.you')) : 'Nex'} #${idx + 1}${
                 preview ? ` · ${preview}` : ''
               }`;
               return (
@@ -3180,7 +3113,7 @@ export function ConversationPane() {
           <button
             type="button"
             onClick={() => scrollToBottom('smooth')}
-            title={locale === 'en-US' ? 'Scroll to bottom' : '回到底部'}
+            title={formatMsg(locale, 'chat.scrollToBottom')}
             className="zcode-popover-up absolute bottom-3 left-1/2 z-20 flex size-7 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-card text-foreground-subtle shadow-sm transition-all hover:scale-105 hover:text-foreground active:scale-95"
           >
             <ChevronDown className="size-4" />

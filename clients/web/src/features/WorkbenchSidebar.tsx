@@ -23,7 +23,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { useNexStore } from '../core/store';
 import { DirEntry, FilePreview, WorkbenchTab, WorkbenchTabKind } from '../core/types';
 import { wsClient } from '../core/wsClient';
-import { formatMsg } from '../i18n/messages';
+import { formatMsg, type LocaleCode } from '../i18n/messages';
 import { GhosttyTerminal } from './GhosttyTerminal';
 import { highlightSourceLine, MarkdownRenderer } from './MarkdownRenderer';
 
@@ -70,10 +70,10 @@ export function WorkbenchSidebar() {
 
   const menuItems: Array<{ kind: WorkbenchTabKind; label: string; icon: ReactNode }> = [
     { kind: 'new_tab', label: formatMsg(locale, 'sidePane.newTab'), icon: <Plus className="size-3.5" /> },
-    { kind: 'side_chat', label: locale === 'en-US' ? 'Side conversation' : '辅助对话', icon: <MessageSquare className="size-3.5" /> },
-    { kind: 'review', label: locale === 'en-US' ? 'Review' : '审查', icon: <FileDiff className="size-3.5" /> },
-    { kind: 'files', label: locale === 'en-US' ? 'Files' : '文件', icon: <Folder className="size-3.5" /> },
-    { kind: 'terminal', label: locale === 'en-US' ? 'Terminal' : '终端', icon: <SquareTerminal className="size-3.5" /> },
+    { kind: 'side_chat', label: formatMsg(locale, 'sidePane.selectionChat'), icon: <MessageSquare className="size-3.5" /> },
+    { kind: 'review', label: formatMsg(locale, 'sidePane.review'), icon: <FileDiff className="size-3.5" /> },
+    { kind: 'files', label: formatMsg(locale, 'fileManager.title'), icon: <Folder className="size-3.5" /> },
+    { kind: 'terminal', label: formatMsg(locale, 'terminal.title'), icon: <SquareTerminal className="size-3.5" /> },
   ];
 
   return (
@@ -271,7 +271,7 @@ function TabLauncher({
   gitSummary,
   onOpen,
 }: {
-  locale: 'zh-CN' | 'en-US';
+  locale: LocaleCode;
   gitSummary: ReturnType<typeof useNexStore.getState>['gitSummary'];
   onOpen: (kind: WorkbenchTabKind) => void;
 }) {
@@ -609,7 +609,7 @@ function GitReviewPanel({
   if (!summary || !summary.is_git_repo) {
     return (
       <div className="p-6 text-center text-ui-sm text-foreground-subtlest">
-        {locale === 'en-US' ? 'No Git repository detected in workspace' : '当前工作区未检测到 Git 仓库'}
+        {formatMsg(locale, 'workbench.noGitRepositoryDetectedIn')}
       </div>
     );
   }
@@ -648,10 +648,10 @@ function GitReviewPanel({
       setCommitMsg('');
       setCommitStatus({
         ok: true,
-        text: locale === 'en-US' ? `Committed ${res.commit || ''}` : `已提交 ${res.commit || ''}`,
+        text: formatMsg(locale, 'workbench.committed', { v: res.commit || '' }),
       });
     } else {
-      setCommitStatus({ ok: false, text: res.error || (locale === 'en-US' ? 'Commit failed' : '提交失败') });
+      setCommitStatus({ ok: false, text: res.error || (formatMsg(locale, 'workbench.commitFailed')) });
     }
   };
 
@@ -680,11 +680,11 @@ function GitReviewPanel({
               type="button"
               disabled={busyAction}
               onClick={() => void gitStage('')}
-              title={locale === 'en-US' ? 'Stage all changes' : '全部暂存'}
+              title={formatMsg(locale, 'workbench.stageAllChanges')}
               className="flex h-6 items-center gap-1 rounded-md border border-border px-2 text-ui-xs text-foreground-subtle hover:bg-hover hover:text-foreground disabled:opacity-40"
             >
               <Plus className="size-3" />
-              <span>{locale === 'en-US' ? 'Stage all' : '全部暂存'}</span>
+              <span>{formatMsg(locale, 'workbench.stageAll')}</span>
             </button>
           )}
           {stagedCount > 0 && (
@@ -692,7 +692,7 @@ function GitReviewPanel({
               type="button"
               disabled={busyAction}
               onClick={() => void gitUnstage('')}
-              title={locale === 'en-US' ? 'Unstage all' : '取消全部暂存'}
+              title={formatMsg(locale, 'workbench.unstageAll')}
               className="flex h-6 items-center gap-1 rounded-md border border-border px-2 text-ui-xs text-foreground-subtle hover:bg-hover hover:text-foreground disabled:opacity-40"
             >
               <Minus className="size-3" />
@@ -704,7 +704,7 @@ function GitReviewPanel({
             className="flex h-6 items-center gap-1 rounded-md border border-border px-2 text-ui-xs text-foreground-subtle hover:bg-hover hover:text-foreground"
           >
             <RefreshCw className="size-3" />
-            <span>{locale === 'en-US' ? 'Refresh' : '刷新'}</span>
+            <span>{formatMsg(locale, 'common.refresh')}</span>
           </button>
         </div>
 
@@ -722,7 +722,7 @@ function GitReviewPanel({
                     });
                   }
                 }}
-                placeholder={locale === 'en-US' ? 'New branch name…' : '新建分支名…'}
+                placeholder={formatMsg(locale, 'workbench.newBranchName')}
                 className="h-7 min-w-0 flex-1 rounded-md border border-border bg-input px-2 font-mono text-ui-xs text-foreground"
               />
               <button
@@ -775,12 +775,8 @@ function GitReviewPanel({
               }}
               placeholder={
                 stagedCount > 0
-                  ? locale === 'en-US'
-                    ? `Commit ${stagedCount} staged file(s)…`
-                    : `输入提交信息（将提交 ${stagedCount} 个已暂存文件）…`
-                  : locale === 'en-US'
-                    ? 'Stage files first to commit…'
-                    : '请先暂存文件再提交…'
+                  ? formatMsg(locale, 'workbench.commitStagedFileS', { stagedCount })
+                  : formatMsg(locale, 'workbench.stageFilesFirstToCommit')
               }
               className="h-7 min-w-0 flex-1 rounded-lg border border-border bg-input px-2.5 text-ui-xs text-foreground placeholder-foreground-subtlest focus:border-border-hover"
             />
@@ -792,7 +788,7 @@ function GitReviewPanel({
               className="flex h-7 shrink-0 items-center gap-1 rounded-lg bg-foreground px-2.5 text-ui-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-35"
             >
               <GitCommitHorizontal className="size-3.5" />
-              <span>{locale === 'en-US' ? 'Commit' : '提交'}</span>
+              <span>{formatMsg(locale, 'workbench.commit')}</span>
             </button>
           </div>
           {commitStatus && (
@@ -807,9 +803,9 @@ function GitReviewPanel({
         <div className="flex items-center gap-0.5">
           {(
             [
-              { id: 'all', label: `${locale === 'en-US' ? 'All' : '全部'} (${files.length})` },
-              { id: 'staged', label: `${locale === 'en-US' ? 'Staged' : '已暂存'} (${stagedCount})` },
-              { id: 'unstaged', label: `${locale === 'en-US' ? 'Unstaged' : '未暂存'} (${unstagedCount})` },
+              { id: 'all', label: `${formatMsg(locale, 'common.all')} (${files.length})` },
+              { id: 'staged', label: `${formatMsg(locale, 'workbench.staged')} (${stagedCount})` },
+              { id: 'unstaged', label: `${formatMsg(locale, 'workbench.unstaged')} (${unstagedCount})` },
             ] as const
           ).map((f) => (
             <button
@@ -850,7 +846,7 @@ function GitReviewPanel({
 
       {filteredFiles.length === 0 && (
         <div className="p-8 text-center text-ui-sm text-foreground-subtlest">
-          {locale === 'en-US' ? 'Working tree clean' : '工作区干净，无未提交改动'}
+          {formatMsg(locale, 'workbench.workingTreeClean')}
         </div>
       )}
 
@@ -879,7 +875,7 @@ function GitReviewPanel({
                     <button
                       type="button"
                       onClick={() => void gitStage(f.rel_path)}
-                      title={locale === 'en-US' ? 'Stage file' : '暂存此文件'}
+                      title={formatMsg(locale, 'workbench.stageFile')}
                       className="flex size-5 items-center justify-center rounded border border-border text-foreground-subtle hover:bg-hover hover:text-success"
                     >
                       <Plus className="size-3" />
@@ -889,7 +885,7 @@ function GitReviewPanel({
                     <button
                       type="button"
                       onClick={() => void gitUnstage(f.rel_path)}
-                      title={locale === 'en-US' ? 'Unstage file' : '取消暂存'}
+                      title={formatMsg(locale, 'workbench.unstageFile')}
                       className="flex size-5 items-center justify-center rounded border border-border text-foreground-subtle hover:bg-hover hover:text-warning"
                     >
                       <Minus className="size-3" />
@@ -899,7 +895,7 @@ function GitReviewPanel({
                     <button
                       type="button"
                       onClick={() => void gitDiscard(f.rel_path)}
-                      title={locale === 'en-US' ? 'Discard unstaged changes' : '放弃未暂存更改'}
+                      title={formatMsg(locale, 'workbench.discardUnstagedChanges')}
                       className="flex size-5 items-center justify-center rounded border border-border text-foreground-subtle hover:bg-hover hover:text-destructive"
                     >
                       <RotateCcw className="size-3" />

@@ -1,3 +1,4 @@
+import { formatMsg, type LocaleCode } from '../i18n/messages';
 import {
   ArrowRight,
   Check,
@@ -71,42 +72,36 @@ export interface RawTraceSnapshot {
 
 type VisualRole = 'system' | 'user' | 'assistant' | 'thinking' | 'tool-call' | 'tool-result';
 
-const ROLE_STYLES: Record<VisualRole, { text: string; pill: string; zh: string; en: string }> = {
+const ROLE_STYLES: Record<VisualRole, { text: string; pill: string; label: string }> = {
   system: {
     text: 'text-foreground-subtle',
     pill: 'bg-surface text-foreground-subtle border-border',
-    zh: 'SYSTEM',
-    en: 'SYSTEM',
+    label: 'SYSTEM',
   },
   user: {
     text: 'text-blue-600 dark:text-blue-400',
     pill: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
-    zh: 'USER',
-    en: 'USER',
+    label: 'USER',
   },
   assistant: {
     text: 'text-emerald-600 dark:text-emerald-400',
     pill: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-    zh: 'ASSISTANT',
-    en: 'ASSISTANT',
+    label: 'ASSISTANT',
   },
   thinking: {
     text: 'text-violet-600 dark:text-violet-400',
     pill: 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20',
-    zh: 'THINKING',
-    en: 'THINKING',
+    label: 'THINKING',
   },
   'tool-call': {
     text: 'text-amber-600 dark:text-amber-400',
     pill: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
-    zh: 'TOOL CALL',
-    en: 'TOOL CALL',
+    label: 'TOOL CALL',
   },
   'tool-result': {
     text: 'text-cyan-600 dark:text-cyan-400',
     pill: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20',
-    zh: 'TOOL',
-    en: 'TOOL',
+    label: 'TOOL',
   },
 };
 
@@ -147,7 +142,7 @@ function CopyIconButton({
   className = '',
 }: {
   text: string;
-  locale: 'zh-CN' | 'en-US';
+  locale: LocaleCode;
   className?: string;
 }) {
   const [copied, setCopied] = useState(false);
@@ -160,7 +155,7 @@ function CopyIconButton({
         setCopied(true);
         window.setTimeout(() => setCopied(false), 1400);
       }}
-      title={copied ? (locale === 'en-US' ? 'Copied' : '已复制') : locale === 'en-US' ? 'Copy' : '复制'}
+      title={copied ? (formatMsg(locale, 'common.copied')) : formatMsg(locale, 'common.copy')}
       className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground ${className}`}
     >
       {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
@@ -207,7 +202,7 @@ function ToolDefinitionCard({
   defaultOpen = false,
 }: {
   tool: TraceToolDef;
-  locale: 'zh-CN' | 'en-US';
+  locale: LocaleCode;
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -238,7 +233,7 @@ function ToolDefinitionCard({
           </span>
         )}
         <span className="shrink-0 rounded-full border border-border bg-surface px-2 py-0.5 font-mono text-[11px] tabular-nums text-foreground-subtlest">
-          {propEntries.length} {locale === 'en-US' ? 'params' : '参数'}
+          {propEntries.length} {formatMsg(locale, 'trajectory.params')}
         </span>
       </button>
 
@@ -251,9 +246,9 @@ function ToolDefinitionCard({
           {propEntries.length > 0 && (
             <div className="overflow-hidden rounded-lg border border-border bg-card">
               <div className="grid grid-cols-[minmax(120px,auto)_84px_minmax(0,1fr)] border-b border-border bg-surface/60 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-foreground-subtlest">
-                <span>{locale === 'en-US' ? 'Parameter' : '参数名'}</span>
-                <span>{locale === 'en-US' ? 'Type' : '类型'}</span>
-                <span>{locale === 'en-US' ? 'Description' : '说明'}</span>
+                <span>{formatMsg(locale, 'trajectory.parameter')}</span>
+                <span>{formatMsg(locale, 'trajectory.type')}</span>
+                <span>{formatMsg(locale, 'common.description')}</span>
               </div>
               <div className="divide-y divide-border/60">
                 {propEntries.map(([pName, pDef]) => {
@@ -272,7 +267,7 @@ function ToolDefinitionCard({
                         <span>{pName}</span>
                         {isReq && (
                           <span className="rounded bg-destructive/10 px-1 py-px text-[10px] font-semibold text-destructive">
-                            {locale === 'en-US' ? 'req' : '必填'}
+                            {formatMsg(locale, 'trajectory.req')}
                           </span>
                         )}
                       </span>
@@ -308,12 +303,8 @@ function ToolDefinitionCard({
               <Code2 className="size-3.5" />
               <span>
                 {showSchema
-                  ? locale === 'en-US'
-                    ? 'Hide raw schema'
-                    : '收起原始 Schema'
-                  : locale === 'en-US'
-                    ? 'View raw schema'
-                    : '查看原始 Schema'}
+                  ? formatMsg(locale, 'trajectory.hideRawSchema')
+                  : formatMsg(locale, 'trajectory.viewRawSchema')}
               </span>
             </button>
             <CopyIconButton text={prettyJSON(tool)} locale={locale} />
@@ -353,22 +344,18 @@ function ExpandableRow({
   isAlt,
 }: {
   entry: TrajectoryRowEntry;
-  locale: 'zh-CN' | 'en-US';
+  locale: LocaleCode;
   expanded: boolean;
   onToggle: () => void;
   isAlt?: boolean;
 }) {
   const style = ROLE_STYLES[entry.role];
-  const roleLabel = locale === 'en-US' ? style.en : style.zh;
+  const roleLabel = style.label;
   const dirLabel =
     entry.direction === 'input'
-      ? locale === 'en-US'
-        ? 'INPUT'
-        : '输入'
+      ? formatMsg(locale, 'trajectory.input')
       : entry.direction === 'output'
-        ? locale === 'en-US'
-          ? 'OUTPUT'
-          : '输出'
+        ? formatMsg(locale, 'trajectory.output')
         : null;
 
   return (
@@ -532,7 +519,7 @@ export function ContextInspectorModal({
   colorVar?: string;
   tokens?: number;
   rawContent: string;
-  locale: 'zh-CN' | 'en-US';
+  locale: LocaleCode;
   onClose: () => void;
 }) {
   const [viewMode, setViewMode] = useState<'formatted' | 'raw'>('formatted');
@@ -637,12 +624,12 @@ export function ContextInspectorModal({
             )}
             {parsedTools && (
               <span className="shrink-0 rounded-full border border-border bg-surface px-2 py-0.5 font-mono text-[11px] tabular-nums text-foreground-subtle">
-                {parsedTools.length} {locale === 'en-US' ? 'tools' : '个工具'}
+                {parsedTools.length} {formatMsg(locale, 'trajectory.tools')}
               </span>
             )}
             {parsedMessages && (
               <span className="shrink-0 rounded-full border border-border bg-surface px-2 py-0.5 font-mono text-[11px] tabular-nums text-foreground-subtle">
-                {parsedMessages.length} {locale === 'en-US' ? 'messages' : '条消息'}
+                {parsedMessages.length} {formatMsg(locale, 'trajectory.messages')}
               </span>
             )}
           </div>
@@ -658,7 +645,7 @@ export function ContextInspectorModal({
                     : 'text-foreground-subtle hover:text-foreground'
                 }`}
               >
-                {locale === 'en-US' ? 'Formatted' : '结构化'}
+                {formatMsg(locale, 'trajectory.formatted')}
               </button>
               <button
                 type="button"
@@ -669,7 +656,7 @@ export function ContextInspectorModal({
                     : 'text-foreground-subtle hover:text-foreground'
                 }`}
               >
-                {locale === 'en-US' ? 'Raw' : '原始文本'}
+                {formatMsg(locale, 'trajectory.raw')}
               </button>
             </div>
 
@@ -678,7 +665,7 @@ export function ContextInspectorModal({
             <button
               type="button"
               onClick={onClose}
-              aria-label={locale === 'en-US' ? 'Close' : '关闭'}
+              aria-label={formatMsg(locale, 'common.close')}
               className="flex size-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
             >
               <X className="size-4" />
@@ -697,12 +684,8 @@ export function ContextInspectorModal({
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={
                   parsedTools
-                    ? locale === 'en-US'
-                      ? 'Filter tools by name, description, or parameter…'
-                      : '按工具名、描述或参数筛选…'
-                    : locale === 'en-US'
-                      ? 'Search messages…'
-                      : '搜索消息内容…'
+                    ? formatMsg(locale, 'trajectory.filterToolsByNameDescription')
+                    : formatMsg(locale, 'trajectory.searchMessages')
                 }
                 className="h-8 w-full rounded-lg border border-border bg-input pl-8 pr-3 text-ui-sm text-foreground placeholder-foreground-subtlest outline-none focus:border-border-hover"
               />
@@ -720,7 +703,7 @@ export function ContextInspectorModal({
             <div className="space-y-2">
               {filteredTools.length === 0 ? (
                 <div className="py-10 text-center text-ui-sm text-foreground-subtlest">
-                  {locale === 'en-US' ? 'No matching tools' : '没有匹配的工具'}
+                  {formatMsg(locale, 'trajectory.noMatchingTools')}
                 </div>
               ) : (
                 filteredTools.map((td, idx) => (
@@ -737,7 +720,7 @@ export function ContextInspectorModal({
             <div className="overflow-hidden rounded-xl border border-border bg-card">
               {filteredMessageRows.length === 0 ? (
                 <div className="py-10 text-center text-ui-sm text-foreground-subtlest">
-                  {locale === 'en-US' ? 'No matching messages' : '没有匹配的消息'}
+                  {formatMsg(locale, 'trajectory.noMatchingMessages')}
                 </div>
               ) : (
                 filteredMessageRows.map((row, idx) => {
@@ -780,14 +763,14 @@ interface LoadedCallRecord {
   error?: string;
 }
 
-function sourceLabel(trigger: string | undefined, locale: 'zh-CN' | 'en-US'): string {
+function sourceLabel(trigger: string | undefined, locale: LocaleCode): string {
   switch (trigger) {
     case 'subagent':
-      return locale === 'en-US' ? 'Subagent' : '子智能体';
+      return formatMsg(locale, 'tool.subagent');
     case 'cron':
-      return locale === 'en-US' ? 'Automation' : '定时任务';
+      return formatMsg(locale, 'trajectory.automation');
     default:
-      return locale === 'en-US' ? 'Main' : '主对话';
+      return formatMsg(locale, 'trajectory.main');
   }
 }
 
@@ -799,7 +782,7 @@ export function ModelTrajectoryModal({
 }: {
   telemetries: TurnTelemetry[];
   sessionTitle?: string;
-  locale: 'zh-CN' | 'en-US';
+  locale: LocaleCode;
   onClose: () => void;
 }) {
   const [records, setRecords] = useState<LoadedCallRecord[]>([]);
@@ -914,7 +897,7 @@ export function ModelTrajectoryModal({
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <Sparkles className="size-4 shrink-0 text-brand-blue" />
               <h3 className="truncate text-ui-base font-semibold text-foreground">
-                {locale === 'en-US' ? 'Model Trajectory' : '模型调用轨迹'}
+                {formatMsg(locale, 'trajectory.modelTrajectory')}
               </h3>
               {sessionTitle && (
                 <span className="hidden truncate text-ui-xs text-foreground-subtlest sm:inline">
@@ -929,24 +912,16 @@ export function ModelTrajectoryModal({
                 onClick={handleToggleAll}
                 title={
                   globalExpanded
-                    ? locale === 'en-US'
-                      ? 'Collapse all'
-                      : '全部收起'
-                    : locale === 'en-US'
-                      ? 'Expand all'
-                      : '全部展开'
+                    ? formatMsg(locale, 'trajectory.collapseAll')
+                    : formatMsg(locale, 'trajectory.expandAll')
                 }
                 className="inline-flex h-7 items-center gap-1 rounded-lg border border-border bg-surface px-2 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
               >
                 {globalExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
                 <span className="hidden sm:inline">
                   {globalExpanded
-                    ? locale === 'en-US'
-                      ? 'Collapse'
-                      : '全部收起'
-                    : locale === 'en-US'
-                      ? 'Expand'
-                      : '全部展开'}
+                    ? formatMsg(locale, 'trajectory.collapse')
+                    : formatMsg(locale, 'trajectory.expand')}
                 </span>
               </button>
 
@@ -966,7 +941,7 @@ export function ModelTrajectoryModal({
               <button
                 type="button"
                 onClick={onClose}
-                aria-label={locale === 'en-US' ? 'Close' : '关闭'}
+                aria-label={formatMsg(locale, 'common.close')}
                 className="flex size-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
               >
                 <X className="size-4" />
@@ -978,7 +953,7 @@ export function ModelTrajectoryModal({
           <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] tabular-nums text-foreground-subtle">
               <span className="rounded-md border border-border bg-surface px-2 py-0.5 text-foreground">
-                {records.length} {locale === 'en-US' ? 'calls' : '次调用'}
+                {records.length} {formatMsg(locale, 'trajectory.calls')}
               </span>
               <span className="rounded-md border border-border bg-surface px-2 py-0.5">
                 IN {formatCompactTokens(aggregate.inTok)}
@@ -1009,13 +984,13 @@ export function ModelTrajectoryModal({
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder={locale === 'en-US' ? 'Search trajectory…' : '搜索调用轨迹…'}
+                    placeholder={formatMsg(locale, 'trajectory.searchTrajectory')}
                     className="h-7 w-44 rounded-lg border border-border bg-input pl-7 pr-2.5 text-ui-xs text-foreground placeholder-foreground-subtlest outline-none focus:border-border-hover sm:w-52"
                   />
                 </div>
                 {(
                   [
-                    ['all', locale === 'en-US' ? 'All' : '全部'],
+                    ['all', formatMsg(locale, 'common.all')],
                     ['system', 'SYS'],
                     ['user', 'USER'],
                     ['thinking', 'THINK'],
@@ -1045,12 +1020,12 @@ export function ModelTrajectoryModal({
         <div className="flex-1 overflow-auto">
           {loading ? (
             <div className="flex h-48 items-center justify-center text-ui-sm text-foreground-subtle">
-              {locale === 'en-US' ? 'Loading model trajectory…' : '正在加载模型调用轨迹…'}
+              {formatMsg(locale, 'trajectory.loadingModelTrajectory')}
             </div>
           ) : records.length === 0 ? (
             <div className="flex h-48 flex-col items-center justify-center gap-1.5 text-ui-sm text-foreground-subtlest">
               <FileText className="size-6 opacity-50" />
-              <span>{locale === 'en-US' ? 'No trajectory records available' : '暂无模型调用轨迹记录'}</span>
+              <span>{formatMsg(locale, 'trajectory.noTrajectoryRecordsAvailable')}</span>
             </div>
           ) : rawView ? (
             <div className="space-y-4 p-4">
@@ -1091,7 +1066,7 @@ export function ModelTrajectoryModal({
                     sysRows.push({
                       id: `c${idx}:sys`,
                       role: 'system',
-                      title: `${sections.length} ${locale === 'en-US' ? 'sections' : '段'}`,
+                      title: `${sections.length} ${formatMsg(locale, 'trajectory.sections')}`,
                       body: combinedSys,
                       isMarkdown: true,
                     });
@@ -1124,12 +1099,8 @@ export function ModelTrajectoryModal({
                   trace?.response?.content?.some((b) => (b.type || '').toLowerCase() === 'tool_call'),
                 );
                 const finishLabel = hasToolCall
-                  ? locale === 'en-US'
-                    ? 'Tool call'
-                    : '工具调用'
-                  : locale === 'en-US'
-                    ? 'Completed'
-                    : '已完成';
+                  ? formatMsg(locale, 'trajectory.toolCall')
+                  : formatMsg(locale, 'trajectory.completed');
 
                 return (
                   <article key={idx} className="bg-background">
@@ -1180,7 +1151,7 @@ export function ModelTrajectoryModal({
                             <section className="overflow-hidden rounded-xl border border-border bg-card">
                               <div className="flex items-center justify-between border-b border-border/70 bg-surface/60 px-3 py-1.5">
                                 <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-foreground-subtle">
-                                  {locale === 'en-US' ? 'INPUT' : '输入 · INPUT'}
+                                  {formatMsg(locale, 'trajectory.input2')}
                                 </span>
                                 {hiddenPriorCount > 0 && (
                                   <button
@@ -1190,9 +1161,7 @@ export function ModelTrajectoryModal({
                                     }
                                     className="text-ui-xs text-brand-blue hover:underline"
                                   >
-                                    {locale === 'en-US'
-                                      ? `Show ${hiddenPriorCount} prior messages`
-                                      : `展开前序 ${hiddenPriorCount} 条历史消息`}
+                                    {formatMsg(locale, 'trajectory.showPriorMessages', { hiddenPriorCount })}
                                   </button>
                                 )}
                               </div>
@@ -1220,7 +1189,7 @@ export function ModelTrajectoryModal({
                             <section className="overflow-hidden rounded-xl border border-border bg-card">
                               <div className="flex items-center justify-between border-b border-border/70 bg-surface/60 px-3 py-1.5">
                                 <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-foreground-subtle">
-                                  {locale === 'en-US' ? 'OUTPUT' : '输出 · OUTPUT'}
+                                  {formatMsg(locale, 'trajectory.output2')}
                                 </span>
                               </div>
                               <div>

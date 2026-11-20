@@ -87,6 +87,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
   });
 
   it('starts with Side Pane closed by default, opens New Tab launcher on demand, and navigates ZCode Settings', () => {
+    useNexStore.setState({ locale: 'zh-CN' });
     render(<App />);
     expect(screen.getByTestId('project-sidebar')).toBeTruthy();
 

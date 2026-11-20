@@ -1,3 +1,4 @@
+import { formatMsg } from '../i18n/messages';
 import { Eye, EyeOff, LoaderCircle, Lock } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { useNexStore } from '../core/store';
@@ -5,7 +6,6 @@ import { useNexStore } from '../core/store';
 export function AuthGate() {
   const locale = useNexStore((s) => s.locale);
   const loginWithPassword = useNexStore((s) => s.loginWithPassword);
-  const isEn = locale === 'en-US';
 
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
@@ -20,7 +20,7 @@ export function AuthGate() {
     const res = await loginWithPassword(password);
     setSubmitting(false);
     if (!res.ok) {
-      setError(isEn ? 'Incorrect password. Please try again.' : '密码错误，请重试。');
+      setError(formatMsg(locale, 'auth.incorrectPasswordPleaseTryAgain'));
     }
   };
 
@@ -35,12 +35,10 @@ export function AuthGate() {
             <Lock className="size-5" />
           </div>
           <h1 className="mt-4 text-xl font-semibold tracking-tight text-foreground">
-            {isEn ? 'Nex Access Protected' : 'Nex 访问密码验证'}
+            {formatMsg(locale, 'auth.nexAccessProtected')}
           </h1>
           <p className="mt-1.5 text-ui-sm text-foreground-subtle">
-            {isEn
-              ? 'Enter your access password to view and use this workspace.'
-              : '首次打开请输入访问密码，验证通过后即可查看和使用工作台。'}
+            {formatMsg(locale, 'auth.enterYourAccessPasswordTo')}
           </p>
         </div>
 
@@ -55,7 +53,7 @@ export function AuthGate() {
                 setPassword(e.target.value);
                 if (error) setError('');
               }}
-              placeholder={isEn ? 'Enter password…' : '请输入访问密码…'}
+              placeholder={formatMsg(locale, 'auth.enterPassword')}
               className="h-10 w-full rounded-xl border border-border bg-input pl-3.5 pr-10 text-ui-base text-foreground placeholder-foreground-subtlest outline-none transition-colors focus:border-brand-blue"
             />
             <button
@@ -84,7 +82,7 @@ export function AuthGate() {
             className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-foreground text-ui-base font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
           >
             {submitting && <LoaderCircle className="size-4 animate-spin" />}
-            <span>{submitting ? (isEn ? 'Verifying…' : '正在验证…') : isEn ? 'Unlock' : '解锁进入'}</span>
+            <span>{submitting ? (formatMsg(locale, 'auth.verifying')) : formatMsg(locale, 'auth.unlock')}</span>
           </button>
         </form>
       </div>

@@ -226,13 +226,9 @@ export function ContextWindowsButton({
               >
                 <Activity className="size-3.5 text-foreground-subtle" />
                 <span>
-                  {locale === 'en-US'
-                    ? allTelemetries.length > 1
-                      ? `Model Trajectory (${allTelemetries.length} calls)`
-                      : 'Model Trajectory'
-                    : allTelemetries.length > 1
-                      ? `查看调用轨迹（${allTelemetries.length} 次）`
-                      : '查看调用轨迹'}
+                  {allTelemetries.length > 1
+                    ? formatMsg(locale, 'context.trajectoryCount', { count: allTelemetries.length })
+                    : formatMsg(locale, 'context.trajectorySingle')}
                 </span>
               </button>
             </div>

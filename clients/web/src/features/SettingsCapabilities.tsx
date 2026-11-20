@@ -1,3 +1,4 @@
+import { formatMsg } from '../i18n/messages';
 import { ChevronRight, LoaderCircle, Pencil, Search, Sparkles, Trash2 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { apiFetch } from '../core/protocol';
@@ -77,7 +78,6 @@ function MetaBadge({ children, mono = false }: { children: ReactNode; mono?: boo
 
 export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {
   const { locale, agentProfiles, refreshRegistries } = useNexStore();
-  const isEn = locale === 'en-US';
 
   const [slug, setSlug] = useState('code-reviewer');
   const [name, setName] = useState('Code Reviewer');
@@ -104,7 +104,7 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
       }),
     });
     await refreshRegistries();
-    onFlash(isEn ? `Subagent profile "${slug}" saved` : `已保存并同步子智能体预设 "${slug}"`);
+    onFlash(formatMsg(locale, 'capabilities.subagentProfileSaved', { slug }));
   };
 
   const removeAgent = async (targetSlug: string) => {
@@ -115,17 +115,15 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
   return (
     <div className="space-y-6">
       <SectionHeading
-        title={isEn ? 'New subagent profile' : '新建子智能体'}
+        title={formatMsg(locale, 'capabilities.newSubagentProfile')}
         description={
-          isEn
-            ? 'Spawn read-only or isolated workers with their own tools and prompt.'
-            : '为子智能体定义独立工具白名单、系统提示词与 Worktree 隔离策略。'
+          formatMsg(locale, 'capabilities.spawnReadOnlyOrIsolated')
         }
       />
 
       <SettingsGroupCard>
         <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-2">
-          <Field label={isEn ? 'Slug' : '标识 (Slug)'}>
+          <Field label={formatMsg(locale, 'capabilities.slug')}>
             <input
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
@@ -133,7 +131,7 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
               className={settingsMonoInputClass}
             />
           </Field>
-          <Field label={isEn ? 'Display name' : '显示名称'}>
+          <Field label={formatMsg(locale, 'capabilities.displayName')}>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -144,8 +142,8 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
 
         <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-2">
           <Field
-            label={isEn ? 'Allowed tools' : '允许工具'}
-            description={isEn ? 'Comma-separated tool allowlist.' : '逗号分隔的工具白名单。'}
+            label={formatMsg(locale, 'capabilities.allowedTools')}
+            description={formatMsg(locale, 'capabilities.commaSeparatedToolAllowlist')}
           >
             <input
               value={toolsCsv}
@@ -155,11 +153,9 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
             />
           </Field>
           <Field
-            label={isEn ? 'Isolation' : '隔离模式'}
+            label={formatMsg(locale, 'capabilities.isolation')}
             description={
-              isEn
-                ? 'Shared workspace or an independent Git worktree.'
-                : '共享工作区或独立的 Git Worktree。'
+              formatMsg(locale, 'capabilities.sharedWorkspaceOrAnIndependent')
             }
           >
             <select
@@ -167,17 +163,17 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
               onChange={(e) => setIsolation(e.target.value as 'shared' | 'worktree')}
               className={settingsSelectClass}
             >
-              <option value="shared">{isEn ? 'Shared workspace' : '共享工作区'}</option>
-              <option value="worktree">{isEn ? 'Git worktree' : '独立 Git Worktree'}</option>
+              <option value="shared">{formatMsg(locale, 'capabilities.sharedWorkspace')}</option>
+              <option value="worktree">{formatMsg(locale, 'capabilities.gitWorktree')}</option>
             </select>
           </Field>
         </div>
 
         <div className="space-y-3 px-5 py-4">
           <Field
-            label={isEn ? 'System prompt' : '系统提示词'}
+            label={formatMsg(locale, 'chat.contextUsage.systemPrompt')}
             description={
-              isEn ? 'Appended when this subagent is spawned.' : '派生子智能体时注入的系统提示词。'
+              formatMsg(locale, 'capabilities.appendedWhenThisSubagentIs')
             }
           >
             <CodeEditorWithHighlight
@@ -185,12 +181,12 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
               language="markdown"
               value={prompt}
               onChange={setPrompt}
-              placeholder={isEn ? 'Role-specific system prompt...' : '角色专属 System Prompt...'}
+              placeholder={formatMsg(locale, 'capabilities.roleSpecificSystemPrompt')}
             />
           </Field>
           <div className="flex justify-end">
             <SaveButton
-              label={isEn ? 'Save subagent' : '保存并同步'}
+              label={formatMsg(locale, 'capabilities.saveSubagent')}
               onClick={() => void saveAgent()}
             />
           </div>
@@ -199,18 +195,14 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
 
       <SectionHeading
         title={
-          isEn
-            ? `Configured profiles (${agentProfiles.length})`
-            : `已配置角色 (${agentProfiles.length})`
+          formatMsg(locale, 'capabilities.configuredProfiles', { length: agentProfiles.length })
         }
       />
 
       <SettingsGroupCard>
         {agentProfiles.length === 0 ? (
           <EmptyRow>
-            {isEn
-              ? 'Using the built-in explore (read-only) and worker (read-write) subagents.'
-              : '当前使用系统内置默认 explore（只读）与 worker（读写）子智能体画像。'}
+            {formatMsg(locale, 'capabilities.usingTheBuiltInExplore')}
           </EmptyRow>
         ) : (
           agentProfiles.map((ap) => (
@@ -231,7 +223,7 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
               <button
                 type="button"
                 onClick={() => void removeAgent(ap.slug)}
-                aria-label={isEn ? 'Delete subagent' : '删除子智能体'}
+                aria-label={formatMsg(locale, 'capabilities.deleteSubagent')}
                 className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
               >
                 <Trash2 className="size-4" />
@@ -250,7 +242,6 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
 
 export function MCPSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {
   const { locale, mcpServers, refreshRegistries } = useNexStore();
-  const isEn = locale === 'en-US';
 
   const [name, setName] = useState('playwright');
   const [hostMode, setHostMode] = useState<'runner_local' | 'server_hosted'>('runner_local');
@@ -274,7 +265,7 @@ export function MCPSettingsSection({ onFlash }: { onFlash: (msg: string) => void
     });
     await refreshRegistries();
     onFlash(
-      isEn ? `MCP server "${name}" saved` : `MCP 服务 "${name}" 已保存（懒加载 + codemode 暴露）`,
+      formatMsg(locale, 'capabilities.mcpServerSaved', { name }),
     );
   };
 
@@ -287,7 +278,7 @@ export function MCPSettingsSection({ onFlash }: { onFlash: (msg: string) => void
     <div className="space-y-6">
       <SettingsGroupCard>
         <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-3">
-          <Field label={isEn ? 'Namespace' : '命名空间'}>
+          <Field label={formatMsg(locale, 'capabilities.namespace')}>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -295,21 +286,21 @@ export function MCPSettingsSection({ onFlash }: { onFlash: (msg: string) => void
               className={settingsMonoInputClass}
             />
           </Field>
-          <Field label={isEn ? 'Host mode' : '托管方式'}>
+          <Field label={formatMsg(locale, 'capabilities.hostMode')}>
             <select
               value={hostMode}
               onChange={(e) => setHostMode(e.target.value as 'runner_local' | 'server_hosted')}
               className={settingsSelectClass}
             >
               <option value="runner_local">
-                {isEn ? 'Runner local (stdio)' : '节点本地 (stdio)'}
+                {formatMsg(locale, 'capabilities.runnerLocalStdio')}
               </option>
-              <option value="server_hosted">{isEn ? 'Server hosted' : '中心托管'}</option>
+              <option value="server_hosted">{formatMsg(locale, 'capabilities.serverHosted')}</option>
             </select>
           </Field>
           <Field
-            label={isEn ? 'Idle TTL (s)' : '空闲回收 (秒)'}
-            description={isEn ? 'Reclaim the process after idling.' : '空闲达到该时长后回收进程。'}
+            label={formatMsg(locale, 'capabilities.idleTtlS')}
+            description={formatMsg(locale, 'capabilities.reclaimTheProcessAfterIdling')}
           >
             <input
               type="number"
@@ -322,7 +313,7 @@ export function MCPSettingsSection({ onFlash }: { onFlash: (msg: string) => void
 
         {hostMode === 'runner_local' ? (
           <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-3">
-            <Field label={isEn ? 'Command' : '命令'}>
+            <Field label={formatMsg(locale, 'capabilities.command')}>
               <input
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
@@ -332,8 +323,8 @@ export function MCPSettingsSection({ onFlash }: { onFlash: (msg: string) => void
             </Field>
             <div className="sm:col-span-2">
               <Field
-                label={isEn ? 'Arguments' : '参数'}
-                description={isEn ? 'Whitespace-separated.' : '空格分隔。'}
+                label={formatMsg(locale, 'capabilities.arguments')}
+                description={formatMsg(locale, 'capabilities.whitespaceSeparated')}
               >
                 <input
                   value={argsCsv}
@@ -347,20 +338,20 @@ export function MCPSettingsSection({ onFlash }: { onFlash: (msg: string) => void
 
         <div className="flex justify-end px-5 py-4">
           <SaveButton
-            label={isEn ? 'Save MCP server' : '保存 MCP 配置'}
+            label={formatMsg(locale, 'capabilities.saveMcpServer')}
             onClick={() => void saveMCP()}
           />
         </div>
       </SettingsGroupCard>
 
       <SectionHeading
-        title={isEn ? `MCP servers (${mcpServers.length})` : `MCP 服务器 (${mcpServers.length})`}
+        title={formatMsg(locale, 'capabilities.mcpServers', { length: mcpServers.length })}
       />
 
       <SettingsGroupCard>
         {mcpServers.length === 0 ? (
           <EmptyRow>
-            {isEn ? 'No external MCP servers registered.' : '暂未注册外部 MCP 服务。'}
+            {formatMsg(locale, 'capabilities.noExternalMcpServersRegistered')}
           </EmptyRow>
         ) : (
           mcpServers.map((m) => (
@@ -384,7 +375,7 @@ export function MCPSettingsSection({ onFlash }: { onFlash: (msg: string) => void
               <button
                 type="button"
                 onClick={() => void removeMCP(m.name)}
-                aria-label={isEn ? 'Delete MCP server' : '删除 MCP 服务'}
+                aria-label={formatMsg(locale, 'capabilities.deleteMcpServer')}
                 className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
               >
                 <Trash2 className="size-4" />
@@ -409,7 +400,6 @@ export function SkillsAndPluginsSection({
   onFlash: (msg: string) => void;
 }) {
   const { locale, skills, plugins, refreshRegistries } = useNexStore();
-  const isEn = locale === 'en-US';
 
   const [skName, setSkName] = useState('code-audit');
   const [skDesc, setSkDesc] = useState('Security & concurrency review checklist');
@@ -439,7 +429,7 @@ export function SkillsAndPluginsSection({
       });
       await refreshRegistries();
       onFlash(
-        isEn ? `Skill "${skName}" synced to runners` : `Skill "${skName}" 已同步至各 Runner 本地缓存`,
+        formatMsg(locale, 'capabilities.skillSyncedToRunners', { skName }),
       );
     };
 
@@ -448,8 +438,8 @@ export function SkillsAndPluginsSection({
         <SettingsGroupCard>
           <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-2">
             <Field
-              label={isEn ? 'Skill name' : '技能名称'}
-              description={isEn ? 'Invoked as $skill-name.' : '以 $skill-name 形式调用。'}
+              label={formatMsg(locale, 'capabilities.skillName')}
+              description={formatMsg(locale, 'capabilities.invokedAsSkillName')}
             >
               <input
                 value={skName}
@@ -459,11 +449,9 @@ export function SkillsAndPluginsSection({
               />
             </Field>
             <Field
-              label={isEn ? 'Description' : '触发描述'}
+              label={formatMsg(locale, 'common.description2')}
               description={
-                isEn
-                  ? 'One line injected into the system prompt index.'
-                  : '注入系统提示词目录的一句话描述。'
+                formatMsg(locale, 'capabilities.oneLineInjectedIntoThe')
               }
             >
               <input
@@ -476,7 +464,7 @@ export function SkillsAndPluginsSection({
           <div className="space-y-3 px-5 py-4">
             <div className="flex items-center justify-between gap-2">
               <span className="text-ui-xs text-foreground-subtle">
-                {isEn ? 'Markdown body' : 'Markdown 内容'}
+                {formatMsg(locale, 'capabilities.markdownBody')}
               </span>
               <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-ui-xs">
                 <button
@@ -486,7 +474,7 @@ export function SkillsAndPluginsSection({
                     !skPreview ? 'bg-popover text-foreground shadow-xs' : 'text-foreground-subtle hover:text-foreground'
                   }`}
                 >
-                  {isEn ? 'Edit' : '编辑'}
+                  {formatMsg(locale, 'common.edit')}
                 </button>
                 <button
                   type="button"
@@ -495,7 +483,7 @@ export function SkillsAndPluginsSection({
                     skPreview ? 'bg-popover text-foreground shadow-xs' : 'text-foreground-subtle hover:text-foreground'
                   }`}
                 >
-                  {isEn ? 'Preview' : '预览'}
+                  {formatMsg(locale, 'capabilities.preview')}
                 </button>
               </div>
             </div>
@@ -515,18 +503,18 @@ export function SkillsAndPluginsSection({
             )}
             <div className="flex justify-end">
               <SaveButton
-                label={isEn ? 'Save skill' : '保存并下发'}
+                label={formatMsg(locale, 'capabilities.saveSkill')}
                 onClick={() => void saveSkill()}
               />
             </div>
           </div>
         </SettingsGroupCard>
 
-        <SectionHeading title={isEn ? `Skills (${skills.length})` : `技能 (${skills.length})`} />
+        <SectionHeading title={formatMsg(locale, 'capabilities.skills', { length: skills.length })} />
 
         <SettingsGroupCard>
           {skills.length === 0 ? (
-            <EmptyRow>{isEn ? 'No custom skills yet.' : '暂未添加自定义技能。'}</EmptyRow>
+            <EmptyRow>{formatMsg(locale, 'capabilities.noCustomSkillsYet')}</EmptyRow>
           ) : (
             skills.map((s) => {
               const isOpen = expandedSkill === s.name;
@@ -558,7 +546,7 @@ export function SkillsAndPluginsSection({
                         });
                         await refreshRegistries();
                       }}
-                      aria-label={isEn ? 'Delete skill' : '删除技能'}
+                      aria-label={formatMsg(locale, 'capabilities.deleteSkill')}
                       className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
                     >
                       <Trash2 className="size-4" />
@@ -590,9 +578,7 @@ export function SkillsAndPluginsSection({
     });
     await refreshRegistries();
     onFlash(
-      isEn
-        ? `Plugin "${plName}" compiled and synced`
-        : `插件 "${plName}" 已通过 esbuild 转译并同步至 goja 引擎`,
+      formatMsg(locale, 'capabilities.pluginCompiledAndSynced', { plName }),
     );
   };
 
@@ -600,11 +586,11 @@ export function SkillsAndPluginsSection({
     <div className="space-y-6">
       <SettingsGroupCard>
         <CardHeading
-          title={isEn ? 'TypeScript plugin editor' : 'TypeScript 插件编辑器'}
+          title={formatMsg(locale, 'capabilities.typescriptPluginEditor')}
           trailing={<MetaBadge mono>esbuild + goja</MetaBadge>}
         />
         <div className="space-y-3 border-t border-border px-5 py-4">
-          <Field label={isEn ? 'Plugin name' : '插件名称'}>
+          <Field label={formatMsg(locale, 'capabilities.pluginName')}>
             <input
               value={plName}
               onChange={(e) => setPlName(e.target.value)}
@@ -621,7 +607,7 @@ export function SkillsAndPluginsSection({
           />
           <div className="flex justify-end">
             <SaveButton
-              label={isEn ? 'Compile & deploy' : '编译并热下发'}
+              label={formatMsg(locale, 'capabilities.compileDeploy')}
               onClick={() => void savePlugin()}
             />
           </div>
@@ -629,12 +615,12 @@ export function SkillsAndPluginsSection({
       </SettingsGroupCard>
 
       <SectionHeading
-        title={isEn ? `Plugins (${plugins.length})` : `插件 (${plugins.length})`}
+        title={formatMsg(locale, 'capabilities.plugins', { length: plugins.length })}
       />
 
       <SettingsGroupCard>
         {plugins.length === 0 ? (
-          <EmptyRow>{isEn ? 'No dynamic plugins installed.' : '暂未安装动态插件。'}</EmptyRow>
+          <EmptyRow>{formatMsg(locale, 'capabilities.noDynamicPluginsInstalled')}</EmptyRow>
         ) : (
           plugins.map((p) => {
             const isOpen = expandedPlugin === p.name;
@@ -668,7 +654,7 @@ export function SkillsAndPluginsSection({
                       });
                       await refreshRegistries();
                     }}
-                    aria-label={isEn ? 'Delete plugin' : '删除插件'}
+                    aria-label={formatMsg(locale, 'capabilities.deletePlugin')}
                     className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
                   >
                     <Trash2 className="size-4" />
@@ -694,15 +680,14 @@ export function SkillsAndPluginsSection({
 
 export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void }) {
   const { locale, runners, cronJobs, selectedRunnerId, refreshRegistries } = useNexStore();
-  const isEn = locale === 'en-US';
 
   const [runnerId, setRunnerId] = useState(selectedRunnerId || runners[0]?.id || '');
   const [title, setTitle] = useState(
-    isEn ? 'Daily workspace health check at 9am' : '每天早上 9 点工作区健康巡检',
+    formatMsg(locale, 'capabilities.dailyWorkspaceHealthCheckAt'),
   );
   const [cronExpr, setCronExpr] = useState('0 9 * * *');
   const [prompt, setPrompt] = useState(
-    isEn ? 'Run the test suite and summarize any failures.' : '运行测试套件并生成简要巡检报告',
+    formatMsg(locale, 'capabilities.runTheTestSuiteAnd'),
   );
 
   const createCron = async () => {
@@ -722,9 +707,7 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
     });
     await refreshRegistries();
     onFlash(
-      isEn
-        ? `Automation "${title}" scheduled on runner`
-        : `定时任务 "${title}" 已下发至节点本地 Cron 快照`,
+      formatMsg(locale, 'capabilities.automationScheduledOnRunner', { title }),
     );
   };
 
@@ -732,7 +715,7 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
     <div className="space-y-6">
       <SettingsGroupCard>
         <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-3">
-          <Field label={isEn ? 'Runner' : '运行设备'}>
+          <Field label={formatMsg(locale, 'capabilities.runner')}>
             <select
               value={runnerId}
               onChange={(e) => setRunnerId(e.target.value)}
@@ -745,7 +728,7 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
               ))}
             </select>
           </Field>
-          <Field label={isEn ? 'Title' : '任务标题'}>
+          <Field label={formatMsg(locale, 'common.title')}>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -753,8 +736,8 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
             />
           </Field>
           <Field
-            label={isEn ? 'Cron expression' : 'Cron 表达式'}
-            description={isEn ? 'Runs in the runner timezone.' : '按设备本地时区触发。'}
+            label={formatMsg(locale, 'capabilities.cronExpression')}
+            description={formatMsg(locale, 'capabilities.runsInTheRunnerTimezone')}
           >
             <input
               value={cronExpr}
@@ -766,11 +749,9 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
         </div>
         <div className="space-y-3 px-5 py-4">
           <Field
-            label={isEn ? 'Prompt' : '自治提示词'}
+            label={formatMsg(locale, 'capabilities.prompt')}
             description={
-              isEn
-                ? 'Executed autonomously when the schedule fires.'
-                : '触发后由节点独立执行的完整提示词。'
+              formatMsg(locale, 'capabilities.executedAutonomouslyWhenTheSchedule')
             }
           >
             <textarea
@@ -782,7 +763,7 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
           </Field>
           <div className="flex justify-end">
             <SaveButton
-              label={isEn ? 'Create automation' : '创建自动化'}
+              label={formatMsg(locale, 'capabilities.createAutomation')}
               onClick={() => void createCron()}
             />
           </div>
@@ -790,12 +771,12 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
       </SettingsGroupCard>
 
       <SectionHeading
-        title={isEn ? `Automations (${cronJobs.length})` : `自动化 (${cronJobs.length})`}
+        title={formatMsg(locale, 'capabilities.automations', { length: cronJobs.length })}
       />
 
       <SettingsGroupCard>
         {cronJobs.length === 0 ? (
-          <EmptyRow>{isEn ? 'No automations yet.' : '暂无定时自动化任务。'}</EmptyRow>
+          <EmptyRow>{formatMsg(locale, 'capabilities.noAutomationsYet')}</EmptyRow>
         ) : (
           cronJobs.map((j) => (
             <div key={j.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
@@ -804,9 +785,7 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
                   <span className="text-ui-base font-medium text-foreground">{j.title}</span>
                   <MetaBadge mono>{j.cron_expr}</MetaBadge>
                   <span className="text-ui-xs text-foreground-subtlest">
-                    {isEn
-                      ? `${j.runner_id} · ${j.run_count || 0} runs`
-                      : `${j.runner_id} · 已运行 ${j.run_count || 0} 次`}
+                    {formatMsg(locale, 'capabilities.runs', { runner_id: j.runner_id, v: j.run_count || 0 })}
                   </span>
                 </div>
                 <p className="mt-0.5 truncate text-ui-sm text-foreground-subtle">{j.prompt}</p>
@@ -821,7 +800,7 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
                     await refreshRegistries();
                   }
                 }}
-                aria-label={isEn ? 'Delete automation' : '删除自动化'}
+                aria-label={formatMsg(locale, 'capabilities.deleteAutomation')}
                 className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
               >
                 <Trash2 className="size-4" />
@@ -851,7 +830,6 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
     refreshRegistries,
     consolidateMemories,
   } = useNexStore();
-  const isEn = locale === 'en-US';
 
   const [editingId, setEditingId] = useState('');
   const [scope, setScope] = useState<'global' | 'project'>('global');
@@ -877,7 +855,7 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
       body: JSON.stringify(next),
     });
     await refreshInitialData();
-    onFlash(isEn ? 'Memory engine settings updated & synced' : '记忆引擎配置已更新并同步至所有节点');
+    onFlash(formatMsg(locale, 'capabilities.memoryEngineSettingsUpdatedSynced'));
   };
 
   const runConsolidate = async () => {
@@ -890,16 +868,12 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
       });
       if (res) {
         onFlash(
-          isEn
-            ? `Consolidated ${res.before_count} → ${res.after_count}: ${res.summary}`
-            : `记忆整理完成（${res.before_count} → ${res.after_count} 条）：${res.summary}`,
+          formatMsg(locale, 'capabilities.consolidated', { before_count: res.before_count, after_count: res.after_count, summary: res.summary }),
         );
       }
     } catch (err) {
       onFlash(
-        isEn
-          ? `Consolidation failed: ${err instanceof Error ? err.message : String(err)}`
-          : `记忆整理失败：${err instanceof Error ? err.message : String(err)}`,
+        formatMsg(locale, 'capabilities.consolidationFailed', { v: err instanceof Error ? err.message : String(err) }),
       );
     } finally {
       setConsolidating(false);
@@ -923,7 +897,7 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
     setTitle('');
     setContent('');
     await refreshRegistries();
-    onFlash(isEn ? 'Memory saved and synced to runners' : '长期记忆已保存并同步至所有节点');
+    onFlash(formatMsg(locale, 'capabilities.memorySavedAndSyncedTo'));
   };
 
   const startEdit = (m: (typeof memories)[number]) => {
@@ -966,12 +940,10 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
         <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
           <div className="min-w-0 flex-1 space-y-0.5">
             <div className="text-ui-base font-medium text-foreground">
-              {isEn ? 'Background auto-extraction' : '对话后后台自动提取记忆'}
+              {formatMsg(locale, 'capabilities.backgroundAutoExtraction')}
             </div>
             <p className="text-ui-xs text-foreground-subtlest">
-              {isEn
-                ? 'Asynchronously distills durable preferences & conventions after chat turns (secrets automatically blocked). Large memory banks use compact index + on-demand memory_read.'
-                : '每轮对话结束后在后台异步提炼偏好与架构事实（自动拦截密钥），记忆较多时以轻量索引注入并由模型按需调用 memory_read。'}
+              {formatMsg(locale, 'capabilities.asynchronouslyDistillsDurablePreferencesConventions')}
             </p>
           </div>
           <label className="inline-flex cursor-pointer items-center gap-2 text-ui-sm text-foreground">
@@ -982,18 +954,16 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
               onChange={(e) => void saveMemoryPreferences({ memory_auto_extract: e.target.checked })}
               className="size-4 accent-brand-blue"
             />
-            <span>{preferences.memory_auto_extract ? (isEn ? 'Enabled' : '已开启') : isEn ? 'Disabled' : '已关闭'}</span>
+            <span>{preferences.memory_auto_extract ? (formatMsg(locale, 'common.enabled')) : formatMsg(locale, 'common.disabled')}</span>
           </label>
         </div>
 
         <div className="flex flex-wrap items-end justify-between gap-4 border-t border-border px-5 py-4">
           <div className="min-w-[240px] flex-1">
             <Field
-              label={isEn ? 'Dedicated model for extraction & consolidation' : '记忆提取与整理专用模型'}
+              label={formatMsg(locale, 'capabilities.dedicatedModelForExtractionConsolidation')}
               description={
-                isEn
-                  ? 'Optional fast/low-cost model. Leave default to follow the active session model.'
-                  : '可选指定高速低价模型（如 Flash）；留空则跟随当前对话模型。'
+                formatMsg(locale, 'capabilities.optionalFastLowCostModel')
               }
             >
               <select
@@ -1010,7 +980,7 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
                 }}
                 className={settingsSelectClass}
               >
-                <option value="">{isEn ? 'Follow active session model' : '跟随当前对话模型'}</option>
+                <option value="">{formatMsg(locale, 'capabilities.followActiveSessionModel')}</option>
                 {selectableModels.map((m) => (
                   <option key={`${m.provider_id}::${m.id}`} value={`${m.provider_id}::${m.id}`}>
                     {m.display_name || m.id} ({m.provider_id})
@@ -1027,12 +997,8 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
             onClick={() => void runConsolidate()}
             title={
               memories.length < 2
-                ? isEn
-                  ? 'Requires at least 2 memories'
-                  : '至少需要 2 条记忆才能整理去重'
-                : isEn
-                  ? 'Deduplicate, merge conflicts, and tighten saved memories'
-                  : '使用模型自动去重合并冲突并精炼记忆库'
+                ? formatMsg(locale, 'capabilities.requiresAtLeast2Memories')
+                : formatMsg(locale, 'capabilities.deduplicateMergeConflictsAndTighten')
             }
             className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 text-ui-sm font-medium text-foreground transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-45"
           >
@@ -1043,12 +1009,8 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
             )}
             <span>
               {consolidating
-                ? isEn
-                  ? 'Consolidating…'
-                  : '正在整理…'
-                : isEn
-                  ? 'Consolidate / Dream'
-                  : '一键整理去重 (Dream)'}
+                ? formatMsg(locale, 'capabilities.consolidating')
+                : formatMsg(locale, 'capabilities.consolidateDream')}
             </span>
           </button>
         </div>
@@ -1057,41 +1019,41 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
       {/* Add / Edit Memory Card */}
       <SettingsGroupCard>
         <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-3">
-          <Field label={isEn ? 'Scope' : '作用域'}>
+          <Field label={formatMsg(locale, 'capabilities.scope')}>
             <select
               value={scope}
               onChange={(e) => setScope(e.target.value as 'global' | 'project')}
               className={settingsSelectClass}
             >
-              <option value="global">{isEn ? 'Global (all workspaces)' : '全局（所有项目生效）'}</option>
-              <option value="project">{isEn ? 'Current project' : '当前项目工作区'}</option>
+              <option value="global">{formatMsg(locale, 'capabilities.globalAllWorkspaces')}</option>
+              <option value="project">{formatMsg(locale, 'capabilities.currentProject')}</option>
             </select>
           </Field>
-          <Field label={isEn ? 'Category' : '分类'}>
+          <Field label={formatMsg(locale, 'capabilities.category')}>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value as 'preference' | 'architecture' | 'convention' | 'fact')}
               className={settingsSelectClass}
             >
-              <option value="preference">{isEn ? 'Preference' : '个人偏好'}</option>
-              <option value="convention">{isEn ? 'Convention' : '编码规范'}</option>
-              <option value="architecture">{isEn ? 'Architecture' : '架构决策'}</option>
-              <option value="fact">{isEn ? 'Fact' : '项目事实'}</option>
+              <option value="preference">{formatMsg(locale, 'capabilities.preference')}</option>
+              <option value="convention">{formatMsg(locale, 'capabilities.convention')}</option>
+              <option value="architecture">{formatMsg(locale, 'capabilities.architecture')}</option>
+              <option value="fact">{formatMsg(locale, 'capabilities.fact')}</option>
             </select>
           </Field>
-          <Field label={isEn ? 'Title' : '标题'}>
+          <Field label={formatMsg(locale, 'common.title2')}>
             <input
               data-testid="memory-title-input"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={isEn ? 'e.g. Prefer CGO_ENABLED=0' : '例如：强制纯 Go 静态构建'}
+              placeholder={formatMsg(locale, 'capabilities.eGPreferCgoEnabled')}
               className={settingsInputClass}
             />
           </Field>
         </div>
 
         <div className="space-y-3 border-t border-border px-5 py-4">
-          <Field label={isEn ? 'Memory content' : '记忆内容'}>
+          <Field label={formatMsg(locale, 'capabilities.memoryContent')}>
             <CodeEditorWithHighlight
               testId="memory-content-editor"
               rows={4}
@@ -1099,9 +1061,7 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
               value={content}
               onChange={setContent}
               placeholder={
-                isEn
-                  ? 'Concise fact or preference recalled automatically in future sessions…'
-                  : '填写希望在后续对话自动召回的偏好、约定或项目事实…'
+                formatMsg(locale, 'capabilities.conciseFactOrPreferenceRecalled')
               }
             />
           </Field>
@@ -1116,18 +1076,14 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
                 }}
                 className="h-8 rounded-lg border border-border px-3 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
               >
-                {isEn ? 'Cancel edit' : '取消编辑'}
+                {formatMsg(locale, 'capabilities.cancelEdit')}
               </button>
             )}
             <SaveButton
               label={
                 editingId
-                  ? isEn
-                    ? 'Update memory'
-                    : '更新记忆'
-                  : isEn
-                    ? 'Save memory'
-                    : '保存记忆'
+                  ? formatMsg(locale, 'capabilities.updateMemory')
+                  : formatMsg(locale, 'capabilities.saveMemory')
               }
               onClick={() => void saveMemory()}
             />
@@ -1137,7 +1093,7 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SectionHeading
-          title={isEn ? `Saved memories (${visibleMemories.length})` : `已保存记忆 (${visibleMemories.length})`}
+          title={formatMsg(locale, 'capabilities.savedMemories', { length: visibleMemories.length })}
         />
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
@@ -1145,7 +1101,7 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={isEn ? 'Filter memories…' : '搜索记忆…'}
+              placeholder={formatMsg(locale, 'capabilities.filterMemories')}
               className="h-7 w-44 rounded-lg border border-border bg-input pl-8 pr-2.5 text-ui-xs text-foreground placeholder-foreground-subtlest"
             />
           </div>
@@ -1160,16 +1116,10 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
                 }`}
               >
                 {sc === 'all'
-                  ? isEn
-                    ? 'All'
-                    : '全部'
+                  ? formatMsg(locale, 'common.all')
                   : sc === 'global'
-                    ? isEn
-                      ? 'Global'
-                      : '全局'
-                    : isEn
-                      ? 'Project'
-                      : '项目'}
+                    ? formatMsg(locale, 'common.global')
+                    : formatMsg(locale, 'common.project')}
               </button>
             ))}
           </div>
@@ -1179,9 +1129,7 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
       <SettingsGroupCard>
         {visibleMemories.length === 0 ? (
           <EmptyRow>
-            {isEn
-              ? 'No memories saved yet. Add one above, enable auto-extraction, or ask Nex via memory_save.'
-              : '暂无长期记忆。可在上方添加、开启后台自动提取，或在对话中让 Nex 调用 memory_save。'}
+            {formatMsg(locale, 'capabilities.noMemoriesSavedYetAdd')}
           </EmptyRow>
         ) : (
           visibleMemories.map((m) => (
@@ -1202,7 +1150,7 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
                 <button
                   type="button"
                   onClick={() => startEdit(m)}
-                  aria-label={isEn ? 'Edit memory' : '编辑记忆'}
+                  aria-label={formatMsg(locale, 'capabilities.editMemory')}
                   className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
                 >
                   <Pencil className="size-3.5" />
@@ -1210,7 +1158,7 @@ export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) =>
                 <button
                   type="button"
                   onClick={() => void removeMemory(m.id)}
-                  aria-label={isEn ? 'Delete memory' : '删除记忆'}
+                  aria-label={formatMsg(locale, 'capabilities.deleteMemory')}
                   className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
                 >
                   <Trash2 className="size-4" />

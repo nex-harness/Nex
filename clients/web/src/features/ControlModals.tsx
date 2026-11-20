@@ -32,9 +32,9 @@ export function ApprovalModal({ approval }: { approval: PendingApproval }) {
         <div className="mt-3 flex items-start gap-2 rounded-xl border border-border bg-surface px-3 py-2.5">
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
           <div className="min-w-0 text-ui-sm text-foreground-subtle">
-            <span>{locale === 'en-US' ? 'The agent wants to run ' : 'Agent 希望执行工具 '}</span>
+            <span>{formatMsg(locale, 'modal.theAgentWantsToRun')}</span>
             <code className="rounded bg-tag px-1.5 py-0.5 font-mono text-ui-xs text-foreground">{approval.toolName}</code>
-            <span>{locale === 'en-US' ? ' — review the arguments before allowing.' : '，请先确认调用参数。'}</span>
+            <span>{formatMsg(locale, 'modal.reviewTheArgumentsBeforeAllowing')}</span>
           </div>
         </div>
 
@@ -63,7 +63,7 @@ export function ApprovalModal({ approval }: { approval: PendingApproval }) {
             >
               <ShieldCheck className="size-3.5 text-success" />
               <span>
-                {locale === 'en-US' ? 'Allow and switch to full access' : '允许，并切换为完全访问'}
+                {formatMsg(locale, 'modal.allowAndSwitchToFull')}
               </span>
             </button>
             <button
@@ -121,7 +121,7 @@ export function UIPromptModal({ prompt }: { prompt: PendingUIPrompt }) {
             onClick={() => resolveUIPrompt(prompt.requestId, false, '', true)}
             className="h-8 rounded-lg border border-border px-3 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
           >
-            {locale === 'en-US' ? 'Cancel' : '取消'}
+            {formatMsg(locale, 'common.cancel')}
           </button>
           {prompt.kind !== 'select' && (
             <button
@@ -129,7 +129,7 @@ export function UIPromptModal({ prompt }: { prompt: PendingUIPrompt }) {
               onClick={() => resolveUIPrompt(prompt.requestId, true, val)}
               className="h-8 rounded-lg bg-primary px-4 text-ui-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
-              {locale === 'en-US' ? 'Confirm' : '确认'}
+              {formatMsg(locale, 'common.confirm')}
             </button>
           )}
         </div>

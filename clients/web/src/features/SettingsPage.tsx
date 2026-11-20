@@ -36,7 +36,7 @@ import { apiFetch } from '../core/protocol';
 import { useNexStore } from '../core/store';
 import { ModelMeta, ProviderRecord, SettingsSectionId, UserPreferences } from '../core/types';
 import { hostBridge } from '../host/bridge';
-import { formatMsg, type MessageKey } from '../i18n/messages';
+import { formatMsg, type LocaleCode, type MessageKey, SUPPORTED_LOCALES } from '../i18n/messages';
 import { HighlightedCode } from './MarkdownRenderer';
 import { ArchivesSettingsSection, UsageAnalyticsSection } from './SettingsAnalyticsArchive';
 import {
@@ -217,7 +217,7 @@ export function SettingsPage() {
           <input
             value={navFilter}
             onChange={(e) => setNavFilter(e.target.value)}
-            placeholder={locale === 'en-US' ? 'Search settings' : '搜索设置'}
+            placeholder={formatMsg(locale, 'settings.searchSettings')}
             className="min-w-0 flex-1 bg-transparent text-ui-sm text-foreground placeholder-foreground-subtlest"
           />
         </div>
@@ -310,9 +310,9 @@ export function SettingsPage() {
 /* -------------------------------------------------------------------------- */
 
 const THEME_OPTIONS = [
-  { id: 'system' as const, icon: Monitor, zh: '跟随系统', en: 'System' },
-  { id: 'light' as const, icon: Sun, zh: '浅色', en: 'Light' },
-  { id: 'dark' as const, icon: Moon, zh: '深色', en: 'Dark' },
+  { id: 'system' as const, icon: Monitor, labelKey: 'settings.theme.system' as MessageKey },
+  { id: 'light' as const, icon: Sun, labelKey: 'settings.theme.light' as MessageKey },
+  { id: 'dark' as const, icon: Moon, labelKey: 'settings.theme.dark' as MessageKey },
 ];
 
 function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {
@@ -328,7 +328,6 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
     refreshInitialData,
     updateThemeQuick,
   } = useNexStore();
-  const isEn = locale === 'en-US';
 
   const [autoArchiveEnabled, setAutoArchiveEnabled] = useState(
     preferences.auto_archive_after_days > 0,
@@ -345,43 +344,43 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
   const handleSavePassword = async () => {
     setPwdError('');
     if (newPwd.length < 4) {
-      setPwdError(isEn ? 'Password must be at least 4 characters.' : '密码长度至少为 4 位。');
+      setPwdError(formatMsg(locale, 'settings.passwordMustBeAtLeast'));
       return;
     }
     if (newPwd !== confirmPwd) {
-      setPwdError(isEn ? 'Passwords do not match.' : '两次输入的新密码不一致。');
+      setPwdError(formatMsg(locale, 'settings.passwordsDoNotMatch'));
       return;
     }
     setPwdBusy(true);
     const res = await updateWebPassword(currentPwd, newPwd);
     setPwdBusy(false);
     if (!res.ok) {
-      setPwdError(res.error || (isEn ? 'Failed to save password' : '保存密码失败'));
+      setPwdError(res.error || (formatMsg(locale, 'settings.failedToSavePassword')));
       return;
     }
     setCurrentPwd('');
     setNewPwd('');
     setConfirmPwd('');
-    onFlash(isEn ? 'Web access password updated' : 'Web 访问密码已设置生效');
+    onFlash(formatMsg(locale, 'settings.webAccessPasswordUpdated'));
   };
 
   const handleClearPassword = async () => {
     setPwdError('');
     if (!currentPwd) {
-      setPwdError(isEn ? 'Enter current password to disable protection.' : '请先输入当前密码以移除保护。');
+      setPwdError(formatMsg(locale, 'settings.enterCurrentPasswordToDisable'));
       return;
     }
     setPwdBusy(true);
     const res = await updateWebPassword(currentPwd, '');
     setPwdBusy(false);
     if (!res.ok) {
-      setPwdError(res.error || (isEn ? 'Failed to remove password' : '移除密码失败'));
+      setPwdError(res.error || (formatMsg(locale, 'settings.failedToRemovePassword')));
       return;
     }
     setCurrentPwd('');
     setNewPwd('');
     setConfirmPwd('');
-    onFlash(isEn ? 'Web access password disabled' : '已移除 Web 访问密码');
+    onFlash(formatMsg(locale, 'settings.webAccessPasswordDisabled'));
   };
 
   const savePreferences = async (patch: Partial<UserPreferences>) => {
@@ -406,29 +405,32 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
     <div className="space-y-6">
       <SettingsGroupCard>
         <SettingsRow
-          label={isEn ? 'Language' : '界面语言'}
+          label={formatMsg(locale, 'settings.locale')}
           description={
-            isEn ? 'Display language for the app interface.' : '应用界面所使用的显示语言。'
+            formatMsg(locale, 'settings.displayLanguageForTheApp')
           }
         >
           <select
             value={locale}
-            onChange={(e) => setLocale(e.target.value as 'zh-CN' | 'en-US')}
+            onChange={(e) => setLocale(e.target.value as LocaleCode)}
             className={settingsSelectClass}
           >
-            <option value="zh-CN">中文简体</option>
-            <option value="en-US">English</option>
+            {SUPPORTED_LOCALES.map((loc) => (
+              <option key={loc.code} value={loc.code}>
+                {loc.nativeName}
+              </option>
+            ))}
           </select>
         </SettingsRow>
 
         <SettingsRow
-          label={isEn ? 'App theme' : '界面主题'}
+          label={formatMsg(locale, 'settings.themeMode')}
           description={
-            isEn ? 'Use light, dark, or match the system setting.' : '使用浅色、深色，或跟随系统设置。'
+            formatMsg(locale, 'settings.useLightDarkOrMatch')
           }
         >
           <div className="inline-flex w-full items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
-            {THEME_OPTIONS.map(({ id, icon: Icon, zh, en }) => {
+            {THEME_OPTIONS.map(({ id, icon: Icon, labelKey }) => {
               const active = preferences.theme === id;
               return (
                 <button
@@ -436,7 +438,7 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
                   type="button"
                   onClick={() => {
                     void updateThemeQuick(id);
-                    onFlash(isEn ? 'Theme updated' : '界面主题已切换');
+                    onFlash(formatMsg(locale, 'settings.themeUpdated'));
                   }}
                   className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md text-ui-sm transition-colors ${
                     active
@@ -445,7 +447,7 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
                   }`}
                 >
                   <Icon className="size-3.5 shrink-0" />
-                  <span className="truncate">{isEn ? en : zh}</span>
+                  <span className="truncate">{formatMsg(locale, labelKey)}</span>
                 </button>
               );
             })}
@@ -453,11 +455,9 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
         </SettingsRow>
 
         <SettingsRow
-          label={isEn ? 'Default permission mode' : '默认权限模式'}
+          label={formatMsg(locale, 'settings.defaultPermissionMode')}
           description={
-            isEn
-              ? 'Applied to new sessions until you change it in the composer.'
-              : '应用于新会话，可在对话输入框中随时切换。'
+            formatMsg(locale, 'settings.appliedToNewSessionsUntil')
           }
         >
           <select
@@ -475,37 +475,31 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
       </SettingsGroupCard>
 
       <SectionHeading
-        title={isEn ? 'Session storage' : '会话存储'}
+        title={formatMsg(locale, 'settings.sessionStorage')}
         description={
-          isEn
-            ? 'Keep the active workspace lean by moving idle sessions to cold storage.'
-            : '将长期闲置的会话迁出热库，保持活跃工作区轻量高效。'
+          formatMsg(locale, 'settings.keepTheActiveWorkspaceLean')
         }
       />
 
       <SettingsGroupCard>
         <SettingsRow
-          label={isEn ? 'Auto-archive old sessions' : '自动归档旧会话'}
+          label={formatMsg(locale, 'settings.autoArchiveOldSessions')}
           description={
-            isEn
-              ? 'Idle sessions move to archive.db automatically.'
-              : '闲置会话将自动迁移至冷库 archive.db，不影响历史统计。'
+            formatMsg(locale, 'settings.idleSessionsMoveToArchive')
           }
         >
           <Toggle
             checked={autoArchiveEnabled}
             onChange={toggleAutoArchive}
-            label={isEn ? 'Auto-archive old sessions' : '自动归档旧会话'}
+            label={formatMsg(locale, 'settings.autoArchiveOldSessions')}
           />
         </SettingsRow>
 
         {autoArchiveEnabled ? (
           <SettingsRow
-            label={isEn ? 'Archive after' : '归档保留时长'}
+            label={formatMsg(locale, 'settings.archiveAfter')}
             description={
-              isEn
-                ? 'Sessions older than this threshold become archive candidates.'
-                : '会话最后更新时间早于该时长后，才会进入自动归档候选。'
+              formatMsg(locale, 'settings.sessionsOlderThanThisThreshold')
             }
           >
             <select
@@ -515,7 +509,7 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
             >
               {[3, 7, 14, 30].map((d) => (
                 <option key={d} value={d}>
-                  {isEn ? `${d} days` : `${d} 天后归档`}
+                  {formatMsg(locale, 'settings.days', { d })}
                 </option>
               ))}
             </select>
@@ -524,11 +518,9 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
       </SettingsGroupCard>
 
       <SectionHeading
-        title={isEn ? 'Web access password' : 'Web 访问密码'}
+        title={formatMsg(locale, 'settings.webAccessPassword')}
         description={
-          isEn
-            ? 'Require a password when opening Nex in a browser. API and WebSocket requests are verified server-side.'
-            : '开启后，首次打开 Web 端需输入密码验证才能查看和使用（后端强制校验 API 与 WebSocket）。'
+          formatMsg(locale, 'settings.requireAPasswordWhenOpening')
         }
       />
 
@@ -537,7 +529,7 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
           <div className="flex items-center gap-2.5">
             <Lock className="size-4 text-foreground-subtle" />
             <span className="text-ui-base font-medium text-foreground">
-              {isEn ? 'Password protection' : '密码保护状态'}
+              {formatMsg(locale, 'settings.passwordProtection')}
             </span>
             <span
               data-testid="web-auth-status-badge"
@@ -548,12 +540,8 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
               }`}
             >
               {authEnabled
-                ? isEn
-                  ? 'Enabled'
-                  : '已启用'
-                : isEn
-                  ? 'Disabled'
-                  : '未设置'}
+                ? formatMsg(locale, 'common.enabled2')
+                : formatMsg(locale, 'common.disabled2')}
             </span>
           </div>
           {authEnabled && (
@@ -564,7 +552,7 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover"
             >
               <LogOut className="size-3.5" />
-              <span>{isEn ? 'Lock / Log out' : '锁定并退出登录'}</span>
+              <span>{formatMsg(locale, 'settings.lockLogOut')}</span>
             </button>
           )}
         </div>
@@ -574,14 +562,14 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
             {authEnabled && (
               <label className="block space-y-1">
                 <span className="text-ui-xs text-foreground-subtle">
-                  {isEn ? 'Current password' : '当前密码'}
+                  {formatMsg(locale, 'settings.currentPassword')}
                 </span>
                 <input
                   type="password"
                   data-testid="web-password-current"
                   value={currentPwd}
                   onChange={(e) => setCurrentPwd(e.target.value)}
-                  placeholder={isEn ? 'Required to change/remove' : '修改或移除时必填'}
+                  placeholder={formatMsg(locale, 'settings.requiredToChangeRemove')}
                   className={settingsInputClass}
                 />
               </label>
@@ -589,32 +577,28 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
             <label className="block space-y-1">
               <span className="text-ui-xs text-foreground-subtle">
                 {authEnabled
-                  ? isEn
-                    ? 'New password'
-                    : '新密码'
-                  : isEn
-                    ? 'Set password'
-                    : '设置访问密码'}
+                  ? formatMsg(locale, 'settings.newPassword')
+                  : formatMsg(locale, 'settings.setPassword')}
               </span>
               <input
                 type="password"
                 data-testid="web-password-new"
                 value={newPwd}
                 onChange={(e) => setNewPwd(e.target.value)}
-                placeholder={isEn ? 'At least 4 characters' : '至少 4 位字符'}
+                placeholder={formatMsg(locale, 'settings.atLeast4Characters')}
                 className={settingsInputClass}
               />
             </label>
             <label className="block space-y-1">
               <span className="text-ui-xs text-foreground-subtle">
-                {isEn ? 'Confirm password' : '确认新密码'}
+                {formatMsg(locale, 'settings.confirmPassword')}
               </span>
               <input
                 type="password"
                 data-testid="web-password-confirm"
                 value={confirmPwd}
                 onChange={(e) => setConfirmPwd(e.target.value)}
-                placeholder={isEn ? 'Repeat new password' : '再次输入新密码'}
+                placeholder={formatMsg(locale, 'settings.repeatNewPassword')}
                 className={settingsInputClass}
               />
             </label>
@@ -633,7 +617,7 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
                 onClick={() => void handleClearPassword()}
                 className="h-8 rounded-lg border border-destructive/30 px-3 text-ui-xs font-medium text-destructive transition-colors hover:bg-destructive-surface disabled:opacity-50"
               >
-                {isEn ? 'Disable password' : '移除密码保护'}
+                {formatMsg(locale, 'settings.disablePassword')}
               </button>
             )}
             <button
@@ -644,12 +628,8 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
               className="h-8 rounded-lg bg-foreground px-3.5 text-ui-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-45"
             >
               {authEnabled
-                ? isEn
-                  ? 'Update password'
-                  : '更新密码'
-                : isEn
-                  ? 'Enable password'
-                  : '保存并启用密码'}
+                ? formatMsg(locale, 'settings.updatePassword')
+                : formatMsg(locale, 'settings.enablePassword')}
             </button>
           </div>
         </div>
@@ -666,8 +646,7 @@ const THEME_CARDS = [
   {
     id: 'system' as const,
     icon: Monitor,
-    zh: '跟随系统',
-    en: 'System',
+    labelKey: 'settings.theme.system' as MessageKey,
     preview: 'bg-gradient-to-r from-[#f8f8f8] to-[#161616]',
     side: 'bg-black/10',
     line: 'bg-black/25',
@@ -676,8 +655,7 @@ const THEME_CARDS = [
   {
     id: 'light' as const,
     icon: Sun,
-    zh: '浅色',
-    en: 'Light',
+    labelKey: 'settings.theme.light' as MessageKey,
     preview: 'bg-[#f8f8f8]',
     side: 'bg-[#ececee]',
     line: 'bg-black/25',
@@ -686,8 +664,7 @@ const THEME_CARDS = [
   {
     id: 'dark' as const,
     icon: Moon,
-    zh: '深色',
-    en: 'Dark',
+    labelKey: 'settings.theme.dark' as MessageKey,
     preview: 'bg-[#161616]',
     side: 'bg-[#202020]',
     line: 'bg-white/30',
@@ -697,7 +674,6 @@ const THEME_CARDS = [
 
 function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
   const { locale, preferences, refreshInitialData, updateThemeQuick } = useNexStore();
-  const isEn = locale === 'en-US';
 
   const [uiFontPx, setUiFontPx] = useState(() => hostBridge.getDeviceFontScale());
   const [sansFont, setSansFont] = useState(preferences.font_family);
@@ -719,7 +695,7 @@ function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
         }),
       }).catch(() => {});
       await refreshInitialData();
-      onFlash(isEn ? 'Appearance settings saved' : '界面设置已保存并生效');
+      onFlash(formatMsg(locale, 'settings.appearanceSettingsSaved'));
     } finally {
       setSaving(false);
     }
@@ -727,7 +703,7 @@ function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
 
   const chooseTheme = async (theme: UserPreferences['theme']) => {
     await updateThemeQuick(theme);
-    onFlash(isEn ? 'Theme updated' : '界面主题已切换');
+    onFlash(formatMsg(locale, 'settings.themeUpdated'));
   };
 
   return (
@@ -736,14 +712,14 @@ function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
         <div className="space-y-3 px-5 py-4">
           <div>
             <div className="text-ui-base font-medium text-foreground">
-              {isEn ? 'Theme' : '界面主题'}
+              {formatMsg(locale, 'settings.theme')}
             </div>
             <p className="mt-1 text-ui-sm leading-relaxed text-foreground-subtle">
-              {isEn ? 'Use light, dark, or match the system setting.' : '使用浅色、深色，或跟随系统设置。'}
+              {formatMsg(locale, 'settings.useLightDarkOrMatch')}
             </p>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {THEME_CARDS.map(({ id, icon: Icon, zh, en, preview, side, line, lineSoft }) => {
+            {THEME_CARDS.map(({ id, icon: Icon, labelKey, preview, side, line, lineSoft }) => {
               const active = preferences.theme === id;
               return (
                 <button
@@ -768,7 +744,7 @@ function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
                     <span className="flex min-w-0 items-center gap-1.5">
                       <Icon className="size-3.5 shrink-0 text-foreground-subtle" />
                       <span className="truncate text-ui-sm font-medium text-foreground">
-                        {isEn ? en : zh}
+                        {formatMsg(locale, labelKey)}
                       </span>
                     </span>
                     {active ? (
@@ -782,11 +758,9 @@ function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
         </div>
 
         <SettingsRow
-          label={isEn ? 'Interface font size' : '界面字号'}
+          label={formatMsg(locale, 'settings.interfaceFontSize')}
           description={
-            isEn
-              ? 'Adjust interface text between 12px and 18px. Icons and layout stay intact.'
-              : '在 12px ~ 18px 间调整界面文字大小，图标与布局尺寸不受影响。'
+            formatMsg(locale, 'settings.adjustInterfaceTextBetween12px')
           }
         >
           <input
@@ -807,34 +781,30 @@ function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
         </SettingsRow>
 
         <SettingsRow
-          label={isEn ? 'Expand thinking by default' : '默认展开思考过程'}
+          label={formatMsg(locale, 'settings.expandThinkingByDefault')}
           description={
-            isEn
-              ? 'Reasoning blocks are expanded when they arrive instead of collapsed.'
-              : '对话流收到推理块时默认展开而非折叠。'
+            formatMsg(locale, 'settings.reasoningBlocksAreExpandedWhen')
           }
         >
           <Toggle
             checked={expandThinking}
             onChange={setExpandThinking}
-            label={isEn ? 'Expand thinking by default' : '默认展开思考过程'}
+            label={formatMsg(locale, 'settings.expandThinkingByDefault')}
           />
         </SettingsRow>
       </SettingsGroupCard>
 
       <SectionHeading
-        title={isEn ? 'Code' : '代码设置'}
+        title={formatMsg(locale, 'settings.code')}
         description={
-          isEn
-            ? 'Configure code typography. These settings do not depend on interface size.'
-            : '设置代码内容的字体与预览效果，不受界面字号影响。'
+          formatMsg(locale, 'settings.configureCodeTypographyTheseSettings')
         }
       />
 
       <SettingsGroupCard>
         <SettingsRow
-          label={isEn ? 'Interface font (Sans)' : '界面字体 (Sans)'}
-          description={isEn ? 'Sans-serif stack used across the interface.' : '界面全局使用的无衬线字体栈。'}
+          label={formatMsg(locale, 'settings.interfaceFontSans')}
+          description={formatMsg(locale, 'settings.sansSerifStackUsedAcross')}
         >
           <input
             value={sansFont}
@@ -845,9 +815,9 @@ function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
         </SettingsRow>
 
         <SettingsRow
-          label={isEn ? 'Code & terminal font (Mono)' : '代码与终端字体 (Mono)'}
+          label={formatMsg(locale, 'settings.codeTerminalFontMono')}
           description={
-            isEn ? 'Monospace stack used by code blocks and terminals.' : '代码块与终端使用的等宽字体栈。'
+            formatMsg(locale, 'settings.monospaceStackUsedByCode')
           }
         >
           <input
@@ -860,7 +830,7 @@ function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
 
         <div className="space-y-2 px-5 py-4">
           <div className="text-ui-base font-medium text-foreground">
-            {isEn ? 'Live preview' : '实时预览'}
+            {formatMsg(locale, 'settings.livePreview')}
           </div>
           <HighlightedCode
             language="ts"
@@ -876,7 +846,7 @@ function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
             onClick={() => void saveAppearance()}
             className="h-8 rounded-lg bg-primary px-4 text-ui-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
-            {isEn ? 'Save changes' : '保存设置'}
+            {formatMsg(locale, 'settings.saveChanges')}
           </button>
         </div>
       </SettingsGroupCard>
@@ -945,7 +915,6 @@ function ProvidersAndModelsSection({
     modelOrder,
     reorderProviderModels,
   } = useNexStore();
-  const isEn = locale === 'en-US';
 
   const [draft, setDraft] = useState<ProviderDraft | null>(null);
   const [showKey, setShowKey] = useState(false);
@@ -986,7 +955,7 @@ function ProvidersAndModelsSection({
     setShowAdvanced(false);
     setDraft({
       id: '',
-      name: isEn ? 'New provider' : '新供应商',
+      name: formatMsg(locale, 'settings.newProvider'),
       driver: 'openai_responses',
       baseUrl: 'https://api.openai.com/v1',
       apiKey: '',
@@ -1026,7 +995,7 @@ function ProvidersAndModelsSection({
     }).catch(() => {});
     await refreshInitialData();
     setDraft({ ...next, id });
-    onFlash(isEn ? `Provider "${name}" saved` : `供应商 "${name}" 配置已保存并同步`);
+    onFlash(formatMsg(locale, 'settings.providerSaved', { name }));
   };
 
   const removeProvider = async (id: string) => {
@@ -1035,7 +1004,7 @@ function ProvidersAndModelsSection({
     );
     await refreshInitialData();
     setDraft(null);
-    onFlash(isEn ? 'Provider deleted' : '供应商已删除');
+    onFlash(formatMsg(locale, 'settings.providerDeleted'));
   };
 
   const syncModelsDev = async () => {
@@ -1047,15 +1016,11 @@ function ProvidersAndModelsSection({
       });
       await refreshInitialData();
       onFlash(
-        isEn
-          ? `Synced ${res.synced_count} models from models.dev`
-          : `成功从 models.dev 同步更新了 ${res.synced_count} 个模型的窗口与计费单价`,
+        formatMsg(locale, 'settings.syncedModelsFromModelsDev', { synced_count: res.synced_count }),
       );
     } catch (e) {
       onFlash(
-        isEn
-          ? `models.dev sync failed: ${(e as Error).message}`
-          : `models.dev 在线同步失败: ${(e as Error).message}`,
+        formatMsg(locale, 'settings.modelsDevSyncFailed', { message: (e as Error).message }),
       );
     } finally {
       setSyncing(false);
@@ -1077,9 +1042,9 @@ function ProvidersAndModelsSection({
         if (res.meta.max_output_tokens > 0) setNewMaxOut(res.meta.max_output_tokens);
         setNewSupportsVision(Boolean(res.meta.supports_vision));
         setNewSupportsReasoning(Boolean(res.meta.supports_reasoning));
-        onFlash(isEn ? `Loaded metadata for "${res.meta.id}"` : `已从 models.dev 匹配 "${res.meta.id}"`);
+        onFlash(formatMsg(locale, 'settings.loadedMetadataFor', { id: res.meta.id }));
       } else {
-        onFlash(isEn ? 'No matching model found in models.dev' : '未在 models.dev 找到匹配模型');
+        onFlash(formatMsg(locale, 'settings.noMatchingModelFoundIn'));
       }
     } catch (e) {
       onFlash((e as Error).message);
@@ -1105,7 +1070,7 @@ function ProvidersAndModelsSection({
       );
       setRemoteModels((res.models || []).filter((id) => !existingIds.has(id)));
     } catch (e) {
-      onFlash(isEn ? `Fetch /v1/models failed: ${(e as Error).message}` : `获取 /v1/models 失败: ${(e as Error).message}`);
+      onFlash(formatMsg(locale, 'settings.fetchV1ModelsFailed', { message: (e as Error).message }));
       setFetchRemoteOpen(false);
     } finally {
       setFetchingRemote(false);
@@ -1114,7 +1079,7 @@ function ProvidersAndModelsSection({
 
   const addSelectedRemoteModels = async () => {
     if (!draft?.id) {
-      onFlash(isEn ? 'Save the provider before adding models' : '请先保存供应商，再添加模型');
+      onFlash(formatMsg(locale, 'settings.saveTheProviderBeforeAdding'));
       return;
     }
     const chosen = Object.entries(remoteSelected)
@@ -1153,7 +1118,7 @@ function ProvidersAndModelsSection({
       }
       setFetchRemoteOpen(false);
       await refreshInitialData();
-      onFlash(isEn ? `Added ${chosen.length} models` : `已添加 ${chosen.length} 个模型`);
+      onFlash(formatMsg(locale, 'settings.addedModels', { length: chosen.length }));
     } finally {
       setAddingRemote(false);
     }
@@ -1177,10 +1142,10 @@ function ProvidersAndModelsSection({
       );
       if (res.ok) {
         setTestResults((prev) => ({ ...prev, [m.id]: { ok: true, msg: `${res.latency_ms ?? 0}ms` } }));
-        onFlash(isEn ? `Model "${m.id}" OK (${res.latency_ms ?? 0}ms)` : `模型 "${m.id}" 测试通过 (${res.latency_ms ?? 0}ms)`);
+        onFlash(formatMsg(locale, 'settings.modelOkMs', { id: m.id, v: res.latency_ms ?? 0 }));
       } else {
         setTestResults((prev) => ({ ...prev, [m.id]: { ok: false, msg: res.error || 'Error' } }));
-        onFlash(isEn ? `Test failed: ${res.error}` : `模型测试失败: ${res.error}`);
+        onFlash(formatMsg(locale, 'settings.testFailed', { error: res.error || '' }));
       }
     } catch (e) {
       setTestResults((prev) => ({ ...prev, [m.id]: { ok: false, msg: (e as Error).message } }));
@@ -1246,7 +1211,7 @@ function ProvidersAndModelsSection({
   const addCustomModel = async () => {
     if (!draft || !newModelId.trim()) return;
     if (!draft.id) {
-      onFlash(isEn ? 'Save the provider before adding models' : '请先保存供应商，再添加模型');
+      onFlash(formatMsg(locale, 'settings.saveTheProviderBeforeAdding'));
       return;
     }
     const modelId = newModelId.trim();
@@ -1279,12 +1244,8 @@ function ProvidersAndModelsSection({
     await refreshInitialData();
     onFlash(
       editingModel
-        ? isEn
-          ? `Model "${modelId}" updated`
-          : `已更新模型 "${modelId}"`
-        : isEn
-          ? `Model "${modelId}" added`
-          : `已向 ${draft.id} 添加模型 "${modelId}"`,
+        ? formatMsg(locale, 'settings.modelUpdated', { modelId })
+        : formatMsg(locale, 'settings.modelAddedToProvider', { modelId, providerId: draft.id }),
     );
   };
 
@@ -1294,7 +1255,7 @@ function ProvidersAndModelsSection({
       method: 'DELETE',
     }).catch(() => {});
     await refreshInitialData();
-    onFlash(isEn ? `Deleted "${m.id}"` : `已删除模型 "${m.id}"`);
+    onFlash(formatMsg(locale, 'settings.deleted', { id: m.id }));
   };
 
   const renameModel = async (m: ModelMeta, nextName: string) => {
@@ -1306,7 +1267,7 @@ function ProvidersAndModelsSection({
       body: JSON.stringify({ ...m, display_name: clean }),
     }).catch(() => {});
     await refreshInitialData();
-    onFlash(isEn ? `Renamed model to "${clean}"` : `已重命名为 "${clean}"`);
+    onFlash(formatMsg(locale, 'settings.renamedModelTo', { clean }));
   };
 
   const providerModels = (() => {
@@ -1334,7 +1295,7 @@ function ProvidersAndModelsSection({
             className="flex h-8 items-center gap-1 rounded-lg bg-primary px-3.5 text-ui-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             <Plus className="size-3.5" />
-            <span>{isEn ? 'Add provider' : '添加供应商'}</span>
+            <span>{formatMsg(locale, 'settings.addProvider')}</span>
           </button>
         </div>
       </div>
@@ -1343,11 +1304,11 @@ function ProvidersAndModelsSection({
         {/* Left: custom providers */}
         <div className="space-y-1 border-b border-border p-3 md:border-r md:border-b-0">
           <div className="px-2.5 py-1 text-ui-xs font-medium text-foreground-subtlest">
-            {isEn ? 'Custom providers' : '自定义供应商'}
+            {formatMsg(locale, 'settings.customProviders')}
           </div>
           {providers.length === 0 ? (
             <p className="px-2.5 py-2 text-ui-sm text-foreground-subtlest">
-              {isEn ? 'No providers yet.' : '暂无供应商。'}
+              {formatMsg(locale, 'settings.noProvidersYet')}
             </p>
           ) : (
             providers.map((p) => {
@@ -1386,9 +1347,7 @@ function ProvidersAndModelsSection({
             <div className="flex min-h-[280px] flex-col items-center justify-center gap-3 text-center">
               <Package className="size-6 text-foreground-subtlest" />
               <p className="text-ui-sm text-foreground-subtle">
-                {isEn
-                  ? 'Select a provider on the left, or add a new one.'
-                  : '在左侧选择供应商，或添加一个新的供应商。'}
+                {formatMsg(locale, 'settings.selectAProviderOnThe')}
               </p>
               <button
                 type="button"
@@ -1396,7 +1355,7 @@ function ProvidersAndModelsSection({
                 className="flex h-8 items-center gap-1 rounded-lg bg-primary px-3.5 text-ui-sm font-medium text-primary-foreground hover:opacity-90"
               >
                 <Plus className="size-3.5" />
-                <span>{isEn ? 'Add provider' : '添加供应商'}</span>
+                <span>{formatMsg(locale, 'settings.addProvider')}</span>
               </button>
             </div>
           ) : (
@@ -1413,12 +1372,12 @@ function ProvidersAndModelsSection({
                         (e.target as HTMLInputElement).blur();
                       }
                     }}
-                    placeholder={isEn ? 'Provider name (click to rename)' : '供应商名称（点击重命名）'}
-                    aria-label={isEn ? 'Provider name' : '供应商名称'}
+                    placeholder={formatMsg(locale, 'settings.providerNameClickToRename')}
+                    aria-label={formatMsg(locale, 'settings.providerName')}
                     className="h-8 min-w-0 flex-1 rounded-lg border border-border/70 bg-input/60 px-2.5 text-ui-lg font-semibold text-foreground transition-colors hover:border-border-hover hover:bg-input focus:border-primary focus:bg-input focus:outline-none"
                   />
                   <span className="shrink-0 text-ui-xs text-foreground-subtlest opacity-0 transition-opacity group-hover:opacity-100">
-                    {isEn ? 'Rename' : '可重命名'}
+                    {formatMsg(locale, 'settings.rename')}
                   </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
@@ -1428,14 +1387,14 @@ function ProvidersAndModelsSection({
                       setDraft({ ...draft, enabled: v });
                       void persistDraft({ enabled: v });
                     }}
-                    label={isEn ? 'Provider enabled' : '启用供应商'}
+                    label={formatMsg(locale, 'settings.providerEnabled')}
                   />
                   {isSavedDraft ? (
                     <button
                       type="button"
                       onClick={() => void removeProvider(draft.id)}
-                      aria-label={isEn ? 'Delete provider' : '删除供应商'}
-                      title={isEn ? 'Delete provider' : '删除供应商'}
+                      aria-label={formatMsg(locale, 'settings.deleteProvider')}
+                      title={formatMsg(locale, 'settings.deleteProvider')}
                       className="ml-1 flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
                     >
                       <Trash2 className="size-4" />
@@ -1458,7 +1417,7 @@ function ProvidersAndModelsSection({
 
                 <label className="block space-y-1.5">
                   <span className="text-ui-xs text-foreground-subtle">
-                    {isEn ? 'API format' : 'API 格式'}
+                    {formatMsg(locale, 'settings.apiFormat')}
                   </span>
                   <select
                     value={draft.driver}
@@ -1490,7 +1449,7 @@ function ProvidersAndModelsSection({
                     <button
                       type="button"
                       onClick={() => setShowKey((v) => !v)}
-                      aria-label={showKey ? (isEn ? 'Hide API key' : '隐藏密钥') : isEn ? 'Show API key' : '显示密钥'}
+                      aria-label={showKey ? (formatMsg(locale, 'settings.hideApiKey')) : formatMsg(locale, 'settings.showApiKey')}
                       className="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
                     >
                       {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -1502,7 +1461,7 @@ function ProvidersAndModelsSection({
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <label className="block space-y-1.5">
                       <span className="text-ui-xs text-foreground-subtle">
-                        {isEn ? 'Provider ID' : '供应商 ID'}
+                        {formatMsg(locale, 'settings.providerId')}
                       </span>
                       <input
                         value={draft.id}
@@ -1514,7 +1473,7 @@ function ProvidersAndModelsSection({
                     </label>
                     <label className="block space-y-1.5">
                       <span className="text-ui-xs text-foreground-subtle">
-                        {isEn ? 'Credential routing' : '密钥路由'}
+                        {formatMsg(locale, 'settings.credentialRouting')}
                       </span>
                       <select
                         value={draft.proxyMode}
@@ -1525,9 +1484,9 @@ function ProvidersAndModelsSection({
                         }}
                         className={settingsSelectClass}
                       >
-                        <option value="direct">{isEn ? 'Direct' : 'Direct（直接下发）'}</option>
+                        <option value="direct">{formatMsg(locale, 'settings.direct')}</option>
                         <option value="server_proxy">
-                          {isEn ? 'Server proxy' : 'Server Proxy（中心代理）'}
+                          {formatMsg(locale, 'settings.serverProxy')}
                         </option>
                       </select>
                     </label>
@@ -1540,12 +1499,8 @@ function ProvidersAndModelsSection({
                   className="text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground"
                 >
                   {showAdvanced
-                    ? isEn
-                      ? 'Hide advanced'
-                      : '收起高级选项'
-                    : isEn
-                      ? 'Advanced'
-                      : '高级选项'}
+                    ? formatMsg(locale, 'settings.hideAdvanced')
+                    : formatMsg(locale, 'settings.advanced')}
                 </button>
               </div>
 
@@ -1553,7 +1508,7 @@ function ProvidersAndModelsSection({
               <div className="space-y-2 pt-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-ui-sm font-medium text-foreground">
-                    {isEn ? 'Model list' : '模型列表'}
+                    {formatMsg(locale, 'settings.modelList')}
                   </span>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -1562,7 +1517,7 @@ function ProvidersAndModelsSection({
                       className="flex h-7 items-center gap-1 rounded-lg border border-border bg-card px-2.5 text-ui-xs text-foreground transition-colors hover:bg-hover"
                     >
                       <Globe className="size-3" />
-                      <span>{isEn ? 'Fetch from /v1/models' : '从 /v1/models 获取'}</span>
+                      <span>{formatMsg(locale, 'settings.fetchFromV1Models')}</span>
                     </button>
                     <button
                       type="button"
@@ -1570,7 +1525,7 @@ function ProvidersAndModelsSection({
                       className="flex h-7 items-center gap-1 rounded-lg border border-border bg-card px-2.5 text-ui-xs text-foreground transition-colors hover:bg-hover"
                     >
                       <Plus className="size-3" />
-                      <span>{isEn ? 'Add model manually' : '手动添加模型'}</span>
+                      <span>{formatMsg(locale, 'settings.addModelManually')}</span>
                     </button>
                   </div>
                 </div>
@@ -1581,12 +1536,10 @@ function ProvidersAndModelsSection({
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <h3 className="text-ui-lg font-semibold text-foreground">
-                            {isEn ? 'Select models from /v1/models' : '从 /v1/models 选择模型'}
+                            {formatMsg(locale, 'settings.selectModelsFromV1Models')}
                           </h3>
                           <p className="mt-1 text-ui-xs text-foreground-subtle">
-                            {isEn
-                              ? 'Reads the model list using the provider base URL and API key above.'
-                              : '使用上方配置的 Base URL 与 API Key 读取模型列表。'}
+                            {formatMsg(locale, 'settings.readsTheModelListUsing')}
                           </p>
                         </div>
                         <button
@@ -1603,7 +1556,7 @@ function ProvidersAndModelsSection({
                         <input
                           value={remoteFilter}
                           onChange={(e) => setRemoteFilter(e.target.value)}
-                          placeholder={isEn ? 'Filter by name' : '按名称筛选'}
+                          placeholder={formatMsg(locale, 'settings.filterByName')}
                           className="h-8 w-full bg-transparent text-ui-sm text-foreground outline-none placeholder-foreground-subtlest"
                         />
                       </div>
@@ -1623,25 +1576,25 @@ function ProvidersAndModelsSection({
                             }}
                             className="rounded-md bg-secondary px-2 py-1 text-foreground hover:bg-hover"
                           >
-                            {isEn ? 'Select all listed' : '全选'}
+                            {formatMsg(locale, 'settings.selectAllListed')}
                           </button>
                           <button
                             type="button"
                             onClick={() => setRemoteSelected({})}
                             className="px-2 py-1 text-foreground-subtle hover:text-foreground"
                           >
-                            {isEn ? 'Clear selection' : '清空'}
+                            {formatMsg(locale, 'settings.clearSelection')}
                           </button>
                         </div>
                         <span className="text-foreground-subtle">
-                          {Object.values(remoteSelected).filter(Boolean).length} {isEn ? 'selected' : '已选'}
+                          {Object.values(remoteSelected).filter(Boolean).length} {formatMsg(locale, 'settings.selected')}
                         </span>
                       </div>
 
                       <div className="mt-2.5 flex-1 space-y-1.5 overflow-y-auto pr-1">
                         {fetchingRemote ? (
                           <div className="py-8 text-center text-ui-sm text-foreground-subtle">
-                            {isEn ? 'Loading…' : '加载中…'}
+                            {formatMsg(locale, 'common.loading')}
                           </div>
                         ) : (
                           remoteModels
@@ -1670,7 +1623,7 @@ function ProvidersAndModelsSection({
                           onClick={() => setFetchRemoteOpen(false)}
                           className="h-8 rounded-lg px-3 text-ui-sm text-foreground-subtle hover:bg-hover"
                         >
-                          {isEn ? 'Cancel' : '取消'}
+                          {formatMsg(locale, 'common.cancel')}
                         </button>
                         <button
                           type="button"
@@ -1679,12 +1632,8 @@ function ProvidersAndModelsSection({
                           className="h-8 rounded-lg bg-primary px-3 text-ui-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
                         >
                           {addingRemote
-                            ? isEn
-                              ? 'Adding…'
-                              : '添加中…'
-                            : isEn
-                              ? 'Add selected models'
-                              : '添加所选模型'}
+                            ? formatMsg(locale, 'settings.adding')
+                            : formatMsg(locale, 'settings.addSelectedModels')}
                         </button>
                       </div>
                     </div>
@@ -1696,7 +1645,7 @@ function ProvidersAndModelsSection({
                     <div className="zcode-dialog-content w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-xl">
                       <div className="flex items-center justify-between">
                         <h3 className="text-ui-lg font-semibold text-foreground">
-                          {isEn ? 'Add model manually' : '手动添加模型'}
+                          {formatMsg(locale, 'settings.addModelManually')}
                         </h3>
                         <button
                           type="button"
@@ -1719,19 +1668,19 @@ function ProvidersAndModelsSection({
                         </label>
                         <label className="block space-y-1">
                           <span className="text-ui-xs text-foreground-subtle">
-                            {isEn ? 'Model name' : '显示名称'}
+                            {formatMsg(locale, 'settings.modelName')}
                           </span>
                           <input
                             value={newModelName}
                             onChange={(e) => setNewModelName(e.target.value)}
-                            placeholder={isEn ? 'Optional short name' : '可选短名称'}
+                            placeholder={formatMsg(locale, 'settings.optionalShortName')}
                             className={settingsInputClass}
                           />
                         </label>
                         <div className="grid grid-cols-2 gap-3">
                           <label className="block space-y-1">
                             <span className="text-ui-xs text-foreground-subtle">
-                              {isEn ? 'Context window' : '上下文窗口'}
+                              {formatMsg(locale, 'settings.contextWindow')}
                             </span>
                             <input
                               type="number"
@@ -1742,7 +1691,7 @@ function ProvidersAndModelsSection({
                           </label>
                           <label className="block space-y-1">
                             <span className="text-ui-xs text-foreground-subtle">
-                              {isEn ? 'Max output tokens' : '最大输出'}
+                              {formatMsg(locale, 'settings.maxOutputTokens')}
                             </span>
                             <input
                               type="number"
@@ -1774,9 +1723,7 @@ function ProvidersAndModelsSection({
                           <div className="space-y-2.5 rounded-xl border border-border/70 bg-surface/50 p-3">
                             <label className="block space-y-1">
                               <span className="text-ui-xs text-foreground-subtle">
-                                {isEn
-                                  ? 'Reasoning levels (low → high, comma-separated)'
-                                  : '推理强度档位（按低→高逗号分隔，留空则按模型族自动推断）'}
+                                {formatMsg(locale, 'settings.reasoningLevelsLowHighComma')}
                               </span>
                               <input
                                 value={newReasoningLevels}
@@ -1787,9 +1734,7 @@ function ProvidersAndModelsSection({
                             </label>
                             <label className="block space-y-1">
                               <span className="text-ui-xs text-foreground-subtle">
-                                {isEn
-                                  ? 'Wire effort mapping (optional, e.g. max=xhigh, off=none)'
-                                  : '协议参数映射（可选，如 max=xhigh, off=none 或 high=12000）'}
+                                {formatMsg(locale, 'settings.wireEffortMappingOptionalE')}
                               </span>
                               <input
                                 value={newReasoningMap}
@@ -1810,12 +1755,8 @@ function ProvidersAndModelsSection({
                           className="text-ui-xs text-foreground-subtle underline hover:text-foreground disabled:opacity-40"
                         >
                           {fetchingInfo
-                            ? isEn
-                              ? 'Fetching…'
-                              : '获取中…'
-                            : isEn
-                              ? 'Fetch model info'
-                              : '从 models.dev 获取信息'}
+                            ? formatMsg(locale, 'settings.fetching')
+                            : formatMsg(locale, 'settings.fetchModelInfo')}
                         </button>
                         <div className="flex items-center gap-2">
                           <button
@@ -1823,14 +1764,14 @@ function ProvidersAndModelsSection({
                             onClick={() => setShowAddModel(false)}
                             className="h-8 rounded-lg px-3 text-ui-sm text-foreground-subtle hover:bg-hover"
                           >
-                            {isEn ? 'Cancel' : '取消'}
+                            {formatMsg(locale, 'common.cancel')}
                           </button>
                           <button
                             type="button"
                             onClick={() => void addCustomModel()}
                             className="h-8 rounded-lg bg-primary px-3 text-ui-sm font-medium text-primary-foreground hover:opacity-90"
                           >
-                            {isEn ? 'Save' : '保存'}
+                            {formatMsg(locale, 'common.save')}
                           </button>
                         </div>
                       </div>
@@ -1840,9 +1781,7 @@ function ProvidersAndModelsSection({
 
                 {providerModels.length === 0 ? (
                   <p className="py-6 text-center text-ui-sm text-foreground-subtlest">
-                    {isEn
-                      ? 'No models registered for this provider yet.'
-                      : '该供应商暂未注册模型。'}
+                    {formatMsg(locale, 'settings.noModelsRegisteredForThis')}
                   </p>
                 ) : (
                   <div className="divide-y divide-border">
@@ -1877,9 +1816,7 @@ function ProvidersAndModelsSection({
                             draggingModelId === m.id ? 'opacity-45' : ''
                           }`}
                           title={
-                            isEn
-                              ? `${m.id} · In $${m.pricing.input_per_1m}/1M · Out $${m.pricing.output_per_1m}/1M`
-                              : `${m.id} · 输入 $${m.pricing.input_per_1m}/1M · 输出 $${m.pricing.output_per_1m}/1M`
+                            formatMsg(locale, 'settings.in1mOut1m', { id: m.id, input_per_1m: m.pricing.input_per_1m, output_per_1m: m.pricing.output_per_1m })
                           }
                         >
                           <div className="flex min-w-0 items-center gap-1.5">
@@ -1919,7 +1856,7 @@ function ProvidersAndModelsSection({
                             <button
                               type="button"
                               onClick={() => openEditModelDialog(m)}
-                              title={isEn ? 'Configure model & reasoning levels' : '配置模型与推理强度档位'}
+                              title={formatMsg(locale, 'settings.configureModelReasoningLevels')}
                               className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
                             >
                               <SlidersHorizontal className="size-3.5" />
@@ -1930,7 +1867,7 @@ function ProvidersAndModelsSection({
                                 setRenamingModelId(m.id);
                                 setRenameModelDraft(m.display_name || m.id);
                               }}
-                              title={isEn ? 'Rename display name' : '重命名显示名称'}
+                              title={formatMsg(locale, 'settings.renameDisplayName')}
                               className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
                             >
                               <Pencil className="size-3.5" />
@@ -1939,8 +1876,8 @@ function ProvidersAndModelsSection({
                               type="button"
                               disabled={testingModelId === m.id}
                               onClick={() => void testModelConnection(m)}
-                              title={isEn ? 'Test model connection' : '测试模型连通性'}
-                              aria-label={isEn ? 'Test model connection' : '测试模型连通性'}
+                              title={formatMsg(locale, 'settings.testModelConnection')}
+                              aria-label={formatMsg(locale, 'settings.testModelConnection')}
                               className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground disabled:opacity-40"
                             >
                               <Cable className={`size-3.5 ${testingModelId === m.id ? 'animate-pulse text-primary' : ''}`} />
@@ -1949,9 +1886,9 @@ function ProvidersAndModelsSection({
                               type="button"
                               onClick={() => {
                                 void navigator.clipboard?.writeText(m.id);
-                                onFlash(isEn ? `Copied "${m.id}"` : `已复制模型 ID "${m.id}"`);
+                                onFlash(formatMsg(locale, 'settings.copied', { id: m.id }));
                               }}
-                              aria-label={isEn ? 'Copy model ID' : '复制模型 ID'}
+                              aria-label={formatMsg(locale, 'settings.copyModelId')}
                               className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
                             >
                               <Copy className="size-3.5" />
@@ -1959,7 +1896,7 @@ function ProvidersAndModelsSection({
                             <button
                               type="button"
                               onClick={() => void removeModel(m)}
-                              aria-label={isEn ? 'Delete model' : '删除模型'}
+                              aria-label={formatMsg(locale, 'settings.deleteModel')}
                               className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
                             >
                               <Trash2 className="size-3.5" />
@@ -1967,7 +1904,7 @@ function ProvidersAndModelsSection({
                             <Toggle
                               checked={visible}
                               onChange={() => toggleModelVisibility(m.provider_id, m.id)}
-                              label={isEn ? 'Show in model picker' : '在模型选择框中显示'}
+                              label={formatMsg(locale, 'settings.showInModelPicker')}
                             />
                           </div>
                         </div>

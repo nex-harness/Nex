@@ -20,16 +20,7 @@ import {
 import { useMemo, useState } from 'react';
 import { useNexStore } from '../core/store';
 import { SessionRecord } from '../core/types';
-import { formatMsg } from '../i18n/messages';
-
-function formatRelativeShort(ts: number): string {
-  if (!ts) return '';
-  const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (diffSec < 60) return 'now';
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h`;
-  return `${Math.floor(diffSec / 86400)}d`;
-}
+import { formatMsg, formatRelativeTimeShort } from '../i18n/messages';
 
 function projectLeaf(workspacePath: string, fallback: string): string {
   return workspacePath.split(/[\\/]/).filter(Boolean).pop() || fallback;
@@ -183,7 +174,7 @@ export function ProjectSidebar() {
 
         <span className="flex shrink-0 items-center gap-1.5 text-ui-xs tabular-nums text-foreground-subtlest group-hover:hidden">
           <SessionRunningDot sessionId={sess.id} status={sess.status} />
-          {formatRelativeShort(sess.last_active_at || sess.updated_at)}
+          {formatRelativeTimeShort(sess.last_active_at || sess.updated_at, locale)}
         </span>
 
         <div className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
@@ -269,7 +260,7 @@ export function ProjectSidebar() {
 
         <span className="flex shrink-0 items-center gap-1.5 text-ui-xs tabular-nums text-foreground-subtlest">
           <SessionRunningDot sessionId={sess.id} status={sess.status} />
-          {formatRelativeShort(sess.last_active_at || sess.updated_at)}
+          {formatRelativeTimeShort(sess.last_active_at || sess.updated_at, locale)}
         </span>
       </div>
     );
@@ -327,12 +318,8 @@ export function ProjectSidebar() {
                   className="flex h-7 w-full items-center rounded-lg pl-5 pr-2 text-left text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground-subtle"
                 >
                   {showAll
-                    ? formatMsg(locale, 'project.view') === '筛选视图'
-                      ? '收起'
-                      : 'Show less'
-                    : formatMsg(locale, 'project.view') === '筛选视图'
-                      ? '显示更多'
-                      : 'Show more'}
+                    ? formatMsg(locale, 'sidebar.showLess')
+                    : formatMsg(locale, 'sidebar.showMore')}
                 </button>
               )}
             </div>
@@ -342,8 +329,7 @@ export function ProjectSidebar() {
     );
   };
 
-  const taskListLabel = formatMsg(locale, 'project.view') === '筛选视图' ? '任务列表' : 'Task list';
-  const isZh = formatMsg(locale, 'project.view') === '筛选视图';
+  const taskListLabel = formatMsg(locale, 'sidebar.taskList');
 
   return (
     <aside
@@ -401,7 +387,7 @@ export function ProjectSidebar() {
         >
           <span className="flex items-center gap-2.5 text-ui-base font-normal text-foreground">
             <Search className="size-4 shrink-0" />
-            <span className="truncate">{isZh ? '全局搜索与指令' : 'Search & commands'}</span>
+            <span className="truncate">{formatMsg(locale, 'sidebar.searchCommands')}</span>
           </span>
           <span className="shrink-0 text-ui-xs text-foreground-subtlest">⌘ K</span>
         </button>
@@ -513,7 +499,7 @@ export function ProjectSidebar() {
         ) : (
           <div className="space-y-3">
             <div className="px-2 text-ui-xs font-medium text-foreground-subtlest">
-              {isZh ? '项目' : 'Projects'}
+              {formatMsg(locale, 'sidebar.projects')}
             </div>
             {groups.length === 0 ? (
               <div className="px-3 py-6 text-center text-ui-sm text-foreground-subtlest">

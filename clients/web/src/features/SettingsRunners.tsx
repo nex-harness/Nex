@@ -1,3 +1,4 @@
+import { formatMsg } from '../i18n/messages';
 import {
   Check,
   ChevronDown,
@@ -22,7 +23,7 @@ import {
   Wifi,
   X,
 } from 'lucide-react';
-import { type ClipboardEvent, type FormEvent, useEffect, useState } from 'react';
+import { type ClipboardEvent, type FormEvent, useEffect, useRef, useState } from 'react';
 import { apiFetch, resolveApiBase, safeStorageGet } from '../core/protocol';
 import { useNexStore } from '../core/store';
 import { SSHConfigHost, SSHTargetRecord, StagedBinaryInfo } from '../core/types';
@@ -124,7 +125,6 @@ function formatBytesShort(n: number): string {
 
 export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {
   const { locale, runners, sshTargets, refreshInitialData, refreshRegistries } = useNexStore();
-  const isEn = locale === 'en-US';
 
   const [copied, setCopied] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -160,19 +160,24 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
     }
   };
 
+  const mountedRef = useRef(true);
   useEffect(() => {
+    mountedRef.current = true;
     void loadStagedBinaries();
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const loadSSHConfigHosts = async () => {
     setConfigLoading(true);
     try {
       const hosts = await apiFetch<SSHConfigHost[]>('/api/v1/ssh/config-hosts');
-      setConfigHosts(Array.isArray(hosts) ? hosts : []);
+      if (mountedRef.current) setConfigHosts(Array.isArray(hosts) ? hosts : []);
     } catch {
-      setConfigHosts([]);
+      if (mountedRef.current) setConfigHosts([]);
     } finally {
-      setConfigLoading(false);
+      if (mountedRef.current) setConfigLoading(false);
     }
   };
 
@@ -245,9 +250,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
       name: prev.name || parsed.host || '',
     }));
     setPasteNotice(
-      isEn
-        ? `Parsed ${parsed.username ? `${parsed.username}@` : ''}${parsed.host}${parsed.port ? `:${parsed.port}` : ''}`
-        : `已自动识别 ${parsed.username ? `${parsed.username}@` : ''}${parsed.host}${parsed.port ? `:${parsed.port}` : ''}`,
+      formatMsg(locale, 'runners.parsed', { v: parsed.username ? `${parsed.username}@` : '', host: parsed.host || '', v2: parsed.port ? `:${parsed.port}` : '' }),
     );
   };
 
@@ -270,7 +273,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
       );
       if (!res.ok) throw new Error(await res.text());
       await loadStagedBinaries();
-      onFlash(isEn ? `Uploaded nex-runner (${os}/${arch})` : `已上传 nex-runner (${os}/${arch}) 二进制`);
+      onFlash(formatMsg(locale, 'runners.uploadedNexRunner', { os, arch }));
     } catch (err) {
       setFormError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -283,11 +286,11 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
     const host = form.host.trim();
     const portNum = Number(form.port.trim() || '22');
     if (!host) {
-      setFormError(isEn ? 'Host is required.' : '请填写远程主机地址。');
+      setFormError(formatMsg(locale, 'runners.hostIsRequired'));
       return;
     }
     if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-      setFormError(isEn ? 'Port must be between 1 and 65535.' : '端口必须为 1–65535 的整数。');
+      setFormError(formatMsg(locale, 'runners.portMustBeBetween1'));
       return;
     }
     setSaving(true);
@@ -314,7 +317,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
       });
       await refreshRegistries();
       setModalOpen(false);
-      onFlash(isEn ? `Saved SSH server "${saved.name}"` : `已保存远程服务器 "${saved.name}"`);
+      onFlash(formatMsg(locale, 'runners.savedSshServer', { name: saved.name }));
       if (deployAfterSave && saved?.id) {
         void runTargetAction(saved, 'deploy');
       }
@@ -340,24 +343,25 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
       if (res?.ok) {
         if (action === 'test') {
           onFlash(
-            isEn
-              ? `SSH OK: ${target.name} (${res.os}/${res.arch})`
-              : `SSH 连接成功：${target.name} (${res.os}/${res.arch})`,
+            formatMsg(locale, 'runners.sshOk', {
+              name: target.name,
+              os: res.os || '',
+              arch: res.arch || '',
+            }),
           );
         } else if (action === 'deploy') {
           onFlash(
-            isEn
-              ? `Deployed & started runner on ${target.name}`
-              : `已部署并启动远程 Runner：${target.name}`,
+            formatMsg(locale, 'runners.deployedStartedRunnerOn', { name: target.name }),
           );
         } else {
-          onFlash(isEn ? `Stopped runner on ${target.name}` : `已停止远程 Runner：${target.name}`);
+          onFlash(formatMsg(locale, 'runners.stoppedRunnerOn', { name: target.name }));
         }
       } else {
         onFlash(
-          isEn
-            ? `${action} failed: ${res?.error || 'unknown error'}`
-            : `操作失败：${res?.error || '请查看部署日志'}`,
+          formatMsg(locale, 'runners.actionFailed', {
+            action,
+            error: res?.error || formatMsg(locale, 'runners.unknownError'),
+          }),
         );
       }
     } catch (err) {
@@ -383,11 +387,9 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
       {/* Top Action Bar & SSH Targets Section */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SectionHeading
-          title={isEn ? `SSH remote servers (${sshTargets.length})` : `SSH 远程服务器 (${sshTargets.length})`}
+          title={formatMsg(locale, 'runners.sshRemoteServers', { length: sshTargets.length })}
           description={
-            isEn
-              ? 'Configure remote hosts via SSH config or credentials, then deploy nex-runner via SCP or Remote Install.'
-              : '支持从 ~/.ssh/config 导入或手动配置远程服务器，一键通过 SCP 上传或远程下载安装并启动 nex-runner。'
+            formatMsg(locale, 'runners.configureRemoteHostsViaSsh')
           }
         />
         <button
@@ -397,7 +399,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
           className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-foreground px-3 text-ui-sm font-medium text-background transition-opacity hover:opacity-90"
         >
           <Plus className="size-3.5" />
-          <span>{isEn ? 'Add SSH server' : '添加 SSH 服务器'}</span>
+          <span>{formatMsg(locale, 'runners.addSshServer')}</span>
         </button>
       </div>
 
@@ -406,9 +408,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
           <div className="flex flex-col items-center justify-center gap-2 px-5 py-9 text-center">
             <Server className="size-6 text-foreground-subtlest" />
             <p className="text-ui-sm text-foreground-subtle">
-              {isEn
-                ? 'No SSH servers configured yet. Add one to deploy nex-runner via SCP or Remote Install.'
-                : '尚未配置 SSH 远程服务器。点击右上角「添加 SSH 服务器」，即可导入 ~/.ssh/config 并一键 SCP 上传或远程安装。'}
+              {formatMsg(locale, 'runners.noSshServersConfiguredYet')}
             </p>
           </div>
         ) : (
@@ -441,12 +441,8 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       </span>
                       <span className="rounded-md border border-border bg-surface px-1.5 py-0.5 text-[11px] font-medium text-foreground-subtle">
                         {t.install_mode === 'remote_install'
-                          ? isEn
-                            ? 'Remote Install'
-                            : '远程安装'
-                          : isEn
-                            ? 'SCP Upload'
-                            : 'SCP 上传'}
+                          ? formatMsg(locale, 'runners.remoteInstall')
+                          : formatMsg(locale, 'runners.scpUpload')}
                       </span>
                       {t.ssh_alias && (
                         <span className="inline-flex items-center gap-1 rounded-md bg-brand-blue/10 px-1.5 py-0.5 font-mono text-[11px] text-brand-blue">
@@ -456,7 +452,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       )}
                       {isOnline && (
                         <span className="rounded-md bg-success-surface px-1.5 py-0.5 text-[11px] font-medium text-success-surface-fg">
-                          {isEn ? 'Runner Online' : '节点在线'}
+                          {formatMsg(locale, 'runners.runnerOnline')}
                         </span>
                       )}
                     </div>
@@ -482,7 +478,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       ) : (
                         <Wifi className="size-3" />
                       )}
-                      <span>{isEn ? 'Test' : '测试连接'}</span>
+                      <span>{formatMsg(locale, 'runners.test')}</span>
                     </button>
                     <button
                       type="button"
@@ -500,16 +496,10 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       )}
                       <span>
                         {busy === 'deploy'
-                          ? isEn
-                            ? 'Deploying…'
-                            : '部署中…'
+                          ? formatMsg(locale, 'runners.deploying')
                           : t.install_mode === 'remote_install'
-                            ? isEn
-                              ? 'Remote Install'
-                              : '远程安装'
-                            : isEn
-                              ? 'SCP Deploy'
-                              : 'SCP 部署'}
+                            ? formatMsg(locale, 'runners.remoteInstall')
+                            : formatMsg(locale, 'runners.scpDeploy')}
                       </span>
                     </button>
                     {isOnline && (
@@ -517,7 +507,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                         type="button"
                         disabled={Boolean(busy)}
                         onClick={() => void runTargetAction(t, 'stop')}
-                        title={isEn ? 'Stop remote runner' : '停止远程 Runner'}
+                        title={formatMsg(locale, 'runners.stopRemoteRunner')}
                         className="flex size-7 items-center justify-center rounded-md border border-border text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground disabled:opacity-50"
                       >
                         {busy === 'stop' ? <LoaderCircle className="size-3 animate-spin" /> : <Square className="size-3" />}
@@ -527,7 +517,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       <button
                         type="button"
                         onClick={() => setExpandedLogs((p) => ({ ...p, [t.id]: !p[t.id] }))}
-                        title={isEn ? 'Toggle logs' : '查看部署日志'}
+                        title={formatMsg(locale, 'runners.toggleLogs')}
                         className={`flex size-7 items-center justify-center rounded-md transition-colors hover:bg-hover ${
                           logOpen ? 'bg-selected text-foreground' : 'text-foreground-subtlest hover:text-foreground'
                         }`}
@@ -538,7 +528,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     <button
                       type="button"
                       onClick={() => openEditModal(t)}
-                      aria-label={isEn ? 'Edit SSH server' : '编辑服务器'}
+                      aria-label={formatMsg(locale, 'runners.editSshServer')}
                       className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
                     >
                       <Pencil className="size-3.5" />
@@ -546,7 +536,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     <button
                       type="button"
                       onClick={() => void deleteTarget(t.id)}
-                      aria-label={isEn ? 'Delete SSH server' : '删除服务器'}
+                      aria-label={formatMsg(locale, 'runners.deleteSshServer')}
                       className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
                     >
                       <Trash2 className="size-3.5" />
@@ -568,11 +558,9 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
       {/* Connected Runners */}
       <div className="flex items-center justify-between gap-2">
         <SectionHeading
-          title={isEn ? `Connected runners (${runners.length})` : `已接入设备 (${runners.length})`}
+          title={formatMsg(locale, 'runners.connectedRunners', { length: runners.length })}
           description={
-            isEn
-              ? 'Live reverse-connected runners, platform info, workspace, and synced config revision.'
-              : '实时在线的反向连接节点、系统架构、默认工作区与配置同步版本。'
+            formatMsg(locale, 'runners.liveReverseConnectedRunnersPlatform')
           }
         />
         <button
@@ -581,14 +569,14 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
           className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
         >
           <RefreshCw className="size-3" />
-          <span>{isEn ? 'Refresh' : '刷新'}</span>
+          <span>{formatMsg(locale, 'common.refresh')}</span>
         </button>
       </div>
 
       <SettingsGroupCard>
         {runners.length === 0 ? (
           <div className="px-5 py-8 text-center text-ui-sm text-foreground-subtlest">
-            {isEn ? 'No runners connected yet.' : '暂无已连接的远程设备。'}
+            {formatMsg(locale, 'runners.noRunnersConnectedYet')}
           </div>
         ) : (
           runners.map((r) => (
@@ -639,10 +627,10 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
         >
           <span className="flex items-center gap-2 text-ui-sm font-medium text-foreground">
             {manualOpen ? <ChevronDown className="size-4 text-foreground-subtlest" /> : <ChevronRight className="size-4 text-foreground-subtlest" />}
-            <span>{isEn ? 'Manual runner join command' : '手动运行接入命令'}</span>
+            <span>{formatMsg(locale, 'runners.manualRunnerJoinCommand')}</span>
           </span>
           <span className="text-ui-xs text-foreground-subtlest">
-            {isEn ? 'For NAT / firewalled hosts' : '适用于仅能出站访问的内网机器'}
+            {formatMsg(locale, 'runners.forNatFirewalledHosts')}
           </span>
         </button>
         {manualOpen && (
@@ -659,7 +647,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                 className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-ui-xs text-foreground transition-colors hover:bg-hover"
               >
                 {copied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
-                <span>{copied ? (isEn ? 'Copied' : '已复制') : isEn ? 'Copy command' : '复制命令'}</span>
+                <span>{copied ? (formatMsg(locale, 'common.copied')) : formatMsg(locale, 'runners.copyCommand')}</span>
               </button>
             </div>
           </div>
@@ -685,12 +673,8 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
               <div className="min-w-0">
                 <h2 className="text-ui-lg font-semibold text-foreground">
                   {form.id
-                    ? isEn
-                      ? 'Edit SSH connection'
-                      : '编辑 SSH 远程连接'
-                    : isEn
-                      ? 'New SSH connection'
-                      : '新建 SSH 远程连接'}
+                    ? formatMsg(locale, 'runners.editSshConnection')
+                    : formatMsg(locale, 'runners.newSshConnection')}
                 </h2>
                 <div className="mt-0.5 truncate font-mono text-ui-xs text-foreground-subtlest">
                   {livePreview}
@@ -717,7 +701,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     <span className="inline-flex items-center gap-1 rounded-lg border border-brand-blue/25 bg-brand-blue/8 px-2 py-1 font-mono text-ui-xs text-brand-blue">
                       <Link2 className="size-3" />
                       <span>
-                        {isEn ? `Linked: ${form.ssh_alias}` : `已关联 Host ${form.ssh_alias}`}
+                        {formatMsg(locale, 'runners.linked', { ssh_alias: form.ssh_alias })}
                       </span>
                       <button
                         type="button"
@@ -741,7 +725,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     className="inline-flex h-7 items-center gap-1 rounded-lg border border-border bg-surface px-2.5 text-ui-xs font-medium text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
                   >
                     <FileCode2 className="size-3.5" />
-                    <span>{isEn ? 'Import from SSH config' : '从 SSH config 导入'}</span>
+                    <span>{formatMsg(locale, 'runners.importFromSshConfig')}</span>
                     <ChevronDown className="size-3" />
                   </button>
 
@@ -753,11 +737,11 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       {configLoading ? (
                         <div className="flex items-center gap-2 px-3 py-2 text-ui-xs text-foreground-subtlest">
                           <LoaderCircle className="size-3.5 animate-spin" />
-                          <span>{isEn ? 'Reading ~/.ssh/config…' : '正在读取 ~/.ssh/config…'}</span>
+                          <span>{formatMsg(locale, 'runners.readingSshConfig')}</span>
                         </div>
                       ) : configHosts.length === 0 ? (
                         <div className="px-3 py-2 text-ui-xs text-foreground-subtlest">
-                          {isEn ? 'No concrete Host entries found in ~/.ssh/config' : '~/.ssh/config 中未找到可用 Host'}
+                          {formatMsg(locale, 'runners.noConcreteHostEntriesFound')}
                         </div>
                       ) : (
                         configHosts.map((h) => (
@@ -790,20 +774,20 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
               {/* Host + Port side-by-side (ZCode RDUX-27 layout) */}
               <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3">
                 <label className="block space-y-1">
-                  <span className="text-ui-sm text-foreground-subtle">{isEn ? 'Host' : '主机地址'}</span>
+                  <span className="text-ui-sm text-foreground-subtle">{formatMsg(locale, 'runners.host')}</span>
                   <input
                     autoFocus
                     data-testid="ssh-host-input"
                     value={form.host}
                     onPaste={handleHostPaste}
                     onChange={(e) => setForm((p) => ({ ...p, host: e.target.value, ssh_alias: '' }))}
-                    placeholder={isEn ? '192.168.1.10 or paste user@host:22' : '192.168.1.10（支持粘贴 user@host:22）'}
+                    placeholder={formatMsg(locale, 'runners.192168110Or')}
                     className={settingsMonoInputClass}
                   />
                   {pasteNotice && <p className="text-ui-xs text-success">{pasteNotice}</p>}
                 </label>
                 <label className="block space-y-1">
-                  <span className="text-ui-sm text-foreground-subtle">{isEn ? 'Port' : '端口'}</span>
+                  <span className="text-ui-sm text-foreground-subtle">{formatMsg(locale, 'runners.port')}</span>
                   <input
                     data-testid="ssh-port-input"
                     value={form.port}
@@ -816,7 +800,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
               {/* Name + Username */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="block space-y-1">
-                  <span className="text-ui-sm text-foreground-subtle">{isEn ? 'Username' : '用户名'}</span>
+                  <span className="text-ui-sm text-foreground-subtle">{formatMsg(locale, 'runners.username')}</span>
                   <input
                     data-testid="ssh-username-input"
                     value={form.username}
@@ -826,12 +810,12 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                   />
                 </label>
                 <label className="block space-y-1">
-                  <span className="text-ui-sm text-foreground-subtle">{isEn ? 'Display name' : '设备名称'}</span>
+                  <span className="text-ui-sm text-foreground-subtle">{formatMsg(locale, 'runners.displayName')}</span>
                   <input
                     data-testid="ssh-name-input"
                     value={form.name}
                     onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                    placeholder={isEn ? 'e.g. Build Server' : '例如：编译服务器'}
+                    placeholder={formatMsg(locale, 'runners.eGBuildServer')}
                     className={settingsInputClass}
                   />
                 </label>
@@ -840,13 +824,13 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
               {/* Auth method segmented control */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-ui-sm text-foreground-subtle">{isEn ? 'Authentication' : '认证方式'}</span>
+                  <span className="text-ui-sm text-foreground-subtle">{formatMsg(locale, 'runners.authentication')}</span>
                   <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-ui-xs">
                     {(
                       [
-                        { id: 'key', zh: '私钥文件', en: 'Private Key' },
-                        { id: 'agent', zh: 'SSH Agent', en: 'SSH Agent' },
-                        { id: 'password', zh: '密码', en: 'Password' },
+                        { id: 'key', labelKey: 'runners.auth.key' },
+                        { id: 'agent', labelKey: 'runners.auth.agent' },
+                        { id: 'password', labelKey: 'runners.auth.password' },
                       ] as const
                     ).map((opt) => (
                       <button
@@ -859,7 +843,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                             : 'text-foreground-subtle hover:text-foreground'
                         }`}
                       >
-                        {isEn ? opt.en : opt.zh}
+                        {formatMsg(locale, opt.labelKey)}
                       </button>
                     ))}
                   </div>
@@ -885,12 +869,8 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
                       placeholder={
                         form.has_password
-                          ? isEn
-                            ? 'Leave blank to keep saved password'
-                            : '留空则保留已保存的密码'
-                          : isEn
-                            ? 'Enter SSH password'
-                            : '输入 SSH 登录密码'
+                          ? formatMsg(locale, 'runners.leaveBlankToKeepSaved')
+                          : formatMsg(locale, 'runners.enterSshPassword')
                       }
                       className={`${settingsInputClass} pr-9`}
                     />
@@ -909,13 +889,13 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
               <div className="space-y-2.5 rounded-xl border border-border bg-surface/50 p-3.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-ui-sm font-medium text-foreground">
-                    {isEn ? 'Runner deployment mode' : 'Runner 部署方式'}
+                    {formatMsg(locale, 'runners.runnerDeploymentMode')}
                   </span>
                   <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-ui-xs">
                     {(
                       [
-                        { id: 'scp', zh: 'SCP 上传部署', en: 'SCP Upload' },
-                        { id: 'remote_install', zh: '远程下载安装', en: 'Remote Install' },
+                        { id: 'scp', labelKey: 'runners.deployMode.scp' },
+                        { id: 'remote_install', labelKey: 'runners.deployMode.remoteInstall' },
                       ] as const
                     ).map((m) => (
                       <button
@@ -929,7 +909,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                             : 'text-foreground-subtle hover:text-foreground'
                         }`}
                       >
-                        {isEn ? m.en : m.zh}
+                        {formatMsg(locale, m.labelKey)}
                       </button>
                     ))}
                   </div>
@@ -938,9 +918,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                 {form.install_mode === 'scp' ? (
                   <div className="space-y-2">
                     <p className="text-ui-xs leading-relaxed text-foreground-subtle">
-                      {isEn
-                        ? 'Probes remote OS/Arch, auto-matches (or cross-compiles in dev workspace) the nex-runner binary, uploads via SCP, and launches it in background.'
-                        : '自动探测远端 OS/Arch，优先匹配已上传或本机二进制（开发环境可自动交叉编译），通过 SCP 上传至远端并后台启动。'}
+                      {formatMsg(locale, 'runners.probesRemoteOsArchAuto')}
                     </p>
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       <select
@@ -959,7 +937,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                         ) : (
                           <Upload className="size-3" />
                         )}
-                        <span>{isEn ? 'Upload binary (optional)' : '上传预编译二进制（可选）'}</span>
+                        <span>{formatMsg(locale, 'runners.uploadBinaryOptional')}</span>
                         <input
                           type="file"
                           className="hidden"
@@ -972,7 +950,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       </label>
                       {stagedBinaries.length > 0 && (
                         <span className="text-[11px] text-foreground-subtlest">
-                          {isEn ? 'Ready: ' : '已就绪：'}
+                          {formatMsg(locale, 'runners.ready')}
                           {stagedBinaries.map((b) => `${b.os}/${b.arch} (${formatBytesShort(b.size_bytes)})`).join(', ')}
                         </span>
                       )}
@@ -981,18 +959,14 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                 ) : (
                   <div className="space-y-2">
                     <p className="text-ui-xs leading-relaxed text-foreground-subtle">
-                      {isEn
-                        ? 'Runs curl/wget on the remote server to download nex-runner. Supports {os} and {arch} placeholders, or leave blank to pull directly from this Nex server.'
-                        : '在远端通过 curl/wget 拉取安装 nex-runner。支持 {os} / {arch} 占位符；留空则自动生成一次性令牌从当前 Nex Server 拉取。'}
+                      {formatMsg(locale, 'runners.runsCurlWgetOnThe')}
                     </p>
                     <input
                       data-testid="ssh-download-url-input"
                       value={form.download_url}
                       onChange={(e) => setForm((p) => ({ ...p, download_url: e.target.value }))}
                       placeholder={
-                        isEn
-                          ? 'Optional: https://releases.example.com/nex-runner-{os}-{arch}'
-                          : '可选：https://example.com/releases/nex-runner-{os}-{arch}'
+                        formatMsg(locale, 'runners.optionalHttpsReleasesExampleCom')
                       }
                       className={settingsMonoInputClass}
                     />
@@ -1008,13 +982,13 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                   className="inline-flex items-center gap-1 text-ui-xs font-medium text-foreground-subtle transition-colors hover:text-foreground"
                 >
                   {advancedOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-                  <span>{isEn ? 'Advanced options' : '高级选项'}</span>
+                  <span>{formatMsg(locale, 'runners.advancedOptions')}</span>
                 </button>
                 {advancedOpen && (
                   <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <label className="block space-y-1">
                       <span className="text-ui-xs text-foreground-subtle">
-                        {isEn ? 'Default remote workspace' : '远端默认工作目录'}
+                        {formatMsg(locale, 'runners.defaultRemoteWorkspace')}
                       </span>
                       <input
                         value={form.workspace_path}
@@ -1025,7 +999,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     </label>
                     <label className="block space-y-1">
                       <span className="text-ui-xs text-foreground-subtle">
-                        {isEn ? 'Remote install directory' : '远端安装目录'}
+                        {formatMsg(locale, 'runners.remoteInstallDirectory')}
                       </span>
                       <input
                         value={form.install_dir}
@@ -1036,7 +1010,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     </label>
                     <label className="block space-y-1 sm:col-span-2">
                       <span className="text-ui-xs text-foreground-subtle">
-                        {isEn ? 'Server WebSocket URL override' : 'Server WebSocket 回连地址覆盖（可选）'}
+                        {formatMsg(locale, 'runners.serverWebsocketUrlOverride')}
                       </span>
                       <input
                         value={form.server_ws_url}
@@ -1057,7 +1031,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                 onClick={() => setModalOpen(false)}
                 className="h-8 rounded-lg border border-border bg-card px-3 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
               >
-                {isEn ? 'Cancel' : '取消'}
+                {formatMsg(locale, 'common.cancel')}
               </button>
               <button
                 type="submit"
@@ -1065,7 +1039,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                 disabled={saving}
                 className="h-8 rounded-lg border border-border bg-card px-3 text-ui-sm font-medium text-foreground transition-colors hover:bg-hover disabled:opacity-50"
               >
-                {isEn ? 'Save' : '仅保存'}
+                {formatMsg(locale, 'common.save2')}
               </button>
               <button
                 type="button"
@@ -1075,7 +1049,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                 className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3.5 text-ui-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 {saving && <LoaderCircle className="size-3.5 animate-spin" />}
-                <span>{isEn ? 'Save & deploy' : '保存并部署'}</span>
+                <span>{formatMsg(locale, 'runners.saveDeploy')}</span>
               </button>
             </div>
           </form>

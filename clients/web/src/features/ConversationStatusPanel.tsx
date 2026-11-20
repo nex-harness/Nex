@@ -86,9 +86,7 @@ export function ConversationStatusPanel() {
   const terminalSeenRef = useRef<Record<string, number>>({});
   const bashSeenRef = useRef<Record<string, number>>({});
   const defaultCommitPrompt =
-    locale === 'en-US'
-      ? 'Review the current git status and diff, then create a clear commit message and commit the changes. Push as well if a remote is configured.'
-      : '请先检查当前 git status 与 diff，然后生成语义清晰的提交信息并提交改动；如已配置远端则一并推送。';
+    formatMsg(locale, 'statusPanel.reviewTheCurrentGitStatus');
 
   const todos = stream?.todos || [];
   const goals = stream?.goals || [];
@@ -322,7 +320,7 @@ export function ConversationStatusPanel() {
                       className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-ui-sm text-foreground hover:bg-menu-hover"
                     >
                       <RefreshCw className="size-3.5 text-foreground-subtle" />
-                      <span>{locale === 'en-US' ? 'Refresh changes' : '刷新变更'}</span>
+                      <span>{formatMsg(locale, 'statusPanel.refreshChanges')}</span>
                     </button>
                     <button
                       type="button"
@@ -399,7 +397,7 @@ export function ConversationStatusPanel() {
                             onClick={() => setCommitOpen(false)}
                             className="h-6 rounded-md px-2 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
                           >
-                            {locale === 'en-US' ? 'Cancel' : '取消'}
+                            {formatMsg(locale, 'common.cancel')}
                           </button>
                           <button
                             type="button"

@@ -1,3 +1,4 @@
+import { formatMsg } from '../i18n/messages';
 import {
   Archive,
   Blocks,
@@ -57,7 +58,6 @@ export function CommandPaletteModal() {
   const updateThemeQuick = useNexStore((s) => s.updateThemeQuick);
   const openSettings = useNexStore((s) => s.openSettings);
 
-  const isEn = locale === 'en-US';
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SessionSearchHit[]>([]);
   const [searching, setSearching] = useState(false);
@@ -116,8 +116,8 @@ export function CommandPaletteModal() {
       {
         id: 'cmd-new-task',
         section: 'command',
-        title: isEn ? 'New task' : '新建任务',
-        subtitle: isEn ? 'Start a fresh conversation draft' : '开始一段新的对话任务',
+        title: formatMsg(locale, 'sidebar.newTask'),
+        subtitle: formatMsg(locale, 'palette.startAFreshConversationDraft'),
         shortcut: '⌘N',
         keywords: 'new task session chat 新建 任务 对话',
         icon: CirclePlus,
@@ -128,13 +128,9 @@ export function CommandPaletteModal() {
         section: 'command',
         title:
           permissionMode === 'plan'
-            ? isEn
-              ? 'Exit Plan Mode (Switch to Full Access)'
-              : '退出计划模式（切换到完全访问）'
-            : isEn
-              ? 'Switch to Plan Mode'
-              : '切换到计划模式（先规划再执行）',
-        subtitle: isEn ? 'Read-only planning & approval flow' : '只读调研与分步规划审批流程',
+            ? formatMsg(locale, 'palette.exitPlanModeSwitchTo')
+            : formatMsg(locale, 'palette.switchToPlanMode'),
+        subtitle: formatMsg(locale, 'palette.readOnlyPlanningApprovalFlow'),
         badge: permissionMode === 'plan' ? 'ON' : 'Plan',
         keywords: 'plan mode architecture 计划 规划 模式',
         icon: ListTodo,
@@ -146,8 +142,8 @@ export function CommandPaletteModal() {
       items.push({
         id: 'cmd-export-md',
         section: 'command',
-        title: isEn ? 'Export current conversation as Markdown' : '导出当前对话为 Markdown (.md)',
-        subtitle: isEn ? 'Download transcript including thinking & tool results' : '下载含思考过程与工具调用的完整对话记录',
+        title: formatMsg(locale, 'palette.exportCurrentConversationAsMarkdown'),
+        subtitle: formatMsg(locale, 'palette.downloadTranscriptIncludingThinkingTool'),
         badge: '.md',
         keywords: 'export markdown download transcript 导出 下载 记录',
         icon: Download,
@@ -161,7 +157,7 @@ export function CommandPaletteModal() {
       {
         id: 'cmd-toggle-sidebar',
         section: 'command',
-        title: isEn ? 'Toggle left sidebar' : '切换左侧任务栏',
+        title: formatMsg(locale, 'palette.toggleLeftSidebar'),
         keywords: 'sidebar left panel 侧边栏 任务栏',
         icon: PanelLeft,
         onSelect: closeAnd(() => toggleSidebar()),
@@ -169,7 +165,7 @@ export function CommandPaletteModal() {
       {
         id: 'cmd-toggle-sidepane',
         section: 'command',
-        title: isEn ? 'Toggle right workbench panel' : '切换右侧工作台面板',
+        title: formatMsg(locale, 'palette.toggleRightWorkbenchPanel'),
         keywords: 'workbench right side pane files git review 右侧 工作台',
         icon: PanelRight,
         onSelect: closeAnd(() => toggleSidePane()),
@@ -177,7 +173,7 @@ export function CommandPaletteModal() {
       {
         id: 'cmd-toggle-terminal',
         section: 'command',
-        title: isEn ? 'Toggle bottom terminal' : '切换底部终端',
+        title: formatMsg(locale, 'palette.toggleBottomTerminal'),
         keywords: 'terminal pty shell bash 终端',
         icon: SquareTerminal,
         onSelect: closeAnd(() => toggleBottomPanel()),
@@ -187,12 +183,8 @@ export function CommandPaletteModal() {
         section: 'command',
         title:
           nextTheme === 'dark'
-            ? isEn
-              ? 'Switch to Dark Theme'
-              : '切换为深色主题'
-            : isEn
-              ? 'Switch to Light Theme'
-              : '切换为浅色主题',
+            ? formatMsg(locale, 'palette.switchToDarkTheme')
+            : formatMsg(locale, 'palette.switchToLightTheme'),
         keywords: 'theme dark light appearance 主题 深色 浅色 外观',
         icon: nextTheme === 'dark' ? Moon : Sun,
         onSelect: closeAnd(() => updateThemeQuick(nextTheme)),
@@ -200,7 +192,7 @@ export function CommandPaletteModal() {
       {
         id: 'cmd-settings-memories',
         section: 'command',
-        title: isEn ? 'Open Long-Term Memory' : '打开长期记忆管理',
+        title: formatMsg(locale, 'palette.openLongTermMemory'),
         keywords: 'memory memories preferences facts 长期记忆 记忆 偏好',
         icon: Brain,
         onSelect: closeAnd(() => openSettings('memories')),
@@ -208,7 +200,7 @@ export function CommandPaletteModal() {
       {
         id: 'cmd-settings-providers',
         section: 'command',
-        title: isEn ? 'Open Providers & Models Settings' : '打开模型与供应商设置',
+        title: formatMsg(locale, 'palette.openProvidersModelsSettings'),
         keywords: 'providers models api key 模型 供应商 设置',
         icon: Cpu,
         onSelect: closeAnd(() => openSettings('providers')),
@@ -216,7 +208,7 @@ export function CommandPaletteModal() {
       {
         id: 'cmd-settings-skills',
         section: 'command',
-        title: isEn ? 'Open Skills Settings' : '打开技能管理',
+        title: formatMsg(locale, 'palette.openSkillsSettings'),
         keywords: 'skills prompt 技能',
         icon: Sparkles,
         onSelect: closeAnd(() => openSettings('skills')),
@@ -224,7 +216,7 @@ export function CommandPaletteModal() {
       {
         id: 'cmd-settings-plugins',
         section: 'command',
-        title: isEn ? 'Open Plugins Settings' : '打开插件管理',
+        title: formatMsg(locale, 'palette.openPluginsSettings'),
         keywords: 'plugins extensions 插件 扩展',
         icon: Blocks,
         onSelect: closeAnd(() => openSettings('plugins')),
@@ -232,7 +224,7 @@ export function CommandPaletteModal() {
       {
         id: 'cmd-settings-archives',
         section: 'command',
-        title: isEn ? 'Open Archived Sessions' : '打开归档历史会话',
+        title: formatMsg(locale, 'palette.openArchivedSessions'),
         keywords: 'archive history 归档 历史',
         icon: Archive,
         onSelect: closeAnd(() => openSettings('archives')),
@@ -250,7 +242,7 @@ export function CommandPaletteModal() {
   }, [
     activeSessionId,
     exportSessionMarkdown,
-    isEn,
+    locale,
     openSettings,
     permissionMode,
     preferences.theme,
@@ -275,9 +267,7 @@ export function CommandPaletteModal() {
           : leafName(hit.session.workspace_path) || hit.session.runner_id,
       badge:
         hit.match_type === 'message'
-          ? isEn
-            ? 'Message match'
-            : '消息匹配'
+          ? formatMsg(locale, 'palette.messageMatch')
           : leafName(hit.session.workspace_path) || undefined,
       icon: MessageSquare,
       onSelect: () => {
@@ -285,7 +275,7 @@ export function CommandPaletteModal() {
         void selectSession(hit.session.id);
       },
     }));
-  }, [hits, isEn, selectSession, setOpen]);
+  }, [hits, locale, selectSession, setOpen]);
 
   const flatItems = useMemo(() => [...sessionItems, ...commands], [sessionItems, commands]);
 
@@ -307,7 +297,7 @@ export function CommandPaletteModal() {
         data-testid="command-palette-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={isEn ? 'Command Palette' : '快捷命令与全局搜索'}
+        aria-label={formatMsg(locale, 'palette.commandPalette')}
         className="w-full max-w-[580px] overflow-hidden rounded-2xl border border-border bg-popover text-foreground shadow-2xl"
       >
         {/* Search bar */}
@@ -339,9 +329,7 @@ export function CommandPaletteModal() {
               }
             }}
             placeholder={
-              isEn
-                ? 'Search conversations, message content, or commands…'
-                : '搜索历史对话、消息全文或快捷指令…'
+              formatMsg(locale, 'palette.searchConversationsMessageContentOr')
             }
             className="min-w-0 flex-1 bg-transparent text-ui-base text-foreground outline-none placeholder:text-foreground-subtlest"
           />
@@ -354,7 +342,7 @@ export function CommandPaletteModal() {
         <div className="max-h-[60vh] overflow-y-auto p-1.5">
           {flatItems.length === 0 ? (
             <div className="px-3 py-8 text-center text-ui-sm text-foreground-subtlest">
-              {isEn ? 'No matching conversations or commands.' : '未找到匹配的对话或快捷指令。'}
+              {formatMsg(locale, 'palette.noMatchingConversationsOrCommands')}
             </div>
           ) : (
             <>
@@ -362,12 +350,8 @@ export function CommandPaletteModal() {
                 <div className="mb-1.5">
                   <div className="px-2.5 py-1 text-[11px] font-medium text-foreground-subtlest">
                     {query.trim()
-                      ? isEn
-                        ? 'Matching Conversations'
-                        : '匹配的对话与消息'
-                      : isEn
-                        ? 'Recent Conversations'
-                        : '最近对话'}
+                      ? formatMsg(locale, 'palette.matchingConversations')
+                      : formatMsg(locale, 'palette.recentConversations')}
                   </div>
                   {sessionItems.map((item, idx) => {
                     const Icon = item.icon;
@@ -406,7 +390,7 @@ export function CommandPaletteModal() {
               {commands.length > 0 && (
                 <div>
                   <div className="px-2.5 py-1 text-[11px] font-medium text-foreground-subtlest">
-                    {isEn ? 'Commands' : '快捷指令'}
+                    {formatMsg(locale, 'palette.commands')}
                   </div>
                   {commands.map((item, idx) => {
                     const flatIdx = sessionItems.length + idx;
@@ -455,7 +439,7 @@ export function CommandPaletteModal() {
 
         {/* Footer hints */}
         <div className="flex items-center justify-between border-t border-border bg-surface/40 px-3.5 py-1.5 text-[11px] text-foreground-subtlest">
-          <span>{isEn ? 'Full-text search across titles & messages' : '支持标题与消息全文检索'}</span>
+          <span>{formatMsg(locale, 'palette.fullTextSearchAcrossTitles')}</span>
           <span className="font-mono">↑↓ · Enter · Esc</span>
         </div>
       </div>
