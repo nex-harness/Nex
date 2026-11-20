@@ -1,4 +1,4 @@
-import { Activity, ChevronRight } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { apiFetchText, formatCompactTokens } from '../core/protocol';
 import { useNexStore } from '../core/store';
@@ -173,7 +173,7 @@ export function ContextWindowsButton({
             </div>
           )}
 
-          <div className="mt-3 space-y-0.5 text-ui-sm">
+          <div className="-mx-2 mt-3 space-y-0.5 text-ui-sm">
             {CATEGORY_META.map(({ key, meta }) => {
               const found = telemetry?.breakdown?.find((b) => b.category === key);
               const itemPct = found ? found.pct : 0;
@@ -196,19 +196,16 @@ export function ContextWindowsButton({
                       ? `${label}: ${formatCompactTokens(found.tokens)} tokens (${itemPct.toFixed(1)}%)`
                       : label
                   }
-                  className={`group flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${
-                    clickable ? 'cursor-pointer hover:bg-menu-hover' : 'cursor-default opacity-75'
+                  className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${
+                    clickable ? 'cursor-pointer hover:bg-menu-hover' : 'cursor-default opacity-65'
                   }`}
                 >
                   <span className="flex min-w-0 items-center gap-2 text-foreground">
                     <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: meta.colorVar }} />
                     <span className="truncate">{label}</span>
                   </span>
-                  <span className="flex shrink-0 items-center gap-1 font-mono text-ui-xs tabular-nums text-foreground-subtle">
-                    <span>{itemPct.toFixed(1)}%</span>
-                    {clickable && (
-                      <ChevronRight className="size-3.5 text-foreground-subtlest opacity-0 transition-opacity group-hover:opacity-100" />
-                    )}
+                  <span className="shrink-0 font-mono text-ui-xs tabular-nums text-foreground-subtle">
+                    {itemPct.toFixed(1)}%
                   </span>
                 </button>
               );
