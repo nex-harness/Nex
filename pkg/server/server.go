@@ -371,6 +371,7 @@ func (s *Server) handleLLMProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	upReq.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 	upReq.Header.Set("Accept", r.Header.Get("Accept"))
+	upReq.Header.Set("User-Agent", ai.DefaultUserAgent)
 
 	if prov.Driver == ai.DriverAnthropic {
 		upReq.Header.Set("anthropic-version", "2023-06-01")

@@ -1692,8 +1692,8 @@ function ProvidersAndModelsSection({
                           }`}
                           title={
                             isEn
-                              ? `In $${m.pricing.input_per_1m}/1M · Out $${m.pricing.output_per_1m}/1M`
-                              : `输入 $${m.pricing.input_per_1m}/1M · 输出 $${m.pricing.output_per_1m}/1M`
+                              ? `${m.id} · In $${m.pricing.input_per_1m}/1M · Out $${m.pricing.output_per_1m}/1M`
+                              : `${m.id} · 输入 $${m.pricing.input_per_1m}/1M · 输出 $${m.pricing.output_per_1m}/1M`
                           }
                         >
                           <div className="flex min-w-0 items-center gap-1.5">
@@ -1711,16 +1711,9 @@ function ProvidersAndModelsSection({
                                 className="h-7 w-44 rounded-md border border-border bg-input px-2 text-ui-sm text-foreground focus:border-primary focus:outline-none"
                               />
                             ) : (
-                              <>
-                                <span className="truncate font-mono text-ui-base text-foreground">
-                                  {m.display_name && m.display_name !== m.id ? m.display_name : m.id}
-                                </span>
-                                {m.display_name && m.display_name !== m.id && (
-                                  <span className="hidden truncate font-mono text-ui-xs text-foreground-subtlest sm:inline">
-                                    ({m.id})
-                                  </span>
-                                )}
-                              </>
+                              <span className="truncate font-mono text-ui-base text-foreground">
+                                {m.display_name && m.display_name !== m.id ? m.display_name : m.id}
+                              </span>
                             )}
                             <ModelBadge>{contextLabel(m.context_window)}</ModelBadge>
                             {m.supports_vision ? <ModelBadge>Vision</ModelBadge> : null}

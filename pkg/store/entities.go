@@ -467,9 +467,19 @@ func (s *Store) ForkSession(ctx context.Context, sourceSessionID string, upToSeq
 		return forked, nil, err
 	}
 	var copied []SessionEvent
-	for _, ev := range srcEvents {
+	openAgentRun := false
+	lastTurnIdx := 0
+	for i, ev := range srcEvents {
 		if upToSeq > 0 && ev.Seq > upToSeq {
-			break
+			// Include immediately trailing turn_end / agent_end events that close the forked turn
+			if ev.EventType == "turn_end" && (ev.TurnIdx == lastTurnIdx || lastTurnIdx == 0) {
+				// allow copying closing turn_end
+			} else if ev.EventType == "agent_end" && openAgentRun {
+				// allow copying closing agent_end, then stop
+			} else {
+				break
+			}
+			_ = i
 		}
 		saved, aErr := s.AppendSessionEvent(ctx, SessionEvent{
 			SessionID:  forked.ID,
@@ -483,6 +493,31 @@ func (s *Store) ForkSession(ctx context.Context, sourceSessionID string, upToSeq
 			return forked, copied, aErr
 		}
 		copied = append(copied, saved)
+		if ev.TurnIdx > 0 {
+			lastTurnIdx = ev.TurnIdx
+		}
+		switch ev.EventType {
+		case "agent_start":
+			openAgentRun = true
+		case "agent_end":
+			openAgentRun = false
+		}
+		if upToSeq > 0 && ev.Seq > upToSeq && !openAgentRun {
+			break
+		}
+	}
+	// Guarantee a forked session NEVER remains stuck in running/streaming state!
+	if openAgentRun {
+		savedEnd, aErr := s.AppendSessionEvent(ctx, SessionEvent{
+			SessionID: forked.ID,
+			TurnIdx:   lastTurnIdx,
+			EventType: "agent_end",
+			Payload:   json.RawMessage(`{"type":"agent_end"}`),
+			CreatedAt: now,
+		}, false)
+		if aErr == nil {
+			copied = append(copied, savedEnd)
+		}
 	}
 	return forked, copied, nil
 }

@@ -32,9 +32,9 @@ func TestDefaultReasoningLevelsByModelFamily(t *testing.T) {
 			want: []string{"off", "minimal", "low", "medium", "high"},
 		},
 		{
-			name: "deepseek r1 uses toggle off/on",
-			meta: ModelMeta{ID: "deepseek-r1", SupportsReasoning: true},
-			want: []string{"off", "on"},
+			name: "deepseek uses low/high/max",
+			meta: ModelMeta{ID: "auto/deepseek-flash", SupportsReasoning: true},
+			want: []string{"low", "high", "max"},
 		},
 		{
 			name: "explicit custom levels take precedence",
@@ -87,7 +87,16 @@ func TestResolveWireEffortMappingAndClamping(t *testing.T) {
 		t.Fatalf("expected custom word pass-through, got val=%q active=%v", val, active)
 	}
 
-	// 5. Anthropic numeric budget override in ReasoningMap
+	// 5. DeepSeek declared ReasoningLevels ["low","high","max"] passes "max" verbatim on Responses/Chat!
+	val, active = ResolveWireEffort(&StreamRequest{
+		ThinkingEffort:  ThinkingMax,
+		ReasoningLevels: []string{"low", "high", "max"},
+	}, []string{"minimal", "low", "medium", "high", "xhigh"})
+	if !active || val != "max" {
+		t.Fatalf("expected DeepSeek declared max to pass through verbatim, got val=%q active=%v", val, active)
+	}
+
+	// 6. Anthropic numeric budget override in ReasoningMap
 	budget := thinkingBudgetForEffort(&StreamRequest{
 		ThinkingEffort: ThinkingHigh,
 		ReasoningMap:   map[string]string{"high": "12345"},

@@ -845,6 +845,12 @@ function clampEffortIndex(levels: EffortLevelOption[], requested: ThinkingEffort
   return medIdx >= 0 ? medIdx : Math.min(1, levels.length - 1);
 }
 
+function formatContextLabel(n: number): string {
+  if (n >= 1_000_000) return `${Number((n / 1_000_000).toFixed(1))}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
+  return String(n);
+}
+
 function isGlmHighspeedModel(name: string): boolean {
   return /glm/i.test(name) && /highspeed|flashx/i.test(name);
 }
@@ -1845,7 +1851,7 @@ function Composer({
                             <span className="truncate text-ui-base text-foreground">{m.display_name || m.id}</span>
                             {m.context_window > 0 && (
                               <span className="shrink-0 rounded bg-secondary/70 px-1.5 py-0.5 font-mono text-[10px] text-foreground-subtle">
-                                {Math.round(m.context_window / 1000)}k
+                                {formatContextLabel(m.context_window)}
                               </span>
                             )}
                             {m.supports_vision && (

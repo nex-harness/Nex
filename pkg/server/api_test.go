@@ -336,6 +336,27 @@ func TestSessionForkEndpointCopiesEventsUpToSeq(t *testing.T) {
 	if err != nil || len(evs) != 2 {
 		t.Fatalf("expected 2 events in forked session, got len=%d err=%v", len(evs), err)
 	}
+
+	// Forking mid-run (after agent_start + message_end, before agent_end) MUST seal with agent_end!
+	_, _ = st.CreateOrUpdateSession(ctx, store.SessionRecord{
+		ID: "sess_seal", RunnerID: "run_offline", Title: "SealTest", WorkspacePath: "/tmp",
+	})
+	_, _ = st.AppendSessionEvent(ctx, store.SessionEvent{SessionID: "sess_seal", TurnIdx: 1, EventType: "agent_start", Payload: json.RawMessage(`{"type":"agent_start"}`)}, false)
+	_, _ = st.AppendSessionEvent(ctx, store.SessionEvent{SessionID: "sess_seal", TurnIdx: 1, EventType: "message_end", Payload: json.RawMessage(`{"message":{"role":"assistant","content":[{"type":"text","text":"done"}]}}`)}, false)
+	_, _ = st.AppendSessionEvent(ctx, store.SessionEvent{SessionID: "sess_seal", TurnIdx: 1, EventType: "turn_end", Payload: json.RawMessage(`{"type":"turn_end"}`)}, false)
+	_, _ = st.AppendSessionEvent(ctx, store.SessionEvent{SessionID: "sess_seal", TurnIdx: 1, EventType: "agent_end", Payload: json.RawMessage(`{"type":"agent_end"}`)}, false)
+
+	sealRaw := postJSON(t, ts.URL+"/api/v1/sessions/sess_seal/fork", map[string]any{"up_to_seq": 2})
+	var sealParsed struct {
+		Session store.SessionRecord `json:"session"`
+	}
+	if err := json.Unmarshal(sealRaw, &sealParsed); err != nil {
+		t.Fatal(err)
+	}
+	sealEvs, _ := st.ListSessionEventsAfter(ctx, sealParsed.Session.ID, 0)
+	if len(sealEvs) == 0 || sealEvs[len(sealEvs)-1].EventType != "agent_end" {
+		t.Fatalf("expected forked session to end cleanly with agent_end, got %+v", sealEvs)
+	}
 }
 
 type roundTripErr struct{}

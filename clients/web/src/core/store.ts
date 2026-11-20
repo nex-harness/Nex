@@ -513,6 +513,15 @@ export const useNexStore = create<AppState>((set, get) => ({
     for (const ev of evs || []) {
       st = applySessionEvent(st, runnerId, ev);
     }
+    // If server metadata marks session as idle (e.g., forked or completed historical session),
+    // ensure no trailing item stays stuck in streaming/running state (which also blocks Shiki highlight!).
+    if (meta && meta.status !== 'running' && (st.running || st.items.some((it) => it.streaming))) {
+      st = {
+        ...st,
+        running: false,
+        items: st.items.map((it) => (it.streaming ? { ...it, streaming: false } : it)),
+      };
+    }
     if (tels && tels.length > 0) {
       st.latestTelemetry = tels[tels.length - 1];
     }

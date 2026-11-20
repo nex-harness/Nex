@@ -50,13 +50,15 @@ func DefaultReasoningLevels(m ModelMeta) []string {
 	}
 	idLower := strings.ToLower(m.ID)
 	switch {
+	case strings.Contains(idLower, "deepseek"):
+		return []string{"low", "high", "max"}
 	case strings.Contains(idLower, "claude") && (strings.Contains(idLower, "opus") || strings.Contains(idLower, "sonnet") || strings.Contains(idLower, "4")):
 		return []string{"off", "low", "medium", "high", "max"}
 	case strings.Contains(idLower, "gpt-5") || strings.Contains(idLower, "codex") || strings.Contains(idLower, "o3") || strings.Contains(idLower, "o4"):
 		return []string{"off", "low", "medium", "high", "xhigh"}
 	case strings.Contains(idLower, "gemini"):
 		return []string{"off", "minimal", "low", "medium", "high"}
-	case strings.Contains(idLower, "deepseek-r1") || strings.Contains(idLower, "reasoner") || strings.Contains(idLower, "qwq") || strings.Contains(idLower, "glm-4.5") || strings.Contains(idLower, "glm-z1"):
+	case strings.Contains(idLower, "qwq") || strings.Contains(idLower, "glm-4.5") || strings.Contains(idLower, "glm-z1"):
 		return []string{"off", "on"}
 	default:
 		return []string{"off", "low", "medium", "high"}
@@ -117,7 +119,15 @@ func ResolveWireEffort(req *StreamRequest, driverSupported []string) (wireValue 
 		return "", false
 	}
 
-	// 2. If the requested value is directly in driverSupported, send it verbatim
+	// 2. If the model's own declared ReasoningLevels explicitly includes this level (e.g. DeepSeek "max"),
+	// send it verbatim so model-specific effort names are honored!
+	for _, declared := range req.ReasoningLevels {
+		if strings.EqualFold(strings.TrimSpace(declared), raw) {
+			return strings.TrimSpace(declared), true
+		}
+	}
+
+	// 3. If the requested value is directly in driverSupported, send it verbatim
 	for _, s := range driverSupported {
 		if strings.EqualFold(s, raw) {
 			return s, true
@@ -312,6 +322,7 @@ func FetchModelsDevCatalog(ctx context.Context, client *http.Client, endpoint st
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", DefaultUserAgent)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

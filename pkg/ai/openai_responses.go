@@ -70,6 +70,7 @@ func (p *OpenAIResponsesProvider) Stream(ctx context.Context, req *StreamRequest
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
+	httpReq.Header.Set("User-Agent", DefaultUserAgent)
 	if p.cfg.APIKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	}
@@ -364,7 +365,7 @@ func (p *OpenAIResponsesProvider) consumeStream(ctx context.Context, body io.Rea
 				}
 			}
 
-		case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
+		case "response.reasoning_summary_text.delta", "response.reasoning_text.delta", "response.reasoning_summary.delta", "response.reasoning.delta":
 			delta, _ := ev["delta"].(string)
 			if delta != "" {
 				r := reasoningByIdx[outIdx]
@@ -420,8 +421,8 @@ func (p *OpenAIResponsesProvider) consumeStream(ctx context.Context, body io.Rea
 				}
 				thinkingText := r.textBuf.String()
 				if thinkingText == "" {
+					var sb strings.Builder
 					if summaries, ok := item["summary"].([]any); ok {
-						var sb strings.Builder
 						for _, s := range summaries {
 							if sm, ok := s.(map[string]any); ok {
 								if t, _ := sm["text"].(string); t != "" {
@@ -429,9 +430,21 @@ func (p *OpenAIResponsesProvider) consumeStream(ctx context.Context, body io.Rea
 								}
 							}
 						}
-						thinkingText = sb.String()
 					}
+					if sb.Len() == 0 {
+						if contents, ok := item["content"].([]any); ok {
+							for _, c := range contents {
+								if cm, ok := c.(map[string]any); ok {
+									if t, _ := cm["text"].(string); t != "" {
+										sb.WriteString(t)
+									}
+								}
+							}
+						}
+					}
+					thinkingText = sb.String()
 				}
+				delete(reasoningByIdx, outIdx)
 				assembledBlocks = append(assembledBlocks, ContentBlock{
 					Type:             BlockThinking,
 					Thinking:         thinkingText,
@@ -497,6 +510,17 @@ func (p *OpenAIResponsesProvider) consumeStream(ctx context.Context, body io.Rea
 		case "response.completed", "response.incomplete":
 			respObj, _ := ev["response"].(map[string]any)
 			finalUsage = parseResponsesUsage(respObj)
+			for idx, r := range reasoningByIdx {
+				if r != nil && (r.textBuf.Len() > 0 || r.encryptedContent != "") {
+					assembledBlocks = append([]ContentBlock{{
+						Type:             BlockThinking,
+						Thinking:         r.textBuf.String(),
+						ReasoningItemID:  r.itemID,
+						EncryptedContent: r.encryptedContent,
+					}}, assembledBlocks...)
+				}
+				delete(reasoningByIdx, idx)
+			}
 			if textBuf.Len() > 0 {
 				assembledBlocks = append(assembledBlocks, TextBlock(textBuf.String()))
 				textBuf.Reset()

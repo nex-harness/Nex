@@ -242,6 +242,7 @@ func (s *Server) handleModelsFetchRemote(w http.ResponseWriter, r *http.Request)
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
+	req.Header.Set("User-Agent", ai.DefaultUserAgent)
 	if strings.TrimSpace(body.APIKey) != "" {
 		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(body.APIKey))
 	}

@@ -73,6 +73,7 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req *StreamRequest) (<-c
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
+	httpReq.Header.Set("User-Agent", DefaultUserAgent)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 	if p.cfg.APIKey != "" {
 		if p.cfg.UseBearerAuth {

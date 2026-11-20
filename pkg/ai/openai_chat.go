@@ -78,6 +78,7 @@ func (p *OpenAIChatProvider) Stream(ctx context.Context, req *StreamRequest) (<-
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
+	httpReq.Header.Set("User-Agent", DefaultUserAgent)
 	if p.apiKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 	}
@@ -252,6 +253,7 @@ type chatCompletionChunk struct {
 			Content          string `json:"content"`
 			ReasoningContent string `json:"reasoning_content"`
 			Reasoning        string `json:"reasoning"`
+			Thinking         string `json:"thinking"`
 			ToolCalls        []struct {
 				Index    int    `json:"index"`
 				ID       string `json:"id"`
@@ -348,6 +350,9 @@ func (p *OpenAIChatProvider) consumeStream(ctx context.Context, body io.ReadClos
 					reasonDelta := choice.Delta.ReasoningContent
 					if reasonDelta == "" {
 						reasonDelta = choice.Delta.Reasoning
+					}
+					if reasonDelta == "" {
+						reasonDelta = choice.Delta.Thinking
 					}
 					if reasonDelta != "" {
 						thinkingBuf.WriteString(reasonDelta)
