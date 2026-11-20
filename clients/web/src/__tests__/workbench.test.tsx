@@ -559,4 +559,69 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(screen.getByText('任务提示词')).toBeTruthy();
     expect(screen.getByText('Inspect architecture')).toBeTruthy();
   });
+
+  it('supports / slash command autocomplete, @ file mention autocomplete, and image attachment strip', async () => {
+    useNexStore.setState({
+      mainView: 'workspace',
+      activeSessionId: '',
+      locale: 'zh-CN',
+      selectedRunnerId: 'run_1',
+      selectedWorkspacePath: '/repo',
+      composerText: '',
+      composerAttachments: [],
+      plugins: [
+        {
+          id: 'pl_1',
+          name: 'deploy-helper',
+          source_ts: 'export default function(nex){ nex.registerCommand("deploy-check", { description: "Run preflight" }); }',
+          scope: 'global',
+          target_runners: [],
+          enabled: true,
+        },
+      ],
+      searchWorkspaceFiles: vi.fn(async (q: string) =>
+        ['pkg/agent/loop.go', 'pkg/ai/openai_chat.go', 'README.md'].filter((f) =>
+          f.toLowerCase().includes(q.toLowerCase()),
+        ),
+      ),
+    });
+
+    render(<App />);
+    const input = screen.getByTestId('composer-input') as HTMLTextAreaElement;
+
+    // 1. Typing `/` opens slash command autocomplete with built-ins + plugin commands
+    fireEvent.change(input, { target: { value: '/', selectionStart: 1 } });
+    expect(screen.getByTestId('composer-slash-menu')).toBeTruthy();
+    expect(screen.getByTestId('slash-option-goal')).toBeTruthy();
+    expect(screen.getByTestId('slash-option-compact')).toBeTruthy();
+    expect(screen.getByTestId('slash-option-deploy-check')).toBeTruthy();
+
+    // Selecting `/compact` via mouseDown replaces text cleanly
+    fireEvent.mouseDown(screen.getByTestId('slash-option-compact'));
+    expect(useNexStore.getState().composerText).toBe('/compact ');
+
+    // 2. Typing `@loop` opens workspace file mention autocomplete and inserts `@pkg/agent/loop.go `
+    fireEvent.change(input, { target: { value: 'inspect @loop', selectionStart: 13 } });
+    await waitFor(() => {
+      expect(screen.getByTestId('composer-mention-menu')).toBeTruthy();
+      expect(screen.getByTestId('mention-option-0')).toBeTruthy();
+    });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(useNexStore.getState().composerText).toBe('inspect @pkg/agent/loop.go ');
+
+    // 3. Adding an image attachment renders thumbnail strip and enables send even with empty text
+    act(() => {
+      useNexStore.getState().setComposerText('');
+      useNexStore.getState().addComposerAttachment({
+        id: 'img_1',
+        name: 'screenshot.png',
+        mimeType: 'image/png',
+        dataB64: 'iVBORw0KGgo=',
+        previewUrl: 'data:image/png;base64,iVBORw0KGgo=',
+        size: 2048,
+      });
+    });
+    expect(screen.getByTestId('composer-attachments')).toBeTruthy();
+    expect((screen.getByTestId('send-btn') as HTMLButtonElement).disabled).toBe(false);
+  });
 });

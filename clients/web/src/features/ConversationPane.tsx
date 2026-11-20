@@ -18,9 +18,11 @@ import {
   Folder,
   FolderPlus,
   FolderTree,
+  GitBranch,
   GitPullRequest,
   Globe,
   Hand,
+  ImagePlus,
   ListTodo,
   LoaderCircle,
   PanelLeft,
@@ -570,7 +572,7 @@ function cleanUserDisplayText(raw: string): string {
   return raw.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, '').trim() || raw;
 }
 
-function UserBubble({ text }: { text: string }) {
+function UserBubble({ text, images }: { text: string; images?: ChatTurnItem['images'] }) {
   const locale = useNexStore((s) => s.locale);
   const setComposerText = useNexStore((s) => s.setComposerText);
   const [copied, setCopied] = useState(false);
@@ -584,9 +586,27 @@ function UserBubble({ text }: { text: string }) {
 
   return (
     <div className="group flex flex-col items-end">
-      <div className="max-w-xl whitespace-pre-wrap break-words rounded-2xl bg-black/[0.045] px-4 py-2.5 text-ui-base text-foreground dark:bg-white/[0.08]">
-        {displayText}
-      </div>
+      {images && images.length > 0 && (
+        <div className="mb-1.5 flex flex-wrap justify-end gap-1.5">
+          {images.map((img, idx) => {
+            const src = img.image_url || (img.data_b64 ? `data:${img.mime_type || 'image/png'};base64,${img.data_b64}` : '');
+            if (!src) return null;
+            return (
+              <img
+                key={idx}
+                src={src}
+                alt={`attachment-${idx + 1}`}
+                className="max-h-36 max-w-48 rounded-xl border border-border object-cover shadow-xs"
+              />
+            );
+          })}
+        </div>
+      )}
+      {displayText && (
+        <div className="max-w-xl whitespace-pre-wrap break-words rounded-2xl bg-black/[0.045] px-4 py-2.5 text-ui-base text-foreground dark:bg-white/[0.08]">
+          {displayText}
+        </div>
+      )}
       <div className="mt-0.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <button
           type="button"
@@ -807,6 +827,79 @@ const PROMPT_TEMPLATES_EN = [
 
 type ComposerMenu = 'plus' | 'model' | 'perm' | 'runner' | null;
 
+interface SlashCmdEntry {
+  command: string;
+  insertText: string;
+  badge: string;
+  description: string;
+}
+
+interface AutocompleteTrigger {
+  kind: 'mention' | 'slash';
+  query: string;
+  replaceStart: number;
+  replaceEnd: number;
+}
+
+function detectAutocomplete(text: string, cursor: number): AutocompleteTrigger | null {
+  const safeCursor = Math.max(0, Math.min(cursor, text.length));
+  const before = text.slice(0, safeCursor);
+
+  // Leading `/command` autocomplete (only on the first token)
+  const slashMatch = /^\/([^\s]*)$/.exec(before);
+  if (slashMatch) {
+    return {
+      kind: 'slash',
+      query: slashMatch[1] || '',
+      replaceStart: 0,
+      replaceEnd: safeCursor,
+    };
+  }
+
+  // Inline `@file` mention autocomplete (at start or after whitespace)
+  const mentionMatch = /(?:^|\s)@([^\s@]*)$/.exec(before);
+  if (mentionMatch) {
+    const query = mentionMatch[1] || '';
+    const atPos = safeCursor - query.length - 1;
+    return {
+      kind: 'mention',
+      query,
+      replaceStart: atPos,
+      replaceEnd: safeCursor,
+    };
+  }
+
+  return null;
+}
+
+function readImageFileAsAttachment(file: File): Promise<import('../core/types').ComposerAttachment | null> {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) {
+      resolve(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      const commaIdx = dataUrl.indexOf(',');
+      if (commaIdx < 0) {
+        resolve(null);
+        return;
+      }
+      resolve({
+        id: `img_${crypto.randomUUID().slice(0, 8)}`,
+        name: file.name || `image.${file.type.split('/')[1] || 'png'}`,
+        mimeType: file.type,
+        dataB64: dataUrl.slice(commaIdx + 1),
+        previewUrl: dataUrl,
+        size: file.size,
+      });
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
 function Composer({
   isDraft,
   locale,
@@ -858,13 +951,27 @@ function Composer({
   const [dirBrowserOpen, setDirBrowserOpen] = useState(false);
   const [projectSearch, setProjectSearch] = useState('');
   const [hoveredStop, setHoveredStop] = useState<string | null>(null);
+  const [cursorPos, setCursorPos] = useState<number>(composerText.length);
+  const [mentionFiles, setMentionFiles] = useState<string[]>([]);
+  const [mentionLoading, setMentionLoading] = useState(false);
+  const [acDismissed, setAcDismissed] = useState(false);
+  const [activeAcIdx, setActiveAcIdx] = useState(0);
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const modelPopoverRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const providers = useNexStore((s) => s.providers);
   const sessions = useNexStore((s) => s.sessions);
+  const skills = useNexStore((s) => s.skills);
+  const plugins = useNexStore((s) => s.plugins);
   const recentWorkspaces = useNexStore((s) => s.recentWorkspaces);
   const hiddenModelKeys = useNexStore((s) => s.hiddenModelKeys);
+  const composerAttachments = useNexStore((s) => s.composerAttachments);
+  const addComposerAttachment = useNexStore((s) => s.addComposerAttachment);
+  const removeComposerAttachment = useNexStore((s) => s.removeComposerAttachment);
+  const searchWorkspaceFiles = useNexStore((s) => s.searchWorkspaceFiles);
 
   useEffect(() => {
     if (!openMenu) {
@@ -1001,7 +1108,140 @@ function Composer({
 
   const templates = locale === 'en-US' ? PROMPT_TEMPLATES_EN : PROMPT_TEMPLATES_ZH;
   const isRunning = stream.running;
-  const canSend = Boolean(composerText.trim()) && Boolean(selectedRunnerId);
+  const canSend = (Boolean(composerText.trim()) || composerAttachments.length > 0) && Boolean(selectedRunnerId);
+
+  // Detect active `@` file mention or `/` slash command autocomplete trigger
+  const acTrigger = useMemo(() => {
+    if (acDismissed) return null;
+    return detectAutocomplete(composerText, cursorPos);
+  }, [composerText, cursorPos, acDismissed]);
+
+  // Build available `/` slash commands (built-ins + enabled plugins + enabled skills)
+  const slashCommands = useMemo<SlashCmdEntry[]>(() => {
+    const list: SlashCmdEntry[] = [
+      {
+        command: '/goal',
+        insertText: '/goal ',
+        badge: locale === 'en-US' ? 'Built-in' : '内置',
+        description:
+          locale === 'en-US'
+            ? 'Goal-driven thorough execution loop until deliverables are verified'
+            : '启动目标导向彻底执行闭环，直到交付物验证通过',
+      },
+      {
+        command: '/compact',
+        insertText: '/compact ',
+        badge: locale === 'en-US' ? 'Built-in' : '内置',
+        description:
+          locale === 'en-US'
+            ? 'Compact conversation context (optional focus instructions)'
+            : '压缩当前会话上下文（可附带重点保留指令）',
+      },
+    ];
+
+    const seen = new Set(list.map((c) => c.command));
+    for (const pl of plugins) {
+      if (!pl.enabled || !pl.source_ts) continue;
+      const re = /registerCommand\(\s*["']([^"']+)["'](?:\s*,\s*\{[\s\S]*?description\s*:\s*["']([^"']*)["'])?/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(pl.source_ts)) !== null) {
+        const name = '/' + m[1].replace(/^\/+/, '');
+        if (seen.has(name)) continue;
+        seen.add(name);
+        list.push({
+          command: name,
+          insertText: `${name} `,
+          badge: pl.name || 'Plugin',
+          description: m[2] || (locale === 'en-US' ? `Plugin command from ${pl.name}` : `来自插件 ${pl.name} 的命令`),
+        });
+      }
+    }
+
+    for (const sk of skills) {
+      if (!sk.enabled || !sk.name) continue;
+      const cmd = `/${sk.name}`;
+      if (seen.has(cmd)) continue;
+      seen.add(cmd);
+      list.push({
+        command: cmd,
+        insertText: locale === 'en-US' ? `Use skill "${sk.name}": ` : `使用技能「${sk.name}」：`,
+        badge: 'Skill',
+        description: sk.description || sk.name,
+      });
+    }
+    return list;
+  }, [plugins, skills, locale]);
+
+  const filteredSlashCommands = useMemo(() => {
+    if (acTrigger?.kind !== 'slash') return [];
+    const q = acTrigger.query.toLowerCase();
+    return slashCommands
+      .filter((c) => !q || c.command.toLowerCase().includes(q) || c.description.toLowerCase().includes(q))
+      .slice(0, 12);
+  }, [acTrigger, slashCommands]);
+
+  // Debounced workspace file search when `@` trigger is active
+  useEffect(() => {
+    if (acTrigger?.kind !== 'mention') {
+      setMentionFiles([]);
+      setMentionLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setMentionLoading(true);
+    const timer = window.setTimeout(() => {
+      void searchWorkspaceFiles(acTrigger.query)
+        .then((files) => {
+          if (!cancelled) {
+            setMentionFiles((files || []).slice(0, 12));
+            setMentionLoading(false);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setMentionFiles([]);
+            setMentionLoading(false);
+          }
+        });
+    }, 100);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [acTrigger?.kind, acTrigger?.query, searchWorkspaceFiles]);
+
+  useEffect(() => {
+    setActiveAcIdx(0);
+  }, [acTrigger?.kind, acTrigger?.query, mentionFiles.length, filteredSlashCommands.length]);
+
+  const applyAutocompleteChoice = (insertValue: string) => {
+    if (!acTrigger) return;
+    const nextText =
+      composerText.slice(0, acTrigger.replaceStart) + insertValue + composerText.slice(acTrigger.replaceEnd);
+    const nextCursor = acTrigger.replaceStart + insertValue.length;
+    setComposerText(nextText);
+    setCursorPos(nextCursor);
+    setAcDismissed(false);
+    window.requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(nextCursor, nextCursor);
+      }
+    });
+  };
+
+  const handleAttachFiles = async (fileList: FileList | File[]) => {
+    const arr = Array.from(fileList);
+    for (const file of arr) {
+      if (!file.type.startsWith('image/')) continue;
+      const att = await readImageFileAsAttachment(file);
+      if (att) addComposerAttachment(att);
+    }
+  };
+
+  const acItemCount = acTrigger?.kind === 'slash' ? filteredSlashCommands.length : acTrigger?.kind === 'mention' ? mentionFiles.length : 0;
+  const showAcPopover = Boolean(acTrigger) && (acItemCount > 0 || (acTrigger?.kind === 'mention' && mentionLoading));
 
   const selectEffortByIndex = (idx: number) => {
     const opt = effortLevels[idx];
@@ -1068,29 +1308,197 @@ function Composer({
     </>
   );
 
+  const autocompletePopover = showAcPopover && acTrigger ? (
+    <div
+      data-testid={acTrigger.kind === 'slash' ? 'composer-slash-menu' : 'composer-mention-menu'}
+      className="zcode-popover-up absolute bottom-full left-0 right-0 z-50 mb-2 max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
+    >
+      <div className="flex items-center justify-between px-2 py-1 text-[11px] font-medium text-foreground-subtlest">
+        <span>
+          {acTrigger.kind === 'slash'
+            ? locale === 'en-US'
+              ? 'Commands & Skills'
+              : '命令与技能'
+            : locale === 'en-US'
+              ? 'Workspace Files'
+              : '工作区文件'}
+        </span>
+        <span className="font-mono text-[10px]">↑↓ · Tab/Enter · Esc</span>
+      </div>
+      {acTrigger.kind === 'slash' ? (
+        filteredSlashCommands.map((cmd, idx) => (
+          <button
+            key={cmd.command}
+            type="button"
+            data-testid={`slash-option-${cmd.command.slice(1)}`}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              applyAutocompleteChoice(cmd.insertText);
+            }}
+            onMouseEnter={() => setActiveAcIdx(idx)}
+            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors ${
+              idx === activeAcIdx ? 'bg-menu-hover text-foreground' : 'text-foreground hover:bg-menu-hover/60'
+            }`}
+          >
+            <span className="shrink-0 font-mono text-ui-sm font-semibold text-brand-blue">{cmd.command}</span>
+            <span className="min-w-0 flex-1 truncate text-ui-xs text-foreground-subtle">{cmd.description}</span>
+            <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10px] text-foreground-subtlest">
+              {cmd.badge}
+            </span>
+          </button>
+        ))
+      ) : mentionLoading && mentionFiles.length === 0 ? (
+        <div className="flex items-center gap-2 px-2.5 py-2 text-ui-xs text-foreground-subtlest">
+          <LoaderCircle className="size-3.5 animate-spin" />
+          <span>{locale === 'en-US' ? 'Searching files…' : '正在搜索文件…'}</span>
+        </div>
+      ) : (
+        mentionFiles.map((relPath, idx) => {
+          const fname = baseName(relPath);
+          const dir = relPath.includes('/') ? relPath.slice(0, relPath.lastIndexOf('/')) : '';
+          return (
+            <button
+              key={relPath}
+              type="button"
+              data-testid={`mention-option-${idx}`}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                applyAutocompleteChoice(`@${relPath} `);
+              }}
+              onMouseEnter={() => setActiveAcIdx(idx)}
+              className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors ${
+                idx === activeAcIdx ? 'bg-menu-hover text-foreground' : 'text-foreground hover:bg-menu-hover/60'
+              }`}
+            >
+              <FileText className="size-3.5 shrink-0 text-foreground-subtlest" />
+              <span className="shrink-0 font-mono text-ui-sm font-medium">{fname}</span>
+              {dir && <span className="min-w-0 flex-1 truncate font-mono text-ui-xs text-foreground-subtlest">{dir}</span>}
+            </button>
+          );
+        })
+      )}
+    </div>
+  ) : null;
+
+  const attachmentStrip = composerAttachments.length > 0 ? (
+    <div data-testid="composer-attachments" className="mb-2 flex flex-wrap gap-2">
+      {composerAttachments.map((att) => (
+        <div
+          key={att.id}
+          className="group relative flex items-center gap-1.5 rounded-xl border border-border bg-surface/80 p-1 pr-2"
+        >
+          <img
+            src={att.previewUrl}
+            alt={att.name}
+            className="size-10 rounded-lg object-cover"
+          />
+          <div className="min-w-0 max-w-[120px]">
+            <div className="truncate text-ui-xs font-medium text-foreground">{att.name}</div>
+            <div className="text-[10px] text-foreground-subtlest">{Math.max(1, Math.round(att.size / 1024))} KB</div>
+          </div>
+          <button
+            type="button"
+            aria-label={locale === 'en-US' ? 'Remove image' : '移除图片'}
+            onClick={() => removeComposerAttachment(att.id)}
+            className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full border border-border bg-popover text-foreground-subtle shadow-xs transition-colors hover:bg-destructive hover:text-white"
+          >
+            <X className="size-2.5" />
+          </button>
+        </div>
+      ))}
+    </div>
+  ) : null;
+
   const textarea = (
-    <textarea
-      data-testid="composer-input"
-      rows={isDraft ? 2 : 1}
-      value={composerText}
-      onChange={(e) => setComposerText(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-          e.preventDefault();
-          sendPromptOrSteer();
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        multiple
+        className="sr-only"
+        onChange={(e) => {
+          if (e.target.files) {
+            void handleAttachFiles(e.target.files);
+            e.target.value = '';
+          }
+        }}
+      />
+      {attachmentStrip}
+      <textarea
+        ref={textareaRef}
+        data-testid="composer-input"
+        rows={isDraft ? 2 : 1}
+        value={composerText}
+        onChange={(e) => {
+          setComposerText(e.target.value);
+          setCursorPos(e.target.selectionStart ?? e.target.value.length);
+          setAcDismissed(false);
+        }}
+        onClick={(e) => setCursorPos(e.currentTarget.selectionStart ?? composerText.length)}
+        onKeyUp={(e) => setCursorPos(e.currentTarget.selectionStart ?? composerText.length)}
+        onPaste={(e) => {
+          const items = e.clipboardData?.items;
+          if (!items) return;
+          const imgFiles: File[] = [];
+          for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            if (it.kind === 'file' && it.type.startsWith('image/')) {
+              const f = it.getAsFile();
+              if (f) imgFiles.push(f);
+            }
+          }
+          if (imgFiles.length > 0) {
+            e.preventDefault();
+            void handleAttachFiles(imgFiles);
+          }
+        }}
+        onKeyDown={(e) => {
+          if (showAcPopover && acTrigger && acItemCount > 0) {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              setActiveAcIdx((i) => (i + 1) % acItemCount);
+              return;
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setActiveAcIdx((i) => (i - 1 + acItemCount) % acItemCount);
+              return;
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              setAcDismissed(true);
+              return;
+            }
+            if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              if (acTrigger.kind === 'slash') {
+                const chosen = filteredSlashCommands[activeAcIdx];
+                if (chosen) applyAutocompleteChoice(chosen.insertText);
+              } else {
+                const chosenFile = mentionFiles[activeAcIdx];
+                if (chosenFile) applyAutocompleteChoice(`@${chosenFile} `);
+              }
+              return;
+            }
+          }
+          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            sendPromptOrSteer();
+          }
+        }}
+        placeholder={
+          isDraft
+            ? locale === 'en-US'
+              ? 'Ask Nex anything, @ to add context, / for commands or capabilities'
+              : '向 Nex 提问，@ 添加上下文，/ 调用命令或能力'
+            : locale === 'en-US'
+              ? 'Ask for follow-up changes (@ file, / command, paste image)'
+              : '继续追问或提出修改建议（@ 引用文件，/ 命令，支持粘贴图片）'
         }
-      }}
-      placeholder={
-        isDraft
-          ? locale === 'en-US'
-            ? 'Ask Nex anything, @ to add context, / for commands or capabilities'
-            : '向 Nex 提问，@ 添加上下文，/ 调用命令或能力'
-          : locale === 'en-US'
-            ? 'Ask for follow-up changes'
-            : '继续追问或提出修改建议'
-      }
-      className="w-full resize-none bg-transparent text-ui-base leading-relaxed text-foreground placeholder-foreground-subtlest"
-    />
+        className={`${isDraft ? 'min-h-[58px]' : ''} w-full resize-none bg-transparent text-ui-base leading-relaxed text-foreground placeholder-foreground-subtlest`}
+      />
+    </>
   );
 
   const toolbar = (
@@ -1128,13 +1536,29 @@ function Composer({
             <button
               type="button"
               onClick={() => {
-                setComposerText(`${composerText}@`);
+                const next = `${composerText}@`;
+                setComposerText(next);
+                setCursorPos(next.length);
+                setAcDismissed(false);
                 setOpenMenu(null);
+                window.requestAnimationFrame(() => textareaRef.current?.focus());
               }}
               className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-sm text-foreground transition-colors hover:bg-menu-hover"
             >
               <AtSign className="size-3.5 shrink-0 text-foreground-subtle" />
               <span>{locale === 'en-US' ? 'Reference a workspace file' : '引用工作区文件 (@)'}</span>
+            </button>
+            <button
+              type="button"
+              data-testid="attach-image-btn"
+              onClick={() => {
+                setOpenMenu(null);
+                fileInputRef.current?.click();
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-sm text-foreground transition-colors hover:bg-menu-hover"
+            >
+              <ImagePlus className="size-3.5 shrink-0 text-foreground-subtle" />
+              <span>{locale === 'en-US' ? 'Attach image (or paste)' : '上传图片（或直接粘贴）'}</span>
             </button>
           </div>
         )}
@@ -1506,8 +1930,31 @@ function Composer({
     </div>
   );
 
+  const dropProps = {
+    onDragOver: (e: React.DragEvent) => {
+      if (Array.from(e.dataTransfer.types).includes('Files')) {
+        e.preventDefault();
+        setIsDraggingImage(true);
+      }
+    },
+    onDragLeave: () => setIsDraggingImage(false),
+    onDrop: (e: React.DragEvent) => {
+      setIsDraggingImage(false);
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        e.preventDefault();
+        void handleAttachFiles(e.dataTransfer.files);
+      }
+    },
+  };
+
   const card = (
-    <div className="relative rounded-2xl border border-border bg-input px-4 pb-2.5 pt-3 transition-colors focus-within:border-border-hover composer-shadow">
+    <div
+      {...dropProps}
+      className={`relative rounded-2xl border bg-input px-4 pb-2.5 pt-3 transition-colors focus-within:border-border-hover composer-shadow ${
+        isDraggingImage ? 'border-brand-blue ring-2 ring-brand-blue/25' : 'border-border'
+      }`}
+    >
+      {autocompletePopover}
       {textarea}
       {toolbar}
     </div>
@@ -1641,25 +2088,14 @@ function Composer({
           </div>
 
           <div className="px-1">
-            <div className="relative rounded-2xl border border-border bg-input px-4 py-3 transition-colors focus-within:border-border-hover composer-shadow">
-              <textarea
-                data-testid="composer-input"
-                rows={2}
-                value={composerText}
-                onChange={(e) => setComposerText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    sendPromptOrSteer();
-                  }
-                }}
-                placeholder={
-                  locale === 'en-US'
-                    ? 'Ask Nex anything, @ to add context, / for commands or capabilities'
-                    : '向 Nex 提问，@ 添加上下文，/ 调用命令或能力'
-                }
-                className="min-h-[58px] w-full resize-none bg-transparent text-ui-base leading-relaxed text-foreground placeholder-foreground-subtlest"
-              />
+            <div
+              {...dropProps}
+              className={`relative rounded-2xl border bg-input px-4 py-3 transition-colors focus-within:border-border-hover composer-shadow ${
+                isDraggingImage ? 'border-brand-blue ring-2 ring-brand-blue/25' : 'border-border'
+              }`}
+            >
+              {autocompletePopover}
+              {textarea}
               {toolbar}
             </div>
           </div>
@@ -1708,7 +2144,7 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
       className={`flex flex-col ${item.role === 'user' ? 'items-end' : 'items-start'}`}
     >
       {item.role === 'user' ? (
-        <UserBubble text={item.text} />
+        <UserBubble text={item.text} images={item.images} />
       ) : (
         <div className={`min-w-0 w-full space-y-2.5 ${item.streaming ? 'zcode-stream-in' : ''}`}>
           {(item.thinking || item.toolCalls.length > 0) && (

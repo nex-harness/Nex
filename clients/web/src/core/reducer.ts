@@ -266,10 +266,25 @@ export function applySessionEvent(
           .filter((b) => b.type === 'text')
           .map((b) => String(b.text || ''))
           .join('');
-        if (text) {
+        const images = (msg.content || [])
+          .filter((b) => b.type === 'image')
+          .map((b) => ({
+            mime_type: String(b.mime_type || 'image/png'),
+            data_b64: b.data_b64 ? String(b.data_b64) : undefined,
+            image_url: b.image_url ? String(b.image_url) : undefined,
+          }));
+        if (text || images.length > 0) {
           items = [
             ...items,
-            { id: `usr_${ev.seq || items.length}`, role: 'user', text, thinking: '', toolCalls: [] },
+            {
+              id: `usr_${ev.seq || items.length}`,
+              seq: ev.seq || undefined,
+              role: 'user',
+              text,
+              thinking: '',
+              images: images.length > 0 ? images : undefined,
+              toolCalls: [],
+            },
           ];
           const goalTitle = parseGoalTitle(text);
           if (goalTitle) {
@@ -297,6 +312,9 @@ export function applySessionEvent(
         }
       } else if (msg.role === 'assistant') {
         const target = cloneOrAppendTailAssistant();
+        if (ev.seq) {
+          target.seq = ev.seq;
+        }
         const blocks = msg.content || [];
         const stepText = blocks
           .filter((b) => b.type === 'text')

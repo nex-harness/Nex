@@ -5,6 +5,7 @@ import { applySessionEvent, emptyStreamState, RawSessionEventRow, SessionStreamS
 import {
   AgentProfile,
   BrowseDirsResult,
+  ComposerAttachment,
   CronJobRecord,
   DirEntry,
   FilePreview,
@@ -70,6 +71,7 @@ export interface AppState {
   permissionMode: 'full_access' | 'interactive' | 'read_only';
   activeSessionId: string;
   composerText: string;
+  composerAttachments: ComposerAttachment[];
 
   streams: Record<string, SessionStreamState>;
   gitSummary: GitSummary | null;
@@ -89,6 +91,9 @@ export interface AppState {
   setQuickSearchOpen: (open: boolean) => void;
 
   setComposerText: (text: string) => void;
+  addComposerAttachment: (att: ComposerAttachment) => void;
+  removeComposerAttachment: (id: string) => void;
+  clearComposerAttachments: () => void;
   appendComposerRef: (refText: string) => void;
   setSelectedRunner: (id: string, workspacePath?: string) => void;
   setSelectedProvider: (providerId: string) => void;
@@ -197,6 +202,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   permissionMode: 'full_access',
   activeSessionId: '',
   composerText: '',
+  composerAttachments: [],
 
   streams: {},
   gitSummary: null,
@@ -249,6 +255,15 @@ export const useNexStore = create<AppState>((set, get) => ({
   setQuickSearchOpen: (open) => set({ quickSearchOpen: open }),
 
   setComposerText: (text) => set({ composerText: text }),
+  addComposerAttachment: (att) =>
+    set((s) => ({
+      composerAttachments: s.composerAttachments.length >= 4 ? s.composerAttachments : [...s.composerAttachments, att],
+    })),
+  removeComposerAttachment: (id) =>
+    set((s) => ({
+      composerAttachments: s.composerAttachments.filter((a) => a.id !== id),
+    })),
+  clearComposerAttachments: () => set({ composerAttachments: [] }),
   appendComposerRef: (refText) =>
     set((s) => ({ composerText: s.composerText ? `${s.composerText} ${refText} ` : `${refText} ` })),
   setSelectedRunner: (id, workspacePath) => {
@@ -510,14 +525,15 @@ export const useNexStore = create<AppState>((set, get) => ({
   sendPromptOrSteer: (overrideText) => {
     const s = get();
     const text = (overrideText ?? s.composerText).trim();
-    if (!text || !s.selectedRunnerId) return;
+    const attachments = overrideText === undefined ? s.composerAttachments : [];
+    if ((!text && attachments.length === 0) || !s.selectedRunnerId) return;
 
     let sessionId = s.activeSessionId;
     const currentStream = sessionId ? s.streams[sessionId] : undefined;
 
     if (sessionId && currentStream?.running) {
       wsClient.sendEnvelope('session.steer', { text }, { session_id: sessionId, runner_id: s.selectedRunnerId });
-      if (overrideText === undefined) set({ composerText: '' });
+      if (overrideText === undefined) set({ composerText: '', composerAttachments: [] });
       return;
     }
 
@@ -530,6 +546,15 @@ export const useNexStore = create<AppState>((set, get) => ({
       }));
     }
 
+    const images =
+      attachments.length > 0
+        ? attachments.map((a) => ({
+            type: 'image',
+            mime_type: a.mimeType,
+            data_b64: a.dataB64,
+          }))
+        : undefined;
+
     wsClient.sendEnvelope(
       'session.prompt',
       {
@@ -541,10 +566,11 @@ export const useNexStore = create<AppState>((set, get) => ({
         thinking_effort: s.thinkingEffort,
         permission_mode: s.permissionMode,
         text,
+        images,
       },
       { session_id: sessionId, runner_id: s.selectedRunnerId },
     );
-    if (overrideText === undefined) set({ composerText: '' });
+    if (overrideText === undefined) set({ composerText: '', composerAttachments: [] });
   },
 
   abortActiveSession: () => {

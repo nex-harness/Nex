@@ -206,11 +206,28 @@ export interface ToolCallCard {
   deletions?: number;
 }
 
+export interface ChatImageBlock {
+  mime_type: string;
+  data_b64?: string;
+  image_url?: string;
+}
+
+export interface ComposerAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  dataB64: string;
+  previewUrl: string;
+  size: number;
+}
+
 export interface ChatTurnItem {
   id: string;
+  seq?: number;
   role: 'user' | 'assistant';
   text: string;
   thinking: string;
+  images?: ChatImageBlock[];
   toolCalls: ToolCallCard[];
   streaming?: boolean;
 }
