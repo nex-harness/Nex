@@ -55,6 +55,9 @@ func Open(dataDir string) (*Store, error) {
 
 	// Compact any legacy per-token transient delta rows so historical sessions open instantaneously.
 	_, _ = mainDB.Exec(`DELETE FROM session_events WHERE event_type IN ('message_update', 'tool_execution_update')`)
+	// Idempotent migrations for custom per-model reasoning levels and wire effort maps
+	_, _ = mainDB.Exec(`ALTER TABLE models ADD COLUMN reasoning_levels_json TEXT NOT NULL DEFAULT ''`)
+	_, _ = mainDB.Exec(`ALTER TABLE models ADD COLUMN reasoning_map_json TEXT NOT NULL DEFAULT ''`)
 
 	return &Store{
 		dataDir:     dataDir,
@@ -263,12 +266,25 @@ func (s *Store) UpsertModelsBatch(ctx context.Context, models []ai.ModelMeta, ov
 				continue
 			}
 		}
+		levelsJSON := ""
+		if len(m.ReasoningLevels) > 0 {
+			if b, jErr := json.Marshal(m.ReasoningLevels); jErr == nil {
+				levelsJSON = string(b)
+			}
+		}
+		mapJSON := ""
+		if len(m.ReasoningMap) > 0 {
+			if b, jErr := json.Marshal(m.ReasoningMap); jErr == nil {
+				mapJSON = string(b)
+			}
+		}
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO models (
 				id, provider_id, display_name, source, context_window, max_output_tokens,
 				supports_vision, supports_pdf, supports_audio, supports_video, supports_tools, supports_reasoning, supports_caching,
-				cost_input_per_1m, cost_output_per_1m, cost_cache_read_per_1m, cost_cache_write_per_1m, enabled
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+				cost_input_per_1m, cost_output_per_1m, cost_cache_read_per_1m, cost_cache_write_per_1m,
+				reasoning_levels_json, reasoning_map_json, enabled
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
 			ON CONFLICT(provider_id, id) DO UPDATE SET
 				display_name=excluded.display_name, source=excluded.source,
 				context_window=excluded.context_window, max_output_tokens=excluded.max_output_tokens,
@@ -277,11 +293,13 @@ func (s *Store) UpsertModelsBatch(ctx context.Context, models []ai.ModelMeta, ov
 				supports_tools=excluded.supports_tools, supports_reasoning=excluded.supports_reasoning,
 				supports_caching=excluded.supports_caching,
 				cost_input_per_1m=excluded.cost_input_per_1m, cost_output_per_1m=excluded.cost_output_per_1m,
-				cost_cache_read_per_1m=excluded.cost_cache_read_per_1m, cost_cache_write_per_1m=excluded.cost_cache_write_per_1m
+				cost_cache_read_per_1m=excluded.cost_cache_read_per_1m, cost_cache_write_per_1m=excluded.cost_cache_write_per_1m,
+				reasoning_levels_json=excluded.reasoning_levels_json, reasoning_map_json=excluded.reasoning_map_json
 		`, m.ID, m.ProviderID, m.DisplayName, src, m.ContextWindow, m.MaxOutputTokens,
 			b2i(m.SupportsVision), b2i(m.SupportsPDF), b2i(m.SupportsAudio), b2i(m.SupportsVideo),
 			b2i(m.SupportsTools), b2i(m.SupportsReasoning), b2i(m.SupportsCaching),
 			m.Pricing.InputPer1M, m.Pricing.OutputPer1M, m.Pricing.CacheReadPer1M, m.Pricing.CacheWritePer1M,
+			levelsJSON, mapJSON,
 		)
 		if err != nil {
 			return err
@@ -293,15 +311,18 @@ func (s *Store) UpsertModelsBatch(ctx context.Context, models []ai.ModelMeta, ov
 func (s *Store) GetModel(ctx context.Context, providerID, modelID string) (*ai.ModelMeta, error) {
 	var m ai.ModelMeta
 	var vis, pdf, aud, vid, tls, rsn, cch, en int
+	var levelsJSON, mapJSON string
 	err := s.mainDB.QueryRowContext(ctx, `
 		SELECT id, provider_id, display_name, source, context_window, max_output_tokens,
 		       supports_vision, supports_pdf, supports_audio, supports_video, supports_tools, supports_reasoning, supports_caching,
-		       cost_input_per_1m, cost_output_per_1m, cost_cache_read_per_1m, cost_cache_write_per_1m, enabled
+		       cost_input_per_1m, cost_output_per_1m, cost_cache_read_per_1m, cost_cache_write_per_1m,
+		       reasoning_levels_json, reasoning_map_json, enabled
 		FROM models WHERE provider_id = ? AND id = ?
 	`, providerID, modelID).Scan(
 		&m.ID, &m.ProviderID, &m.DisplayName, &m.Source, &m.ContextWindow, &m.MaxOutputTokens,
 		&vis, &pdf, &aud, &vid, &tls, &rsn, &cch,
-		&m.Pricing.InputPer1M, &m.Pricing.OutputPer1M, &m.Pricing.CacheReadPer1M, &m.Pricing.CacheWritePer1M, &en,
+		&m.Pricing.InputPer1M, &m.Pricing.OutputPer1M, &m.Pricing.CacheReadPer1M, &m.Pricing.CacheWritePer1M,
+		&levelsJSON, &mapJSON, &en,
 	)
 	if err != nil {
 		return nil, err
@@ -313,6 +334,12 @@ func (s *Store) GetModel(ctx context.Context, providerID, modelID string) (*ai.M
 	m.SupportsTools = tls == 1
 	m.SupportsReasoning = rsn == 1
 	m.SupportsCaching = cch == 1
+	if levelsJSON != "" {
+		_ = json.Unmarshal([]byte(levelsJSON), &m.ReasoningLevels)
+	}
+	if mapJSON != "" {
+		_ = json.Unmarshal([]byte(mapJSON), &m.ReasoningMap)
+	}
 	m.ReasoningLevels = ai.DefaultReasoningLevels(m)
 	return &m, nil
 }
@@ -320,7 +347,8 @@ func (s *Store) GetModel(ctx context.Context, providerID, modelID string) (*ai.M
 func (s *Store) ListModels(ctx context.Context, providerID string) ([]ai.ModelMeta, error) {
 	q := `SELECT id, provider_id, display_name, source, context_window, max_output_tokens,
 	             supports_vision, supports_pdf, supports_audio, supports_video, supports_tools, supports_reasoning, supports_caching,
-	             cost_input_per_1m, cost_output_per_1m, cost_cache_read_per_1m, cost_cache_write_per_1m
+	             cost_input_per_1m, cost_output_per_1m, cost_cache_read_per_1m, cost_cache_write_per_1m,
+	             reasoning_levels_json, reasoning_map_json
 	      FROM models`
 	var args []any
 	if providerID != "" {
@@ -337,9 +365,11 @@ func (s *Store) ListModels(ctx context.Context, providerID string) ([]ai.ModelMe
 	for rows.Next() {
 		var m ai.ModelMeta
 		var vis, pdf, aud, vid, tls, rsn, cch int
+		var levelsJSON, mapJSON string
 		if err := rows.Scan(&m.ID, &m.ProviderID, &m.DisplayName, &m.Source, &m.ContextWindow, &m.MaxOutputTokens,
 			&vis, &pdf, &aud, &vid, &tls, &rsn, &cch,
-			&m.Pricing.InputPer1M, &m.Pricing.OutputPer1M, &m.Pricing.CacheReadPer1M, &m.Pricing.CacheWritePer1M); err != nil {
+			&m.Pricing.InputPer1M, &m.Pricing.OutputPer1M, &m.Pricing.CacheReadPer1M, &m.Pricing.CacheWritePer1M,
+			&levelsJSON, &mapJSON); err != nil {
 			return nil, err
 		}
 		m.SupportsVision = vis == 1
@@ -349,6 +379,12 @@ func (s *Store) ListModels(ctx context.Context, providerID string) ([]ai.ModelMe
 		m.SupportsTools = tls == 1
 		m.SupportsReasoning = rsn == 1
 		m.SupportsCaching = cch == 1
+		if levelsJSON != "" {
+			_ = json.Unmarshal([]byte(levelsJSON), &m.ReasoningLevels)
+		}
+		if mapJSON != "" {
+			_ = json.Unmarshal([]byte(mapJSON), &m.ReasoningMap)
+		}
 		m.ReasoningLevels = ai.DefaultReasoningLevels(m)
 		out = append(out, m)
 	}

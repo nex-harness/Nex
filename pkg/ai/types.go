@@ -147,12 +147,14 @@ type ToolDefinition struct {
 type ThinkingEffort string
 
 const (
-	ThinkingOff    ThinkingEffort = ""
-	ThinkingLow    ThinkingEffort = "low"
-	ThinkingMedium ThinkingEffort = "medium"
-	ThinkingHigh   ThinkingEffort = "high"
-	ThinkingXHigh  ThinkingEffort = "xhigh"
-	ThinkingMax    ThinkingEffort = "max"
+	ThinkingOff     ThinkingEffort = ""
+	ThinkingMinimal ThinkingEffort = "minimal"
+	ThinkingLow     ThinkingEffort = "low"
+	ThinkingMedium  ThinkingEffort = "medium"
+	ThinkingOn      ThinkingEffort = "on"
+	ThinkingHigh    ThinkingEffort = "high"
+	ThinkingXHigh   ThinkingEffort = "xhigh"
+	ThinkingMax     ThinkingEffort = "max"
 )
 
 // SystemSection represents a categorized segment of the assembled system instructions,
@@ -173,8 +175,10 @@ type StreamRequest struct {
 	Tools           []ToolDefinition `json:"tools,omitempty"`
 	MaxOutputTokens int              `json:"max_output_tokens,omitempty"`
 	Temperature     *float64         `json:"temperature,omitempty"`
-	ThinkingEffort  ThinkingEffort   `json:"thinking_effort,omitempty"`
-	PromptCacheKey  string           `json:"prompt_cache_key,omitempty"`
+	ThinkingEffort  ThinkingEffort    `json:"thinking_effort,omitempty"`
+	ReasoningLevels []string          `json:"reasoning_levels,omitempty"`
+	ReasoningMap    map[string]string `json:"reasoning_map,omitempty"`
+	PromptCacheKey  string            `json:"prompt_cache_key,omitempty"`
 }
 
 // FullSystemPrompt returns the combined system instructions from SystemSections and SystemPrompt.

@@ -31,29 +31,135 @@ type ModelMeta struct {
 	SupportsAudio     bool         `json:"supports_audio"`
 	SupportsVideo     bool         `json:"supports_video"`
 	SupportsTools     bool         `json:"supports_tools"`
-	SupportsReasoning bool         `json:"supports_reasoning"`
-	SupportsCaching   bool         `json:"supports_caching"`
-	ReasoningLevels   []string     `json:"reasoning_levels,omitempty"`
-	Pricing           ModelPricing `json:"pricing"`
+	SupportsReasoning bool              `json:"supports_reasoning"`
+	SupportsCaching   bool              `json:"supports_caching"`
+	ReasoningLevels   []string          `json:"reasoning_levels,omitempty"`
+	ReasoningMap      map[string]string `json:"reasoning_map,omitempty"`
+	Pricing           ModelPricing      `json:"pricing"`
 }
 
 // DefaultReasoningLevels returns the ordered reasoning effort levels supported by a model.
-// Levels are strictly ordered from lowest (off) to highest (high/xhigh/max).
+// Levels are strictly ordered from lowest (off) to highest (on/high/xhigh/max).
+// Non-reasoning models return nil unless explicitly configured with ReasoningLevels.
 func DefaultReasoningLevels(m ModelMeta) []string {
 	if len(m.ReasoningLevels) > 0 {
 		return m.ReasoningLevels
 	}
+	if !m.SupportsReasoning {
+		return nil
+	}
 	idLower := strings.ToLower(m.ID)
-	if strings.Contains(idLower, "claude") && (strings.Contains(idLower, "opus") || strings.Contains(idLower, "sonnet") || strings.Contains(idLower, "4")) {
+	switch {
+	case strings.Contains(idLower, "claude") && (strings.Contains(idLower, "opus") || strings.Contains(idLower, "sonnet") || strings.Contains(idLower, "4")):
 		return []string{"off", "low", "medium", "high", "max"}
-	}
-	if strings.Contains(idLower, "gpt-5") || strings.Contains(idLower, "codex") || strings.Contains(idLower, "o3") || strings.Contains(idLower, "o4") {
+	case strings.Contains(idLower, "gpt-5") || strings.Contains(idLower, "codex") || strings.Contains(idLower, "o3") || strings.Contains(idLower, "o4"):
 		return []string{"off", "low", "medium", "high", "xhigh"}
-	}
-	if m.SupportsReasoning || m.Source == "custom" {
+	case strings.Contains(idLower, "gemini"):
+		return []string{"off", "minimal", "low", "medium", "high"}
+	case strings.Contains(idLower, "deepseek-r1") || strings.Contains(idLower, "reasoner") || strings.Contains(idLower, "qwq") || strings.Contains(idLower, "glm-4.5") || strings.Contains(idLower, "glm-z1"):
+		return []string{"off", "on"}
+	default:
 		return []string{"off", "low", "medium", "high"}
 	}
-	return []string{"off", "low", "medium", "high"}
+}
+
+// CanonicalEffortRank maps standard effort words to a comparable intensity rank (0..6).
+// Unknown custom words return -1.
+func CanonicalEffortRank(level string) int {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "", "off", "none", "disabled":
+		return 0
+	case "minimal", "min":
+		return 1
+	case "low":
+		return 2
+	case "medium", "med", "on", "enabled", "auto":
+		return 3
+	case "high":
+		return 4
+	case "xhigh", "extra_high", "extra-high":
+		return 5
+	case "max", "maximum", "ultra":
+		return 6
+	default:
+		return -1
+	}
+}
+
+// ResolveWireEffort translates a requested ThinkingEffort into a provider-compatible wire value
+// by checking req.ReasoningMap first, then matching or clamping against driverSupported values
+// by canonical intensity rank. Returns ("", false) when reasoning should be omitted/off.
+func ResolveWireEffort(req *StreamRequest, driverSupported []string) (wireValue string, active bool) {
+	raw := strings.TrimSpace(string(req.ThinkingEffort))
+	lower := strings.ToLower(raw)
+
+	// 1. Check explicit per-model ReasoningMap first (supports custom gateway words & explicit off mapping like "none")
+	if len(req.ReasoningMap) > 0 {
+		lookupKey := lower
+		if lookupKey == "" {
+			lookupKey = "off"
+		}
+		for k, v := range req.ReasoningMap {
+			if strings.EqualFold(strings.TrimSpace(k), lookupKey) {
+				mapped := strings.TrimSpace(v)
+				if mapped == "" || strings.EqualFold(mapped, "null") {
+					return "", false
+				}
+				if lookupKey == "off" || lookupKey == "none" {
+					return mapped, false
+				}
+				return mapped, true
+			}
+		}
+	}
+
+	if lower == "" || lower == "off" || lower == "none" || lower == "disabled" {
+		return "", false
+	}
+
+	// 2. If the requested value is directly in driverSupported, send it verbatim
+	for _, s := range driverSupported {
+		if strings.EqualFold(s, raw) {
+			return s, true
+		}
+	}
+
+	// 3. If the model explicitly declared this custom word in ReasoningLevels (not in canonical catalog),
+	// pass it through verbatim so custom gateway values work without hardcoding!
+	reqRank := CanonicalEffortRank(lower)
+	if reqRank < 0 {
+		return raw, true
+	}
+
+	// 4. Clamp to closest supported wire level at or below reqRank (or lowest above if none below)
+	bestVal := ""
+	bestRank := -1
+	for _, s := range driverSupported {
+		sr := CanonicalEffortRank(s)
+		if sr <= 0 {
+			continue
+		}
+		if sr <= reqRank && sr > bestRank {
+			bestRank = sr
+			bestVal = s
+		}
+	}
+	if bestVal != "" {
+		return bestVal, true
+	}
+	// Fallback: pick lowest positive supported value
+	lowestRank := 999
+	for _, s := range driverSupported {
+		sr := CanonicalEffortRank(s)
+		if sr > 0 && sr < lowestRank {
+			lowestRank = sr
+			bestVal = s
+		}
+	}
+	if bestVal != "" {
+		return bestVal, true
+	}
+	return raw, true
 }
 
 // NewProvider instantiates a streaming Provider for the given Driver.

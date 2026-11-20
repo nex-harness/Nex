@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -103,20 +104,30 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req *StreamRequest) (<-c
 	return ch, nil
 }
 
-func thinkingBudgetForEffort(effort ThinkingEffort) int {
-	switch effort {
-	case ThinkingLow:
+func thinkingBudgetForEffort(req *StreamRequest) int {
+	val, active := ResolveWireEffort(req, []string{"minimal", "low", "medium", "on", "high", "xhigh", "max"})
+	if !active || val == "" {
+		return 0
+	}
+	// Allow explicit numeric token budget override in ReasoningMap (e.g. {"high": "12000"})
+	if n, err := strconv.Atoi(val); err == nil && n >= 1024 {
+		return n
+	}
+	switch strings.ToLower(val) {
+	case "minimal":
+		return 1024
+	case "low":
 		return 2048
-	case ThinkingMedium:
+	case "medium", "on":
 		return 8192
-	case ThinkingHigh:
+	case "high":
 		return 16000
-	case ThinkingXHigh:
+	case "xhigh":
 		return 24576
-	case ThinkingMax:
+	case "max":
 		return 32768
 	default:
-		return 0
+		return 8192
 	}
 }
 
@@ -131,7 +142,7 @@ func buildAnthropicPayload(req *StreamRequest) (map[string]any, error) {
 		"stream": true,
 	}
 
-	budget := thinkingBudgetForEffort(req.ThinkingEffort)
+	budget := thinkingBudgetForEffort(req)
 	if budget > 0 {
 		if maxTokens <= budget {
 			maxTokens = budget + 8192

@@ -30,7 +30,7 @@ export interface ModelPricing {
   cache_write_per_1m: number;
 }
 
-export type ThinkingEffort = '' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type ThinkingEffort = '' | 'minimal' | 'low' | 'medium' | 'on' | 'high' | 'xhigh' | 'max' | (string & {});
 
 export interface ModelMeta {
   id: string;
@@ -45,6 +45,7 @@ export interface ModelMeta {
   supports_reasoning: boolean;
   supports_caching: boolean;
   reasoning_levels?: string[];
+  reasoning_map?: Record<string, string>;
   pricing: ModelPricing;
 }
 

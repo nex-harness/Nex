@@ -482,6 +482,8 @@ func (n *Node) ExecutePrompt(
 		WorkDir:         workDir,
 		SystemSections:  sections,
 		ThinkingEffort:  p.ThinkingEffort,
+		ReasoningLevels: modelMeta.ReasoningLevels,
+		ReasoningMap:    modelMeta.ReasoningMap,
 		MaxOutputTokens: modelMeta.MaxOutputTokens,
 		ContextWindow:   modelMeta.ContextWindow,
 		Pricing:         modelMeta.Pricing,

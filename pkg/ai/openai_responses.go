@@ -111,16 +111,15 @@ func buildResponsesPayload(req *StreamRequest) (map[string]any, error) {
 		out["prompt_cache_key"] = req.PromptCacheKey
 	}
 
-	if req.ThinkingEffort != ThinkingOff && req.ThinkingEffort != "off" && req.ThinkingEffort != "none" {
-		effortVal := string(req.ThinkingEffort)
-		if req.ThinkingEffort == ThinkingMax {
-			effortVal = "xhigh"
-		}
+	if effortVal, active := ResolveWireEffort(req, []string{"minimal", "low", "medium", "high", "xhigh"}); active {
 		out["reasoning"] = map[string]any{
 			"effort":  effortVal,
 			"summary": "auto",
 		}
 		out["include"] = []string{"reasoning.encrypted_content"}
+	} else if effortVal != "" {
+		// Explicit off mapping via ReasoningMap (e.g. {"off": "none"})
+		out["reasoning"] = map[string]any{"effort": effortVal}
 	} else if req.Temperature != nil {
 		out["temperature"] = *req.Temperature
 	}

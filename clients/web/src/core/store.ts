@@ -214,8 +214,8 @@ export const useNexStore = create<AppState>((set, get) => ({
   })(),
   thinkingEffort: (() => {
     const saved = safeStorageGet('nex.thinkingEffort');
-    if (saved === '' || saved === 'low' || saved === 'medium' || saved === 'high' || saved === 'xhigh' || saved === 'max') {
-      return saved;
+    if (saved !== null) {
+      return saved as ThinkingEffort;
     }
     return 'medium';
   })(),

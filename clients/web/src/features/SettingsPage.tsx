@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Search,
   Settings2,
+  SlidersHorizontal,
   Sun,
   Trash2,
   WandSparkles,
@@ -770,6 +771,9 @@ function ProvidersAndModelsSection({
   const [newMaxOut, setNewMaxOut] = useState(16_384);
   const [newSupportsVision, setNewSupportsVision] = useState(true);
   const [newSupportsReasoning, setNewSupportsReasoning] = useState(true);
+  const [newReasoningLevels, setNewReasoningLevels] = useState('');
+  const [newReasoningMap, setNewReasoningMap] = useState('');
+  const [editingModel, setEditingModel] = useState<ModelMeta | null>(null);
   const [fetchingInfo, setFetchingInfo] = useState(false);
   const [fetchRemoteOpen, setFetchRemoteOpen] = useState(false);
   const [remoteModels, setRemoteModels] = useState<string[]>([]);
@@ -1000,6 +1004,59 @@ function ProvidersAndModelsSection({
     }
   };
 
+  const parseReasoningLevelsInput = (raw: string): string[] | undefined => {
+    const parts = raw
+      .split(/[,，\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return parts.length > 0 ? parts : undefined;
+  };
+
+  const parseReasoningMapInput = (raw: string): Record<string, string> | undefined => {
+    const out: Record<string, string> = {};
+    for (const pair of raw.split(/[,，;\n]+/)) {
+      const idx = pair.indexOf('=');
+      if (idx <= 0) continue;
+      const k = pair.slice(0, idx).trim();
+      const v = pair.slice(idx + 1).trim();
+      if (k) out[k] = v;
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+  };
+
+  const formatReasoningMapInput = (m?: Record<string, string>): string => {
+    if (!m) return '';
+    return Object.entries(m)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(', ');
+  };
+
+  const openAddModelDialog = () => {
+    setEditingModel(null);
+    setNewModelId('');
+    setNewModelName('');
+    setNewCtxWin(128_000);
+    setNewMaxOut(16_384);
+    setNewSupportsVision(true);
+    setNewSupportsReasoning(true);
+    setNewReasoningLevels('');
+    setNewReasoningMap('');
+    setShowAddModel(true);
+  };
+
+  const openEditModelDialog = (m: ModelMeta) => {
+    setEditingModel(m);
+    setNewModelId(m.id);
+    setNewModelName(m.display_name || '');
+    setNewCtxWin(m.context_window || 128_000);
+    setNewMaxOut(m.max_output_tokens || 16_384);
+    setNewSupportsVision(Boolean(m.supports_vision));
+    setNewSupportsReasoning(Boolean(m.supports_reasoning));
+    setNewReasoningLevels((m.reasoning_levels || []).join(', '));
+    setNewReasoningMap(formatReasoningMapInput(m.reasoning_map));
+    setShowAddModel(true);
+  };
+
   const addCustomModel = async () => {
     if (!draft || !newModelId.trim()) return;
     if (!draft.id) {
@@ -1007,26 +1064,42 @@ function ProvidersAndModelsSection({
       return;
     }
     const modelId = newModelId.trim();
+    const parsedLevels = parseReasoningLevelsInput(newReasoningLevels);
+    const parsedMap = parseReasoningMapInput(newReasoningMap);
     await apiFetch('/api/v1/models', {
       method: 'POST',
       body: JSON.stringify({
+        ...(editingModel || {}),
         id: modelId,
         provider_id: draft.id,
         display_name: newModelName.trim() || modelId,
-        source: 'custom',
+        source: editingModel?.source || 'custom',
         context_window: newCtxWin,
         max_output_tokens: newMaxOut,
         supports_vision: newSupportsVision,
-        supports_tools: true,
-        supports_reasoning: newSupportsReasoning,
-        supports_caching: true,
+        supports_tools: editingModel?.supports_tools ?? true,
+        supports_reasoning: newSupportsReasoning || Boolean(parsedLevels && parsedLevels.length >= 2),
+        supports_caching: editingModel?.supports_caching ?? true,
+        reasoning_levels: parsedLevels,
+        reasoning_map: parsedMap,
       }),
     }).catch(() => {});
+    setEditingModel(null);
     setNewModelId('');
     setNewModelName('');
+    setNewReasoningLevels('');
+    setNewReasoningMap('');
     setShowAddModel(false);
     await refreshInitialData();
-    onFlash(isEn ? `Model "${modelId}" added` : `已向 ${draft.id} 添加模型 "${modelId}"`);
+    onFlash(
+      editingModel
+        ? isEn
+          ? `Model "${modelId}" updated`
+          : `已更新模型 "${modelId}"`
+        : isEn
+          ? `Model "${modelId}" added`
+          : `已向 ${draft.id} 添加模型 "${modelId}"`,
+    );
   };
 
   const removeModel = async (m: ModelMeta) => {
@@ -1307,7 +1380,7 @@ function ProvidersAndModelsSection({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowAddModel(true)}
+                      onClick={openAddModelDialog}
                       className="flex h-7 items-center gap-1 rounded-lg border border-border bg-card px-2.5 text-ui-xs text-foreground transition-colors hover:bg-hover"
                     >
                       <Plus className="size-3" />
@@ -1511,6 +1584,36 @@ function ProvidersAndModelsSection({
                             <span>Reasoning</span>
                           </label>
                         </div>
+                        {newSupportsReasoning && (
+                          <div className="space-y-2.5 rounded-xl border border-border/70 bg-surface/50 p-3">
+                            <label className="block space-y-1">
+                              <span className="text-ui-xs text-foreground-subtle">
+                                {isEn
+                                  ? 'Reasoning levels (low → high, comma-separated)'
+                                  : '推理强度档位（按低→高逗号分隔，留空则按模型族自动推断）'}
+                              </span>
+                              <input
+                                value={newReasoningLevels}
+                                onChange={(e) => setNewReasoningLevels(e.target.value)}
+                                placeholder="off, low, medium, high, xhigh  (or off, on)"
+                                className={settingsMonoInputClass}
+                              />
+                            </label>
+                            <label className="block space-y-1">
+                              <span className="text-ui-xs text-foreground-subtle">
+                                {isEn
+                                  ? 'Wire effort mapping (optional, e.g. max=xhigh, off=none)'
+                                  : '协议参数映射（可选，如 max=xhigh, off=none 或 high=12000）'}
+                              </span>
+                              <input
+                                value={newReasoningMap}
+                                onChange={(e) => setNewReasoningMap(e.target.value)}
+                                placeholder="max=xhigh, off=none"
+                                className={settingsMonoInputClass}
+                              />
+                            </label>
+                          </div>
+                        )}
                       </div>
 
                       <div className="mt-5 flex items-center justify-between">
@@ -1634,6 +1737,14 @@ function ProvidersAndModelsSection({
                                 {testRes.ok ? testRes.msg : 'ERR'}
                               </span>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => openEditModelDialog(m)}
+                              title={isEn ? 'Configure model & reasoning levels' : '配置模型与推理强度档位'}
+                              className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
+                            >
+                              <SlidersHorizontal className="size-3.5" />
+                            </button>
                             <button
                               type="button"
                               onClick={() => {

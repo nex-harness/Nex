@@ -25,6 +25,8 @@ type LoopConfig struct {
 	SystemPrompt    string
 	SystemSections  []ai.SystemSection
 	ThinkingEffort  ai.ThinkingEffort
+	ReasoningLevels []string
+	ReasoningMap    map[string]string
 	MaxOutputTokens int
 	MaxTurns        int
 	ContextWindow      int
@@ -257,6 +259,8 @@ func (l *Loop) Run(ctx context.Context, promptMsg *ai.Message) (*ai.Message, err
 				Tools:           activeTools,
 				MaxOutputTokens: l.cfg.MaxOutputTokens,
 				ThinkingEffort:  l.cfg.ThinkingEffort,
+				ReasoningLevels: l.cfg.ReasoningLevels,
+				ReasoningMap:    l.cfg.ReasoningMap,
 				PromptCacheKey:  l.cfg.SessionID,
 			}
 

@@ -110,11 +110,9 @@ func buildChatCompletionsPayload(req *StreamRequest) (map[string]any, error) {
 	if req.MaxOutputTokens > 0 {
 		out["max_tokens"] = req.MaxOutputTokens
 	}
-	if req.ThinkingEffort != ThinkingOff && req.ThinkingEffort != "off" && req.ThinkingEffort != "none" {
-		effortVal := string(req.ThinkingEffort)
-		if req.ThinkingEffort == ThinkingMax || req.ThinkingEffort == ThinkingXHigh {
-			effortVal = "high"
-		}
+	if effortVal, active := ResolveWireEffort(req, []string{"minimal", "low", "medium", "high"}); active {
+		out["reasoning_effort"] = effortVal
+	} else if effortVal != "" {
 		out["reasoning_effort"] = effortVal
 	} else if req.Temperature != nil {
 		out["temperature"] = *req.Temperature

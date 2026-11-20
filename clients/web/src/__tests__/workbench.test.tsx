@@ -682,4 +682,65 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       expect(commitSpy).toHaveBeenCalledWith('feat: test commit');
     });
   });
+
+  it('handles custom effort level names, canonical clamping across models, and hides slider for non-reasoning models', () => {
+    useNexStore.setState({
+      mainView: 'workspace',
+      activeSessionId: '',
+      locale: 'zh-CN',
+      providers: [
+        { id: 'custom', name: 'CustomGW', driver: 'openai_chat', base_url: 'https://gw.example/v1', api_key: '', proxy_mode: 'direct', enabled: true },
+      ],
+      models: [
+        {
+          id: 'my-custom-thinker',
+          provider_id: 'custom',
+          display_name: 'Custom Thinker',
+          source: 'custom',
+          context_window: 128000,
+          max_output_tokens: 8192,
+          supports_vision: false,
+          supports_pdf: false,
+          supports_tools: true,
+          supports_reasoning: true,
+          supports_caching: false,
+          reasoning_levels: ['off', 'turbo', 'ultra'],
+          pricing: { input_per_1m: 0, output_per_1m: 0, cache_read_per_1m: 0, cache_write_per_1m: 0 },
+        },
+        {
+          id: 'gpt-4o-mini',
+          provider_id: 'custom',
+          display_name: 'GPT-4o Mini',
+          source: 'models.dev',
+          context_window: 128000,
+          max_output_tokens: 4096,
+          supports_vision: true,
+          supports_pdf: false,
+          supports_tools: true,
+          supports_reasoning: false,
+          supports_caching: false,
+          pricing: { input_per_1m: 0.15, output_per_1m: 0.6, cache_read_per_1m: 0, cache_write_per_1m: 0 },
+        },
+      ],
+      selectedProviderId: 'custom',
+      selectedModelId: 'my-custom-thinker',
+      thinkingEffort: 'max', // from a previous Claude session -> should clamp to highest custom level ("Ultra"), NOT off!
+      hiddenModelKeys: {},
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('model-effort-btn'));
+
+    // 1. Custom words are preserved and "max" clamps cleanly to index 2 ("Ultra")
+    const slider = screen.getByTestId('composer-thought-slider') as HTMLInputElement;
+    expect(slider.max).toBe('2');
+    expect(slider.value).toBe('2');
+    expect(slider.getAttribute('aria-valuetext')).toBe('Ultra');
+
+    // 2. Switching to a non-reasoning model hides the slider and shows unsupported notice
+    fireEvent.click(screen.getByTestId('model-option-gpt-4o-mini'));
+    fireEvent.click(screen.getByTestId('model-effort-btn'));
+    expect(screen.queryByTestId('composer-thought-slider')).toBeNull();
+    expect(screen.getByTestId('composer-thought-unsupported')).toBeTruthy();
+  });
 });

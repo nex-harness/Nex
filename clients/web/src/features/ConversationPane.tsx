@@ -750,17 +750,22 @@ const PERMISSION_OPTIONS: Array<{
 
 interface EffortLevelOption {
   value: ThinkingEffort;
-  labelKey: MessageKey;
+  labelKey?: MessageKey;
+  customLabel?: string;
+  rank: number;
 }
 
 const EFFORT_CATALOG: Record<string, EffortLevelOption> = {
-  off: { value: '', labelKey: 'chat.thought.off' },
-  '': { value: '', labelKey: 'chat.thought.off' },
-  low: { value: 'low', labelKey: 'chat.thought.low' },
-  medium: { value: 'medium', labelKey: 'chat.thought.medium' },
-  high: { value: 'high', labelKey: 'chat.thought.high' },
-  xhigh: { value: 'xhigh', labelKey: 'chat.thought.xhigh' },
-  max: { value: 'max', labelKey: 'chat.thought.max' },
+  off: { value: '', labelKey: 'chat.thought.off', rank: 0 },
+  none: { value: '', labelKey: 'chat.thought.off', rank: 0 },
+  '': { value: '', labelKey: 'chat.thought.off', rank: 0 },
+  minimal: { value: 'minimal', labelKey: 'chat.thought.minimal', rank: 1 },
+  low: { value: 'low', labelKey: 'chat.thought.low', rank: 2 },
+  medium: { value: 'medium', labelKey: 'chat.thought.medium', rank: 3 },
+  on: { value: 'on', labelKey: 'chat.thought.on', rank: 3 },
+  high: { value: 'high', labelKey: 'chat.thought.high', rank: 4 },
+  xhigh: { value: 'xhigh', labelKey: 'chat.thought.xhigh', rank: 5 },
+  max: { value: 'max', labelKey: 'chat.thought.max', rank: 6 },
 };
 
 const DEFAULT_EFFORT_LEVELS: EffortLevelOption[] = [
@@ -770,18 +775,74 @@ const DEFAULT_EFFORT_LEVELS: EffortLevelOption[] = [
   EFFORT_CATALOG.high,
 ];
 
+function formatEffortLabel(opt: EffortLevelOption | undefined, locale: 'zh-CN' | 'en-US'): string {
+  if (!opt) return '';
+  if (opt.labelKey) return formatMsg(locale, opt.labelKey);
+  return opt.customLabel || String(opt.value || '');
+}
+
+function canonicalEffortRank(val: string): number {
+  const lower = (val || '').trim().toLowerCase();
+  const known = EFFORT_CATALOG[lower];
+  return known ? known.rank : -1;
+}
+
 function resolveEffortLevels(model?: ModelMeta): EffortLevelOption[] {
   const raw = model?.reasoning_levels;
+  if (model && !model.supports_reasoning && (!raw || raw.length === 0)) {
+    return [];
+  }
   if (!raw || raw.length < 2) return DEFAULT_EFFORT_LEVELS;
   const seen = new Set<string>();
   const resolved: EffortLevelOption[] = [];
-  for (const token of raw) {
-    const entry = EFFORT_CATALOG[token.trim().toLowerCase()];
-    if (!entry || seen.has(entry.value)) continue;
+  for (let i = 0; i < raw.length; i++) {
+    const clean = raw[i].trim();
+    if (!clean) continue;
+    const lower = clean.toLowerCase();
+    const known = EFFORT_CATALOG[lower];
+    const entry: EffortLevelOption = known
+      ? known
+      : {
+          value: clean,
+          customLabel: clean.charAt(0).toUpperCase() + clean.slice(1),
+          // Interpolate rank from position so custom words (e.g. turbo/ultra) clamp cleanly!
+          rank: Math.max(1, Math.round((i / Math.max(1, raw.length - 1)) * 6)),
+        };
+    if (seen.has(entry.value)) continue;
     seen.add(entry.value);
     resolved.push(entry);
   }
   return resolved.length >= 2 ? resolved : DEFAULT_EFFORT_LEVELS;
+}
+
+function clampEffortIndex(levels: EffortLevelOption[], requested: ThinkingEffort): number {
+  if (levels.length === 0) return 0;
+  const exactIdx = levels.findIndex((o) => o.value === requested);
+  if (exactIdx >= 0) return exactIdx;
+
+  const reqRank = canonicalEffortRank(String(requested));
+  if (reqRank === 0) {
+    const offIdx = levels.findIndex((o) => o.rank === 0);
+    return offIdx >= 0 ? offIdx : 0;
+  }
+
+  // Clamp by canonical rank: find the highest supported non-off level <= reqRank (or closest positive level)
+  if (reqRank > 0) {
+    let bestIdx = -1;
+    let bestRank = -1;
+    for (let i = 0; i < levels.length; i++) {
+      if (levels[i].rank > 0 && levels[i].rank <= reqRank && levels[i].rank > bestRank) {
+        bestRank = levels[i].rank;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx >= 0) return bestIdx;
+    const firstPos = levels.findIndex((o) => o.rank > 0);
+    if (firstPos >= 0) return firstPos;
+  }
+
+  const medIdx = levels.findIndex((o) => o.value === 'medium' || o.value === 'on');
+  return medIdx >= 0 ? medIdx : Math.min(1, levels.length - 1);
 }
 
 function isGlmHighspeedModel(name: string): boolean {
@@ -1033,26 +1094,23 @@ function Composer({
 
   const activeModel = models.find((m) => m.provider_id === effectiveProviderId && m.id === selectedModelId);
   const effortLevels = useMemo(() => resolveEffortLevels(activeModel), [activeModel]);
-  const currentEffortIdx = useMemo(() => {
-    const idx = effortLevels.findIndex((o) => o.value === thinkingEffort);
-    if (idx >= 0) return idx;
-    // If current effort (e.g. max) isn't in a 4-level model, fall back to highest non-off level or medium
-    if (thinkingEffort === 'max' || thinkingEffort === 'xhigh') {
-      return effortLevels.length - 1;
-    }
-    const medIdx = effortLevels.findIndex((o) => o.value === 'medium');
-    return medIdx >= 0 ? medIdx : Math.min(1, effortLevels.length - 1);
-  }, [effortLevels, thinkingEffort]);
+  const effortSupported = effortLevels.length >= 2;
+  const currentEffortIdx = useMemo(
+    () => clampEffortIndex(effortLevels, thinkingEffort),
+    [effortLevels, thinkingEffort],
+  );
 
   const effortMeta = effortLevels[currentEffortIdx] || effortLevels[0];
+  const effortDisplayLabel = formatEffortLabel(effortMeta, locale);
   const sliderProgress =
     effortLevels.length > 1 ? (currentEffortIdx / (effortLevels.length - 1)) * 100 : 0;
-  const sliderFilled = effortMeta.value !== '';
+  const sliderFilled = effortSupported && Boolean(effortMeta && effortMeta.value !== '');
   const isMaxEffort = sliderFilled && currentEffortIdx === effortLevels.length - 1;
   const isHighspeed = isGlmHighspeedModel(activeModel?.display_name || activeModel?.id || '');
 
   // Bind Ctrl+T (^T) globally to cycle thinking effort level smoothly (ZCode parity)
   useEffect(() => {
+    if (!effortSupported) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 't') {
         e.preventDefault();
@@ -1063,7 +1121,7 @@ function Composer({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [currentEffortIdx, effortLevels, setThinkingEffort]);
+  }, [effortSupported, currentEffortIdx, effortLevels, setThinkingEffort]);
 
   const allVisibleModels = useMemo(
     () => models.filter((m) => !hiddenModelKeys[`${m.provider_id}::${m.id}`]),
@@ -1659,14 +1717,16 @@ function Composer({
               setProviderMenuOpen(false);
               setOpenMenu((m) => (m === 'model' ? null : 'model'));
             }}
-            title={`${modelLabel} · ${formatMsg(locale, effortMeta.labelKey)}`}
+            title={effortSupported ? `${modelLabel} · ${effortDisplayLabel}` : modelLabel}
             className="flex h-7 w-full max-w-[240px] min-w-0 items-center gap-1.5 rounded-lg px-2 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
           >
             <span className="min-w-0 truncate">{modelLabel}</span>
-            <RollingLabel
-              text={formatMsg(locale, effortMeta.labelKey)}
-              className="shrink-0 text-foreground-subtlest"
-            />
+            {effortSupported && (
+              <RollingLabel
+                text={effortDisplayLabel}
+                className="shrink-0 text-foreground-subtlest"
+              />
+            )}
             <ChevronDown
               className={`size-3.5 shrink-0 opacity-70 transition-transform duration-150 ${
                 openMenu === 'model' ? 'rotate-180' : ''
@@ -1801,119 +1861,128 @@ function Composer({
                   )}
                 </div>
 
-                {/* ZCode Effort Slider (strictly ordered: Off -> Low -> Medium -> High -> Max/XHigh) */}
-                <div className="border-t border-border px-3.5 py-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-ui-xs text-foreground-subtlest">
-                        {formatMsg(locale, 'chat.toolbar.thoughtLevel')}
-                      </span>
-                      <RollingLabel
-                        text={formatMsg(locale, effortMeta.labelKey)}
-                        className="text-ui-sm font-medium text-foreground"
-                      />
+                {/* ZCode Effort Slider (strictly ordered per-model levels; hidden/disabled for non-reasoning models) */}
+                {effortSupported ? (
+                  <div className="border-t border-border px-3.5 py-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-ui-xs text-foreground-subtlest">
+                          {formatMsg(locale, 'chat.toolbar.thoughtLevel')}
+                        </span>
+                        <RollingLabel
+                          text={effortDisplayLabel}
+                          className="text-ui-sm font-medium text-foreground"
+                        />
+                      </div>
+                      <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-foreground-subtle">
+                        ^ T
+                      </kbd>
                     </div>
-                    <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-foreground-subtle">
-                      ^ T
-                    </kbd>
-                  </div>
 
-                  <div className="composer-thought-slider relative h-8 w-full rounded-full">
-                    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-                      {/* Track + Dynamic Fill */}
-                      <div
-                        data-testid="composer-thought-track"
-                        data-progress={sliderFilled ? sliderProgress : 0}
-                        className="absolute inset-x-0 top-1 h-6 overflow-hidden rounded-full bg-foreground/10"
-                      >
-                        <div className="absolute inset-0 rounded-full border border-foreground/10" />
+                    <div className="composer-thought-slider relative h-8 w-full rounded-full">
+                      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+                        {/* Track + Dynamic Fill */}
                         <div
-                          className="composer-thought-slider-fill absolute inset-y-0 left-0 overflow-hidden rounded-full"
-                          data-max={isMaxEffort}
-                          data-highspeed={isHighspeed}
-                          style={{
-                            width: sliderFilled
-                              ? `calc(14px + (100% - 28px) * ${sliderProgress / 100})`
-                              : 0,
-                          }}
+                          data-testid="composer-thought-track"
+                          data-progress={sliderFilled ? sliderProgress : 0}
+                          className="absolute inset-x-0 top-1 h-6 overflow-hidden rounded-full bg-foreground/10"
                         >
-                          {isMaxEffort && (
-                            <div
-                              data-testid="composer-thought-bubbles"
-                              className="composer-thought-bubbles absolute inset-0"
-                            >
-                              {(isHighspeed ? HIGHSPEED_BUBBLES : EFFORT_BUBBLES).map((bubble, idx) => (
-                                <span
-                                  key={idx}
-                                  className="composer-thought-bubble absolute inset-x-0"
-                                  style={{
-                                    top: bubble.top,
-                                    animationDuration: `${bubble.duration}s`,
-                                    animationDelay: `${bubble.delay}s`,
-                                  }}
-                                >
+                          <div className="absolute inset-0 rounded-full border border-foreground/10" />
+                          <div
+                            className="composer-thought-slider-fill absolute inset-y-0 left-0 overflow-hidden rounded-full"
+                            data-max={isMaxEffort}
+                            data-highspeed={isHighspeed}
+                            style={{
+                              width: sliderFilled
+                                ? `calc(14px + (100% - 28px) * ${sliderProgress / 100})`
+                                : 0,
+                            }}
+                          >
+                            {isMaxEffort && (
+                              <div
+                                data-testid="composer-thought-bubbles"
+                                className="composer-thought-bubbles absolute inset-0"
+                              >
+                                {(isHighspeed ? HIGHSPEED_BUBBLES : EFFORT_BUBBLES).map((bubble, idx) => (
                                   <span
-                                    className="block rounded-full bg-white"
-                                    style={{ width: bubble.size, height: bubble.size }}
-                                  />
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                                    key={idx}
+                                    className="composer-thought-bubble absolute inset-x-0"
+                                    style={{
+                                      top: bubble.top,
+                                      animationDuration: `${bubble.duration}s`,
+                                      animationDelay: `${bubble.delay}s`,
+                                    }}
+                                  >
+                                    <span
+                                      className="block rounded-full bg-white"
+                                      style={{ width: bubble.size, height: bubble.size }}
+                                    />
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
+
+                        {/* Discrete Stop Dots */}
+                        <div className="absolute inset-x-3.5 inset-y-0 flex items-center justify-between">
+                          {effortLevels.map((lvl, idx) => (
+                            <span
+                              key={lvl.value || 'off'}
+                              data-composer-thought-stop
+                              data-filled={sliderFilled && idx <= currentEffortIdx}
+                              data-hovered={hoveredStop === (lvl.value || 'off')}
+                              className="composer-thought-slider-stop size-1 shrink-0 rounded-full"
+                            />
+                          ))}
+                        </div>
+
+                        {/* White Circular Thumb */}
+                        <div
+                          className="composer-thought-slider-thumb absolute top-0.5 size-7 rounded-full shadow-sm"
+                          style={{ left: `calc((100% - 28px) * ${sliderProgress / 100})` }}
+                        />
                       </div>
 
-                      {/* Discrete Stop Dots */}
-                      <div className="absolute inset-x-3.5 inset-y-0 flex items-center justify-between">
-                        {effortLevels.map((lvl, idx) => (
-                          <span
-                            key={lvl.value || 'off'}
-                            data-composer-thought-stop
-                            data-filled={sliderFilled && idx <= currentEffortIdx}
-                            data-hovered={hoveredStop === (lvl.value || 'off')}
-                            className="composer-thought-slider-stop size-1 shrink-0 rounded-full"
-                          />
-                        ))}
-                      </div>
-
-                      {/* White Circular Thumb */}
-                      <div
-                        className="composer-thought-slider-thumb absolute top-0.5 size-7 rounded-full shadow-sm"
-                        style={{ left: `calc((100% - 28px) * ${sliderProgress / 100})` }}
+                      <input
+                        type="range"
+                        min={0}
+                        max={Math.max(0, effortLevels.length - 1)}
+                        step={1}
+                        value={currentEffortIdx}
+                        aria-label={formatMsg(locale, 'chat.toolbar.thoughtLevel')}
+                        aria-valuetext={effortDisplayLabel}
+                        data-testid="composer-thought-slider"
+                        className="composer-thought-range absolute inset-0 m-0 h-8 w-full cursor-pointer appearance-none bg-transparent outline-none"
+                        onPointerLeave={() => setHoveredStop(null)}
+                        onPointerMove={(event) => {
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          const trackWidth = Math.max(1, rect.width - 28);
+                          const maxIdx = Math.max(1, effortLevels.length - 1);
+                          const idx = Math.max(
+                            0,
+                            Math.min(maxIdx, Math.round(((event.clientX - rect.left - 14) / trackWidth) * maxIdx)),
+                          );
+                          const level = effortLevels[idx];
+                          const center = rect.left + 14 + (trackWidth * idx) / maxIdx;
+                          setHoveredStop(
+                            event.pointerType !== 'touch' && level && Math.abs(event.clientX - center) <= 12
+                              ? level.value || 'off'
+                              : null,
+                          );
+                        }}
+                        onChange={(e) => selectEffortByIndex(Number(e.target.value))}
                       />
                     </div>
-
-                    <input
-                      type="range"
-                      min={0}
-                      max={Math.max(0, effortLevels.length - 1)}
-                      step={1}
-                      value={currentEffortIdx}
-                      aria-label={formatMsg(locale, 'chat.toolbar.thoughtLevel')}
-                      aria-valuetext={formatMsg(locale, effortMeta.labelKey)}
-                      data-testid="composer-thought-slider"
-                      className="composer-thought-range absolute inset-0 m-0 h-8 w-full cursor-pointer appearance-none bg-transparent outline-none"
-                      onPointerLeave={() => setHoveredStop(null)}
-                      onPointerMove={(event) => {
-                        const rect = event.currentTarget.getBoundingClientRect();
-                        const trackWidth = Math.max(1, rect.width - 28);
-                        const maxIdx = Math.max(1, effortLevels.length - 1);
-                        const idx = Math.max(
-                          0,
-                          Math.min(maxIdx, Math.round(((event.clientX - rect.left - 14) / trackWidth) * maxIdx)),
-                        );
-                        const level = effortLevels[idx];
-                        const center = rect.left + 14 + (trackWidth * idx) / maxIdx;
-                        setHoveredStop(
-                          event.pointerType !== 'touch' && level && Math.abs(event.clientX - center) <= 12
-                            ? level.value || 'off'
-                            : null,
-                        );
-                      }}
-                      onChange={(e) => selectEffortByIndex(Number(e.target.value))}
-                    />
                   </div>
-                </div>
+                ) : (
+                  <div
+                    data-testid="composer-thought-unsupported"
+                    className="border-t border-border px-3.5 py-2.5 text-ui-xs text-foreground-subtlest"
+                  >
+                    {formatMsg(locale, 'chat.thought.unsupported')}
+                  </div>
+                )}
               </div>
             </div>
           )}
