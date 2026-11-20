@@ -1,5 +1,6 @@
 # Binaries & build artifacts
-bin/
+/bin/
+/dist/
 *.exe
 *.dll
 *.so
@@ -9,10 +10,13 @@ bin/
 coverage.out
 coverage.html
 
-# Frontend dependencies & cache (pkg/webui/dist is tracked/built for go:embed)
+# Frontend dependencies, cache & build outputs (only .gitkeep is kept for go:embed)
 node_modules/
 clients/web/dist/
 clients/web/.vite/
+*.tsbuildinfo
+pkg/webui/dist/*
+!pkg/webui/dist/.gitkeep
 
 # Local runtime state & temporary worktrees
 .nex/
