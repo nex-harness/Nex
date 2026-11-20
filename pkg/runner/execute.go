@@ -194,6 +194,9 @@ func (n *Node) resolveProviderAndModel(ctx context.Context, provID, modelID stri
 	} else {
 		meta = ai.ModelMeta{ID: modelID, ProviderID: chosenProv.ID, ContextWindow: 200000, MaxOutputTokens: 16384}
 	}
+	if len(meta.ReasoningLevels) == 0 {
+		meta.ReasoningLevels = ai.DefaultReasoningLevels(meta)
+	}
 
 	p, err := ai.NewProvider(chosenProv.Driver, chosenProv.BaseURL, apiKey, n.hc)
 	if err != nil {

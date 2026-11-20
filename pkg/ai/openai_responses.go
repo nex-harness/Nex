@@ -379,6 +379,22 @@ func (p *OpenAIResponsesProvider) consumeStream(ctx context.Context, body io.Rea
 				}
 			}
 
+		case "response.reasoning_summary_text.done", "response.reasoning_text.done":
+			fullText, _ := ev["text"].(string)
+			if fullText != "" {
+				r := reasoningByIdx[outIdx]
+				if r == nil {
+					r = &pendingReasoning{}
+					reasoningByIdx[outIdx] = r
+				}
+				if r.textBuf.Len() == 0 {
+					r.textBuf.WriteString(fullText)
+					if !emit(StreamEvent{Type: StreamEventThinkingDelta, ThinkingDelta: fullText}) {
+						return
+					}
+				}
+			}
+
 		case "response.function_call_arguments.delta":
 			delta, _ := ev["delta"].(string)
 			itemID, _ := ev["item_id"].(string)

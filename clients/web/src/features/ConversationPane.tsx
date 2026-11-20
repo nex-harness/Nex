@@ -42,6 +42,7 @@ import {
   X,
 } from 'lucide-react';
 import { type CSSProperties, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { clampEffortIndex, formatEffortLabel, resolveEffortLevels } from '../core/effort';
 import { emptyStreamState } from '../core/reducer';
 import { useNexStore } from '../core/store';
 import { ChatTurnItem, ModelMeta, ThinkingEffort, ToolCallCard } from '../core/types';
@@ -696,27 +697,48 @@ function WorkGroup({
         ? 'Working…'
         : '正在执行...';
 
+  const hasThinking = Boolean(item.thinking && item.thinking.trim());
+  const hasTools = item.toolCalls.length > 0;
+  const completedLabel =
+    hasThinking && !hasTools
+      ? locale === 'en-US'
+        ? 'Thought process'
+        : '思考过程'
+      : locale === 'en-US'
+        ? `Worked on ${stepCount} steps`
+        : `思考并执行了 ${stepCount} 步`;
+
   return (
     <div className="min-w-0">
       <button
         type="button"
         onClick={onToggle}
-        className="inline-flex items-center gap-1 py-0.5 text-ui-sm text-foreground-subtle transition-colors hover:text-foreground"
+        className="inline-flex items-center gap-1.5 py-0.5 text-ui-sm text-foreground-subtle transition-colors hover:text-foreground"
       >
+        {hasThinking && !activeTool && (
+          <Sparkles className="size-3.5 shrink-0 text-foreground-subtlest" />
+        )}
         {item.streaming ? (
           <span className="animated-gradient-text">{shimmerText}</span>
         ) : (
-          <span>{locale === 'en-US' ? `Worked on ${stepCount} steps` : `思考并执行了 ${stepCount} 步`}</span>
+          <span>{completedLabel}</span>
         )}
         <ChevronRight className={`size-3.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
       </button>
 
       <div className="zcode-collapsible" data-open={open}>
         <div className="zcode-collapsible-inner">
-          <div className="ml-1 mb-3 mt-2 space-y-1.5 border-l border-border pl-3.5">
-            {item.thinking && (
-              <div className="max-h-60 overflow-auto whitespace-pre-wrap py-0.5 text-ui-sm leading-relaxed text-foreground-subtle">
-                {item.thinking}
+          <div className="ml-1 mb-3 mt-2 space-y-2 border-l border-border pl-3.5">
+            {hasThinking && (
+              <div className="space-y-1">
+                {hasTools && (
+                  <div className="text-ui-xs font-medium text-foreground-subtlest">
+                    {locale === 'en-US' ? 'Thinking' : '思考过程'}
+                  </div>
+                )}
+                <div className="max-h-72 overflow-auto whitespace-pre-wrap py-0.5 text-ui-sm leading-relaxed text-foreground-subtle">
+                  {item.thinking}
+                </div>
               </div>
             )}
             {hiddenTools.map((tc) => (
@@ -747,103 +769,6 @@ const PERMISSION_OPTIONS: Array<{
   { value: 'full_access', icon: ShieldCheck, labelKey: 'mode.fullAccess', descKey: 'mode.fullAccess.desc' },
   { value: 'read_only', icon: BookOpen, labelKey: 'mode.readOnly', descKey: 'mode.readOnly.desc' },
 ];
-
-interface EffortLevelOption {
-  value: ThinkingEffort;
-  labelKey?: MessageKey;
-  customLabel?: string;
-  rank: number;
-}
-
-const EFFORT_CATALOG: Record<string, EffortLevelOption> = {
-  off: { value: '', labelKey: 'chat.thought.off', rank: 0 },
-  none: { value: '', labelKey: 'chat.thought.off', rank: 0 },
-  '': { value: '', labelKey: 'chat.thought.off', rank: 0 },
-  minimal: { value: 'minimal', labelKey: 'chat.thought.minimal', rank: 1 },
-  low: { value: 'low', labelKey: 'chat.thought.low', rank: 2 },
-  medium: { value: 'medium', labelKey: 'chat.thought.medium', rank: 3 },
-  on: { value: 'on', labelKey: 'chat.thought.on', rank: 3 },
-  high: { value: 'high', labelKey: 'chat.thought.high', rank: 4 },
-  xhigh: { value: 'xhigh', labelKey: 'chat.thought.xhigh', rank: 5 },
-  max: { value: 'max', labelKey: 'chat.thought.max', rank: 6 },
-};
-
-const DEFAULT_EFFORT_LEVELS: EffortLevelOption[] = [
-  EFFORT_CATALOG.off,
-  EFFORT_CATALOG.low,
-  EFFORT_CATALOG.medium,
-  EFFORT_CATALOG.high,
-];
-
-function formatEffortLabel(opt: EffortLevelOption | undefined, locale: 'zh-CN' | 'en-US'): string {
-  if (!opt) return '';
-  if (opt.labelKey) return formatMsg(locale, opt.labelKey);
-  return opt.customLabel || String(opt.value || '');
-}
-
-function canonicalEffortRank(val: string): number {
-  const lower = (val || '').trim().toLowerCase();
-  const known = EFFORT_CATALOG[lower];
-  return known ? known.rank : -1;
-}
-
-function resolveEffortLevels(model?: ModelMeta): EffortLevelOption[] {
-  const raw = model?.reasoning_levels;
-  if (model && !model.supports_reasoning && (!raw || raw.length === 0)) {
-    return [];
-  }
-  if (!raw || raw.length < 2) return DEFAULT_EFFORT_LEVELS;
-  const seen = new Set<string>();
-  const resolved: EffortLevelOption[] = [];
-  for (let i = 0; i < raw.length; i++) {
-    const clean = raw[i].trim();
-    if (!clean) continue;
-    const lower = clean.toLowerCase();
-    const known = EFFORT_CATALOG[lower];
-    const entry: EffortLevelOption = known
-      ? known
-      : {
-          value: clean,
-          customLabel: clean.charAt(0).toUpperCase() + clean.slice(1),
-          // Interpolate rank from position so custom words (e.g. turbo/ultra) clamp cleanly!
-          rank: Math.max(1, Math.round((i / Math.max(1, raw.length - 1)) * 6)),
-        };
-    if (seen.has(entry.value)) continue;
-    seen.add(entry.value);
-    resolved.push(entry);
-  }
-  return resolved.length >= 2 ? resolved : DEFAULT_EFFORT_LEVELS;
-}
-
-function clampEffortIndex(levels: EffortLevelOption[], requested: ThinkingEffort): number {
-  if (levels.length === 0) return 0;
-  const exactIdx = levels.findIndex((o) => o.value === requested);
-  if (exactIdx >= 0) return exactIdx;
-
-  const reqRank = canonicalEffortRank(String(requested));
-  if (reqRank === 0) {
-    const offIdx = levels.findIndex((o) => o.rank === 0);
-    return offIdx >= 0 ? offIdx : 0;
-  }
-
-  // Clamp by canonical rank: find the highest supported non-off level <= reqRank (or closest positive level)
-  if (reqRank > 0) {
-    let bestIdx = -1;
-    let bestRank = -1;
-    for (let i = 0; i < levels.length; i++) {
-      if (levels[i].rank > 0 && levels[i].rank <= reqRank && levels[i].rank > bestRank) {
-        bestRank = levels[i].rank;
-        bestIdx = i;
-      }
-    }
-    if (bestIdx >= 0) return bestIdx;
-    const firstPos = levels.findIndex((o) => o.rank > 0);
-    if (firstPos >= 0) return firstPos;
-  }
-
-  const medIdx = levels.findIndex((o) => o.value === 'medium' || o.value === 'on');
-  return medIdx >= 0 ? medIdx : Math.min(1, levels.length - 1);
-}
 
 function formatContextLabel(n: number): string {
   if (n >= 1_000_000) return `${Number((n / 1_000_000).toFixed(1))}M`;
@@ -2245,7 +2170,9 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
   const [copiedReply, setCopiedReply] = useState(false);
   const activeSessionId = useNexStore((s) => s.activeSessionId);
   const forkSession = useNexStore((s) => s.forkSession);
-  const workExpanded = manualOpen ?? Boolean(item.streaming);
+  const expandThinking = useNexStore((s) => s.preferences.expand_thinking);
+  const defaultOpen = Boolean(item.streaming) || Boolean(expandThinking && item.thinking);
+  const workExpanded = manualOpen ?? defaultOpen;
 
   return (
     <div
@@ -2262,7 +2189,7 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
               item={item}
               locale={locale}
               open={workExpanded}
-              onToggle={() => setManualOpen((prev) => !(prev ?? Boolean(item.streaming)))}
+              onToggle={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
             />
           )}
 

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { hostBridge } from '../host/bridge';
+import { resolveEffectiveEffort } from './effort';
 import { apiFetch, safeStorageGet, safeStorageSet } from './protocol';
 import { applySessionEvent, emptyStreamState, RawSessionEventRow, SessionStreamState } from './reducer';
 import {
@@ -612,6 +613,11 @@ export const useNexStore = create<AppState>((set, get) => ({
           }))
         : undefined;
 
+    const activeModel = s.models.find(
+      (m) => m.provider_id === s.selectedProviderId && m.id === s.selectedModelId,
+    );
+    const effectiveThinkingEffort = resolveEffectiveEffort(activeModel, s.thinkingEffort);
+
     wsClient.sendEnvelope(
       'session.prompt',
       {
@@ -620,7 +626,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         workspace_path: s.selectedWorkspacePath || undefined,
         provider_id: s.selectedProviderId,
         model_id: s.selectedModelId,
-        thinking_effort: s.thinkingEffort,
+        thinking_effort: effectiveThinkingEffort,
         permission_mode: s.permissionMode,
         text,
         images,
