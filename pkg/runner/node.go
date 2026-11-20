@@ -468,6 +468,21 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 			as.cancel()
 		}
 
+	case protocol.TypeSessionForkSync:
+		go func() {
+			var p protocol.SessionForkSyncPayload
+			var reply protocol.Envelope
+			if err := json.Unmarshal(env.Payload, &p); err != nil {
+				reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": err.Error()})
+			} else if err := n.store.ImportSessionSnapshot(ctx, p.Session, p.Events); err != nil {
+				reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": err.Error()})
+			} else {
+				reply, _ = protocol.NewEnvelope(protocol.TypeSessionForkSync, map[string]any{"ok": true, "session_id": p.Session.ID})
+			}
+			reply.ReplyTo = env.ID
+			_ = n.sendEnvelope(ctx, reply)
+		}()
+
 	case protocol.TypeApprovalResolve:
 		var ar protocol.ApprovalResolvePayload
 		if json.Unmarshal(env.Payload, &ar) == nil && ar.ApprovalID != "" {

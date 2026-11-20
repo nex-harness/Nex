@@ -1,16 +1,21 @@
 import {
   Bot,
+  Check,
   ChevronDown,
   ChevronRight,
   FileCode,
   FileDiff,
   Folder,
   FolderOpen,
+  GitBranch,
+  GitCommitHorizontal,
   MessageSquare,
   MessageSquareText,
+  Minus,
   PanelRightClose,
   Plus,
   RefreshCw,
+  RotateCcw,
   SquareTerminal,
   X,
 } from 'lucide-react';
@@ -534,55 +539,231 @@ function GitReviewPanel({
   onRefresh: () => void;
   onOpenFile: (rel: string) => void;
 }) {
+  const locale = useNexStore((s) => s.locale);
+  const gitStage = useNexStore((s) => s.gitStage);
+  const gitUnstage = useNexStore((s) => s.gitUnstage);
+  const gitDiscard = useNexStore((s) => s.gitDiscard);
+  const gitCommit = useNexStore((s) => s.gitCommit);
+  const gitListBranches = useNexStore((s) => s.gitListBranches);
+  const gitCheckout = useNexStore((s) => s.gitCheckout);
+
   const [viewMode, setViewMode] = useState<'unified' | 'split'>('unified');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'staged' | 'unstaged'>('all');
+  const [commitMsg, setCommitMsg] = useState('');
+  const [commitStatus, setCommitStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busyAction, setBusyAction] = useState(false);
+  const [branchMenuOpen, setBranchMenuOpen] = useState(false);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [newBranchName, setNewBranchName] = useState('');
 
   useEffect(() => {
     onRefresh();
   }, [onRefresh]);
 
   if (!summary || !summary.is_git_repo) {
-    return <div className="p-6 text-center text-ui-sm text-foreground-subtlest">当前工作区未检测到 Git 仓库</div>;
+    return (
+      <div className="p-6 text-center text-ui-sm text-foreground-subtlest">
+        {locale === 'en-US' ? 'No Git repository detected in workspace' : '当前工作区未检测到 Git 仓库'}
+      </div>
+    );
   }
 
   const files = summary.files || [];
+  const isStaged = (f: (typeof files)[number]) =>
+    f.staged !== undefined ? f.staged : f.status === 'A' || f.status === 'R';
+  const isUnstaged = (f: (typeof files)[number]) =>
+    f.unstaged !== undefined ? f.unstaged : !isStaged(f);
+
+  const stagedCount = files.filter(isStaged).length;
+  const unstagedCount = files.filter(isUnstaged).length;
+
   const filteredFiles =
     sourceFilter === 'all'
       ? files
-      : files.filter((f) => {
-          // Backend porcelain mapping: added/renamed entries are index (staged) changes,
-          // everything else (modified/deleted/untracked) lives in the working tree.
-          const staged = f.status === 'A' || f.status === 'R';
-          return sourceFilter === 'staged' ? staged : !staged;
-        });
+      : files.filter((f) => (sourceFilter === 'staged' ? isStaged(f) : isUnstaged(f)));
+
+  const openBranches = async () => {
+    const next = !branchMenuOpen;
+    setBranchMenuOpen(next);
+    if (next) {
+      const res = await gitListBranches();
+      setBranches(res.branches);
+    }
+  };
+
+  const handleCommit = async () => {
+    const msg = commitMsg.trim();
+    if (!msg || busyAction) return;
+    setBusyAction(true);
+    setCommitStatus(null);
+    const res = await gitCommit(msg);
+    setBusyAction(false);
+    if (res.ok) {
+      setCommitMsg('');
+      setCommitStatus({
+        ok: true,
+        text: locale === 'en-US' ? `Committed ${res.commit || ''}` : `已提交 ${res.commit || ''}`,
+      });
+    } else {
+      setCommitStatus({ ok: false, text: res.error || (locale === 'en-US' ? 'Commit failed' : '提交失败') });
+    }
+  };
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-center justify-between border-b border-border/60 px-3 py-2 text-ui-sm">
+      {/* Header: Branch Switcher + Stats + Stage All / Refresh */}
+      <div className="relative flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2 text-ui-sm">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="rounded-md bg-tag px-2 py-0.5 font-mono text-ui-xs text-foreground">
-            {summary.branch || 'HEAD'}
-          </span>
+          <button
+            type="button"
+            data-testid="git-branch-btn"
+            onClick={() => void openBranches()}
+            className="inline-flex max-w-[160px] items-center gap-1 rounded-md bg-tag px-2 py-0.5 font-mono text-ui-xs text-foreground transition-colors hover:bg-hover"
+          >
+            <GitBranch className="size-3 shrink-0 text-foreground-subtle" />
+            <span className="truncate">{summary.branch || 'HEAD'}</span>
+            <ChevronDown className="size-3 shrink-0 text-foreground-subtlest" />
+          </button>
           <span className="font-mono text-ui-xs tabular-nums text-success">+{summary.additions}</span>
           <span className="font-mono text-ui-xs tabular-nums text-destructive">-{summary.deletions}</span>
         </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="flex h-6 items-center gap-1 rounded-md border border-border px-2 text-ui-xs text-foreground-subtle hover:bg-hover hover:text-foreground"
-        >
-          <RefreshCw className="size-3" />
-          <span>刷新</span>
-        </button>
+
+        <div className="flex shrink-0 items-center gap-1">
+          {unstagedCount > 0 && (
+            <button
+              type="button"
+              disabled={busyAction}
+              onClick={() => void gitStage('')}
+              title={locale === 'en-US' ? 'Stage all changes' : '全部暂存'}
+              className="flex h-6 items-center gap-1 rounded-md border border-border px-2 text-ui-xs text-foreground-subtle hover:bg-hover hover:text-foreground disabled:opacity-40"
+            >
+              <Plus className="size-3" />
+              <span>{locale === 'en-US' ? 'Stage all' : '全部暂存'}</span>
+            </button>
+          )}
+          {stagedCount > 0 && (
+            <button
+              type="button"
+              disabled={busyAction}
+              onClick={() => void gitUnstage('')}
+              title={locale === 'en-US' ? 'Unstage all' : '取消全部暂存'}
+              className="flex h-6 items-center gap-1 rounded-md border border-border px-2 text-ui-xs text-foreground-subtle hover:bg-hover hover:text-foreground disabled:opacity-40"
+            >
+              <Minus className="size-3" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="flex h-6 items-center gap-1 rounded-md border border-border px-2 text-ui-xs text-foreground-subtle hover:bg-hover hover:text-foreground"
+          >
+            <RefreshCw className="size-3" />
+            <span>{locale === 'en-US' ? 'Refresh' : '刷新'}</span>
+          </button>
+        </div>
+
+        {branchMenuOpen && (
+          <div className="zcode-popover-down absolute left-3 top-10 z-40 w-64 rounded-xl border border-border bg-popover p-1.5 shadow-xl">
+            <div className="mb-1 flex items-center gap-1 px-1">
+              <input
+                value={newBranchName}
+                onChange={(e) => setNewBranchName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newBranchName.trim()) {
+                    void gitCheckout(newBranchName.trim(), true).then(() => {
+                      setNewBranchName('');
+                      setBranchMenuOpen(false);
+                    });
+                  }
+                }}
+                placeholder={locale === 'en-US' ? 'New branch name…' : '新建分支名…'}
+                className="h-7 min-w-0 flex-1 rounded-md border border-border bg-input px-2 font-mono text-ui-xs text-foreground"
+              />
+              <button
+                type="button"
+                disabled={!newBranchName.trim()}
+                onClick={() =>
+                  void gitCheckout(newBranchName.trim(), true).then(() => {
+                    setNewBranchName('');
+                    setBranchMenuOpen(false);
+                  })
+                }
+                className="flex h-7 items-center rounded-md bg-foreground px-2 text-ui-xs text-background disabled:opacity-40"
+              >
+                <Plus className="size-3" />
+              </button>
+            </div>
+            <div className="max-h-44 overflow-y-auto">
+              {branches.map((br) => (
+                <button
+                  key={br}
+                  type="button"
+                  onClick={() => void gitCheckout(br, false).then(() => setBranchMenuOpen(false))}
+                  className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left font-mono text-ui-xs hover:bg-menu-hover ${
+                    br === summary.branch ? 'bg-selected font-medium text-foreground' : 'text-foreground-subtle'
+                  }`}
+                >
+                  <span className="truncate">{br}</span>
+                  {br === summary.branch && <Check className="size-3 text-success" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Quick Commit Bar (shown when there are staged changes or any changes) */}
+      {files.length > 0 && (
+        <div className="border-b border-border/60 bg-surface/40 px-3 py-2">
+          <div className="flex items-center gap-1.5">
+            <input
+              data-testid="git-commit-input"
+              type="text"
+              value={commitMsg}
+              onChange={(e) => setCommitMsg(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  void handleCommit();
+                }
+              }}
+              placeholder={
+                stagedCount > 0
+                  ? locale === 'en-US'
+                    ? `Commit ${stagedCount} staged file(s)…`
+                    : `输入提交信息（将提交 ${stagedCount} 个已暂存文件）…`
+                  : locale === 'en-US'
+                    ? 'Stage files first to commit…'
+                    : '请先暂存文件再提交…'
+              }
+              className="h-7 min-w-0 flex-1 rounded-lg border border-border bg-input px-2.5 text-ui-xs text-foreground placeholder-foreground-subtlest focus:border-border-hover"
+            />
+            <button
+              type="button"
+              data-testid="git-commit-btn"
+              disabled={busyAction || !commitMsg.trim() || stagedCount === 0}
+              onClick={() => void handleCommit()}
+              className="flex h-7 shrink-0 items-center gap-1 rounded-lg bg-foreground px-2.5 text-ui-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-35"
+            >
+              <GitCommitHorizontal className="size-3.5" />
+              <span>{locale === 'en-US' ? 'Commit' : '提交'}</span>
+            </button>
+          </div>
+          {commitStatus && (
+            <div className={`mt-1 text-ui-xs ${commitStatus.ok ? 'text-success' : 'text-destructive'}`}>
+              {commitStatus.text}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center justify-between border-b border-border/60 px-3 py-1.5">
         <div className="flex items-center gap-0.5">
           {(
             [
-              { id: 'all', label: '全部' },
-              { id: 'staged', label: '已暂存' },
-              { id: 'unstaged', label: '未暂存' },
+              { id: 'all', label: `${locale === 'en-US' ? 'All' : '全部'} (${files.length})` },
+              { id: 'staged', label: `${locale === 'en-US' ? 'Staged' : '已暂存'} (${stagedCount})` },
+              { id: 'unstaged', label: `${locale === 'en-US' ? 'Unstaged' : '未暂存'} (${unstagedCount})` },
             ] as const
           ).map((f) => (
             <button
@@ -622,27 +803,63 @@ function GitReviewPanel({
       </div>
 
       {filteredFiles.length === 0 && (
-        <div className="p-8 text-center text-ui-sm text-foreground-subtlest">工作区干净，无未提交改动</div>
+        <div className="p-8 text-center text-ui-sm text-foreground-subtlest">
+          {locale === 'en-US' ? 'Working tree clean' : '工作区干净，无未提交改动'}
+        </div>
       )}
 
       <div className="divide-y divide-border">
         {filteredFiles.map((f) => {
+          const staged = isStaged(f);
+          const unstaged = isUnstaged(f);
           const diffLines = (f.diff || '').split('\n');
           const unifiedLines = viewMode === 'unified' ? diffLines : splitDiffLines(diffLines);
           return (
             <div key={f.rel_path} className="p-2.5">
-              <div className="flex items-center justify-between text-ui-sm">
+              <div className="flex items-center justify-between gap-2 text-ui-sm">
                 <button
                   type="button"
                   onClick={() => onOpenFile(f.rel_path)}
-                  className="truncate font-mono font-medium text-foreground hover:text-brand-blue"
+                  className="min-w-0 truncate font-mono font-medium text-foreground hover:text-brand-blue"
                 >
                   [{f.status}] {f.rel_path}
                 </button>
-                <span className="shrink-0 font-mono text-ui-xs tabular-nums">
-                  <span className="text-success">+{f.additions}</span>{' '}
-                  <span className="text-destructive">-{f.deletions}</span>
-                </span>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <span className="font-mono text-ui-xs tabular-nums">
+                    <span className="text-success">+{f.additions}</span>{' '}
+                    <span className="text-destructive">-{f.deletions}</span>
+                  </span>
+                  {unstaged && (
+                    <button
+                      type="button"
+                      onClick={() => void gitStage(f.rel_path)}
+                      title={locale === 'en-US' ? 'Stage file' : '暂存此文件'}
+                      className="flex size-5 items-center justify-center rounded border border-border text-foreground-subtle hover:bg-hover hover:text-success"
+                    >
+                      <Plus className="size-3" />
+                    </button>
+                  )}
+                  {staged && (
+                    <button
+                      type="button"
+                      onClick={() => void gitUnstage(f.rel_path)}
+                      title={locale === 'en-US' ? 'Unstage file' : '取消暂存'}
+                      className="flex size-5 items-center justify-center rounded border border-border text-foreground-subtle hover:bg-hover hover:text-warning"
+                    >
+                      <Minus className="size-3" />
+                    </button>
+                  )}
+                  {unstaged && (
+                    <button
+                      type="button"
+                      onClick={() => void gitDiscard(f.rel_path)}
+                      title={locale === 'en-US' ? 'Discard unstaged changes' : '放弃未暂存更改'}
+                      className="flex size-5 items-center justify-center rounded border border-border text-foreground-subtle hover:bg-hover hover:text-destructive"
+                    >
+                      <RotateCcw className="size-3" />
+                    </button>
+                  )}
+                </div>
               </div>
               {f.folded && !f.diff && (
                 <div className="mt-2 rounded-lg border border-border/60 bg-surface px-2 py-1.5 text-ui-xs text-foreground-subtlest">

@@ -292,6 +292,52 @@ func TestRunnerBrowseDirsEndpointAndCRUDRoutes(t *testing.T) {
 	_ = delSessResp.Body.Close()
 }
 
+func TestSessionForkEndpointCopiesEventsUpToSeq(t *testing.T) {
+	ctx := context.Background()
+	_, ts, st := newTestServer(t, http.DefaultClient)
+
+	_, err := st.CreateOrUpdateSession(ctx, store.SessionRecord{
+		ID: "sess_src", RunnerID: "run_offline", Title: "Original", WorkspacePath: "/tmp",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 4; i++ {
+		_, err := st.AppendSessionEvent(ctx, store.SessionEvent{
+			SessionID: "sess_src",
+			TurnIdx:   i,
+			EventType: "message_end",
+			Payload:   json.RawMessage(fmt.Sprintf(`{"message":{"role":"user","content":[{"type":"text","text":"msg %d"}]}}`, i)),
+		}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Fork before seq 3 -> should copy only seq 1 & 2!
+	rawResp := postJSON(t, ts.URL+"/api/v1/sessions/sess_src/fork", map[string]any{
+		"before_seq": 3,
+		"title":      "Edited Branch",
+	})
+	var parsed struct {
+		Session      store.SessionRecord `json:"session"`
+		CopiedEvents int                 `json:"copied_events"`
+	}
+	if err := json.Unmarshal(rawResp, &parsed); err != nil {
+		t.Fatalf("unmarshal fork response: %v: %s", err, string(rawResp))
+	}
+	if parsed.CopiedEvents != 2 {
+		t.Fatalf("expected 2 copied_events, got %+v", parsed)
+	}
+	if parsed.Session.Title != "Edited Branch" {
+		t.Fatalf("unexpected forked title: %+v", parsed.Session)
+	}
+	evs, err := st.ListSessionEventsAfter(ctx, parsed.Session.ID, 0)
+	if err != nil || len(evs) != 2 {
+		t.Fatalf("expected 2 events in forked session, got len=%d err=%v", len(evs), err)
+	}
+}
+
 type roundTripErr struct{}
 
 func (roundTripErr) RoundTrip(*http.Request) (*http.Response, error) {

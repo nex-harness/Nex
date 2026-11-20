@@ -28,6 +28,7 @@ const (
 	TypeSessionFollowUp = "session.follow_up"
 	TypeSessionAbort    = "session.abort"
 	TypeSessionEvent    = "session.event"
+	TypeSessionForkSync = "session.fork_sync"
 
 	// Remote Approval & Remote Plugin UI (ctx.ui)
 	TypeApprovalResolve = "approval.resolve"
@@ -137,6 +138,12 @@ type PromptPayload struct {
 	PermissionMode   string            `json:"permission_mode,omitempty"`
 	Text             string            `json:"text"`
 	Images           []ai.ContentBlock `json:"images,omitempty"`
+}
+
+// SessionForkSyncPayload mirrors a server-forked session and its event snapshot into a Runner's local SQLite.
+type SessionForkSyncPayload struct {
+	Session store.SessionRecord  `json:"session"`
+	Events  []store.SessionEvent `json:"events"`
 }
 
 // ApprovalResolvePayload resolves a pending interactive tool approval request.

@@ -110,6 +110,10 @@ export interface AppState {
   startNewSession: (runnerId?: string, workspacePath?: string) => void;
   renameSession: (sessionId: string, newTitle: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
+  forkSession: (
+    sessionId: string,
+    opts?: { upToSeq?: number; beforeSeq?: number; title?: string; prefillText?: string },
+  ) => Promise<string | null>;
   sendPromptOrSteer: (overrideText?: string) => void;
   abortActiveSession: () => void;
   resolveApproval: (approvalId: string, approved: boolean) => void;
@@ -128,6 +132,12 @@ export interface AppState {
   browseRunnerDirs: (runnerId: string, dirPath?: string, includeHidden?: boolean) => Promise<BrowseDirsResult>;
   searchWorkspaceFiles: (query: string) => Promise<string[]>;
   refreshGitSummary: (includeDiffs?: boolean) => Promise<GitSummary | null>;
+  gitStage: (relPath?: string) => Promise<void>;
+  gitUnstage: (relPath?: string) => Promise<void>;
+  gitDiscard: (relPath: string) => Promise<void>;
+  gitCommit: (message: string) => Promise<{ ok: boolean; commit?: string; error?: string }>;
+  gitListBranches: () => Promise<{ current: string; branches: string[] }>;
+  gitCheckout: (branch: string, createBranch?: boolean) => Promise<{ ok: boolean; error?: string }>;
   spawnBottomTerminal: () => Promise<void>;
   closeBottomTerminal: (id: string) => void;
 }
@@ -522,6 +532,28 @@ export const useNexStore = create<AppState>((set, get) => ({
     await get().refreshInitialData();
   },
 
+  forkSession: async (sessionId, opts) => {
+    const res = await apiFetch<{ session?: SessionRecord; copied_events?: number }>(
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/fork`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          up_to_seq: opts?.upToSeq || 0,
+          before_seq: opts?.beforeSeq || 0,
+          title: opts?.title || '',
+        }),
+      },
+    );
+    const forked = res?.session;
+    if (!forked?.id) return null;
+    await get().refreshInitialData();
+    await get().selectSession(forked.id);
+    if (opts?.prefillText !== undefined) {
+      set({ composerText: opts.prefillText });
+    }
+    return forked.id;
+  },
+
   sendPromptOrSteer: (overrideText) => {
     const s = get();
     const text = (overrideText ?? s.composerText).trim();
@@ -836,6 +868,139 @@ export const useNexStore = create<AppState>((set, get) => ({
       // ignore
     }
     return null;
+  },
+
+  gitStage: async (relPath = '') => {
+    const rid = get().selectedRunnerId;
+    if (!rid || !wsClient.connected) return;
+    const resp = await wsClient.requestRPC<
+      { action: string; rel_path?: string; workspace_path?: string },
+      GitSummary
+    >(
+      'workspace.req',
+      {
+        action: 'git_stage',
+        rel_path: relPath || undefined,
+        workspace_path: get().selectedWorkspacePath || undefined,
+      },
+      { runner_id: rid },
+    );
+    if (resp.payload) set({ gitSummary: resp.payload });
+  },
+
+  gitUnstage: async (relPath = '') => {
+    const rid = get().selectedRunnerId;
+    if (!rid || !wsClient.connected) return;
+    const resp = await wsClient.requestRPC<
+      { action: string; rel_path?: string; workspace_path?: string },
+      GitSummary
+    >(
+      'workspace.req',
+      {
+        action: 'git_unstage',
+        rel_path: relPath || undefined,
+        workspace_path: get().selectedWorkspacePath || undefined,
+      },
+      { runner_id: rid },
+    );
+    if (resp.payload) set({ gitSummary: resp.payload });
+  },
+
+  gitDiscard: async (relPath) => {
+    const rid = get().selectedRunnerId;
+    if (!rid || !wsClient.connected || !relPath) return;
+    const resp = await wsClient.requestRPC<
+      { action: string; rel_path: string; workspace_path?: string },
+      GitSummary
+    >(
+      'workspace.req',
+      {
+        action: 'git_discard',
+        rel_path: relPath,
+        workspace_path: get().selectedWorkspacePath || undefined,
+      },
+      { runner_id: rid },
+    );
+    if (resp.payload) set({ gitSummary: resp.payload });
+  },
+
+  gitCommit: async (message) => {
+    const rid = get().selectedRunnerId;
+    if (!rid || !wsClient.connected) return { ok: false, error: 'Runner offline' };
+    try {
+      const resp = await wsClient.requestRPC<
+        { action: string; message: string; workspace_path?: string },
+        { ok?: boolean; commit?: string; summary?: GitSummary; error?: string }
+      >(
+        'workspace.req',
+        {
+          action: 'git_commit',
+          message,
+          workspace_path: get().selectedWorkspacePath || undefined,
+        },
+        { runner_id: rid },
+      );
+      if (resp.type === 'error' || resp.payload?.error) {
+        return { ok: false, error: resp.payload?.error || 'Commit failed' };
+      }
+      if (resp.payload?.summary) set({ gitSummary: resp.payload.summary });
+      else void get().refreshGitSummary(true);
+      return { ok: true, commit: resp.payload?.commit };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  gitListBranches: async () => {
+    const rid = get().selectedRunnerId;
+    if (!rid || !wsClient.connected) return { current: '', branches: [] };
+    try {
+      const resp = await wsClient.requestRPC<
+        { action: string; workspace_path?: string },
+        { current?: string; branches?: string[] }
+      >(
+        'workspace.req',
+        {
+          action: 'git_branches',
+          workspace_path: get().selectedWorkspacePath || undefined,
+        },
+        { runner_id: rid },
+      );
+      return {
+        current: resp.payload?.current || '',
+        branches: resp.payload?.branches || [],
+      };
+    } catch {
+      return { current: '', branches: [] };
+    }
+  },
+
+  gitCheckout: async (branch, createBranch = false) => {
+    const rid = get().selectedRunnerId;
+    if (!rid || !wsClient.connected) return { ok: false, error: 'Runner offline' };
+    try {
+      const resp = await wsClient.requestRPC<
+        { action: string; branch: string; create_branch?: boolean; workspace_path?: string },
+        { ok?: boolean; summary?: GitSummary; error?: string }
+      >(
+        'workspace.req',
+        {
+          action: 'git_checkout',
+          branch,
+          create_branch: createBranch,
+          workspace_path: get().selectedWorkspacePath || undefined,
+        },
+        { runner_id: rid },
+      );
+      if (resp.type === 'error' || resp.payload?.error) {
+        return { ok: false, error: resp.payload?.error || 'Checkout failed' };
+      }
+      if (resp.payload?.summary) set({ gitSummary: resp.payload.summary });
+      else void get().refreshGitSummary(true);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
   },
 
   spawnBottomTerminal: async () => {

@@ -624,4 +624,62 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(screen.getByTestId('composer-attachments')).toBeTruthy();
     expect((screen.getByTestId('send-btn') as HTMLButtonElement).disabled).toBe(false);
   });
+
+  it('exposes Branch & Edit / Fork actions on turns and Stage / Commit controls in Review tab', async () => {
+    const forkSpy = vi.fn(async () => 'sess_forked_1');
+    const stageSpy = vi.fn(async () => {});
+    const commitSpy = vi.fn(async () => ({ ok: true, commit: 'abc1234' }));
+
+    useNexStore.setState({
+      mainView: 'workspace',
+      activeSessionId: 'sess_active',
+      selectedRunnerId: 'run_1',
+      sidePaneVisible: true,
+      locale: 'zh-CN',
+      rightTabs: [{ id: 'tab_rev', kind: 'review', title: '审查', closable: true }],
+      activeRightTabId: 'tab_rev',
+      gitSummary: {
+        is_git_repo: true,
+        branch: 'feat/nex-v3',
+        changed_files: 1,
+        additions: 5,
+        deletions: 1,
+        files: [
+          { rel_path: 'pkg/agent/loop.go', status: 'M', staged: true, unstaged: true, additions: 5, deletions: 1, diff: '+ok' },
+        ],
+      },
+      streams: {
+        sess_active: {
+          ...emptyStreamState(),
+          lastSeq: 2,
+          items: [
+            { id: 'usr_1', seq: 1, role: 'user', text: 'First question', thinking: '', toolCalls: [] },
+            { id: 'ast_2', seq: 2, role: 'assistant', text: 'First answer', thinking: '', toolCalls: [] },
+          ],
+        },
+      },
+      forkSession: forkSpy,
+      gitStage: stageSpy,
+      gitCommit: commitSpy,
+      refreshGitSummary: vi.fn(async () => null),
+    });
+
+    render(<App />);
+
+    // Branch & Edit before user turn 1
+    fireEvent.click(screen.getByTestId('fork-before-1'));
+    expect(forkSpy).toHaveBeenCalledWith('sess_active', { beforeSeq: 1, prefillText: 'First question' });
+
+    // Fork after assistant turn 2
+    fireEvent.click(screen.getByTestId('fork-after-2'));
+    expect(forkSpy).toHaveBeenCalledWith('sess_active', { upToSeq: 2 });
+
+    // Commit staged file in Git Review tab
+    const commitInput = screen.getByTestId('git-commit-input') as HTMLInputElement;
+    fireEvent.change(commitInput, { target: { value: 'feat: test commit' } });
+    fireEvent.click(screen.getByTestId('git-commit-btn'));
+    await waitFor(() => {
+      expect(commitSpy).toHaveBeenCalledWith('feat: test commit');
+    });
+  });
 });

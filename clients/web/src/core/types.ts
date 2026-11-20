@@ -291,6 +291,8 @@ export interface FilePreview {
 export interface GitFileChange {
   rel_path: string;
   status: string;
+  staged?: boolean;
+  unstaged?: boolean;
   additions: number;
   deletions: number;
   diff?: string;

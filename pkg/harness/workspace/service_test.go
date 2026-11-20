@@ -158,3 +158,85 @@ func TestBrowseDirs(t *testing.T) {
 		t.Fatalf("expected error for non-directory path")
 	}
 }
+
+func TestGitStageUnstageDiscardCommitAndBranches(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	run := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Tester", "GIT_AUTHOR_EMAIL=t@example.com",
+			"GIT_COMMITTER_NAME=Tester", "GIT_COMMITTER_EMAIL=t@example.com",
+		)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, string(out))
+		}
+	}
+	run("init", "-b", "main")
+	_ = os.WriteFile(filepath.Join(dir, "a.txt"), []byte("line1\n"), 0o644)
+	run("add", "a.txt")
+	run("commit", "-m", "init")
+
+	svc := NewService()
+	ctx := context.Background()
+
+	// Modify a.txt and create untracked b.txt
+	_ = os.WriteFile(filepath.Join(dir, "a.txt"), []byte("line1\nline2\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "b.txt"), []byte("temp\n"), 0o644)
+
+	// Stage a.txt -> verify Staged=true
+	sum, err := svc.GitStage(ctx, dir, "a.txt")
+	if err != nil {
+		t.Fatalf("GitStage failed: %v", err)
+	}
+	foundStaged := false
+	for _, f := range sum.Files {
+		if f.RelPath == "a.txt" && f.Staged {
+			foundStaged = true
+		}
+	}
+	if !foundStaged {
+		t.Fatalf("expected a.txt staged, got %+v", sum.Files)
+	}
+
+	// Unstage a.txt -> verify Staged=false
+	sum, err = svc.GitUnstage(ctx, dir, "a.txt")
+	if err != nil {
+		t.Fatalf("GitUnstage failed: %v", err)
+	}
+	for _, f := range sum.Files {
+		if f.RelPath == "a.txt" && f.Staged {
+			t.Fatalf("expected a.txt unstaged, got %+v", f)
+		}
+	}
+
+	// Discard untracked b.txt -> file removed
+	sum, err = svc.GitDiscard(ctx, dir, "b.txt")
+	if err != nil {
+		t.Fatalf("GitDiscard untracked failed: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "b.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected b.txt to be removed after discard")
+	}
+
+	// Stage all & Commit
+	if _, err := svc.GitStage(ctx, dir, ""); err != nil {
+		t.Fatal(err)
+	}
+	commitRes, err := svc.GitCommit(ctx, dir, "feat: add line2")
+	if err != nil || commitRes["ok"] != true {
+		t.Fatalf("GitCommit failed: %+v err=%v", commitRes, err)
+	}
+
+	// Create & checkout branch, list branches
+	if _, err := svc.GitCheckout(ctx, dir, "feat/test-branch", true); err != nil {
+		t.Fatalf("GitCheckout -b failed: %v", err)
+	}
+	brRes, err := svc.GitBranches(ctx, dir)
+	if err != nil || brRes["current"] != "feat/test-branch" {
+		t.Fatalf("unexpected GitBranches: %+v err=%v", brRes, err)
+	}
+}

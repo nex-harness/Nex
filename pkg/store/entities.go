@@ -421,6 +421,86 @@ func (s *Store) ListSessionEventsAfter(ctx context.Context, sessionID string, af
 	return queryEventsFromDB(ctx, s.mainDB, sessionID, afterSeq)
 }
 
+// ForkSession creates a new session copying events from sourceSessionID up to upToSeq
+// (if upToSeq == 0, copies all events; if excludeAll is true, copies 0 events).
+func (s *Store) ForkSession(ctx context.Context, sourceSessionID string, upToSeq uint64, excludeAll bool, newTitle string) (SessionRecord, []SessionEvent, error) {
+	src, err := s.GetSession(ctx, sourceSessionID)
+	if err != nil {
+		return SessionRecord{}, nil, err
+	}
+	title := newTitle
+	if title == "" {
+		base := src.Title
+		if base == "" {
+			base = "Session"
+		}
+		title = base + " (branch)"
+	}
+
+	now := time.Now().UnixMilli()
+	forked := SessionRecord{
+		ID:                 newID("sess"),
+		RunnerID:           src.RunnerID,
+		Title:              title,
+		WorkspacePath:      src.WorkspacePath,
+		AgentProfileSlug:   src.AgentProfileSlug,
+		ModelID:            src.ModelID,
+		ProviderID:         src.ProviderID,
+		PermissionMode:     src.PermissionMode,
+		Status:             "idle",
+		ContextWindowLimit: src.ContextWindowLimit,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+		LastActiveAt:       now,
+	}
+	forked, err = s.CreateOrUpdateSession(ctx, forked)
+	if err != nil {
+		return SessionRecord{}, nil, err
+	}
+
+	if excludeAll {
+		return forked, nil, nil
+	}
+
+	srcEvents, err := s.ListSessionEventsAfter(ctx, sourceSessionID, 0)
+	if err != nil {
+		return forked, nil, err
+	}
+	var copied []SessionEvent
+	for _, ev := range srcEvents {
+		if upToSeq > 0 && ev.Seq > upToSeq {
+			break
+		}
+		saved, aErr := s.AppendSessionEvent(ctx, SessionEvent{
+			SessionID:  forked.ID,
+			TurnIdx:    ev.TurnIdx,
+			EventType:  ev.EventType,
+			Payload:    ev.Payload,
+			BlobHashes: ev.BlobHashes,
+			CreatedAt:  ev.CreatedAt,
+		}, false)
+		if aErr != nil {
+			return forked, copied, aErr
+		}
+		copied = append(copied, saved)
+	}
+	return forked, copied, nil
+}
+
+// ImportSessionSnapshot mirrors a forked session and its historical events into local SQLite (used by Runner sync).
+func (s *Store) ImportSessionSnapshot(ctx context.Context, sess SessionRecord, events []SessionEvent) error {
+	if _, err := s.CreateOrUpdateSession(ctx, sess); err != nil {
+		return err
+	}
+	for _, ev := range events {
+		ev.SessionID = sess.ID
+		if _, err := s.AppendSessionEvent(ctx, ev, false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func queryEventsFromDB(ctx context.Context, db *sql.DB, sessionID string, afterSeq uint64) ([]SessionEvent, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT session_id, seq, turn_idx, event_type, payload_json, blob_hashes_json, created_at

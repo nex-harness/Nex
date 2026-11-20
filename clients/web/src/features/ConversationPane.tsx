@@ -572,9 +572,19 @@ function cleanUserDisplayText(raw: string): string {
   return raw.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, '').trim() || raw;
 }
 
-function UserBubble({ text, images }: { text: string; images?: ChatTurnItem['images'] }) {
+function UserBubble({
+  text,
+  images,
+  seq,
+}: {
+  text: string;
+  images?: ChatTurnItem['images'];
+  seq?: number;
+}) {
   const locale = useNexStore((s) => s.locale);
+  const activeSessionId = useNexStore((s) => s.activeSessionId);
   const setComposerText = useNexStore((s) => s.setComposerText);
+  const forkSession = useNexStore((s) => s.forkSession);
   const [copied, setCopied] = useState(false);
   const displayText = cleanUserDisplayText(text);
 
@@ -619,13 +629,25 @@ function UserBubble({ text, images }: { text: string; images?: ChatTurnItem['ima
         </button>
         <button
           type="button"
-          onClick={() => setComposerText(text)}
+          onClick={() => setComposerText(displayText)}
           title={locale === 'en-US' ? 'Edit in composer' : '在输入框中编辑'}
           className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground"
         >
           <Pencil className="size-3" />
           <span>{locale === 'en-US' ? 'Edit' : '编辑'}</span>
         </button>
+        {activeSessionId && seq && seq > 0 && (
+          <button
+            type="button"
+            data-testid={`fork-before-${seq}`}
+            onClick={() => void forkSession(activeSessionId, { beforeSeq: seq, prefillText: displayText })}
+            title={locale === 'en-US' ? 'Branch & edit from before this message' : '从此处创建新分支并编辑重发'}
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground"
+          >
+            <GitBranch className="size-3" />
+            <span>{locale === 'en-US' ? 'Branch & Edit' : '编辑分支'}</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -2135,6 +2157,9 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
   registerRef: (id: string, el: HTMLDivElement | null) => void;
 }) {
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const [copiedReply, setCopiedReply] = useState(false);
+  const activeSessionId = useNexStore((s) => s.activeSessionId);
+  const forkSession = useNexStore((s) => s.forkSession);
   const workExpanded = manualOpen ?? Boolean(item.streaming);
 
   return (
@@ -2144,9 +2169,9 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
       className={`flex flex-col ${item.role === 'user' ? 'items-end' : 'items-start'}`}
     >
       {item.role === 'user' ? (
-        <UserBubble text={item.text} images={item.images} />
+        <UserBubble text={item.text} images={item.images} seq={item.seq} />
       ) : (
-        <div className={`min-w-0 w-full space-y-2.5 ${item.streaming ? 'zcode-stream-in' : ''}`}>
+        <div className={`group/assistant min-w-0 w-full space-y-2.5 ${item.streaming ? 'zcode-stream-in' : ''}`}>
           {(item.thinking || item.toolCalls.length > 0) && (
             <WorkGroup
               item={item}
@@ -2159,6 +2184,36 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
           {item.text && <MarkdownRenderer content={item.text} streaming={Boolean(item.streaming)} />}
 
           <ChangeSummaryCard item={item} />
+
+          {!item.streaming && (item.text || item.toolCalls.length > 0) && (
+            <div className="flex items-center gap-1 pt-0.5 opacity-0 transition-opacity group-hover/assistant:opacity-100">
+              {item.text && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(item.text);
+                    setCopiedReply(true);
+                    window.setTimeout(() => setCopiedReply(false), 1400);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
+                >
+                  {copiedReply ? <Check className="zcode-reaction-pop size-3 text-success" /> : <Copy className="size-3" />}
+                  <span>{copiedReply ? (locale === 'en-US' ? 'Copied' : '已复制') : locale === 'en-US' ? 'Copy' : '复制'}</span>
+                </button>
+              )}
+              {activeSessionId && item.seq && item.seq > 0 && (
+                <button
+                  type="button"
+                  data-testid={`fork-after-${item.seq}`}
+                  onClick={() => void forkSession(activeSessionId, { upToSeq: item.seq })}
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
+                >
+                  <GitBranch className="size-3" />
+                  <span>{locale === 'en-US' ? 'Fork here' : '从此分支'}</span>
+                </button>
+              )}
+            </div>
+          )}
 
           {item.streaming && !item.thinking && item.toolCalls.length === 0 && !item.text && (
             <div className="zcode-stream-in flex items-center gap-1.5 text-ui-xs text-foreground-subtlest">

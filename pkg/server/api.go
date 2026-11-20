@@ -514,6 +514,47 @@ func (s *Server) handleSessionSubroutes(w http.ResponseWriter, r *http.Request) 
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"archived": true, "session_id": sessID})
 
+	case "fork":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			UpToSeq    uint64 `json:"up_to_seq"`
+			BeforeSeq  uint64 `json:"before_seq"`
+			Title      string `json:"title"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		upTo := body.UpToSeq
+		excludeAll := false
+		if body.BeforeSeq > 0 {
+			if body.BeforeSeq <= 1 {
+				excludeAll = true
+			} else {
+				upTo = body.BeforeSeq - 1
+			}
+		}
+		forked, copied, err := s.store.ForkSession(r.Context(), sessID, upTo, excludeAll, strings.TrimSpace(body.Title))
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+		// Mirror forked history to the target Runner if currently online so next LLM turn has full history!
+		if forked.RunnerID != "" {
+			if env, err := protocol.NewEnvelope(protocol.TypeSessionForkSync, protocol.SessionForkSyncPayload{
+				Session: forked,
+				Events:  copied,
+			}); err == nil {
+				env.RunnerID = forked.RunnerID
+				env.SessionID = forked.ID
+				_, _ = s.callRunnerRPC(r.Context(), forked.RunnerID, env, 8*time.Second)
+			}
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{
+			"session":       forked,
+			"copied_events": len(copied),
+		})
+
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}

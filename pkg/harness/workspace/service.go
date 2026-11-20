@@ -27,13 +27,16 @@ const (
 
 // Request dispatches workspace FS and Git Review actions on a Runner.
 type Request struct {
-	Action        string `json:"action"` // "fs_list" | "fs_browse_dirs" | "fs_search" | "fs_read_preview" | "git_summary" | "git_diff"
+	Action        string `json:"action"` // "fs_list" | "fs_browse_dirs" | "fs_search" | "fs_read_preview" | "git_summary" | "git_diff" | "git_stage" | "git_unstage" | "git_discard" | "git_commit" | "git_branches" | "git_checkout"
 	WorkspacePath string `json:"workspace_path,omitempty"`
 	RelPath       string `json:"rel_path,omitempty"`
 	Query         string `json:"query,omitempty"`
 	DiffMode      string `json:"diff_mode,omitempty"` // "working" | "staged" | "unstaged" | "head"
 	Limit         int    `json:"limit,omitempty"`
 	IncludeHidden bool   `json:"include_hidden,omitempty"`
+	Message       string `json:"message,omitempty"`
+	Branch        string `json:"branch,omitempty"`
+	CreateBranch  bool   `json:"create_branch,omitempty"`
 }
 
 // BrowseDirEntry describes a subdirectory in the host/runner directory browser.
@@ -80,6 +83,8 @@ type FilePreview struct {
 type GitFileChange struct {
 	RelPath   string `json:"rel_path"`
 	Status    string `json:"status"` // "M" | "A" | "D" | "R" | "?"
+	Staged    bool   `json:"staged,omitempty"`
+	Unstaged  bool   `json:"unstaged,omitempty"`
 	Additions int    `json:"additions"`
 	Deletions int    `json:"deletions"`
 	Diff      string `json:"diff,omitempty"`
@@ -156,6 +161,18 @@ func (s *Service) HandleRequest(ctx context.Context, defaultWorkDir string, rawP
 		resp, err = s.GitSummary(ctx, root, false, "")
 	case "git_diff":
 		resp, err = s.GitSummary(ctx, root, true, req.RelPath)
+	case "git_stage":
+		resp, err = s.GitStage(ctx, root, req.RelPath)
+	case "git_unstage":
+		resp, err = s.GitUnstage(ctx, root, req.RelPath)
+	case "git_discard":
+		resp, err = s.GitDiscard(ctx, root, req.RelPath)
+	case "git_commit":
+		resp, err = s.GitCommit(ctx, root, req.Message)
+	case "git_branches":
+		resp, err = s.GitBranches(ctx, root)
+	case "git_checkout":
+		resp, err = s.GitCheckout(ctx, root, req.Branch, req.CreateBranch)
 	default:
 		return nil, fmt.Errorf("unknown workspace action %q", req.Action)
 	}
@@ -484,7 +501,8 @@ func (s *Service) GitSummary(ctx context.Context, rootDir string, includeDiffs b
 		if len(line) < 4 {
 			continue
 		}
-		xy := strings.TrimSpace(line[:2])
+		rawXY := line[:2]
+		xy := strings.TrimSpace(rawXY)
 		relP := strings.TrimSpace(line[3:])
 		if idx := strings.Index(relP, " -> "); idx >= 0 {
 			relP = relP[idx+4:]
@@ -513,9 +531,18 @@ func (s *Service) GitSummary(ctx context.Context, rootDir string, includeDiffs b
 		totalAdds += adds
 		totalDels += dels
 
+		staged := len(rawXY) >= 1 && rawXY[0] != ' ' && rawXY[0] != '?'
+		unstaged := len(rawXY) >= 2 && rawXY[1] != ' '
+		if rawXY == "??" {
+			staged = false
+			unstaged = true
+		}
+
 		fc := GitFileChange{
 			RelPath:   relP,
 			Status:    status,
+			Staged:    staged,
+			Unstaged:  unstaged,
 			Additions: adds,
 			Deletions: dels,
 		}
@@ -539,6 +566,156 @@ func (s *Service) GitSummary(ctx context.Context, rootDir string, includeDiffs b
 		Deletions:    totalDels,
 		Files:        files,
 	}, nil
+}
+
+// GitStage stages a single file (or all workspace changes if relPath is empty) and returns fresh GitSummary.
+func (s *Service) GitStage(ctx context.Context, rootDir, relPath string) (*GitSummary, error) {
+	absRoot, _, err := safeJoinWorkspace(rootDir, relPath)
+	if err != nil {
+		return nil, err
+	}
+	var args []string
+	if strings.TrimSpace(relPath) == "" {
+		args = []string{"add", "-A"}
+	} else {
+		args = []string{"add", "--", filepath.ToSlash(strings.TrimPrefix(relPath, "/"))}
+	}
+	if _, err := runGitCombined(ctx, absRoot, args...); err != nil {
+		return nil, err
+	}
+	return s.GitSummary(ctx, absRoot, true, "")
+}
+
+// GitUnstage unstages a single file (or all staged changes if relPath is empty) and returns fresh GitSummary.
+func (s *Service) GitUnstage(ctx context.Context, rootDir, relPath string) (*GitSummary, error) {
+	absRoot, _, err := safeJoinWorkspace(rootDir, relPath)
+	if err != nil {
+		return nil, err
+	}
+	var args []string
+	if strings.TrimSpace(relPath) == "" {
+		args = []string{"reset", "HEAD"}
+	} else {
+		args = []string{"reset", "HEAD", "--", filepath.ToSlash(strings.TrimPrefix(relPath, "/"))}
+	}
+	if _, err := runGitCombined(ctx, absRoot, args...); err != nil {
+		return nil, err
+	}
+	return s.GitSummary(ctx, absRoot, true, "")
+}
+
+// GitDiscard discards unstaged changes for a single workspace file (or removes it if untracked).
+func (s *Service) GitDiscard(ctx context.Context, rootDir, relPath string) (*GitSummary, error) {
+	if strings.TrimSpace(relPath) == "" {
+		return nil, errors.New("rel_path is required for git_discard")
+	}
+	absRoot, _, err := safeJoinWorkspace(rootDir, relPath)
+	if err != nil {
+		return nil, err
+	}
+	cleanRel := filepath.ToSlash(strings.TrimPrefix(relPath, "/"))
+	porcelain, _ := runGit(ctx, absRoot, "status", "--porcelain", "--", cleanRel)
+	if strings.HasPrefix(porcelain, "??") {
+		if _, err := runGitCombined(ctx, absRoot, "clean", "-fd", "--", cleanRel); err != nil {
+			return nil, err
+		}
+	} else {
+		if _, err := runGitCombined(ctx, absRoot, "checkout", "--", cleanRel); err != nil {
+			return nil, err
+		}
+	}
+	return s.GitSummary(ctx, absRoot, true, "")
+}
+
+// GitCommit commits currently staged changes with message and returns the new commit hash + fresh GitSummary.
+func (s *Service) GitCommit(ctx context.Context, rootDir, message string) (map[string]any, error) {
+	msg := strings.TrimSpace(message)
+	if msg == "" {
+		return nil, errors.New("commit message is required")
+	}
+	absRoot, _, err := safeJoinWorkspace(rootDir, "")
+	if err != nil {
+		return nil, err
+	}
+	out, err := runGitCombined(ctx, absRoot, "commit", "-m", msg)
+	if err != nil {
+		return nil, err
+	}
+	hash, _ := runGit(ctx, absRoot, "rev-parse", "--short", "HEAD")
+	summary, _ := s.GitSummary(ctx, absRoot, true, "")
+	return map[string]any{
+		"ok":      true,
+		"commit":  strings.TrimSpace(hash),
+		"output":  strings.TrimSpace(out),
+		"summary": summary,
+	}, nil
+}
+
+// GitBranches lists local branches and the currently checked-out branch.
+func (s *Service) GitBranches(ctx context.Context, rootDir string) (map[string]any, error) {
+	absRoot, _, err := safeJoinWorkspace(rootDir, "")
+	if err != nil {
+		return nil, err
+	}
+	cur, err := runGit(ctx, absRoot, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return nil, err
+	}
+	raw, err := runGit(ctx, absRoot, "branch", "--format=%(refname:short)")
+	if err != nil {
+		return nil, err
+	}
+	var branches []string
+	for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
+		b := strings.TrimSpace(line)
+		if b != "" {
+			branches = append(branches, b)
+		}
+	}
+	return map[string]any{
+		"current":  strings.TrimSpace(cur),
+		"branches": branches,
+	}, nil
+}
+
+// GitCheckout switches to branch (or creates it with -b when createBranch is true).
+func (s *Service) GitCheckout(ctx context.Context, rootDir, branch string, createBranch bool) (map[string]any, error) {
+	b := strings.TrimSpace(branch)
+	if b == "" || strings.HasPrefix(b, "-") {
+		return nil, errors.New("valid branch name is required")
+	}
+	absRoot, _, err := safeJoinWorkspace(rootDir, "")
+	if err != nil {
+		return nil, err
+	}
+	args := []string{"checkout"}
+	if createBranch {
+		args = append(args, "-b")
+	}
+	args = append(args, b)
+	if _, err := runGitCombined(ctx, absRoot, args...); err != nil {
+		return nil, err
+	}
+	summary, _ := s.GitSummary(ctx, absRoot, false, "")
+	return map[string]any{
+		"ok":      true,
+		"branch":  b,
+		"summary": summary,
+	}, nil
+}
+
+func runGitCombined(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg != "" {
+			return "", fmt.Errorf("git %s failed: %s", strings.Join(args, " "), msg)
+		}
+		return "", err
+	}
+	return string(out), nil
 }
 
 func computeSingleFileDiff(ctx context.Context, absRoot, relPath, status string) string {
