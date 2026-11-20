@@ -2,19 +2,24 @@ import {
   Archive,
   ArrowUp,
   AtSign,
+  BookOpen,
   Bot,
   Bug,
   CalendarDays,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   CircleHelp,
   Copy,
+  Cpu,
   Ellipsis,
   FileText,
   Folder,
+  FolderPlus,
   FolderTree,
   GitPullRequest,
+  Globe,
   Hand,
   ListTodo,
   LoaderCircle,
@@ -26,6 +31,7 @@ import {
   Plug,
   Plus,
   Search,
+  Settings,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -33,14 +39,15 @@ import {
   SquareTerminal,
   X,
 } from 'lucide-react';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { emptyStreamState } from '../core/reducer';
 import { useNexStore } from '../core/store';
-import { ChatTurnItem, ToolCallCard } from '../core/types';
+import { ChatTurnItem, ModelMeta, ThinkingEffort, ToolCallCard } from '../core/types';
 import { formatMsg } from '../i18n/messages';
 import type { MessageKey } from '../i18n/messages';
 import { ContextWindowsButton } from './ContextPopover';
 import { ConversationStatusPanel } from './ConversationStatusPanel';
+import { DirectoryBrowserModal } from './DirectoryBrowserModal';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 function getGreetingKey(hour: number): MessageKey {
@@ -89,6 +96,15 @@ function DiffBody({ diff }: { diff: string }) {
         );
       })}
     </>
+  );
+}
+
+function ToolIndeterminateBar({ active }: { active: boolean }) {
+  if (!active) return null;
+  return (
+    <div className="relative mt-1 h-[2px] w-48 overflow-hidden rounded-full bg-foreground/10">
+      <div className="tool-call-progress-indeterminate absolute inset-y-0 w-1/3 rounded-full bg-foreground/45" />
+    </div>
   );
 }
 
@@ -164,11 +180,15 @@ function ToolSummaryRow({ tc, dense = true }: { tc: ToolCallCard; dense?: boolea
           {summary && <span className="min-w-0 truncate text-foreground-subtle">{summary}</span>}
           {chevron()}
         </button>
-        {open && output && (
-          <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 font-mono text-ui-sm whitespace-pre-wrap text-foreground-subtle">
-            {output}
+        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
+          <div className="zcode-collapsible-inner">
+            {output && (
+              <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 font-mono text-ui-sm whitespace-pre-wrap text-foreground-subtle">
+                {output}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     );
   }
@@ -200,22 +220,26 @@ function ToolSummaryRow({ tc, dense = true }: { tc: ToolCallCard; dense?: boolea
             {chevron()}
           </button>
         </div>
-        {open && (tc.diff || output) && (
-          <div
-            className="mb-2 mt-1.5 max-h-60 overflow-auto rounded-xl border border-border bg-card font-mono text-[12px] leading-5"
-            style={{
-              boxShadow: `inset 3px 0 0 ${
-                deletions > 0 && additions === 0 ? 'var(--color-destructive)' : 'var(--color-success)'
-              }`,
-            }}
-          >
-            {tc.diff ? (
-              <DiffBody diff={tc.diff} />
-            ) : (
-              <pre className="whitespace-pre-wrap p-2.5 text-foreground-subtle">{output}</pre>
+        <div className="zcode-collapsible" data-open={open && Boolean(tc.diff || output)}>
+          <div className="zcode-collapsible-inner">
+            {(tc.diff || output) && (
+              <div
+                className="mb-2 mt-1.5 max-h-60 overflow-auto rounded-xl border border-border bg-card font-mono text-[12px] leading-5"
+                style={{
+                  boxShadow: `inset 3px 0 0 ${
+                    deletions > 0 && additions === 0 ? 'var(--color-destructive)' : 'var(--color-success)'
+                  }`,
+                }}
+              >
+                {tc.diff ? (
+                  <DiffBody diff={tc.diff} />
+                ) : (
+                  <pre className="whitespace-pre-wrap p-2.5 text-foreground-subtle">{output}</pre>
+                )}
+              </div>
             )}
           </div>
-        )}
+        </div>
       </div>
     );
   }
@@ -236,17 +260,118 @@ function ToolSummaryRow({ tc, dense = true }: { tc: ToolCallCard; dense?: boolea
           )}
           {chevron()}
         </button>
-        {open && (
-          <div className="mb-2 mt-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 font-mono text-ui-sm">
-            <div className="truncate text-foreground-subtle">
-              <span className="text-foreground-subtlest">$ </span>
-              {command}
+        <ToolIndeterminateBar active={running} />
+        <div className="zcode-collapsible" data-open={open}>
+          <div className="zcode-collapsible-inner">
+            <div className="mb-2 mt-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 font-mono text-ui-sm">
+              <div className="truncate text-foreground-subtle">
+                <span className="text-foreground-subtlest">$ </span>
+                {command}
+              </div>
+              {output && (
+                <pre className="mt-1.5 max-h-52 overflow-auto whitespace-pre-wrap text-foreground-subtle">{output}</pre>
+              )}
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (tc.name === 'webfetch') {
+    const url = String(args.url || '');
+    return (
+      <div className="flex max-w-full flex-col">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={`group/tool inline-flex max-w-full items-center gap-2 py-0.5 text-left ${rowClass}`}
+        >
+          <Globe className="size-3.5 shrink-0 text-foreground-subtlest" />
+          <span className="shrink-0 font-medium text-foreground-subtle">
+            {running ? (locale === 'en-US' ? 'Fetching' : '抓取中') : locale === 'en-US' ? 'Fetched' : '已抓取'}
+          </span>
+          {url && <span className="min-w-0 truncate font-mono text-ui-sm text-foreground-subtle">{truncateText(url, 72)}</span>}
+          {chevron()}
+        </button>
+        <ToolIndeterminateBar active={running} />
+        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
+          <div className="zcode-collapsible-inner">
             {output && (
-              <pre className="mt-1.5 max-h-52 overflow-auto whitespace-pre-wrap text-foreground-subtle">{output}</pre>
+              <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 font-mono text-ui-sm whitespace-pre-wrap text-foreground-subtle">
+                {output}
+              </div>
             )}
           </div>
-        )}
+        </div>
+      </div>
+    );
+  }
+
+  if (tc.name === 'ask_user_question') {
+    const question = String(args.question || '');
+    return (
+      <div className="flex max-w-full flex-col">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={`group/tool inline-flex max-w-full items-center gap-2 py-0.5 text-left ${rowClass}`}
+        >
+          <CircleHelp className="size-3.5 shrink-0 text-foreground-subtlest" />
+          <span className="shrink-0 font-medium text-foreground-subtle">
+            {running ? (locale === 'en-US' ? 'Asking' : '等待回答') : locale === 'en-US' ? 'Asked' : '已询问'}
+          </span>
+          {question && <span className="min-w-0 truncate text-foreground-subtle">{truncateText(question, 72)}</span>}
+          {chevron()}
+        </button>
+        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
+          <div className="zcode-collapsible-inner">
+            {output && (
+              <div className="ml-2 mt-1 max-h-40 overflow-auto border-l border-border pl-3.5 text-ui-sm whitespace-pre-wrap text-foreground-subtle">
+                {output}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (tc.name === 'task_output' || tc.name === 'task_stop') {
+    const taskId = String(args.task_id || '');
+    const title =
+      tc.name === 'task_stop'
+        ? locale === 'en-US'
+          ? 'Stopped task'
+          : '已停止后台任务'
+        : running
+          ? locale === 'en-US'
+            ? 'Checking task'
+            : '读取后台任务'
+          : locale === 'en-US'
+            ? 'Checked task'
+            : '已读取后台任务';
+    return (
+      <div className="flex max-w-full flex-col">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={`group/tool inline-flex max-w-full items-center gap-2 py-0.5 text-left ${rowClass}`}
+        >
+          <SquareTerminal className="size-3.5 shrink-0 text-foreground-subtlest" />
+          <span className="shrink-0 font-medium text-foreground-subtle">{title}</span>
+          {taskId && <span className="min-w-0 truncate font-mono text-ui-sm text-foreground-subtle">{taskId}</span>}
+          {chevron()}
+        </button>
+        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
+          <div className="zcode-collapsible-inner">
+            {output && (
+              <pre className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 font-mono text-ui-sm whitespace-pre-wrap text-foreground-subtle">
+                {output}
+              </pre>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
@@ -266,11 +391,16 @@ function ToolSummaryRow({ tc, dense = true }: { tc: ToolCallCard; dense?: boolea
           {summary && <span className="min-w-0 truncate text-foreground-subtle">{summary}</span>}
           {chevron()}
         </button>
-        {open && output && (
-          <div className="mb-2 mt-1.5 max-h-60 overflow-auto rounded-xl border border-border bg-card p-2.5 font-mono text-[12px] leading-5 whitespace-pre-wrap text-foreground-subtle">
-            {output}
+        <ToolIndeterminateBar active={running} />
+        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
+          <div className="zcode-collapsible-inner">
+            {output && (
+              <div className="mb-2 mt-1.5 max-h-60 overflow-auto rounded-xl border border-border bg-card p-2.5 font-mono text-[12px] leading-5 whitespace-pre-wrap text-foreground-subtle">
+                {output}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     );
   }
@@ -284,16 +414,23 @@ function ToolSummaryRow({ tc, dense = true }: { tc: ToolCallCard; dense?: boolea
           onClick={() => setOpen((v) => !v)}
           className={`group/tool inline-flex max-w-full items-center gap-2 py-0.5 text-left ${rowClass}`}
         >
-          <Bot className="size-3.5 shrink-0 text-success" />
-          <span className="shrink-0 font-medium text-foreground-subtle">{formatMsg(locale, 'tool.subagent')}</span>
+          <Bot className={`size-3.5 shrink-0 text-success ${running ? 'animate-pulse' : ''}`} />
+          <span className={`shrink-0 font-medium ${running ? 'animated-gradient-text' : 'text-foreground-subtle'}`}>
+            {formatMsg(locale, 'tool.subagent')}
+          </span>
           {summary && <span className="min-w-0 truncate text-foreground-subtle">{summary}</span>}
           {chevron()}
         </button>
-        {open && output && (
-          <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 text-ui-sm whitespace-pre-wrap text-foreground-subtle">
-            {output}
+        <ToolIndeterminateBar active={running} />
+        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
+          <div className="zcode-collapsible-inner">
+            {output && (
+              <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 text-ui-sm whitespace-pre-wrap text-foreground-subtle">
+                {output}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     );
   }
@@ -402,23 +539,25 @@ function ChangeSummaryCard({ item }: { item: ChatTurnItem }) {
           </button>
         </div>
       </div>
-      {open && (
-        <div className="border-t border-border py-1">
-          {files.map((f) => (
-            <button
-              key={f.path}
-              type="button"
-              onClick={() => void openFileInPreviewTab(f.path)}
-              className="flex w-full items-center justify-between gap-2 px-3 py-1 text-left text-ui-sm hover:bg-hover"
-            >
-              <span className="truncate font-mono text-foreground-subtle">{f.path}</span>
-              <span className="shrink-0 font-mono text-ui-xs tabular-nums">
-                <span className="text-success">+{f.adds}</span> <span className="text-destructive">-{f.dels}</span>
-              </span>
-            </button>
-          ))}
+      <div className="zcode-collapsible" data-open={open}>
+        <div className="zcode-collapsible-inner">
+          <div className="border-t border-border py-1">
+            {files.map((f) => (
+              <button
+                key={f.path}
+                type="button"
+                onClick={() => void openFileInPreviewTab(f.path)}
+                className="flex w-full items-center justify-between gap-2 px-3 py-1 text-left text-ui-sm transition-colors hover:bg-hover"
+              >
+                <span className="truncate font-mono text-foreground-subtle">{f.path}</span>
+                <span className="shrink-0 font-mono text-ui-xs tabular-nums">
+                  <span className="text-success">+{f.adds}</span> <span className="text-destructive">-{f.dels}</span>
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -455,7 +594,7 @@ function UserBubble({ text }: { text: string }) {
           title={locale === 'en-US' ? 'Copy' : '复制'}
           className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground"
         >
-          {copied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
+          {copied ? <Check className="zcode-reaction-pop size-3 text-success" /> : <Copy className="size-3" />}
           <span>{copied ? (locale === 'en-US' ? 'Copied' : '已复制') : locale === 'en-US' ? 'Copy' : '复制'}</span>
         </button>
         <button
@@ -530,18 +669,20 @@ function WorkGroup({
         <ChevronRight className={`size-3.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
       </button>
 
-      {open && (
-        <div className="ml-1 mb-3 mt-2 space-y-1.5 border-l border-border pl-3.5">
-          {item.thinking && (
-            <div className="max-h-60 overflow-auto whitespace-pre-wrap py-0.5 text-ui-sm leading-relaxed text-foreground-subtle">
-              {item.thinking}
-            </div>
-          )}
-          {hiddenTools.map((tc) => (
-            <ToolSummaryRow key={tc.id} tc={tc} />
-          ))}
+      <div className="zcode-collapsible" data-open={open}>
+        <div className="zcode-collapsible-inner">
+          <div className="ml-1 mb-3 mt-2 space-y-1.5 border-l border-border pl-3.5">
+            {item.thinking && (
+              <div className="max-h-60 overflow-auto whitespace-pre-wrap py-0.5 text-ui-sm leading-relaxed text-foreground-subtle">
+                {item.thinking}
+              </div>
+            )}
+            {hiddenTools.map((tc) => (
+              <ToolSummaryRow key={tc.id} tc={tc} />
+            ))}
+          </div>
         </div>
-      )}
+      </div>
 
       {visibleTools.length > 0 && (
         <div className="mt-0.5 flex flex-col gap-0.5">
@@ -562,15 +703,80 @@ const PERMISSION_OPTIONS: Array<{
 }> = [
   { value: 'interactive', icon: Hand, labelKey: 'mode.default', descKey: 'mode.default.desc' },
   { value: 'full_access', icon: ShieldCheck, labelKey: 'mode.fullAccess', descKey: 'mode.fullAccess.desc' },
-  { value: 'read_only', icon: ShieldAlert, labelKey: 'mode.readOnly', descKey: 'mode.readOnly.desc' },
+  { value: 'read_only', icon: BookOpen, labelKey: 'mode.readOnly', descKey: 'mode.readOnly.desc' },
 ];
 
-const EFFORT_OPTIONS: Array<{ value: '' | 'low' | 'medium' | 'high'; labelKey: MessageKey }> = [
-  { value: 'low', labelKey: 'chat.thought.low' },
-  { value: 'medium', labelKey: 'chat.thought.medium' },
-  { value: 'high', labelKey: 'chat.thought.high' },
-  { value: '', labelKey: 'chat.thought.off' },
+interface EffortLevelOption {
+  value: ThinkingEffort;
+  labelKey: MessageKey;
+}
+
+const EFFORT_CATALOG: Record<string, EffortLevelOption> = {
+  off: { value: '', labelKey: 'chat.thought.off' },
+  '': { value: '', labelKey: 'chat.thought.off' },
+  low: { value: 'low', labelKey: 'chat.thought.low' },
+  medium: { value: 'medium', labelKey: 'chat.thought.medium' },
+  high: { value: 'high', labelKey: 'chat.thought.high' },
+  xhigh: { value: 'xhigh', labelKey: 'chat.thought.xhigh' },
+  max: { value: 'max', labelKey: 'chat.thought.max' },
+};
+
+const DEFAULT_EFFORT_LEVELS: EffortLevelOption[] = [
+  EFFORT_CATALOG.off,
+  EFFORT_CATALOG.low,
+  EFFORT_CATALOG.medium,
+  EFFORT_CATALOG.high,
 ];
+
+function resolveEffortLevels(model?: ModelMeta): EffortLevelOption[] {
+  const raw = model?.reasoning_levels;
+  if (!raw || raw.length < 2) return DEFAULT_EFFORT_LEVELS;
+  const seen = new Set<string>();
+  const resolved: EffortLevelOption[] = [];
+  for (const token of raw) {
+    const entry = EFFORT_CATALOG[token.trim().toLowerCase()];
+    if (!entry || seen.has(entry.value)) continue;
+    seen.add(entry.value);
+    resolved.push(entry);
+  }
+  return resolved.length >= 2 ? resolved : DEFAULT_EFFORT_LEVELS;
+}
+
+function isGlmHighspeedModel(name: string): boolean {
+  return /glm/i.test(name) && /highspeed|flashx/i.test(name);
+}
+
+// Fixed seeds matching ZCode ComposerModelMenu.tsx so bubbles flow smoothly without re-randomizing.
+const EFFORT_BUBBLES = [
+  { top: 4, size: 2, duration: 2.6, delay: -0.4 },
+  { top: 14, size: 3, duration: 3.2, delay: -2.1 },
+  { top: 8, size: 4, duration: 2.8, delay: -1.1 },
+  { top: 18, size: 2, duration: 3.6, delay: -0.8 },
+  { top: 3, size: 3, duration: 3.0, delay: -2.5 },
+  { top: 12, size: 2, duration: 3.4, delay: -1.7 },
+  { top: 6, size: 3, duration: 3.1, delay: -0.9 },
+  { top: 17, size: 4, duration: 2.9, delay: -2.3 },
+  { top: 10, size: 2, duration: 3.5, delay: -0.2 },
+  { top: 2, size: 2, duration: 2.7, delay: -1.8 },
+  { top: 15, size: 3, duration: 3.3, delay: -1.2 },
+  { top: 7, size: 4, duration: 3.6, delay: -3.1 },
+];
+
+const HIGHSPEED_BUBBLES = Array.from({ length: 32 }, (_, index) => ({
+  ...EFFORT_BUBBLES[index % EFFORT_BUBBLES.length],
+  duration: (8 + (index % 5)) / 10,
+  delay: -index * 0.137,
+}));
+
+function RollingLabel({ text, className = '' }: { text: string; className?: string }) {
+  return (
+    <span className={`relative inline-flex h-[1.3em] items-center overflow-hidden ${className}`}>
+      <span key={text} className="zcode-label-roll inline-flex whitespace-nowrap leading-[1.25]">
+        {text}
+      </span>
+    </span>
+  );
+}
 
 const CHIPS = {
   'zh-CN': [
@@ -616,6 +822,7 @@ function Composer({
   activeModelLimit,
   setComposerText,
   setSelectedRunner,
+  setSelectedProvider,
   setSelectedModel,
   setThinkingEffort,
   setPermissionMode,
@@ -630,47 +837,236 @@ function Composer({
   runners: ReturnType<typeof useNexStore.getState>['runners'];
   selectedProviderId: string;
   selectedModelId: string;
-  thinkingEffort: '' | 'low' | 'medium' | 'high';
+  thinkingEffort: ThinkingEffort;
   permissionMode: 'full_access' | 'interactive' | 'read_only';
   selectedRunnerId: string;
   selectedWorkspacePath: string;
   activeModelLimit: number;
   setComposerText: (text: string) => void;
   setSelectedRunner: (id: string, workspacePath?: string) => void;
+  setSelectedProvider: (providerId: string) => void;
   setSelectedModel: (providerId: string, modelId: string) => void;
-  setThinkingEffort: (effort: '' | 'low' | 'medium' | 'high') => void;
+  setThinkingEffort: (effort: ThinkingEffort) => void;
   setPermissionMode: (mode: 'full_access' | 'interactive' | 'read_only') => void;
   sendPromptOrSteer: (overrideText?: string) => void;
   abortActiveSession: () => void;
   composerText: string;
 }) {
   const [openMenu, setOpenMenu] = useState<ComposerMenu>(null);
+  const [providerMenuOpen, setProviderMenuOpen] = useState(false);
+  const [providerSubmenuSide, setProviderSubmenuSide] = useState<'side' | 'inline'>('side');
+  const [dirBrowserOpen, setDirBrowserOpen] = useState(false);
+  const [projectSearch, setProjectSearch] = useState('');
+  const [hoveredStop, setHoveredStop] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const modelPopoverRef = useRef<HTMLDivElement | null>(null);
+
+  const providers = useNexStore((s) => s.providers);
+  const sessions = useNexStore((s) => s.sessions);
+  const recentWorkspaces = useNexStore((s) => s.recentWorkspaces);
+  const hiddenModelKeys = useNexStore((s) => s.hiddenModelKeys);
 
   useEffect(() => {
-    if (!openMenu) return;
+    if (!openMenu) {
+      setProviderMenuOpen(false);
+      return;
+    }
     const onDown = (event: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpenMenu(null);
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpenMenu(null);
+        setProviderMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (providerMenuOpen) {
+          setProviderMenuOpen(false);
+        } else {
+          setOpenMenu(null);
+        }
+      }
     };
     document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [openMenu]);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [openMenu, providerMenuOpen]);
 
   const permissionMeta = PERMISSION_OPTIONS.find((o) => o.value === permissionMode) || PERMISSION_OPTIONS[0];
   const PermissionIcon = permissionMode === 'full_access' ? ShieldAlert : permissionMeta.icon;
-  const effortMeta = EFFORT_OPTIONS.find((o) => o.value === thinkingEffort) || EFFORT_OPTIONS[0];
-  const activeModel = models.find((m) => m.provider_id === selectedProviderId && m.id === selectedModelId);
-  const modelLabel = activeModel?.id || selectedModelId || (locale === 'en-US' ? 'Select model' : '选择模型');
+
+  const activeProvider = providers.find((p) => p.id === selectedProviderId) || providers[0];
+  const effectiveProviderId = selectedProviderId || activeProvider?.id || '';
+  const activeProviderName = activeProvider?.name || effectiveProviderId || formatMsg(locale, 'chat.model.providers');
+
+  const activeModel = models.find((m) => m.provider_id === effectiveProviderId && m.id === selectedModelId);
+  const effortLevels = useMemo(() => resolveEffortLevels(activeModel), [activeModel]);
+  const currentEffortIdx = useMemo(() => {
+    const idx = effortLevels.findIndex((o) => o.value === thinkingEffort);
+    if (idx >= 0) return idx;
+    // If current effort (e.g. max) isn't in a 4-level model, fall back to highest non-off level or medium
+    if (thinkingEffort === 'max' || thinkingEffort === 'xhigh') {
+      return effortLevels.length - 1;
+    }
+    const medIdx = effortLevels.findIndex((o) => o.value === 'medium');
+    return medIdx >= 0 ? medIdx : Math.min(1, effortLevels.length - 1);
+  }, [effortLevels, thinkingEffort]);
+
+  const effortMeta = effortLevels[currentEffortIdx] || effortLevels[0];
+  const sliderProgress =
+    effortLevels.length > 1 ? (currentEffortIdx / (effortLevels.length - 1)) * 100 : 0;
+  const sliderFilled = effortMeta.value !== '';
+  const isMaxEffort = sliderFilled && currentEffortIdx === effortLevels.length - 1;
+  const isHighspeed = isGlmHighspeedModel(activeModel?.display_name || activeModel?.id || '');
+
+  // Bind Ctrl+T (^T) globally to cycle thinking effort level smoothly (ZCode parity)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 't') {
+        e.preventDefault();
+        const nextIdx = (currentEffortIdx + 1) % effortLevels.length;
+        const nextOpt = effortLevels[nextIdx];
+        if (nextOpt) setThinkingEffort(nextOpt.value);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [currentEffortIdx, effortLevels, setThinkingEffort]);
+
+  const allVisibleModels = useMemo(
+    () => models.filter((m) => !hiddenModelKeys[`${m.provider_id}::${m.id}`]),
+    [models, hiddenModelKeys],
+  );
+  const providerModels = useMemo(() => {
+    if (!effectiveProviderId) return allVisibleModels;
+    return allVisibleModels.filter((m) => m.provider_id === effectiveProviderId);
+  }, [allVisibleModels, effectiveProviderId]);
+
+  const modelLabel =
+    activeModel?.display_name || activeModel?.id || selectedModelId || formatMsg(locale, 'chat.model.selectModel');
+
+  // Deduplicated known workspaces (runner defaults + recent chosen folders + session folders)
+  const knownProjects = useMemo(() => {
+    const items: Array<{ key: string; runnerId: string; runnerName: string; path: string; folderName: string; isDefault?: boolean }> = [];
+    const seen = new Set<string>();
+    const runnerMap = new Map(runners.map((r) => [r.id, r]));
+
+    const add = (runnerId: string, path: string, isDefault = false) => {
+      const cleanPath = (path || '').trim();
+      if (!runnerId || !cleanPath) return;
+      const key = `${runnerId}::${cleanPath}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const r = runnerMap.get(runnerId);
+      items.push({
+        key,
+        runnerId,
+        runnerName: r?.name || runnerId,
+        path: cleanPath,
+        folderName: cleanPath.split(/[\\/]/).filter(Boolean).pop() || cleanPath,
+        isDefault,
+      });
+    };
+
+    for (const rw of recentWorkspaces) {
+      add(rw.runnerId, rw.path);
+    }
+    for (const r of runners) {
+      if (r.workspace_default) add(r.id, r.workspace_default, true);
+    }
+    for (const sess of sessions) {
+      if (sess.runner_id && sess.workspace_path) add(sess.runner_id, sess.workspace_path);
+    }
+    return items;
+  }, [runners, recentWorkspaces, sessions]);
+
+  const filteredProjects = useMemo(() => {
+    const q = projectSearch.trim().toLowerCase();
+    if (!q) return knownProjects;
+    return knownProjects.filter(
+      (p) =>
+        p.folderName.toLowerCase().includes(q) ||
+        p.path.toLowerCase().includes(q) ||
+        p.runnerName.toLowerCase().includes(q),
+    );
+  }, [knownProjects, projectSearch]);
 
   const activeRunner = runners.find((r) => r.id === selectedRunnerId);
-  const runnerLabel =
-    activeRunner?.name ||
+  const projectLabel =
     (selectedWorkspacePath.split(/[\\/]/).filter(Boolean).pop() || '') ||
+    activeRunner?.name ||
     (locale === 'en-US' ? 'Select project' : '选择项目');
 
   const templates = locale === 'en-US' ? PROMPT_TEMPLATES_EN : PROMPT_TEMPLATES_ZH;
   const isRunning = stream.running;
   const canSend = Boolean(composerText.trim()) && Boolean(selectedRunnerId);
+
+  const selectEffortByIndex = (idx: number) => {
+    const opt = effortLevels[idx];
+    if (opt && opt.value !== thinkingEffort) {
+      setThinkingEffort(opt.value);
+    }
+  };
+
+  const providerListContent = (
+    <>
+      <div className="max-h-64 overflow-y-auto p-1">
+        {providers.length === 0 ? (
+          <div className="px-2.5 py-3 text-ui-sm text-foreground-subtlest">
+            {locale === 'en-US' ? 'No providers configured' : '暂无已配置供应商'}
+          </div>
+        ) : (
+          providers.map((p) => {
+            const isSelected = p.id === effectiveProviderId;
+            const count = allVisibleModels.filter((m) => m.provider_id === p.id).length;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                data-testid={`provider-option-${p.id}`}
+                onClick={() => {
+                  setSelectedProvider(p.id);
+                  setProviderMenuOpen(false);
+                }}
+                className={`flex min-h-8 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-menu-hover ${
+                  isSelected ? 'bg-selected' : ''
+                }`}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <Cpu className="size-3.5 shrink-0 text-foreground-subtle" />
+                  <span className="truncate text-ui-base text-foreground">{p.name || p.id}</span>
+                  <span className="shrink-0 rounded-full bg-surface px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-foreground-subtle">
+                    API
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <span className="font-mono text-ui-xs tabular-nums text-foreground-subtlest">{count}</span>
+                  {isSelected && <Check className="size-3.5 text-foreground-subtle" />}
+                </span>
+              </button>
+            );
+          })
+        )}
+      </div>
+      <div className="border-t border-border p-1">
+        <button
+          type="button"
+          data-testid="manage-providers-btn"
+          onClick={() => {
+            setProviderMenuOpen(false);
+            setOpenMenu(null);
+            useNexStore.getState().openSettings('providers');
+          }}
+          className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-ui-sm text-foreground-subtle transition-colors hover:bg-menu-hover hover:text-foreground"
+        >
+          <Settings className="size-3.5 shrink-0" />
+          <span>{formatMsg(locale, 'chat.model.manageProviders')}</span>
+        </button>
+      </div>
+    </>
+  );
 
   const textarea = (
     <textarea
@@ -698,9 +1094,9 @@ function Composer({
   );
 
   const toolbar = (
-    <div className="mt-1.5 flex items-center justify-between gap-2">
+    <div className="mt-1.5 flex min-w-0 items-center justify-between gap-1.5">
       {/* Left: add context + permission mode */}
-      <div className="relative flex min-w-0 items-center gap-0.5">
+      <div className="relative flex min-w-0 shrink items-center gap-0.5">
         <button
           type="button"
           onClick={() => setOpenMenu((m) => (m === 'plus' ? null : 'plus'))}
@@ -711,7 +1107,7 @@ function Composer({
         </button>
 
         {openMenu === 'plus' && (
-          <div className="absolute bottom-9 left-0 z-40 w-72 rounded-xl border border-border bg-popover p-1.5 shadow-md">
+          <div className="zcode-popover-up absolute bottom-9 left-0 z-40 w-72 rounded-xl border border-border bg-popover p-1.5 shadow-md">
             {templates.map((tpl) => (
               <button
                 key={tpl}
@@ -720,7 +1116,7 @@ function Composer({
                   setComposerText(tpl);
                   setOpenMenu(null);
                 }}
-                className="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left text-ui-sm text-foreground hover:bg-menu-hover"
+                className="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left text-ui-sm text-foreground transition-colors hover:bg-menu-hover"
               >
                 <span className="mt-0.5 shrink-0 text-foreground-subtle">
                   <Sparkles className="size-3.5" />
@@ -735,7 +1131,7 @@ function Composer({
                 setComposerText(`${composerText}@`);
                 setOpenMenu(null);
               }}
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-sm text-foreground hover:bg-menu-hover"
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-sm text-foreground transition-colors hover:bg-menu-hover"
             >
               <AtSign className="size-3.5 shrink-0 text-foreground-subtle" />
               <span>{locale === 'en-US' ? 'Reference a workspace file' : '引用工作区文件 (@)'}</span>
@@ -748,19 +1144,21 @@ function Composer({
           data-testid="permission-mode-btn"
           onClick={() => setOpenMenu((m) => (m === 'perm' ? null : 'perm'))}
           title={formatMsg(locale, permissionMeta.labelKey)}
-          className={`flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-ui-sm transition-colors hover:bg-hover ${
+          className={`flex h-7 min-w-0 shrink items-center gap-1 rounded-lg px-2 text-ui-sm transition-colors hover:bg-hover ${
             permissionMode === 'full_access'
               ? 'text-amber-600 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-400'
-              : 'text-foreground-subtle hover:text-foreground'
+              : permissionMode === 'read_only'
+                ? 'text-brand-blue hover:text-brand-blue'
+                : 'text-foreground-subtle hover:text-foreground'
           }`}
         >
           <PermissionIcon className="size-3.5 shrink-0" />
-          <span className="font-medium">{formatMsg(locale, permissionMeta.labelKey)}</span>
+          <RollingLabel text={formatMsg(locale, permissionMeta.labelKey)} className="min-w-0 max-w-[92px] font-medium" />
           <ChevronDown className="size-3.5 shrink-0 opacity-70" />
         </button>
 
         {openMenu === 'perm' && (
-          <div className="absolute bottom-9 left-0 z-40 w-72 rounded-xl border border-border bg-popover p-1.5 shadow-md">
+          <div className="zcode-popover-up absolute bottom-9 left-0 z-40 w-72 rounded-xl border border-border bg-popover p-1.5 shadow-md">
             {PERMISSION_OPTIONS.map((opt) => {
               const Icon = opt.icon;
               const active = opt.value === permissionMode;
@@ -772,7 +1170,7 @@ function Composer({
                     setPermissionMode(opt.value);
                     setOpenMenu(null);
                   }}
-                  className={`flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-menu-hover ${
+                  className={`flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-menu-hover ${
                     active ? 'bg-selected' : ''
                   }`}
                 >
@@ -794,77 +1192,273 @@ function Composer({
       </div>
 
       {/* Right: context ring + model/effort + send */}
-      <div className="flex shrink-0 items-center gap-0.5">
+      <div className="flex min-w-0 shrink items-center gap-0.5">
         <ContextWindowsButton telemetry={stream.latestTelemetry} contextLimit={activeModelLimit} />
 
-        <div className="relative">
+        <div className="min-w-0 shrink">
           <button
             type="button"
             data-testid="model-effort-btn"
-            onClick={() => setOpenMenu((m) => (m === 'model' ? null : 'model'))}
+            onClick={() => {
+              setProviderMenuOpen(false);
+              setOpenMenu((m) => (m === 'model' ? null : 'model'));
+            }}
             title={`${modelLabel} · ${formatMsg(locale, effortMeta.labelKey)}`}
-            className="flex h-7 max-w-[240px] items-center gap-1.5 rounded-lg px-2 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+            className="flex h-7 w-full max-w-[240px] min-w-0 items-center gap-1.5 rounded-lg px-2 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
           >
-            <span className="truncate">{modelLabel}</span>
-            <span className="shrink-0 opacity-70">{formatMsg(locale, effortMeta.labelKey)}</span>
-            <ChevronDown className="size-3.5 shrink-0 opacity-70" />
+            <span className="min-w-0 truncate">{modelLabel}</span>
+            <RollingLabel
+              text={formatMsg(locale, effortMeta.labelKey)}
+              className="shrink-0 text-foreground-subtlest"
+            />
+            <ChevronDown
+              className={`size-3.5 shrink-0 opacity-70 transition-transform duration-150 ${
+                openMenu === 'model' ? 'rotate-180' : ''
+              }`}
+            />
           </button>
 
           {openMenu === 'model' && (
-            <div className="absolute bottom-9 right-0 z-40 max-h-80 w-72 overflow-auto rounded-xl border border-border bg-popover p-1.5 text-ui-sm shadow-md">
-              <div className="px-2 pb-1 pt-1 text-ui-xs font-medium text-foreground-subtlest">
-                {locale === 'en-US' ? 'Model' : '模型'}
+            <div
+              ref={modelPopoverRef}
+              className="zcode-popover-up absolute bottom-12 right-2 z-50 w-80 max-w-[calc(100%-1rem)] rounded-2xl border border-border bg-popover shadow-xl"
+            >
+              {/* Provider Selector Trigger Row (click selects/switches provider via submenu — NEVER jumps straight to Settings!) */}
+              <div className="relative">
+                <button
+                  type="button"
+                  data-testid="composer-provider-trigger"
+                  aria-expanded={providerMenuOpen}
+                  onClick={() => {
+                    if (!providerMenuOpen && modelPopoverRef.current) {
+                      const rect = modelPopoverRef.current.getBoundingClientRect();
+                      const container =
+                        modelPopoverRef.current.closest('[data-testid="chat-stream"]') ||
+                        modelPopoverRef.current.closest('section');
+                      const containerLeft = container ? container.getBoundingClientRect().left : 0;
+                      setProviderSubmenuSide(rect.left - containerLeft >= 272 ? 'side' : 'inline');
+                    }
+                    setProviderMenuOpen((v) => !v);
+                  }}
+                  className={`flex w-full items-center justify-between rounded-t-2xl border-b border-border px-3.5 py-2.5 text-left transition-colors hover:bg-menu-hover ${
+                    providerMenuOpen ? 'bg-menu-hover/70' : ''
+                  }`}
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Cpu className="size-4 shrink-0 text-foreground-subtle" />
+                    <span className="truncate text-ui-base font-semibold text-foreground">
+                      {activeProviderName}
+                    </span>
+                    <span className="shrink-0 rounded-full bg-surface px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-foreground-subtle">
+                      API
+                    </span>
+                  </div>
+                  <ChevronRight
+                    className={`size-4 shrink-0 text-foreground-subtlest transition-transform duration-150 ${
+                      providerMenuOpen && providerSubmenuSide === 'inline' ? 'rotate-90' : ''
+                    }`}
+                  />
+                </button>
+
+                {/* Side Submenu when there is ample space to the left of the model popover */}
+                {providerMenuOpen && providerSubmenuSide === 'side' && (
+                  <div
+                    data-testid="composer-provider-submenu"
+                    className="zcode-submenu-left absolute right-full top-0 z-50 mr-1.5 w-64 overflow-hidden rounded-xl border border-border bg-popover shadow-xl"
+                  >
+                    <div className="border-b border-border px-3 py-2 text-ui-xs font-medium text-foreground-subtlest">
+                      {formatMsg(locale, 'chat.model.providers')}
+                    </div>
+                    {providerListContent}
+                  </div>
+                )}
               </div>
-              {models.length === 0 && (
-                <div className="px-2 py-2.5 text-ui-sm text-foreground-subtlest">
-                  {locale === 'en-US' ? 'No models configured' : '暂无可用模型'}
+
+              {/* Inline Drill-down when viewport / center column is narrow */}
+              {providerMenuOpen && providerSubmenuSide === 'inline' && (
+                <div data-testid="composer-provider-submenu" className="border-b border-border">
+                  <button
+                    type="button"
+                    onClick={() => setProviderMenuOpen(false)}
+                    className="flex h-8 w-full items-center gap-1.5 border-b border-border px-3 text-ui-sm text-foreground-subtle hover:bg-menu-hover"
+                  >
+                    <ChevronLeft className="size-3.5" />
+                    <span>{locale === 'en-US' ? 'Back' : '返回'}</span>
+                  </button>
+                  {providerListContent}
                 </div>
               )}
-              {models.map((m) => {
-                const active = m.provider_id === selectedProviderId && m.id === selectedModelId;
-                return (
-                  <button
-                    key={`${m.provider_id}::${m.id}`}
-                    type="button"
-                    onClick={() => {
-                      setSelectedModel(m.provider_id, m.id);
-                      setOpenMenu(null);
-                    }}
-                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-menu-hover ${
-                      active ? 'bg-selected' : ''
-                    }`}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-foreground">{m.id}</span>
-                      <span className="block truncate text-ui-xs text-foreground-subtlest">{m.provider_id}</span>
-                    </span>
-                    {active && <Check className="size-3.5 shrink-0 text-success" />}
-                  </button>
-                );
-              })}
-              <div className="my-1 h-px bg-border" />
-              <div className="px-2 pb-1 pt-0.5 text-ui-xs font-medium text-foreground-subtlest">
-                {formatMsg(locale, 'chat.toolbar.thoughtLevel')}
+
+              {/* Models List (scoped to selected provider) */}
+              <div className={providerMenuOpen && providerSubmenuSide === 'inline' ? 'hidden' : 'block'}>
+                <div className="px-3 pt-2.5 pb-1 text-ui-xs font-medium text-foreground-subtlest">
+                  {formatMsg(locale, 'chat.model.models')}
+                </div>
+                <div className="max-h-56 overflow-y-auto px-1.5 pb-2">
+                  {providerModels.length === 0 ? (
+                    <div className="space-y-1.5 px-2.5 py-3 text-ui-sm text-foreground-subtlest">
+                      <div>{formatMsg(locale, 'chat.model.noModels')}</div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenMenu(null);
+                          useNexStore.getState().openSettings('providers');
+                        }}
+                        className="text-ui-xs font-medium text-brand-blue hover:underline"
+                      >
+                        {formatMsg(locale, 'chat.model.manageProviders')} →
+                      </button>
+                    </div>
+                  ) : (
+                    providerModels.map((m) => {
+                      const active = m.provider_id === selectedProviderId && m.id === selectedModelId;
+                      return (
+                        <button
+                          key={`${m.provider_id}::${m.id}`}
+                          type="button"
+                          data-testid={`model-option-${m.id}`}
+                          onClick={() => {
+                            setSelectedModel(m.provider_id, m.id);
+                            setOpenMenu(null);
+                          }}
+                          className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-menu-hover ${
+                            active ? 'bg-selected' : ''
+                          }`}
+                        >
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate text-ui-base text-foreground">{m.display_name || m.id}</span>
+                            {m.context_window > 0 && (
+                              <span className="shrink-0 rounded bg-secondary/70 px-1.5 py-0.5 font-mono text-[10px] text-foreground-subtle">
+                                {Math.round(m.context_window / 1000)}k
+                              </span>
+                            )}
+                            {m.supports_vision && (
+                              <span className="shrink-0 rounded-full border border-border px-1.5 py-px text-[10px] text-foreground-subtle">
+                                Vision
+                              </span>
+                            )}
+                          </span>
+                          {active && <Check className="size-4 shrink-0 text-foreground-subtle" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* ZCode Effort Slider (strictly ordered: Off -> Low -> Medium -> High -> Max/XHigh) */}
+                <div className="border-t border-border px-3.5 py-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-ui-xs text-foreground-subtlest">
+                        {formatMsg(locale, 'chat.toolbar.thoughtLevel')}
+                      </span>
+                      <RollingLabel
+                        text={formatMsg(locale, effortMeta.labelKey)}
+                        className="text-ui-sm font-medium text-foreground"
+                      />
+                    </div>
+                    <kbd className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-foreground-subtle">
+                      ^ T
+                    </kbd>
+                  </div>
+
+                  <div className="composer-thought-slider relative h-8 w-full rounded-full">
+                    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+                      {/* Track + Dynamic Fill */}
+                      <div
+                        data-testid="composer-thought-track"
+                        data-progress={sliderFilled ? sliderProgress : 0}
+                        className="absolute inset-x-0 top-1 h-6 overflow-hidden rounded-full bg-foreground/10"
+                      >
+                        <div className="absolute inset-0 rounded-full border border-foreground/10" />
+                        <div
+                          className="composer-thought-slider-fill absolute inset-y-0 left-0 overflow-hidden rounded-full"
+                          data-max={isMaxEffort}
+                          data-highspeed={isHighspeed}
+                          style={{
+                            width: sliderFilled
+                              ? `calc(14px + (100% - 28px) * ${sliderProgress / 100})`
+                              : 0,
+                          }}
+                        >
+                          {isMaxEffort && (
+                            <div
+                              data-testid="composer-thought-bubbles"
+                              className="composer-thought-bubbles absolute inset-0"
+                            >
+                              {(isHighspeed ? HIGHSPEED_BUBBLES : EFFORT_BUBBLES).map((bubble, idx) => (
+                                <span
+                                  key={idx}
+                                  className="composer-thought-bubble absolute inset-x-0"
+                                  style={{
+                                    top: bubble.top,
+                                    animationDuration: `${bubble.duration}s`,
+                                    animationDelay: `${bubble.delay}s`,
+                                  }}
+                                >
+                                  <span
+                                    className="block rounded-full bg-white"
+                                    style={{ width: bubble.size, height: bubble.size }}
+                                  />
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Discrete Stop Dots */}
+                      <div className="absolute inset-x-3.5 inset-y-0 flex items-center justify-between">
+                        {effortLevels.map((lvl, idx) => (
+                          <span
+                            key={lvl.value || 'off'}
+                            data-composer-thought-stop
+                            data-filled={sliderFilled && idx <= currentEffortIdx}
+                            data-hovered={hoveredStop === (lvl.value || 'off')}
+                            className="composer-thought-slider-stop size-1 shrink-0 rounded-full"
+                          />
+                        ))}
+                      </div>
+
+                      {/* White Circular Thumb */}
+                      <div
+                        className="composer-thought-slider-thumb absolute top-0.5 size-7 rounded-full shadow-sm"
+                        style={{ left: `calc((100% - 28px) * ${sliderProgress / 100})` }}
+                      />
+                    </div>
+
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.max(0, effortLevels.length - 1)}
+                      step={1}
+                      value={currentEffortIdx}
+                      aria-label={formatMsg(locale, 'chat.toolbar.thoughtLevel')}
+                      aria-valuetext={formatMsg(locale, effortMeta.labelKey)}
+                      data-testid="composer-thought-slider"
+                      className="composer-thought-range absolute inset-0 m-0 h-8 w-full cursor-pointer appearance-none bg-transparent outline-none"
+                      onPointerLeave={() => setHoveredStop(null)}
+                      onPointerMove={(event) => {
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        const trackWidth = Math.max(1, rect.width - 28);
+                        const maxIdx = Math.max(1, effortLevels.length - 1);
+                        const idx = Math.max(
+                          0,
+                          Math.min(maxIdx, Math.round(((event.clientX - rect.left - 14) / trackWidth) * maxIdx)),
+                        );
+                        const level = effortLevels[idx];
+                        const center = rect.left + 14 + (trackWidth * idx) / maxIdx;
+                        setHoveredStop(
+                          event.pointerType !== 'touch' && level && Math.abs(event.clientX - center) <= 12
+                            ? level.value || 'off'
+                            : null,
+                        );
+                      }}
+                      onChange={(e) => selectEffortByIndex(Number(e.target.value))}
+                    />
+                  </div>
+                </div>
               </div>
-              {EFFORT_OPTIONS.map((opt) => {
-                const active = opt.value === thinkingEffort;
-                return (
-                  <button
-                    key={opt.value || 'off'}
-                    type="button"
-                    onClick={() => {
-                      setThinkingEffort(opt.value);
-                      setOpenMenu(null);
-                    }}
-                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-menu-hover ${
-                      active ? 'bg-selected' : ''
-                    }`}
-                  >
-                    <span className="flex-1 text-foreground">{formatMsg(locale, opt.labelKey)}</span>
-                    {active && <Check className="size-3.5 shrink-0 text-success" />}
-                  </button>
-                );
-              })}
             </div>
           )}
         </div>
@@ -892,7 +1486,7 @@ function Composer({
             type="button"
             onClick={abortActiveSession}
             title={formatMsg(locale, 'chat.stop')}
-            className="ml-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity hover:opacity-90"
+            className="ml-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-transform hover:opacity-90 active:scale-95"
           >
             <Square className="size-3.5" />
           </button>
@@ -903,7 +1497,7 @@ function Composer({
             disabled={!canSend}
             onClick={() => sendPromptOrSteer()}
             title={formatMsg(locale, isRunning ? 'chat.steer' : 'chat.send')}
-            className="ml-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-colors hover:bg-foreground/90 disabled:bg-foreground/20 disabled:text-background/70"
+            className="ml-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-all hover:bg-foreground/90 active:scale-95 disabled:bg-foreground/20 disabled:text-background/70"
           >
             <ArrowUp className="size-4" />
           </button>
@@ -913,7 +1507,7 @@ function Composer({
   );
 
   const card = (
-    <div className="rounded-2xl border border-border bg-input px-4 pb-2.5 pt-3 composer-shadow">
+    <div className="relative rounded-2xl border border-border bg-input px-4 pb-2.5 pt-3 transition-colors focus-within:border-border-hover composer-shadow">
       {textarea}
       {toolbar}
     </div>
@@ -921,52 +1515,112 @@ function Composer({
 
   if (isDraft) {
     return (
-      <div ref={rootRef} className="mx-auto w-full max-w-2xl">
+      <div ref={rootRef} className="zcode-bottom-dock relative z-30 mx-auto w-full max-w-4xl">
         <div className="w-full rounded-2xl bg-black/[0.035] p-1.5 dark:bg-white/[0.04]">
           <div className="relative flex items-center px-2.5 py-1.5">
             <button
               type="button"
               data-testid="project-select-btn"
               onClick={() => setOpenMenu((m) => (m === 'runner' ? null : 'runner'))}
-              className="flex min-w-0 items-center gap-1.5 rounded-lg px-1 py-0.5 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+              title={selectedWorkspacePath || projectLabel}
+              className="flex min-w-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
             >
               <Folder className="size-3.5 shrink-0 text-foreground-subtle" />
-              <span className="max-w-[260px] truncate">{runnerLabel}</span>
-              <ChevronDown className="size-3.5 shrink-0" />
+              <span className="max-w-[260px] truncate">{projectLabel}</span>
+              <ChevronDown
+                className={`size-3.5 shrink-0 transition-transform duration-150 ${
+                  openMenu === 'runner' ? 'rotate-180' : ''
+                }`}
+              />
             </button>
 
             {openMenu === 'runner' && (
-              <div className="absolute left-1.5 top-9 z-40 w-72 rounded-xl border border-border bg-popover p-1.5 shadow-md">
-                {runners.length === 0 && (
-                  <div className="px-2 py-3 text-center text-ui-sm text-foreground-subtlest">
-                    {locale === 'en-US' ? 'No runner connected' : '暂无已连接的 Runner'}
-                  </div>
-                )}
-                {runners.map((r) => {
-                  const active = r.id === selectedRunnerId;
-                  return (
+              <div
+                data-testid="composer-project-menu"
+                className="zcode-popover-up absolute bottom-9 left-1.5 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-lg"
+              >
+                {/* Search Projects */}
+                <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+                  <Search className="size-3.5 shrink-0 text-foreground-subtlest" />
+                  <input
+                    value={projectSearch}
+                    onChange={(e) => setProjectSearch(e.target.value)}
+                    placeholder={formatMsg(locale, 'dirBrowser.searchProjects')}
+                    className="min-w-0 flex-1 bg-transparent text-ui-sm text-foreground placeholder-foreground-subtlest"
+                  />
+                  {projectSearch && (
                     <button
-                      key={r.id}
                       type="button"
-                      onClick={() => {
-                        setSelectedRunner(r.id);
-                        setOpenMenu(null);
-                      }}
-                      className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-sm hover:bg-menu-hover ${
-                        active ? 'bg-selected' : ''
-                      }`}
+                      onClick={() => setProjectSearch('')}
+                      className="text-foreground-subtlest hover:text-foreground"
                     >
-                      <Folder className="size-3.5 shrink-0 text-foreground-subtle" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-foreground">{r.name}</span>
-                        <span className="block truncate font-mono text-ui-xs text-foreground-subtlest">
-                          {r.workspace_default}
-                        </span>
-                      </span>
-                      {active && <Check className="size-3.5 shrink-0 text-success" />}
+                      <X className="size-3.5" />
                     </button>
-                  );
-                })}
+                  )}
+                </div>
+
+                {/* Known & Recent Projects */}
+                <div className="max-h-56 overflow-y-auto p-1">
+                  {runners.length === 0 ? (
+                    <div className="px-2 py-3 text-center text-ui-sm text-foreground-subtlest">
+                      {formatMsg(locale, 'dirBrowser.noRunner')}
+                    </div>
+                  ) : filteredProjects.length === 0 ? (
+                    <div className="px-2 py-3 text-center text-ui-sm text-foreground-subtlest">
+                      {locale === 'en-US' ? 'No matching projects' : '未找到匹配的项目'}
+                    </div>
+                  ) : (
+                    filteredProjects.map((proj) => {
+                      const active =
+                        proj.runnerId === selectedRunnerId && proj.path === selectedWorkspacePath;
+                      return (
+                        <button
+                          key={proj.key}
+                          type="button"
+                          onClick={() => {
+                            setSelectedRunner(proj.runnerId, proj.path);
+                            setProjectSearch('');
+                            setOpenMenu(null);
+                          }}
+                          className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui-sm transition-colors hover:bg-menu-hover ${
+                            active ? 'bg-selected' : ''
+                          }`}
+                        >
+                          <Folder className="size-3.5 shrink-0 text-foreground-subtle" />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-baseline gap-1.5">
+                              <span className="truncate font-medium text-foreground">{proj.folderName}</span>
+                              <span className="shrink-0 text-ui-xs text-foreground-subtlest">
+                                {proj.runnerName}
+                              </span>
+                            </span>
+                            <span className="block truncate font-mono text-ui-xs text-foreground-subtlest">
+                              {proj.path}
+                            </span>
+                          </span>
+                          {active && <Check className="size-3.5 shrink-0 text-success" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Browse & Choose Folder Action (replaces manual path input!) */}
+                <div className="border-t border-border p-1">
+                  <button
+                    type="button"
+                    data-testid="choose-folder-btn"
+                    disabled={runners.length === 0}
+                    onClick={() => {
+                      setOpenMenu(null);
+                      setDirBrowserOpen(true);
+                    }}
+                    className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-ui-sm font-medium text-foreground transition-colors hover:bg-menu-hover disabled:opacity-40"
+                  >
+                    <FolderPlus className="size-4 shrink-0 text-foreground-subtle" />
+                    <span>{formatMsg(locale, 'dirBrowser.chooseFolder')}</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -987,7 +1641,7 @@ function Composer({
           </div>
 
           <div className="px-1">
-            <div className="rounded-2xl border border-border bg-input px-4 py-3 composer-shadow">
+            <div className="relative rounded-2xl border border-border bg-input px-4 py-3 transition-colors focus-within:border-border-hover composer-shadow">
               <textarea
                 data-testid="composer-input"
                 rows={2}
@@ -1010,12 +1664,23 @@ function Composer({
             </div>
           </div>
         </div>
+
+        <DirectoryBrowserModal
+          open={dirBrowserOpen}
+          initialRunnerId={selectedRunnerId || runners[0]?.id}
+          initialPath={selectedWorkspacePath}
+          onSelect={(rid, pickedPath) => {
+            setSelectedRunner(rid, pickedPath);
+            setDirBrowserOpen(false);
+          }}
+          onClose={() => setDirBrowserOpen(false)}
+        />
       </div>
     );
   }
 
   return (
-    <div ref={rootRef} className="mx-auto w-full max-w-3xl">
+    <div ref={rootRef} className="zcode-bottom-dock mx-auto w-full max-w-4xl">
       {card}
     </div>
   );
@@ -1045,7 +1710,7 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
       {item.role === 'user' ? (
         <UserBubble text={item.text} />
       ) : (
-        <div className="min-w-0 w-full space-y-2.5">
+        <div className={`min-w-0 w-full space-y-2.5 ${item.streaming ? 'zcode-stream-in' : ''}`}>
           {(item.thinking || item.toolCalls.length > 0) && (
             <WorkGroup
               item={item}
@@ -1060,9 +1725,9 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
           <ChangeSummaryCard item={item} />
 
           {item.streaming && !item.thinking && item.toolCalls.length === 0 && !item.text && (
-            <div className="flex items-center gap-1.5 text-ui-xs text-foreground-subtlest">
+            <div className="zcode-stream-in flex items-center gap-1.5 text-ui-xs text-foreground-subtlest">
               <LoaderCircle className="size-3 animate-spin" />
-              <span>{locale === 'en-US' ? 'Generating…' : '正在流式生成...'}</span>
+              <span className="animated-gradient-text">{locale === 'en-US' ? 'Generating…' : '正在流式生成...'}</span>
             </div>
           )}
         </div>
@@ -1095,6 +1760,7 @@ export function ConversationPane() {
   const toggleBottomPanel = useNexStore((s) => s.toggleBottomPanel);
   const setComposerText = useNexStore((s) => s.setComposerText);
   const setSelectedRunner = useNexStore((s) => s.setSelectedRunner);
+  const setSelectedProvider = useNexStore((s) => s.setSelectedProvider);
   const setSelectedModel = useNexStore((s) => s.setSelectedModel);
   const setThinkingEffort = useNexStore((s) => s.setThinkingEffort);
   const setPermissionMode = useNexStore((s) => s.setPermissionMode);
@@ -1204,7 +1870,7 @@ export function ConversationPane() {
           <CircleHelp className="size-4" />
         </button>
         {headerMenu === 'help' && (
-          <div className="absolute right-0 top-8 z-50 w-64 rounded-xl border border-border bg-popover p-2 shadow-md">
+          <div className="zcode-popover-down absolute right-0 top-8 z-50 w-64 rounded-xl border border-border bg-popover p-2 shadow-md">
             <div className="px-1 pb-1.5 text-ui-sm font-medium text-foreground">{formatMsg(locale, 'header.help')}</div>
             <div className="space-y-1 px-1 text-ui-sm text-foreground-subtle">
               <div className="flex items-center justify-between gap-3">
@@ -1214,6 +1880,10 @@ export function ConversationPane() {
               <div className="flex items-center justify-between gap-3">
                 <span>{locale === 'en-US' ? 'New line' : '换行'}</span>
                 <kbd className="rounded bg-tag px-1.5 font-mono text-ui-xs">Shift+Enter</kbd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>{locale === 'en-US' ? 'Cycle reasoning effort' : '切换推理强度'}</span>
+                <kbd className="rounded bg-tag px-1.5 font-mono text-ui-xs">^ T</kbd>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span>{locale === 'en-US' ? 'Reference file' : '引用文件'}</span>
@@ -1303,7 +1973,7 @@ export function ConversationPane() {
               </button>
 
               {headerMenu === 'session' && (
-                <div className="absolute left-0 top-8 z-50 w-52 rounded-xl border border-border bg-popover p-1 shadow-md">
+                <div className="zcode-popover-down absolute left-0 top-8 z-50 w-52 rounded-xl border border-border bg-popover p-1 shadow-md">
                   {renaming ? (
                     <form
                       onSubmit={(e) => {
@@ -1430,22 +2100,24 @@ export function ConversationPane() {
         >
           {isDraft ? (
             <div className="flex h-full flex-col items-center justify-center pb-10">
-              <svg
-                viewBox="0 0 224 144"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.25"
-                strokeLinejoin="round"
-                aria-hidden="true"
-                className="pointer-events-none mb-2 h-36 w-56 text-foreground/[0.06]"
-              >
-                {WATERMARK_PATHS.map((d) => (
-                  <path key={d} d={d} />
-                ))}
-              </svg>
-              <h1 className="mb-7 text-center text-[26px] font-semibold tracking-tight text-foreground">
-                {formatMsg(locale, getGreetingKey(new Date().getHours()))}
-              </h1>
+              <div className="zcode-draft-hero flex flex-col items-center">
+                <svg
+                  viewBox="0 0 224 144"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.25"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className="pointer-events-none mb-2 h-36 w-56 text-foreground/[0.06]"
+                >
+                  {WATERMARK_PATHS.map((d) => (
+                    <path key={d} d={d} />
+                  ))}
+                </svg>
+                <h1 className="mb-7 text-center text-[26px] font-semibold tracking-tight text-foreground">
+                  {formatMsg(locale, getGreetingKey(new Date().getHours()))}
+                </h1>
+              </div>
 
               <Composer
                 isDraft
@@ -1462,6 +2134,7 @@ export function ConversationPane() {
                 activeModelLimit={activeModelMeta?.context_window || 200000}
                 setComposerText={setComposerText}
                 setSelectedRunner={setSelectedRunner}
+                setSelectedProvider={setSelectedProvider}
                 setSelectedModel={setSelectedModel}
                 setThinkingEffort={setThinkingEffort}
                 setPermissionMode={setPermissionMode}
@@ -1471,16 +2144,17 @@ export function ConversationPane() {
               />
 
               <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
-                {CHIPS[locale].map((chip) => {
+                {CHIPS[locale].map((chip, index) => {
                   const Icon = chip.icon;
                   return (
                     <button
                       key={chip.label}
                       type="button"
+                      style={{ '--zcode-draft-prompt-waterfall-delay': `${index * 45}ms` } as CSSProperties}
                       onClick={() => {
                         setComposerText(chip.prompt);
                       }}
-                      className="flex h-8 items-center gap-2 rounded-xl border border-border bg-card px-3.5 text-ui-sm text-foreground-subtle shadow-2xs transition-colors hover:border-border-hover hover:text-foreground"
+                      className="zcode-draft-prompt-waterfall flex h-8 items-center gap-2 rounded-xl border border-border bg-card px-3.5 text-ui-sm text-foreground-subtle shadow-2xs transition-all duration-150 hover:-translate-y-px hover:border-border-hover hover:text-foreground hover:shadow-xs active:translate-y-0"
                     >
                       <Icon className="size-3.5 shrink-0" />
                       <span>{chip.label}</span>
@@ -1490,7 +2164,7 @@ export function ConversationPane() {
               </div>
             </div>
           ) : (
-            <div ref={contentRef} className="mx-auto max-w-3xl space-y-5">
+            <div ref={contentRef} className="mx-auto max-w-4xl space-y-5">
               {items.map((item) => (
                 <MemoTurnItem key={item.id} item={item} locale={locale} registerRef={registerTurnRef} />
               ))}
@@ -1510,7 +2184,7 @@ export function ConversationPane() {
                   const el = turnRefs.current[item.id];
                   el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }}
-                className="h-[1.5px] w-2.5 bg-foreground/20 transition-colors hover:bg-foreground"
+                className="h-[1.5px] w-2.5 bg-foreground/20 transition-all duration-150 hover:w-4 hover:bg-foreground"
               />
             ))}
           </div>
@@ -1522,7 +2196,7 @@ export function ConversationPane() {
             type="button"
             onClick={() => scrollToBottom('smooth')}
             title={locale === 'en-US' ? 'Scroll to bottom' : '回到底部'}
-            className="absolute bottom-3 left-1/2 z-20 flex size-7 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-card text-foreground-subtle shadow-sm transition-colors hover:text-foreground"
+            className="zcode-popover-up absolute bottom-3 left-1/2 z-20 flex size-7 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-card text-foreground-subtle shadow-sm transition-all hover:scale-105 hover:text-foreground active:scale-95"
           >
             <ChevronDown className="size-4" />
           </button>
@@ -1549,6 +2223,7 @@ export function ConversationPane() {
             activeModelLimit={activeModelMeta?.context_window || 200000}
             setComposerText={setComposerText}
             setSelectedRunner={setSelectedRunner}
+            setSelectedProvider={setSelectedProvider}
             setSelectedModel={setSelectedModel}
             setThinkingEffort={setThinkingEffort}
             setPermissionMode={setPermissionMode}

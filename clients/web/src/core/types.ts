@@ -16,7 +16,7 @@ export interface RunnerRecord {
 export interface ProviderRecord {
   id: string;
   name: string;
-  driver: 'openai_responses' | 'anthropic';
+  driver: 'openai_responses' | 'openai_chat' | 'anthropic';
   base_url: string;
   api_key: string;
   proxy_mode: 'direct' | 'server_proxy';
@@ -30,6 +30,8 @@ export interface ModelPricing {
   cache_write_per_1m: number;
 }
 
+export type ThinkingEffort = '' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 export interface ModelMeta {
   id: string;
   provider_id: string;
@@ -42,6 +44,7 @@ export interface ModelMeta {
   supports_tools: boolean;
   supports_reasoning: boolean;
   supports_caching: boolean;
+  reasoning_levels?: string[];
   pricing: ModelPricing;
 }
 
@@ -243,6 +246,19 @@ export interface DirEntry {
   git_status?: string;
 }
 
+export interface BrowseDirEntry {
+  name: string;
+  path: string;
+  is_symlink?: boolean;
+}
+
+export interface BrowseDirsResult {
+  current_path: string;
+  parent_path: string;
+  home_path: string;
+  entries: BrowseDirEntry[];
+}
+
 export interface FilePreview {
   rel_path: string;
   name: string;
@@ -273,7 +289,16 @@ export interface GitSummary {
   files?: GitFileChange[];
 }
 
-export type WorkbenchTabKind = 'new_tab' | 'files' | 'file_preview' | 'review' | 'terminal' | 'side_chat';
+export type WorkbenchTabKind = 'new_tab' | 'files' | 'file_preview' | 'review' | 'terminal' | 'side_chat' | 'subagent';
+
+export interface SubagentInspectorData {
+  toolCallId: string;
+  title: string;
+  agentName?: string;
+  status: 'running' | 'done' | 'error';
+  prompt: string;
+  resultText: string;
+}
 
 export interface WorkbenchTab {
   id: string;
@@ -283,6 +308,7 @@ export interface WorkbenchTab {
   preview?: FilePreview;
   ptyId?: string;
   sideSessionId?: string;
+  subagent?: SubagentInspectorData;
   closable: boolean;
 }
 

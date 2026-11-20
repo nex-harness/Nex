@@ -277,12 +277,8 @@ export function ProjectSidebar() {
   const renderGroup = (group: ProjectGroup) => {
     const collapsed = Boolean(collapsedGroups[group.key]);
     const showAll = Boolean(expandedGroups[group.key]);
-    const shown = collapsed
-      ? []
-      : showAll
-        ? group.sessions
-        : group.sessions.slice(0, TASKS_PER_PROJECT);
-    const hasMore = !collapsed && group.sessions.length > TASKS_PER_PROJECT;
+    const shown = showAll ? group.sessions : group.sessions.slice(0, TASKS_PER_PROJECT);
+    const hasMore = group.sessions.length > TASKS_PER_PROJECT;
 
     return (
       <div key={group.key} className="space-y-0.5">
@@ -291,7 +287,7 @@ export function ProjectSidebar() {
           onClick={() => setCollapsedGroups((p) => ({ ...p, [group.key]: !p[group.key] }))}
         >
           <span className="flex min-w-0 items-center gap-2 text-ui-base text-foreground">
-            <Folder className="size-4 shrink-0 text-foreground-subtle" />
+            <Folder className="size-4 shrink-0 text-foreground-subtle transition-transform duration-150 group-hover:scale-105" />
             <span className="truncate">{group.name}</span>
           </span>
           <button
@@ -301,41 +297,45 @@ export function ProjectSidebar() {
               e.stopPropagation();
               startNewSession(group.runnerId, group.workspacePath);
             }}
-            className="flex size-5 shrink-0 items-center justify-center rounded-md text-foreground-subtle opacity-0 transition-colors hover:bg-selected hover:text-foreground group-hover:opacity-100"
+            className="flex size-5 shrink-0 items-center justify-center rounded-md text-foreground-subtle opacity-0 transition-all hover:bg-selected hover:text-foreground group-hover:opacity-100"
           >
             <Plus className="size-3.5" />
           </button>
         </div>
 
-        <div className="space-y-0.5">
-          {group.sessions.length === 0 ? (
-            <button
-              type="button"
-              onClick={() => startNewSession(group.runnerId, group.workspacePath)}
-              className="flex h-8 w-full items-center gap-2 rounded-lg pl-5 pr-2 text-left text-ui-sm text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground-subtle"
-            >
-              <Plus className="size-3.5 shrink-0" />
-              <span className="truncate">{formatMsg(locale, 'sidebar.newTask')}</span>
-            </button>
-          ) : (
-            shown.map((s) => renderSessionRow(s))
-          )}
+        <div className="zcode-collapsible" data-open={!collapsed}>
+          <div className="zcode-collapsible-inner">
+            <div className="space-y-0.5">
+              {group.sessions.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => startNewSession(group.runnerId, group.workspacePath)}
+                  className="flex h-8 w-full items-center gap-2 rounded-lg pl-5 pr-2 text-left text-ui-sm text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground-subtle"
+                >
+                  <Plus className="size-3.5 shrink-0" />
+                  <span className="truncate">{formatMsg(locale, 'sidebar.newTask')}</span>
+                </button>
+              ) : (
+                shown.map((s) => renderSessionRow(s))
+              )}
 
-          {hasMore && (
-            <button
-              type="button"
-              onClick={() => setExpandedGroups((p) => ({ ...p, [group.key]: !p[group.key] }))}
-              className="flex h-7 w-full items-center rounded-lg pl-5 pr-2 text-left text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground-subtle"
-            >
-              {showAll
-                ? formatMsg(locale, 'project.view') === '筛选视图'
-                  ? '收起'
-                  : 'Show less'
-                : formatMsg(locale, 'project.view') === '筛选视图'
-                  ? '显示更多'
-                  : 'Show more'}
-            </button>
-          )}
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={() => setExpandedGroups((p) => ({ ...p, [group.key]: !p[group.key] }))}
+                  className="flex h-7 w-full items-center rounded-lg pl-5 pr-2 text-left text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground-subtle"
+                >
+                  {showAll
+                    ? formatMsg(locale, 'project.view') === '筛选视图'
+                      ? '收起'
+                      : 'Show less'
+                    : formatMsg(locale, 'project.view') === '筛选视图'
+                      ? '显示更多'
+                      : 'Show more'}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -448,7 +448,7 @@ export function ProjectSidebar() {
       </div>
 
       {searchOpen && (
-        <div className="mx-3 mb-1 flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2">
+        <div className="zcode-popover-down mx-3 mb-1 flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2">
           <Search className="size-3 shrink-0 text-foreground-subtlest" />
           <input
             autoFocus

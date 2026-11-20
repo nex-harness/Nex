@@ -1,4 +1,5 @@
 import {
+  Bot,
   ChevronDown,
   ChevronRight,
   FileCode,
@@ -28,6 +29,7 @@ const TAB_ICON: Record<WorkbenchTabKind, ReactNode> = {
   review: <FileDiff className="size-3.5" />,
   terminal: <SquareTerminal className="size-3.5" />,
   side_chat: <MessageSquareText className="size-3.5" />,
+  subagent: <Bot className="size-3.5" />,
 };
 
 export function WorkbenchSidebar() {
@@ -161,6 +163,42 @@ export function WorkbenchSidebar() {
 
         {activeTab?.kind === 'side_chat' && (
           <SideConversationPanel runnerId={selectedRunnerId} sideSessionId={activeTab.sideSessionId || ''} />
+        )}
+
+        {activeTab?.kind === 'subagent' && activeTab.subagent && (
+          <div className="zcode-view-enter flex h-full flex-col overflow-y-auto p-4 text-ui-base">
+            <div className="flex items-center gap-2 border-b border-border pb-3">
+              <Bot className={`size-4 shrink-0 ${activeTab.subagent.status === 'running' ? 'animate-pulse text-success' : 'text-foreground-subtle'}`} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-semibold text-foreground">{activeTab.subagent.title}</div>
+                <div className="text-ui-xs text-foreground-subtle">
+                  {activeTab.subagent.agentName || formatMsg(locale, 'tool.subagent')} · {activeTab.subagent.status}
+                </div>
+              </div>
+            </div>
+            {activeTab.subagent.prompt && (
+              <div className="mt-3 rounded-lg border border-border bg-secondary/40 p-3">
+                <div className="mb-1 text-ui-xs font-medium text-foreground-subtle">
+                  {formatMsg(locale, 'subagent.taskPrompt')}
+                </div>
+                <div className="whitespace-pre-wrap text-ui-sm text-foreground">{activeTab.subagent.prompt}</div>
+              </div>
+            )}
+            <div className="mt-3 flex-1">
+              <div className="mb-1 text-ui-xs font-medium text-foreground-subtle">
+                {formatMsg(locale, 'subagent.output')}
+              </div>
+              {activeTab.subagent.resultText ? (
+                <MarkdownRenderer content={activeTab.subagent.resultText} />
+              ) : (
+                <div className="text-ui-sm text-foreground-subtlest">
+                  {activeTab.subagent.status === 'running'
+                    ? formatMsg(locale, 'subagent.running')
+                    : formatMsg(locale, 'subagent.noOutput')}
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </section>

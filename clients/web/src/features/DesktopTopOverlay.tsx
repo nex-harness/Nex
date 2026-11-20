@@ -17,7 +17,7 @@ export function DesktopTopOverlay() {
   if (sidebarVisible) return null;
 
   return (
-    <div className="pointer-events-none absolute left-3 top-2.5 z-30 flex items-center">
+    <div className="zcode-view-enter pointer-events-none absolute left-3 top-2.5 z-30 flex items-center">
       <div className="pointer-events-auto flex items-center gap-0.5">
         <button
           type="button"

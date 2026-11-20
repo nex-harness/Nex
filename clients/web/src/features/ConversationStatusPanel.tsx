@@ -10,6 +10,7 @@ import {
   FileDiff,
   GitBranch,
   GitCommitHorizontal,
+  Maximize2,
   Minimize2,
   Pause,
   RefreshCw,
@@ -64,6 +65,7 @@ export function ConversationStatusPanel() {
   const bottomTerminals = useNexStore((s) => s.bottomTerminals);
   const rightTabs = useNexStore((s) => s.rightTabs);
   const openRightTab = useNexStore((s) => s.openRightTab);
+  const openSubagentTab = useNexStore((s) => s.openSubagentTab);
   const sendPromptOrSteer = useNexStore((s) => s.sendPromptOrSteer);
   const refreshGitSummary = useNexStore((s) => s.refreshGitSummary);
   const closeBottomTerminal = useNexStore((s) => s.closeBottomTerminal);
@@ -251,9 +253,12 @@ export function ConversationStatusPanel() {
             data-testid="conversation-status-panel"
             onClick={() => setMode('panel')}
             title={formatMsg(locale, 'chat.statusPanel.autoExpand')}
-            className="flex h-8 items-center gap-2 rounded-full border border-border bg-popover px-3 text-ui-sm text-foreground shadow-md transition-colors hover:bg-surface-hover"
+            className="group zcode-popover-down flex h-8 items-center gap-2 rounded-full border border-border bg-popover px-3 text-ui-sm text-foreground shadow-md transition-all duration-200 hover:bg-surface-hover"
           >
-            <FileDiff className="size-3.5 shrink-0 text-foreground-subtle" />
+            <span className="relative size-3.5 shrink-0">
+              <FileDiff className="absolute inset-0 size-3.5 text-foreground-subtle transition-opacity duration-150 group-hover:opacity-0" />
+              <Maximize2 className="absolute inset-0 size-3.5 text-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+            </span>
             {gitSummary?.is_git_repo && (
               <span className="flex items-center gap-1 font-mono text-ui-xs tabular-nums">
                 <span className="text-success">+{gitSummary?.additions || 0}</span>
@@ -270,7 +275,7 @@ export function ConversationStatusPanel() {
         ) : (
           <div
             data-testid="conversation-status-panel"
-            className="w-80 max-h-[min(74dvh,38rem)] flex flex-col overflow-hidden rounded-2xl border border-border bg-popover text-foreground shadow-md"
+            className="zcode-popover-down w-80 max-h-[min(74dvh,38rem)] flex flex-col overflow-hidden rounded-2xl border border-border bg-popover text-foreground shadow-md transition-[border-radius,padding,background-color,box-shadow] duration-200 ease-out"
           >
             {/* Sticky top-right control overlay */}
             <div className="relative">
@@ -296,7 +301,7 @@ export function ConversationStatusPanel() {
                 </button>
 
                 {menuOpen && (
-                  <div className="absolute right-0 top-7 z-30 w-44 rounded-lg border border-border bg-menu p-1 shadow-md">
+                  <div className="zcode-popover-down absolute right-0 top-7 z-30 w-44 rounded-lg border border-border bg-menu p-1 shadow-md">
                     <button
                       type="button"
                       onClick={() => {
@@ -378,34 +383,36 @@ export function ConversationStatusPanel() {
                     )}
                   </button>
 
-                  {commitOpen && (
-                    <div className="rounded-lg border border-border bg-surface p-2">
-                      <textarea
-                        rows={3}
-                        value={commitPrompt}
-                        onChange={(e) => setCommitPrompt(e.target.value)}
-                        placeholder={formatMsg(locale, 'git.actionMenu.trigger')}
-                        className="w-full resize-none bg-transparent text-ui-sm leading-relaxed text-foreground placeholder-foreground-subtlest"
-                      />
-                      <div className="mt-1 flex justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setCommitOpen(false)}
-                          className="h-6 rounded-md px-2 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
-                        >
-                          {locale === 'en-US' ? 'Cancel' : '取消'}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!commitPrompt.trim()}
-                          onClick={submitCommit}
-                          className="h-6 rounded-md bg-primary px-2.5 text-ui-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
-                        >
-                          {formatMsg(locale, 'chat.send')}
-                        </button>
+                  <div className="zcode-collapsible" data-open={commitOpen}>
+                    <div className="zcode-collapsible-inner">
+                      <div className="rounded-lg border border-border bg-surface p-2">
+                        <textarea
+                          rows={3}
+                          value={commitPrompt}
+                          onChange={(e) => setCommitPrompt(e.target.value)}
+                          placeholder={formatMsg(locale, 'git.actionMenu.trigger')}
+                          className="w-full resize-none bg-transparent text-ui-sm leading-relaxed text-foreground placeholder-foreground-subtlest"
+                        />
+                        <div className="mt-1 flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCommitOpen(false)}
+                            className="h-6 rounded-md px-2 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+                          >
+                            {locale === 'en-US' ? 'Cancel' : '取消'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!commitPrompt.trim()}
+                            onClick={submitCommit}
+                            className="h-6 rounded-md bg-primary px-2.5 text-ui-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
+                          >
+                            {formatMsg(locale, 'chat.send')}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  )}
+                  </div>
                 </section>
               )}
 
@@ -522,14 +529,38 @@ export function ConversationStatusPanel() {
 
                   {runningSubagents.length > 0 && (
                     <div className="mt-2 space-y-1.5">
-                      {runningSubagents.map(({ tc, summary }) => (
-                        <div key={tc.id} className="flex items-start gap-2">
-                          <Bot className="mt-0.5 size-4 shrink-0 animate-pulse text-success" />
-                          <span className="line-clamp-2 text-ui-base leading-snug text-foreground">
-                            {summary || (locale === 'en-US' ? 'Subagent running…' : '子智能体运行中…')}
-                          </span>
-                        </div>
-                      ))}
+                      {runningSubagents.map(({ tc, summary }) => {
+                        const args = parseToolArgs(tc);
+                        const agentName = String(args.agent || args.name || 'Subagent');
+                        const title = summary || agentName;
+                        return (
+                          <button
+                            key={tc.id}
+                            type="button"
+                            onClick={() =>
+                              openSubagentTab({
+                                toolCallId: tc.id,
+                                title,
+                                agentName,
+                                status: 'running',
+                                prompt: String(args.prompt || args.description || ''),
+                                resultText: tc.finalOutput || tc.streamOutput || '',
+                              })
+                            }
+                            className="flex w-full items-start gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-hover"
+                          >
+                            <Bot className="mt-0.5 size-4 shrink-0 animate-pulse text-success" />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-ui-xs font-medium text-foreground-subtle">
+                                {agentName}
+                              </div>
+                              <div className="line-clamp-2 text-ui-base leading-snug text-foreground">
+                                {title}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -546,22 +577,45 @@ export function ConversationStatusPanel() {
                         </span>
                         <span className="flex shrink-0 items-center gap-2">
                           <span className="tabular-nums text-foreground-subtle">{endedSubagents.length}</span>
-                          <ChevronRight className="size-4 text-foreground-subtlest" />
+                          <ChevronRight className={`size-4 text-foreground-subtlest transition-transform ${endedOpen ? 'rotate-90' : ''}`} />
                         </span>
                       </button>
 
-                      {endedOpen && (
-                        <div className="space-y-1 pb-1 pl-7 pr-1">
-                          {endedSubagents.map(({ tc, summary }) => (
-                            <div
-                              key={tc.id}
-                              className="line-clamp-2 text-ui-sm leading-snug text-foreground-subtle"
-                            >
-                              {summary || (locale === 'en-US' ? 'Subagent finished' : '子智能体已完成')}
-                            </div>
-                          ))}
+                      <div className="zcode-collapsible" data-open={endedOpen}>
+                        <div className="zcode-collapsible-inner">
+                          <div className="space-y-1 pb-1 pl-6 pr-1">
+                            {endedSubagents.map(({ tc, summary }) => {
+                              const args = parseToolArgs(tc);
+                              const agentName = String(args.agent || args.name || 'Subagent');
+                              const title = summary || agentName;
+                              return (
+                                <button
+                                  key={tc.id}
+                                  type="button"
+                                  onClick={() =>
+                                    openSubagentTab({
+                                      toolCallId: tc.id,
+                                      title,
+                                      agentName,
+                                      status: tc.status === 'error' ? 'error' : 'done',
+                                      prompt: String(args.prompt || args.description || ''),
+                                      resultText: tc.finalOutput || tc.streamOutput || '',
+                                    })
+                                  }
+                                  className="flex w-full flex-col rounded-md px-2 py-1 text-left transition-colors hover:bg-hover"
+                                >
+                                  <span className="truncate text-ui-xs font-medium text-foreground-subtle">
+                                    {agentName}
+                                  </span>
+                                  <span className="line-clamp-2 text-ui-sm leading-snug text-foreground">
+                                    {title}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   )}
                 </section>

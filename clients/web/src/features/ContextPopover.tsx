@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { apiFetchText, formatCompactTokens } from '../core/protocol';
 import { useNexStore } from '../core/store';
 import { TurnTelemetry } from '../core/types';
@@ -84,7 +85,7 @@ export function ContextWindowsButton({
       {open && (
         <div
           data-testid="context-popover"
-          className="absolute bottom-9 right-0 z-40 w-80 rounded-xl border border-border bg-popover p-3.5 text-foreground shadow-lg"
+          className="zcode-popover-up absolute bottom-9 right-0 z-40 w-80 rounded-xl border border-border bg-popover p-3.5 text-foreground shadow-lg"
         >
           <div className="flex items-center justify-between text-ui-sm">
             <span className="font-semibold text-foreground">{formatMsg(locale, 'chat.contextUsage.title')}</span>
@@ -166,25 +167,28 @@ export function ContextWindowsButton({
         </div>
       )}
 
-      {traceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-[1px]">
-          <div className="flex max-h-[85vh] w-full max-w-4xl flex-col rounded-2xl border border-border bg-popover shadow-xl">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <h3 className="text-ui-base font-semibold text-foreground">{traceModal.title}</h3>
-              <button
-                type="button"
-                onClick={() => setTraceModal(null)}
-                className="flex size-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
-              >
-                <X className="size-4" />
-              </button>
+      {traceModal &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="zcode-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-[1px]">
+            <div className="zcode-dialog-content flex max-h-[85vh] w-full max-w-4xl flex-col rounded-2xl border border-border bg-popover shadow-xl">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <h3 className="text-ui-base font-semibold text-foreground">{traceModal.title}</h3>
+                <button
+                  type="button"
+                  onClick={() => setTraceModal(null)}
+                  className="flex size-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+              <pre className="flex-1 overflow-auto p-4 font-mono text-ui-sm whitespace-pre-wrap text-foreground">
+                {traceModal.content}
+              </pre>
             </div>
-            <pre className="flex-1 overflow-auto p-4 font-mono text-ui-sm whitespace-pre-wrap text-foreground">
-              {traceModal.content}
-            </pre>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

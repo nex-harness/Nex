@@ -1,8 +1,13 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import { decodePTYBinaryFrame, encodePTYBinaryFrame, PTY_BINARY_STDOUT } from '../core/protocol';
 import { applySessionEvent, emptyStreamState } from '../core/reducer';
+import { useNexStore } from '../core/store';
+
+afterEach(() => {
+  cleanup();
+});
 
 describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () => {
   it('encodes and decodes binary PTY frames matching Go protocol', () => {
@@ -91,9 +96,10 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(screen.getByTestId('workbench-plus-btn')).toBeTruthy();
     expect(screen.queryByTestId('side-pane-toggle')).toBeNull();
 
-    // Close Side Pane again via its tab-strip close button
+    // Close Side Pane again via its tab-strip close button (smooth ZCode animated collapse keeps container mounted with data-state="closed")
     fireEvent.click(screen.getByTestId('side-pane-close'));
-    expect(screen.queryByTestId('workbench-plus-btn')).toBeNull();
+    expect(screen.getByTestId('side-pane-container').getAttribute('data-state')).toBe('closed');
+    expect(screen.getByTestId('side-pane-toggle')).toBeTruthy();
 
     // Open localized Context Windows popover (`上下文容量`)
     fireEvent.click(screen.getByTestId('context-ring-btn'));
@@ -342,5 +348,215 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(st.goals[1].index).toBe(2);
     expect(st.goals[1].title).toBe('Iteration 4');
     expect(st.goals[1].status).toBe('running');
+  });
+
+  it('selects provider via submenu without jumping to Settings, filters models, and only opens Settings via footer', () => {
+    useNexStore.setState({
+      mainView: 'workspace',
+      activeSessionId: '',
+      locale: 'zh-CN',
+      providers: [
+        { id: 'anthropic', name: 'Anthropic', driver: 'anthropic', base_url: 'https://api.anthropic.com', api_key: '', proxy_mode: 'direct', enabled: true },
+        { id: 'openai', name: 'OpenAI', driver: 'openai_responses', base_url: 'https://api.openai.com/v1', api_key: '', proxy_mode: 'direct', enabled: true },
+      ],
+      models: [
+        {
+          id: 'claude-sonnet-4-5',
+          provider_id: 'anthropic',
+          display_name: 'Claude Sonnet 4.5',
+          source: 'models.dev',
+          context_window: 200000,
+          max_output_tokens: 16384,
+          supports_vision: true,
+          supports_pdf: true,
+          supports_tools: true,
+          supports_reasoning: true,
+          supports_caching: true,
+          reasoning_levels: ['off', 'low', 'medium', 'high', 'max'],
+          pricing: { input_per_1m: 3, output_per_1m: 15, cache_read_per_1m: 0.3, cache_write_per_1m: 3.75 },
+        },
+        {
+          id: 'gpt-5.2',
+          provider_id: 'openai',
+          display_name: 'GPT-5.2',
+          source: 'models.dev',
+          context_window: 200000,
+          max_output_tokens: 16384,
+          supports_vision: true,
+          supports_pdf: false,
+          supports_tools: true,
+          supports_reasoning: true,
+          supports_caching: true,
+          reasoning_levels: ['off', 'low', 'medium', 'high', 'xhigh'],
+          pricing: { input_per_1m: 2, output_per_1m: 8, cache_read_per_1m: 0.2, cache_write_per_1m: 0 },
+        },
+      ],
+      selectedProviderId: 'anthropic',
+      selectedModelId: 'claude-sonnet-4-5',
+      hiddenModelKeys: {},
+      thinkingEffort: 'medium',
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('model-effort-btn'));
+
+    // Initially displays Anthropic's model only
+    expect(screen.getByTestId('model-option-claude-sonnet-4-5')).toBeTruthy();
+    expect(screen.queryByTestId('model-option-gpt-5.2')).toBeNull();
+
+    // Clicking provider header MUST open provider submenu and NOT jump to Settings!
+    fireEvent.click(screen.getByTestId('composer-provider-trigger'));
+    expect(useNexStore.getState().mainView).toBe('workspace');
+    expect(screen.getByTestId('composer-provider-submenu')).toBeTruthy();
+
+    // Clicking OpenAI selects OpenAI provider and updates models list!
+    fireEvent.click(screen.getAllByTestId('provider-option-openai')[0]);
+    expect(useNexStore.getState().mainView).toBe('workspace');
+    expect(useNexStore.getState().selectedProviderId).toBe('openai');
+    expect(useNexStore.getState().selectedModelId).toBe('gpt-5.2');
+    expect(screen.getByTestId('model-option-gpt-5.2')).toBeTruthy();
+
+    // Only clicking Manage Providers footer jumps to Settings -> Providers
+    fireEvent.click(screen.getByTestId('composer-provider-trigger'));
+    fireEvent.click(screen.getAllByTestId('manage-providers-btn')[0]);
+    expect(useNexStore.getState().mainView).toBe('settings');
+    expect(useNexStore.getState().settingsSection).toBe('providers');
+  });
+
+  it('orders Effort ascending (off -> low -> medium -> high -> max), renders max bubbles, and cycles on Ctrl+T', () => {
+    useNexStore.setState({
+      mainView: 'workspace',
+      activeSessionId: '',
+      locale: 'zh-CN',
+      providers: [
+        { id: 'anthropic', name: 'Anthropic', driver: 'anthropic', base_url: 'https://api.anthropic.com', api_key: '', proxy_mode: 'direct', enabled: true },
+      ],
+      models: [
+        {
+          id: 'claude-opus-4-5',
+          provider_id: 'anthropic',
+          display_name: 'Claude Opus 4.5',
+          source: 'models.dev',
+          context_window: 200000,
+          max_output_tokens: 64000,
+          supports_vision: true,
+          supports_pdf: true,
+          supports_tools: true,
+          supports_reasoning: true,
+          supports_caching: true,
+          reasoning_levels: ['off', 'low', 'medium', 'high', 'max'],
+          pricing: { input_per_1m: 5, output_per_1m: 25, cache_read_per_1m: 0.5, cache_write_per_1m: 6.25 },
+        },
+      ],
+      selectedProviderId: 'anthropic',
+      selectedModelId: 'claude-opus-4-5',
+      thinkingEffort: 'medium',
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('model-effort-btn'));
+
+    const slider = screen.getByTestId('composer-thought-slider') as HTMLInputElement;
+    // Index 0=off, 1=low, 2=medium, 3=high, 4=max
+    expect(slider.min).toBe('0');
+    expect(slider.max).toBe('4');
+    expect(slider.value).toBe('2');
+
+    // Dragging to far right (max) MUST set 'max' (NOT 'off' / 关闭!) and display animated bubbles!
+    fireEvent.change(slider, { target: { value: '4' } });
+    expect(useNexStore.getState().thinkingEffort).toBe('max');
+    expect(screen.getByTestId('composer-thought-bubbles')).toBeTruthy();
+
+    // Dragging to far left (0) sets '' (off / 关闭) and hides bubbles
+    fireEvent.change(slider, { target: { value: '0' } });
+    expect(useNexStore.getState().thinkingEffort).toBe('');
+    expect(screen.queryByTestId('composer-thought-bubbles')).toBeNull();
+
+    // Pressing Ctrl+T cycles effort from off -> low
+    fireEvent.keyDown(window, { key: 't', ctrlKey: true });
+    expect(useNexStore.getState().thinkingEffort).toBe('low');
+  });
+
+  it('opens DirectoryBrowserModal when choosing a workspace folder in draft mode (no manual path input)', async () => {
+    const browseMock = vi.fn().mockResolvedValue({
+      current_path: '/Users/dev/Projects',
+      parent_path: '/Users/dev',
+      home_path: '/Users/dev',
+      entries: [
+        { name: 'Nex-v3', path: '/Users/dev/Projects/Nex-v3' },
+        { name: 'Zcode', path: '/Users/dev/Projects/Zcode' },
+      ],
+    });
+
+    useNexStore.setState({
+      mainView: 'workspace',
+      activeSessionId: '',
+      locale: 'zh-CN',
+      runners: [
+        {
+          id: 'run_local',
+          name: 'MacBook',
+          hostname: 'macbook',
+          os: 'darwin',
+          arch: 'arm64',
+          shell: '/bin/zsh',
+          version: '0.3.0',
+          tags: [],
+          status: 'online',
+          last_seen_at: Date.now(),
+          synced_config_rev: 1,
+          workspace_default: '/Users/dev/Projects',
+        },
+      ],
+      selectedRunnerId: 'run_local',
+      selectedWorkspacePath: '/Users/dev/Projects',
+      browseRunnerDirs: browseMock,
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByTestId('project-select-btn'));
+    expect(screen.getByTestId('composer-project-menu')).toBeTruthy();
+    // Should NOT render raw "/path/to/project" text input
+    expect(screen.queryByPlaceholderText('/path/to/project')).toBeNull();
+
+    // Open DirectoryBrowserModal via "选择目录…"
+    fireEvent.click(screen.getByTestId('choose-folder-btn'));
+    expect(screen.getByTestId('directory-browser-modal')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dir-entry-Zcode')).toBeTruthy();
+    });
+
+    // Quick-select Zcode directory
+    fireEvent.click(screen.getByTestId('dir-pick-Zcode'));
+    expect(useNexStore.getState().selectedWorkspacePath).toBe('/Users/dev/Projects/Zcode');
+    expect(screen.queryByTestId('directory-browser-modal')).toBeNull();
+  });
+
+  it('opens Side Pane when inspecting a Subagent via openSubagentTab', () => {
+    useNexStore.setState({
+      mainView: 'workspace',
+      sidePaneVisible: false,
+      rightTabs: [],
+      activeRightTabId: '',
+      locale: 'zh-CN',
+    });
+
+    render(<App />);
+    act(() => {
+      useNexStore.getState().openSubagentTab({
+        toolCallId: 'call_sub_1',
+        title: 'Explore codebase',
+        agentName: 'explore',
+        status: 'done',
+        prompt: 'Inspect architecture',
+        resultText: 'Found 3 layers.',
+      });
+    });
+
+    expect(useNexStore.getState().sidePaneVisible).toBe(true);
+    expect(screen.getByTestId('side-pane-container').getAttribute('data-state')).toBe('open');
+    expect(screen.getByText('任务提示词')).toBeTruthy();
+    expect(screen.getByText('Inspect architecture')).toBeTruthy();
   });
 });

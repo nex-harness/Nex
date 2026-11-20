@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { hostBridge } from '../host/bridge';
-import { apiFetch } from './protocol';
+import { apiFetch, safeStorageGet, safeStorageSet } from './protocol';
 import { applySessionEvent, emptyStreamState, RawSessionEventRow, SessionStreamState } from './reducer';
 import {
   AgentProfile,
+  BrowseDirsResult,
   CronJobRecord,
   DirEntry,
   FilePreview,
@@ -16,6 +17,7 @@ import {
   SessionRecord,
   SettingsSectionId,
   SkillRecord,
+  ThinkingEffort,
   TurnTelemetry,
   UsageSummary,
   UserPreferences,
@@ -60,9 +62,11 @@ export interface AppState {
 
   selectedRunnerId: string;
   selectedWorkspacePath: string;
+  recentWorkspaces: Array<{ runnerId: string; path: string }>;
   selectedProviderId: string;
   selectedModelId: string;
-  thinkingEffort: '' | 'low' | 'medium' | 'high';
+  hiddenModelKeys: Record<string, boolean>;
+  thinkingEffort: ThinkingEffort;
   permissionMode: 'full_access' | 'interactive' | 'read_only';
   activeSessionId: string;
   composerText: string;
@@ -87,8 +91,10 @@ export interface AppState {
   setComposerText: (text: string) => void;
   appendComposerRef: (refText: string) => void;
   setSelectedRunner: (id: string, workspacePath?: string) => void;
+  setSelectedProvider: (providerId: string) => void;
   setSelectedModel: (providerId: string, modelId: string) => void;
-  setThinkingEffort: (effort: '' | 'low' | 'medium' | 'high') => void;
+  toggleModelVisibility: (providerId: string, modelId: string) => void;
+  setThinkingEffort: (effort: ThinkingEffort) => void;
   setPermissionMode: (mode: 'full_access' | 'interactive' | 'read_only') => void;
   updateThemeQuick: (theme: UserPreferences['theme']) => Promise<void>;
 
@@ -108,11 +114,13 @@ export interface AppState {
   unarchiveSession: (sessionId: string) => Promise<void>;
   deleteArchivedPermanently: (sessionId: string) => Promise<void>;
 
+  openSubagentTab: (data: import('./types').SubagentInspectorData) => void;
   openRightTab: (kind: WorkbenchTabKind, title?: string) => Promise<void>;
   closeRightTab: (tabId: string) => void;
   setActiveRightTab: (tabId: string) => void;
   openFileInPreviewTab: (relPath: string) => Promise<void>;
   listWorkspaceDir: (relPath: string) => Promise<DirEntry[]>;
+  browseRunnerDirs: (runnerId: string, dirPath?: string, includeHidden?: boolean) => Promise<BrowseDirsResult>;
   searchWorkspaceFiles: (query: string) => Promise<string[]>;
   refreshGitSummary: (includeDiffs?: boolean) => Promise<GitSummary | null>;
   spawnBottomTerminal: () => Promise<void>;
@@ -130,7 +138,7 @@ const DEFAULT_PREFS: UserPreferences = {
 
 export const useNexStore = create<AppState>((set, get) => ({
   wsConnected: false,
-  locale: ((typeof localStorage !== 'undefined' && localStorage.getItem('nex.locale')) as 'zh-CN' | 'en-US') || 'zh-CN',
+  locale: (safeStorageGet('nex.locale') as 'zh-CN' | 'en-US') || 'zh-CN',
   mainView: 'workspace',
   settingsSection: 'general',
   sidebarVisible: true,
@@ -139,7 +147,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   quickSearchOpen: false,
   pinnedSessionIds: (() => {
     try {
-      return JSON.parse(localStorage.getItem('nex.pinned.sessions') || '{}');
+      return JSON.parse(safeStorageGet('nex.pinned.sessions') || '{}');
     } catch {
       return {};
     }
@@ -160,9 +168,32 @@ export const useNexStore = create<AppState>((set, get) => ({
 
   selectedRunnerId: '',
   selectedWorkspacePath: '',
+  recentWorkspaces: (() => {
+    try {
+      const raw = safeStorageGet('nex.recentWorkspaces');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  })(),
   selectedProviderId: '',
   selectedModelId: '',
-  thinkingEffort: 'low',
+  hiddenModelKeys: (() => {
+    try {
+      const raw = safeStorageGet('nex.hiddenModels');
+      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    } catch {
+      return {};
+    }
+  })(),
+  thinkingEffort: (() => {
+    const saved = safeStorageGet('nex.thinkingEffort');
+    if (saved === '' || saved === 'low' || saved === 'medium' || saved === 'high' || saved === 'xhigh' || saved === 'max') {
+      return saved;
+    }
+    return 'medium';
+  })(),
   permissionMode: 'full_access',
   activeSessionId: '',
   composerText: '',
@@ -181,11 +212,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   },
   closeSettings: () => set({ mainView: 'workspace' }),
   setLocale: (loc) => {
-    try {
-      localStorage.setItem('nex.locale', loc);
-    } catch {
-      // ignore
-    }
+    safeStorageSet('nex.locale', loc);
     set({ locale: loc });
   },
   togglePinSession: (sessionId) => {
@@ -193,11 +220,7 @@ export const useNexStore = create<AppState>((set, get) => ({
       const next = { ...s.pinnedSessionIds };
       if (next[sessionId]) delete next[sessionId];
       else next[sessionId] = true;
-      try {
-        localStorage.setItem('nex.pinned.sessions', JSON.stringify(next));
-      } catch {
-        // ignore
-      }
+      safeStorageSet('nex.pinned.sessions', JSON.stringify(next));
       return { pinnedSessionIds: next };
     });
   },
@@ -230,14 +253,50 @@ export const useNexStore = create<AppState>((set, get) => ({
     set((s) => ({ composerText: s.composerText ? `${s.composerText} ${refText} ` : `${refText} ` })),
   setSelectedRunner: (id, workspacePath) => {
     const r = get().runners.find((it) => it.id === id);
-    set({
-      selectedRunnerId: id,
-      selectedWorkspacePath: workspacePath ?? r?.workspace_default ?? '',
+    const resolvedPath = workspacePath ?? r?.workspace_default ?? '';
+    set((s) => {
+      let nextRecent = s.recentWorkspaces;
+      if (id && resolvedPath) {
+        const filtered = s.recentWorkspaces.filter((item) => !(item.runnerId === id && item.path === resolvedPath));
+        nextRecent = [{ runnerId: id, path: resolvedPath }, ...filtered].slice(0, 12);
+        safeStorageSet('nex.recentWorkspaces', JSON.stringify(nextRecent));
+      }
+      return {
+        selectedRunnerId: id,
+        selectedWorkspacePath: resolvedPath,
+        recentWorkspaces: nextRecent,
+      };
     });
     void get().refreshGitSummary(false);
   },
+  setSelectedProvider: (providerId) =>
+    set((s) => {
+      const providerModels = s.models.filter(
+        (m) => m.provider_id === providerId && !s.hiddenModelKeys[`${m.provider_id}::${m.id}`],
+      );
+      const keepCurrent =
+        s.selectedProviderId === providerId && providerModels.some((m) => m.id === s.selectedModelId);
+      const fallbackAll = s.models.filter((m) => m.provider_id === providerId);
+      const nextModelId = keepCurrent
+        ? s.selectedModelId
+        : providerModels[0]?.id || fallbackAll[0]?.id || '';
+      return {
+        selectedProviderId: providerId,
+        selectedModelId: nextModelId,
+      };
+    }),
   setSelectedModel: (providerId, modelId) => set({ selectedProviderId: providerId, selectedModelId: modelId }),
-  setThinkingEffort: (effort) => set({ thinkingEffort: effort }),
+  toggleModelVisibility: (providerId, modelId) =>
+    set((s) => {
+      const key = `${providerId}::${modelId}`;
+      const next = { ...s.hiddenModelKeys, [key]: !s.hiddenModelKeys[key] };
+      safeStorageSet('nex.hiddenModels', JSON.stringify(next));
+      return { hiddenModelKeys: next };
+    }),
+  setThinkingEffort: (effort) => {
+    safeStorageSet('nex.thinkingEffort', effort);
+    set({ thinkingEffort: effort });
+  },
   setPermissionMode: (mode) => set({ permissionMode: mode }),
 
   updateThemeQuick: async (theme) => {
@@ -537,6 +596,30 @@ export const useNexStore = create<AppState>((set, get) => ({
     await get().refreshInitialData();
   },
 
+  openSubagentTab: (data) => {
+    const id = `subagent:${data.toolCallId}`;
+    set((s) => {
+      const existing = s.rightTabs.find((t) => t.id === id);
+      if (existing) {
+        return {
+          rightTabs: s.rightTabs.map((t) =>
+            t.id === id ? { ...t, title: data.title, subagent: data } : t,
+          ),
+          activeRightTabId: id,
+          sidePaneVisible: true,
+        };
+      }
+      return {
+        rightTabs: [
+          ...s.rightTabs,
+          { id, kind: 'subagent', title: data.title, subagent: data, closable: true },
+        ],
+        activeRightTabId: id,
+        sidePaneVisible: true,
+      };
+    });
+  },
+
   openRightTab: async (kind, title) => {
     set({ sidePaneVisible: true });
     const existing = get().rightTabs.find((t) => t.kind === kind && (kind === 'files' || kind === 'review'));
@@ -576,6 +659,7 @@ export const useNexStore = create<AppState>((set, get) => ({
       review: get().locale === 'en-US' ? 'Review' : '审查',
       terminal: get().locale === 'en-US' ? 'Terminal' : '终端',
       side_chat: get().locale === 'en-US' ? 'Side conversation' : '辅助对话',
+      subagent: 'Subagent',
     };
     const tab: WorkbenchTab = {
       id,
@@ -617,9 +701,16 @@ export const useNexStore = create<AppState>((set, get) => ({
       set({ activeRightTabId: existing.id });
       return;
     }
-    const resp = await wsClient.requestRPC<{ action: string; rel_path: string }, FilePreview>(
+    const resp = await wsClient.requestRPC<
+      { action: string; rel_path: string; workspace_path?: string },
+      FilePreview
+    >(
       'workspace.req',
-      { action: 'fs_read_preview', rel_path: relPath },
+      {
+        action: 'fs_read_preview',
+        rel_path: relPath,
+        workspace_path: get().selectedWorkspacePath || undefined,
+      },
       { runner_id: get().selectedRunnerId },
     );
     const preview = resp.payload;
@@ -639,20 +730,61 @@ export const useNexStore = create<AppState>((set, get) => ({
   listWorkspaceDir: async (relPath) => {
     const rid = get().selectedRunnerId;
     if (!rid || !wsClient.connected) return [];
-    const resp = await wsClient.requestRPC<{ action: string; rel_path: string }, { entries: DirEntry[] }>(
+    const resp = await wsClient.requestRPC<
+      { action: string; rel_path: string; workspace_path?: string },
+      { entries: DirEntry[] }
+    >(
       'workspace.req',
-      { action: 'fs_list', rel_path: relPath },
+      {
+        action: 'fs_list',
+        rel_path: relPath,
+        workspace_path: get().selectedWorkspacePath || undefined,
+      },
       { runner_id: rid },
     );
     return resp.payload?.entries || [];
   },
 
+  browseRunnerDirs: async (runnerId, dirPath = '', includeHidden = false) => {
+    const rid = runnerId || get().selectedRunnerId;
+    if (!rid) {
+      throw new Error('No runner selected');
+    }
+    if (wsClient.connected) {
+      const resp = await wsClient.requestRPC<
+        { action: string; workspace_path?: string; include_hidden?: boolean },
+        BrowseDirsResult
+      >(
+        'workspace.req',
+        {
+          action: 'fs_browse_dirs',
+          workspace_path: dirPath || undefined,
+          include_hidden: includeHidden,
+        },
+        { runner_id: rid },
+      );
+      if (resp.payload) return resp.payload;
+    }
+    const params = new URLSearchParams();
+    if (dirPath) params.set('path', dirPath);
+    if (includeHidden) params.set('include_hidden', '1');
+    const qs = params.toString();
+    return apiFetch<BrowseDirsResult>(`/api/v1/runners/${encodeURIComponent(rid)}/dirs${qs ? `?${qs}` : ''}`);
+  },
+
   searchWorkspaceFiles: async (query) => {
     const rid = get().selectedRunnerId;
     if (!rid || !wsClient.connected) return [];
-    const resp = await wsClient.requestRPC<{ action: string; query: string }, { files: string[] }>(
+    const resp = await wsClient.requestRPC<
+      { action: string; query: string; workspace_path?: string },
+      { files: string[] }
+    >(
       'workspace.req',
-      { action: 'fs_search', query },
+      {
+        action: 'fs_search',
+        query,
+        workspace_path: get().selectedWorkspacePath || undefined,
+      },
       { runner_id: rid },
     );
     return resp.payload?.files || [];
@@ -662,9 +794,12 @@ export const useNexStore = create<AppState>((set, get) => ({
     const rid = get().selectedRunnerId;
     if (!rid || !wsClient.connected) return null;
     try {
-      const resp = await wsClient.requestRPC<{ action: string }, GitSummary>(
+      const resp = await wsClient.requestRPC<{ action: string; workspace_path?: string }, GitSummary>(
         'workspace.req',
-        { action: includeDiffs ? 'git_diff' : 'git_summary' },
+        {
+          action: includeDiffs ? 'git_diff' : 'git_summary',
+          workspace_path: get().selectedWorkspacePath || undefined,
+        },
         { runner_id: rid },
       );
       if (resp.payload) {

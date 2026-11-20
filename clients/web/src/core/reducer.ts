@@ -437,6 +437,15 @@ export function applySessionEvent(
         latestTelemetry = p.telemetry as TurnTelemetry;
       }
       break;
+
+    case 'compaction': {
+      const reason = String(p.reason || 'compacted');
+      uiBadges = {
+        ...uiBadges,
+        context: reason === 'manual' ? 'compacted' : 'auto-compacted',
+      };
+      break;
+    }
   }
 
   return {

@@ -33,15 +33,42 @@ export function App() {
   );
 
   const [sidebarWidth, setSidebarWidth] = useState(260);
-  const [sidePaneWidth, setSidePaneWidth] = useState(460);
+  const [sidePaneWidth, setSidePaneWidth] = useState(440);
   const [terminalHeight, setTerminalHeight] = useState(220);
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1440,
+  );
+  const [draggingPanel, setDraggingPanel] = useState<'sidebar' | 'sidepane' | 'terminal' | null>(null);
+  const [hasOpenedSidePane, setHasOpenedSidePane] = useState(sidePaneVisible);
+  const [hasOpenedTerminal, setHasOpenedTerminal] = useState(showBottomPanel);
 
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const effectiveSidePaneWidth = Math.min(
+    sidePaneWidth,
+    Math.max(280, Math.floor(viewportWidth * 0.36)),
+  );
+
+  useEffect(() => {
+    if (sidePaneVisible) setHasOpenedSidePane(true);
+  }, [sidePaneVisible]);
+
+  useEffect(() => {
+    if (showBottomPanel) setHasOpenedTerminal(true);
+  }, [showBottomPanel]);
+
   const startHorizontalDrag = (
     e: ReactPointerEvent<HTMLDivElement>,
+    kind: 'sidebar' | 'sidepane',
     initialWidth: number,
     minW: number,
     maxW: number,
@@ -49,12 +76,14 @@ export function App() {
     setter: (w: number) => void,
   ) => {
     e.preventDefault();
+    setDraggingPanel(kind);
     const startX = e.clientX;
     const onMove = (ev: PointerEvent) => {
       const delta = invert ? startX - ev.clientX : ev.clientX - startX;
       setter(Math.max(minW, Math.min(maxW, Math.round(initialWidth + delta))));
     };
     const onUp = () => {
+      setDraggingPanel(null);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
@@ -64,12 +93,14 @@ export function App() {
 
   const startVerticalDrag = (e: ReactPointerEvent<HTMLDivElement>, initialH: number) => {
     e.preventDefault();
+    setDraggingPanel('terminal');
     const startY = e.clientY;
     const onMove = (ev: PointerEvent) => {
       const delta = startY - ev.clientY;
       setTerminalHeight(Math.max(140, Math.min(520, Math.round(initialH + delta))));
     };
     const onUp = () => {
+      setDraggingPanel(null);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
@@ -77,15 +108,18 @@ export function App() {
     window.addEventListener('pointerup', onUp);
   };
 
+  const shouldMountSidePane = sidePaneVisible || hasOpenedSidePane;
+  const shouldMountTerminal = showBottomPanel || hasOpenedTerminal;
+
   const activeBottomTerm = bottomTerminals.find((t) => t.id === activeBottomTermId) || bottomTerminals[0];
 
   if (mainView === 'settings') {
     return (
-      <>
+      <div className="zcode-view-enter h-dvh w-screen overflow-hidden">
         <SettingsPage />
         {pendingApproval && <ApprovalModal approval={pendingApproval} />}
         {pendingUIPrompt && <UIPromptModal prompt={pendingUIPrompt} />}
-      </>
+      </div>
     );
   }
 
@@ -94,33 +128,50 @@ export function App() {
       {/* Top-Left Floating Controls when Left Sidebar is Collapsed */}
       <DesktopTopOverlay />
 
-      {/* Seamless Full-Height Left Sidebar */}
-      {sidebarVisible && (
-        <div style={{ width: `${sidebarWidth}px` }} className="relative h-full shrink-0">
+      {/* Smooth ZCode Animated Full-Height Left Sidebar */}
+      <div
+        data-testid="sidebar-panel"
+        data-state={sidebarVisible ? 'open' : 'closed'}
+        aria-hidden={!sidebarVisible}
+        style={{ width: sidebarVisible ? `${sidebarWidth}px` : '0px' }}
+        className={`relative h-full shrink-0 overflow-hidden ${
+          draggingPanel === 'sidebar' ? '' : 'transition-[width,opacity] duration-200 ease-out'
+        } ${sidebarVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+      >
+        <div style={{ width: `${sidebarWidth}px` }} className="h-full">
           <ProjectSidebar />
+        </div>
+        {sidebarVisible && (
           <div
             role="separator"
             aria-label="Resize sidebar"
-            onPointerDown={(e) => startHorizontalDrag(e, sidebarWidth, 220, 420, false, setSidebarWidth)}
-            className="absolute top-0 -right-1 z-20 h-full w-2 cursor-col-resize hover:bg-resize-handle/40 transition-colors"
+            onPointerDown={(e) => startHorizontalDrag(e, 'sidebar', sidebarWidth, 220, 420, false, setSidebarWidth)}
+            className="absolute top-0 right-0 z-20 h-full w-1.5 cursor-col-resize transition-colors hover:bg-resize-handle/40"
           />
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Seamless Full-Bleed Center Column: Conversation + Optional Bottom Terminal */}
+      {/* Seamless Full-Bleed Center Column: Conversation + Smooth Animated Bottom Terminal */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
         <ConversationPane />
 
-        {showBottomPanel && (
+        {shouldMountTerminal && (
           <section
-            style={{ height: `${terminalHeight}px` }}
-            className="relative flex shrink-0 flex-col border-t border-border bg-panel"
+            data-testid="bottom-terminal-panel"
+            data-state={showBottomPanel ? 'open' : 'closed'}
+            aria-hidden={!showBottomPanel}
+            style={{ height: showBottomPanel ? `${terminalHeight}px` : '0px' }}
+            className={`relative flex shrink-0 flex-col overflow-hidden bg-panel ${
+              draggingPanel === 'terminal' ? '' : 'transition-[height,opacity] duration-200 ease-out'
+            } ${showBottomPanel ? 'border-t border-border opacity-100' : 'pointer-events-none border-t-0 opacity-0'}`}
           >
-            <div
-              role="separator"
-              onPointerDown={(e) => startVerticalDrag(e, terminalHeight)}
-              className="absolute -top-1 left-0 z-20 h-2 w-full cursor-row-resize hover:bg-resize-handle/40 transition-colors"
-            />
+            {showBottomPanel && (
+              <div
+                role="separator"
+                onPointerDown={(e) => startVerticalDrag(e, terminalHeight)}
+                className="absolute top-0 left-0 z-20 h-1.5 w-full cursor-row-resize transition-colors hover:bg-resize-handle/40"
+              />
+            )}
             <div className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-background px-3">
               <div className="flex items-center gap-1 overflow-x-auto">
                 <span className="mr-1.5 flex items-center gap-1.5 text-ui-sm font-medium text-foreground-subtle">
@@ -154,7 +205,7 @@ export function App() {
                   type="button"
                   onClick={() => void spawnBottomTerminal()}
                   title="New remote libghostty terminal"
-                  className="flex size-6 items-center justify-center rounded-md text-foreground-subtle hover:bg-hover hover:text-foreground"
+                  className="flex size-6 items-center justify-center rounded-md text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
                 >
                   <Plus className="size-3.5" />
                 </button>
@@ -163,7 +214,7 @@ export function App() {
               <button
                 type="button"
                 onClick={() => useNexStore.setState({ showBottomPanel: false })}
-                className="flex size-6 items-center justify-center rounded-md text-foreground-subtlest hover:bg-hover hover:text-foreground"
+                className="flex size-6 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
               >
                 <X className="size-3.5" />
               </button>
@@ -176,15 +227,29 @@ export function App() {
         )}
       </div>
 
-      {/* Non-Persistent Right Side Pane (Closed by default; opened on demand) */}
-      {sidePaneVisible && (
-        <div style={{ width: `${sidePaneWidth}px` }} className="relative h-full shrink-0">
-          <div
-            role="separator"
-            onPointerDown={(e) => startHorizontalDrag(e, sidePaneWidth, 320, 760, true, setSidePaneWidth)}
-            className="absolute top-0 -left-1 z-20 h-full w-2 cursor-col-resize hover:bg-resize-handle/40 transition-colors"
-          />
-          <WorkbenchSidebar />
+      {/* Smooth ZCode Animated Right Side Pane (Mounted on first open; collapses smoothly without reflow) */}
+      {shouldMountSidePane && (
+        <div
+          data-testid="side-pane-container"
+          data-state={sidePaneVisible ? 'open' : 'closed'}
+          aria-hidden={!sidePaneVisible}
+          style={{ width: sidePaneVisible ? `${effectiveSidePaneWidth}px` : '0px' }}
+          className={`relative h-full shrink-0 overflow-hidden ${
+            draggingPanel === 'sidepane' ? '' : 'transition-[width,opacity] duration-200 ease-out'
+          } ${sidePaneVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        >
+          {sidePaneVisible && (
+            <div
+              role="separator"
+              onPointerDown={(e) =>
+                startHorizontalDrag(e, 'sidepane', effectiveSidePaneWidth, 280, 760, true, setSidePaneWidth)
+              }
+              className="absolute top-0 left-0 z-20 h-full w-1.5 cursor-col-resize transition-colors hover:bg-resize-handle/40"
+            />
+          )}
+          <div style={{ width: `${effectiveSidePaneWidth}px` }} className="h-full">
+            <WorkbenchSidebar />
+          </div>
         </div>
       )}
 

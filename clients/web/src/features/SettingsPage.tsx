@@ -263,7 +263,7 @@ export function SettingsPage() {
           </header>
 
           {flashMsg ? (
-            <div className="mb-5 rounded-xl border border-border bg-success-surface px-4 py-2.5 text-ui-sm font-medium text-success-surface-fg">
+            <div className="zcode-toast-in fixed right-6 top-6 z-50 rounded-xl border border-border bg-card px-4 py-2.5 text-ui-sm font-medium text-foreground shadow-lg">
               {flashMsg}
             </div>
           ) : null}
@@ -751,9 +751,8 @@ function ProvidersAndModelsSection({
     providers,
     models,
     refreshInitialData,
-    selectedProviderId,
-    selectedModelId,
-    setSelectedModel,
+    hiddenModelKeys,
+    toggleModelVisibility,
   } = useNexStore();
   const isEn = locale === 'en-US';
 
@@ -762,7 +761,20 @@ function ProvidersAndModelsSection({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showAddModel, setShowAddModel] = useState(false);
   const [newModelId, setNewModelId] = useState('');
-  const [newCtxWin, setNewCtxWin] = useState(1_000_000);
+  const [newModelName, setNewModelName] = useState('');
+  const [newCtxWin, setNewCtxWin] = useState(128_000);
+  const [newMaxOut, setNewMaxOut] = useState(16_384);
+  const [newSupportsVision, setNewSupportsVision] = useState(true);
+  const [newSupportsReasoning, setNewSupportsReasoning] = useState(true);
+  const [fetchingInfo, setFetchingInfo] = useState(false);
+  const [fetchRemoteOpen, setFetchRemoteOpen] = useState(false);
+  const [remoteModels, setRemoteModels] = useState<string[]>([]);
+  const [remoteFilter, setRemoteFilter] = useState('');
+  const [remoteSelected, setRemoteSelected] = useState<Record<string, boolean>>({});
+  const [fetchingRemote, setFetchingRemote] = useState(false);
+  const [addingRemote, setAddingRemote] = useState(false);
+  const [testingModelId, setTestingModelId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; msg: string }>>({});
   const [syncing, setSyncing] = useState(false);
   const [hiddenModelIds, setHiddenModelIds] = useState<Record<string, boolean>>({});
 
@@ -853,6 +865,134 @@ function ProvidersAndModelsSection({
     }
   };
 
+  const lookupModelInfo = async () => {
+    const id = newModelId.trim();
+    if (!id) return;
+    setFetchingInfo(true);
+    try {
+      const res = await apiFetch<{ found: boolean; meta?: ModelMeta }>('/api/v1/models/lookup', {
+        method: 'POST',
+        body: JSON.stringify({ model_id: id }),
+      });
+      if (res.found && res.meta) {
+        if (!newModelName.trim()) setNewModelName(res.meta.display_name || id);
+        if (res.meta.context_window > 0) setNewCtxWin(res.meta.context_window);
+        if (res.meta.max_output_tokens > 0) setNewMaxOut(res.meta.max_output_tokens);
+        setNewSupportsVision(Boolean(res.meta.supports_vision));
+        setNewSupportsReasoning(Boolean(res.meta.supports_reasoning));
+        onFlash(isEn ? `Loaded metadata for "${res.meta.id}"` : `已从 models.dev 匹配 "${res.meta.id}"`);
+      } else {
+        onFlash(isEn ? 'No matching model found in models.dev' : '未在 models.dev 找到匹配模型');
+      }
+    } catch (e) {
+      onFlash((e as Error).message);
+    } finally {
+      setFetchingInfo(false);
+    }
+  };
+
+  const fetchFromV1Models = async () => {
+    if (!draft?.baseUrl.trim()) return;
+    setFetchingRemote(true);
+    setFetchRemoteOpen(true);
+    setRemoteModels([]);
+    setRemoteSelected({});
+    setRemoteFilter('');
+    try {
+      const res = await apiFetch<{ models: string[] }>('/api/v1/models/fetch-remote', {
+        method: 'POST',
+        body: JSON.stringify({ base_url: draft.baseUrl.trim(), api_key: draft.apiKey }),
+      });
+      const existingIds = new Set(
+        models.filter((m) => m.provider_id === draft?.id).map((m) => m.id),
+      );
+      setRemoteModels((res.models || []).filter((id) => !existingIds.has(id)));
+    } catch (e) {
+      onFlash(isEn ? `Fetch /v1/models failed: ${(e as Error).message}` : `获取 /v1/models 失败: ${(e as Error).message}`);
+      setFetchRemoteOpen(false);
+    } finally {
+      setFetchingRemote(false);
+    }
+  };
+
+  const addSelectedRemoteModels = async () => {
+    if (!draft?.id) {
+      onFlash(isEn ? 'Save the provider before adding models' : '请先保存供应商，再添加模型');
+      return;
+    }
+    const chosen = Object.entries(remoteSelected)
+      .filter(([, v]) => v)
+      .map(([k]) => k);
+    if (chosen.length === 0) return;
+    setAddingRemote(true);
+    try {
+      for (const id of chosen) {
+        let meta: Partial<ModelMeta> = {};
+        try {
+          const lookup = await apiFetch<{ found: boolean; meta?: ModelMeta }>('/api/v1/models/lookup', {
+            method: 'POST',
+            body: JSON.stringify({ model_id: id }),
+          });
+          if (lookup.found && lookup.meta) meta = lookup.meta;
+        } catch {
+          // fallback to defaults
+        }
+        await apiFetch('/api/v1/models', {
+          method: 'POST',
+          body: JSON.stringify({
+            id,
+            provider_id: draft.id,
+            display_name: meta.display_name || id,
+            source: meta.source || 'custom',
+            context_window: meta.context_window || 128000,
+            max_output_tokens: meta.max_output_tokens || 16384,
+            supports_vision: meta.supports_vision ?? false,
+            supports_tools: meta.supports_tools ?? true,
+            supports_reasoning: meta.supports_reasoning ?? false,
+            supports_caching: meta.supports_caching ?? false,
+            pricing: meta.pricing,
+          }),
+        });
+      }
+      setFetchRemoteOpen(false);
+      await refreshInitialData();
+      onFlash(isEn ? `Added ${chosen.length} models` : `已添加 ${chosen.length} 个模型`);
+    } finally {
+      setAddingRemote(false);
+    }
+  };
+
+  const testModelConnection = async (m: ModelMeta) => {
+    if (!draft) return;
+    setTestingModelId(m.id);
+    try {
+      const res = await apiFetch<{ ok: boolean; reply?: string; error?: string; latency_ms?: number }>(
+        '/api/v1/models/test',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            driver: draft.driver,
+            base_url: draft.baseUrl.trim(),
+            api_key: draft.apiKey,
+            model_id: m.id,
+          }),
+        },
+      );
+      if (res.ok) {
+        setTestResults((prev) => ({ ...prev, [m.id]: { ok: true, msg: `${res.latency_ms ?? 0}ms` } }));
+        onFlash(isEn ? `Model "${m.id}" OK (${res.latency_ms ?? 0}ms)` : `模型 "${m.id}" 测试通过 (${res.latency_ms ?? 0}ms)`);
+      } else {
+        setTestResults((prev) => ({ ...prev, [m.id]: { ok: false, msg: res.error || 'Error' } }));
+        onFlash(isEn ? `Test failed: ${res.error}` : `模型测试失败: ${res.error}`);
+      }
+    } catch (e) {
+      setTestResults((prev) => ({ ...prev, [m.id]: { ok: false, msg: (e as Error).message } }));
+      onFlash((e as Error).message);
+    } finally {
+      setTestingModelId(null);
+    }
+  };
+
   const addCustomModel = async () => {
     if (!draft || !newModelId.trim()) return;
     if (!draft.id) {
@@ -865,17 +1005,18 @@ function ProvidersAndModelsSection({
       body: JSON.stringify({
         id: modelId,
         provider_id: draft.id,
-        display_name: modelId,
+        display_name: newModelName.trim() || modelId,
         source: 'custom',
         context_window: newCtxWin,
-        max_output_tokens: 65536,
-        supports_vision: true,
+        max_output_tokens: newMaxOut,
+        supports_vision: newSupportsVision,
         supports_tools: true,
-        supports_reasoning: true,
+        supports_reasoning: newSupportsReasoning,
         supports_caching: true,
       }),
     }).catch(() => {});
     setNewModelId('');
+    setNewModelName('');
     setShowAddModel(false);
     await refreshInitialData();
     onFlash(isEn ? `Model "${modelId}" added` : `已向 ${draft.id} 添加模型 "${modelId}"`);
@@ -883,9 +1024,11 @@ function ProvidersAndModelsSection({
 
   const removeModel = async (m: ModelMeta) => {
     setHiddenModelIds((prev) => ({ ...prev, [m.id]: true }));
-    await apiFetch(`/api/v1/models/${encodeURIComponent(m.id)}`, { method: 'DELETE' }).catch(
-      () => {},
-    );
+    await apiFetch(`/api/v1/models/${encodeURIComponent(m.id)}?provider_id=${encodeURIComponent(m.provider_id)}`, {
+      method: 'DELETE',
+    }).catch(() => {});
+    await refreshInitialData();
+    onFlash(isEn ? `Deleted "${m.id}"` : `已删除模型 "${m.id}"`);
   };
 
   const providerModels = draft
@@ -898,16 +1041,6 @@ function ProvidersAndModelsSection({
       <div className="mt-2 flex flex-wrap items-center justify-between gap-4 text-ui-base text-foreground-subtle">
         <p className="min-w-0 flex-1">{description}</p>
         <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            disabled={syncing}
-            onClick={() => void syncModelsDev()}
-            aria-label={isEn ? 'Sync from models.dev' : '从 models.dev 同步'}
-            title={isEn ? 'Sync from models.dev' : '从 models.dev 同步'}
-            className="flex size-8 items-center justify-center rounded-lg border border-border bg-card text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground disabled:opacity-50"
-          >
-            <RefreshCw className={`size-3.5 ${syncing ? 'animate-spin' : ''}`} />
-          </button>
           <button
             type="button"
             onClick={startNewProvider}
@@ -982,15 +1115,24 @@ function ProvidersAndModelsSection({
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
+                <div className="group flex min-w-0 flex-1 items-center gap-2">
                   <Package className="size-[18px] shrink-0 text-foreground" />
                   <input
                     value={draft.name}
                     onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                     onBlur={() => void persistDraft()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
+                    placeholder={isEn ? 'Provider name (click to rename)' : '供应商名称（点击重命名）'}
                     aria-label={isEn ? 'Provider name' : '供应商名称'}
-                    className="min-w-0 flex-1 bg-transparent text-ui-lg font-semibold text-foreground placeholder-foreground-subtlest"
+                    className="h-8 min-w-0 flex-1 rounded-lg border border-border/70 bg-input/60 px-2.5 text-ui-lg font-semibold text-foreground transition-colors hover:border-border-hover hover:bg-input focus:border-primary focus:bg-input focus:outline-none"
                   />
+                  <span className="shrink-0 text-ui-xs text-foreground-subtlest opacity-0 transition-opacity group-hover:opacity-100">
+                    {isEn ? 'Rename' : '可重命名'}
+                  </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <Toggle
@@ -1040,7 +1182,8 @@ function ProvidersAndModelsSection({
                     }}
                     className={settingsSelectClass}
                   >
-                    <option value="openai_responses">Responses (/responses)</option>
+                    <option value="openai_responses">OpenAI Responses (/responses)</option>
+                    <option value="openai_chat">OpenAI Chat Completions (/chat/completions)</option>
                     <option value="anthropic">Anthropic Messages (/v1/messages)</option>
                   </select>
                 </label>
@@ -1128,16 +1271,15 @@ function ProvidersAndModelsSection({
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      disabled={syncing}
-                      onClick={() => void syncModelsDev()}
-                      className="flex h-7 items-center gap-1 rounded-lg border border-border bg-card px-2.5 text-ui-xs text-foreground transition-colors hover:bg-hover disabled:opacity-50"
+                      onClick={() => void fetchFromV1Models()}
+                      className="flex h-7 items-center gap-1 rounded-lg border border-border bg-card px-2.5 text-ui-xs text-foreground transition-colors hover:bg-hover"
                     >
                       <Globe className="size-3" />
-                      <span>{isEn ? 'Sync models.dev' : '同步 models.dev'}</span>
+                      <span>{isEn ? 'Fetch from /v1/models' : '从 /v1/models 获取'}</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowAddModel((v) => !v)}
+                      onClick={() => setShowAddModel(true)}
                       className="flex h-7 items-center gap-1 rounded-lg border border-border bg-card px-2.5 text-ui-xs text-foreground transition-colors hover:bg-hover"
                     >
                       <Plus className="size-3" />
@@ -1146,30 +1288,238 @@ function ProvidersAndModelsSection({
                   </div>
                 </div>
 
-                {showAddModel ? (
-                  <div className="flex flex-wrap items-center gap-1.5 pb-1">
-                    <input
-                      value={newModelId}
-                      onChange={(e) => setNewModelId(e.target.value)}
-                      placeholder={isEn ? 'Model ID' : '模型 ID'}
-                      className={`${settingsMonoInputClass} h-8 min-w-0 flex-1 text-ui-sm`}
-                    />
-                    <input
-                      type="number"
-                      value={newCtxWin}
-                      onChange={(e) => setNewCtxWin(Number(e.target.value))}
-                      title={isEn ? 'Context window' : '上下文窗口'}
-                      className={`${settingsMonoInputClass} h-8 w-24 text-ui-sm`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void addCustomModel()}
-                      className="h-8 shrink-0 rounded-lg bg-primary px-3 text-ui-sm font-medium text-primary-foreground hover:opacity-90"
-                    >
-                      {isEn ? 'Add' : '添加'}
-                    </button>
+                {fetchRemoteOpen && (
+                  <div className="zcode-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]">
+                    <div className="zcode-dialog-content flex max-h-[82vh] w-full max-w-lg flex-col rounded-2xl border border-border bg-card p-5 shadow-xl">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h3 className="text-ui-lg font-semibold text-foreground">
+                            {isEn ? 'Select models from /v1/models' : '从 /v1/models 选择模型'}
+                          </h3>
+                          <p className="mt-1 text-ui-xs text-foreground-subtle">
+                            {isEn
+                              ? 'Reads the model list using the provider base URL and API key above.'
+                              : '使用上方配置的 Base URL 与 API Key 读取模型列表。'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFetchRemoteOpen(false)}
+                          className="rounded-md px-2 py-1 text-ui-sm text-foreground-subtle hover:bg-hover"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-input px-3">
+                        <Search className="size-3.5 text-foreground-subtlest" />
+                        <input
+                          value={remoteFilter}
+                          onChange={(e) => setRemoteFilter(e.target.value)}
+                          placeholder={isEn ? 'Filter by name' : '按名称筛选'}
+                          className="h-8 w-full bg-transparent text-ui-sm text-foreground outline-none placeholder-foreground-subtlest"
+                        />
+                      </div>
+
+                      <div className="mt-2.5 flex items-center justify-between text-ui-xs">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next: Record<string, boolean> = {};
+                              for (const id of remoteModels.filter((m) =>
+                                m.toLowerCase().includes(remoteFilter.toLowerCase()),
+                              )) {
+                                next[id] = true;
+                              }
+                              setRemoteSelected(next);
+                            }}
+                            className="rounded-md bg-secondary px-2 py-1 text-foreground hover:bg-hover"
+                          >
+                            {isEn ? 'Select all listed' : '全选'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRemoteSelected({})}
+                            className="px-2 py-1 text-foreground-subtle hover:text-foreground"
+                          >
+                            {isEn ? 'Clear selection' : '清空'}
+                          </button>
+                        </div>
+                        <span className="text-foreground-subtle">
+                          {Object.values(remoteSelected).filter(Boolean).length} {isEn ? 'selected' : '已选'}
+                        </span>
+                      </div>
+
+                      <div className="mt-2.5 flex-1 space-y-1.5 overflow-y-auto pr-1">
+                        {fetchingRemote ? (
+                          <div className="py-8 text-center text-ui-sm text-foreground-subtle">
+                            {isEn ? 'Loading…' : '加载中…'}
+                          </div>
+                        ) : (
+                          remoteModels
+                            .filter((m) => m.toLowerCase().includes(remoteFilter.toLowerCase()))
+                            .map((id) => (
+                              <label
+                                key={id}
+                                className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border px-3 py-2 hover:bg-hover"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(remoteSelected[id])}
+                                  onChange={(e) =>
+                                    setRemoteSelected((prev) => ({ ...prev, [id]: e.target.checked }))
+                                  }
+                                />
+                                <span className="truncate font-mono text-ui-sm text-foreground">{id}</span>
+                              </label>
+                            ))
+                        )}
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFetchRemoteOpen(false)}
+                          className="h-8 rounded-lg px-3 text-ui-sm text-foreground-subtle hover:bg-hover"
+                        >
+                          {isEn ? 'Cancel' : '取消'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={addingRemote || Object.values(remoteSelected).filter(Boolean).length === 0}
+                          onClick={() => void addSelectedRemoteModels()}
+                          className="h-8 rounded-lg bg-primary px-3 text-ui-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                        >
+                          {addingRemote
+                            ? isEn
+                              ? 'Adding…'
+                              : '添加中…'
+                            : isEn
+                              ? 'Add selected models'
+                              : '添加所选模型'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                ) : null}
+                )}
+
+                {showAddModel && (
+                  <div className="zcode-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]">
+                    <div className="zcode-dialog-content w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-xl">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-ui-lg font-semibold text-foreground">
+                          {isEn ? 'Add model manually' : '手动添加模型'}
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddModel(false)}
+                          className="rounded-md px-2 py-1 text-ui-sm text-foreground-subtle hover:bg-hover"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        <label className="block space-y-1">
+                          <span className="text-ui-xs text-foreground-subtle">Model ID</span>
+                          <input
+                            value={newModelId}
+                            onChange={(e) => setNewModelId(e.target.value)}
+                            placeholder="e.g. cli/glm-5.3"
+                            className={settingsMonoInputClass}
+                          />
+                        </label>
+                        <label className="block space-y-1">
+                          <span className="text-ui-xs text-foreground-subtle">
+                            {isEn ? 'Model name' : '显示名称'}
+                          </span>
+                          <input
+                            value={newModelName}
+                            onChange={(e) => setNewModelName(e.target.value)}
+                            placeholder={isEn ? 'Optional short name' : '可选短名称'}
+                            className={settingsInputClass}
+                          />
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="block space-y-1">
+                            <span className="text-ui-xs text-foreground-subtle">
+                              {isEn ? 'Context window' : '上下文窗口'}
+                            </span>
+                            <input
+                              type="number"
+                              value={newCtxWin}
+                              onChange={(e) => setNewCtxWin(Number(e.target.value))}
+                              className={settingsMonoInputClass}
+                            />
+                          </label>
+                          <label className="block space-y-1">
+                            <span className="text-ui-xs text-foreground-subtle">
+                              {isEn ? 'Max output tokens' : '最大输出'}
+                            </span>
+                            <input
+                              type="number"
+                              value={newMaxOut}
+                              onChange={(e) => setNewMaxOut(Number(e.target.value))}
+                              className={settingsMonoInputClass}
+                            />
+                          </label>
+                        </div>
+                        <div className="flex items-center gap-4 pt-1 text-ui-xs text-foreground">
+                          <label className="flex items-center gap-1.5">
+                            <input
+                              type="checkbox"
+                              checked={newSupportsVision}
+                              onChange={(e) => setNewSupportsVision(e.target.checked)}
+                            />
+                            <span>Vision</span>
+                          </label>
+                          <label className="flex items-center gap-1.5">
+                            <input
+                              type="checkbox"
+                              checked={newSupportsReasoning}
+                              onChange={(e) => setNewSupportsReasoning(e.target.checked)}
+                            />
+                            <span>Reasoning</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 flex items-center justify-between">
+                        <button
+                          type="button"
+                          disabled={fetchingInfo || !newModelId.trim()}
+                          onClick={() => void lookupModelInfo()}
+                          className="text-ui-xs text-foreground-subtle underline hover:text-foreground disabled:opacity-40"
+                        >
+                          {fetchingInfo
+                            ? isEn
+                              ? 'Fetching…'
+                              : '获取中…'
+                            : isEn
+                              ? 'Fetch model info'
+                              : '从 models.dev 获取信息'}
+                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowAddModel(false)}
+                            className="h-8 rounded-lg px-3 text-ui-sm text-foreground-subtle hover:bg-hover"
+                          >
+                            {isEn ? 'Cancel' : '取消'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void addCustomModel()}
+                            className="h-8 rounded-lg bg-primary px-3 text-ui-sm font-medium text-primary-foreground hover:opacity-90"
+                          >
+                            {isEn ? 'Save' : '保存'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {providerModels.length === 0 ? (
                   <p className="py-6 text-center text-ui-sm text-foreground-subtlest">
@@ -1180,8 +1530,8 @@ function ProvidersAndModelsSection({
                 ) : (
                   <div className="divide-y divide-border">
                     {providerModels.map((m) => {
-                      const inUse =
-                        selectedProviderId === m.provider_id && selectedModelId === m.id;
+                      const visible = !hiddenModelKeys[`${m.provider_id}::${m.id}`];
+                      const testRes = testResults[m.id];
                       return (
                         <div
                           key={m.id}
@@ -1201,6 +1551,26 @@ function ProvidersAndModelsSection({
                             {m.supports_reasoning ? <ModelBadge>Reasoning</ModelBadge> : null}
                           </div>
                           <div className="flex shrink-0 items-center gap-0.5">
+                            {testRes && (
+                              <span
+                                className={`mr-1 text-ui-xs ${
+                                  testRes.ok ? 'text-success' : 'text-destructive-surface-fg'
+                                }`}
+                                title={testRes.msg}
+                              >
+                                {testRes.ok ? testRes.msg : 'ERR'}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              disabled={testingModelId === m.id}
+                              onClick={() => void testModelConnection(m)}
+                              title={isEn ? 'Test model connection' : '测试模型连通性'}
+                              aria-label={isEn ? 'Test model connection' : '测试模型连通性'}
+                              className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground disabled:opacity-40"
+                            >
+                              <Cable className={`size-3.5 ${testingModelId === m.id ? 'animate-pulse text-primary' : ''}`} />
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
@@ -1221,9 +1591,9 @@ function ProvidersAndModelsSection({
                               <Trash2 className="size-3.5" />
                             </button>
                             <Toggle
-                              checked={inUse}
-                              onChange={() => setSelectedModel(m.provider_id, m.id)}
-                              label={isEn ? 'Use this model' : '在对话中使用该模型'}
+                              checked={visible}
+                              onChange={() => toggleModelVisibility(m.provider_id, m.id)}
+                              label={isEn ? 'Show in model picker' : '在模型选择框中显示'}
                             />
                           </div>
                         </div>

@@ -64,9 +64,30 @@ export function formatCompactTokens(n: number): string {
   return String(n);
 }
 
+export function safeStorageGet(key: string): string | null {
+  try {
+    if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
+      return localStorage.getItem(key);
+    }
+  } catch {
+    // ignore storage access errors
+  }
+  return null;
+}
+
+export function safeStorageSet(key: string, value: string): void {
+  try {
+    if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
+      localStorage.setItem(key, value);
+    }
+  } catch {
+    // ignore storage quota/access errors
+  }
+}
+
 export function resolveApiBase(): string {
   if (typeof window === 'undefined') return 'http://127.0.0.1:8080';
-  const override = localStorage.getItem('nex.server.url');
+  const override = safeStorageGet('nex.server.url');
   if (override) return override.replace(/\/+$/, '');
   return window.location.origin;
 }

@@ -12,8 +12,8 @@ export function ApprovalModal({ approval }: { approval: PendingApproval }) {
   const argsPreview = approval.argsJson || '{}';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-[1px]">
-      <div className="w-full max-w-lg rounded-2xl border border-border bg-popover p-5 text-foreground shadow-lg">
+    <div className="zcode-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-[1px]">
+      <div className="zcode-dialog-content w-full max-w-lg rounded-2xl border border-border bg-popover p-5 text-foreground shadow-lg">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-warning-surface text-warning-surface-fg">
@@ -86,8 +86,8 @@ export function UIPromptModal({ prompt }: { prompt: PendingUIPrompt }) {
   const [val, setVal] = useState(prompt.defaultValue || '');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-[1px]">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-popover p-5 text-foreground shadow-lg">
+    <div className="zcode-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-[1px]">
+      <div className="zcode-dialog-content w-full max-w-md rounded-2xl border border-border bg-popover p-5 text-foreground shadow-lg">
         <h3 className="text-ui-lg font-semibold text-foreground">{prompt.title}</h3>
         {prompt.message && <p className="mt-1.5 text-ui-sm text-foreground-subtle">{prompt.message}</p>}
 
