@@ -12,6 +12,7 @@ import {
   FilePreview,
   GitSummary,
   MCPServerRecord,
+  MemoryRecord,
   ModelMeta,
   PluginRecord,
   ProviderRecord,
@@ -57,6 +58,7 @@ export interface AppState {
   sessions: SessionRecord[];
   archivedSessions: SessionRecord[];
   agentProfiles: AgentProfile[];
+  memories: MemoryRecord[];
   skills: SkillRecord[];
   plugins: PluginRecord[];
   mcpServers: MCPServerRecord[];
@@ -71,7 +73,7 @@ export interface AppState {
   hiddenModelKeys: Record<string, boolean>;
   modelOrder: Record<string, string[]>;
   thinkingEffort: ThinkingEffort;
-  permissionMode: 'full_access' | 'interactive' | 'read_only';
+  permissionMode: 'full_access' | 'interactive' | 'read_only' | 'plan';
   activeSessionId: string;
   composerText: string;
   composerAttachments: ComposerAttachment[];
@@ -105,7 +107,7 @@ export interface AppState {
   toggleModelVisibility: (providerId: string, modelId: string) => void;
   reorderProviderModels: (providerId: string, orderedIds: string[]) => void;
   setThinkingEffort: (effort: ThinkingEffort) => void;
-  setPermissionMode: (mode: 'full_access' | 'interactive' | 'read_only') => void;
+  setPermissionMode: (mode: 'full_access' | 'interactive' | 'read_only' | 'plan') => void;
   updateThemeQuick: (theme: UserPreferences['theme']) => Promise<void>;
 
   bootstrap: () => Promise<void>;
@@ -183,6 +185,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   sessions: [],
   archivedSessions: [],
   agentProfiles: [],
+  memories: [],
   skills: [],
   plugins: [],
   mcpServers: [],
@@ -537,8 +540,9 @@ export const useNexStore = create<AppState>((set, get) => ({
   },
 
   refreshRegistries: async () => {
-    const [agentProfiles, skills, plugins, mcpServers, cronJobs] = await Promise.all([
+    const [agentProfiles, memories, skills, plugins, mcpServers, cronJobs] = await Promise.all([
       apiFetch<AgentProfile[]>('/api/v1/agents').catch(() => []),
+      apiFetch<MemoryRecord[]>('/api/v1/memories').catch(() => []),
       apiFetch<SkillRecord[]>('/api/v1/skills').catch(() => []),
       apiFetch<PluginRecord[]>('/api/v1/plugins').catch(() => []),
       apiFetch<MCPServerRecord[]>('/api/v1/mcp').catch(() => []),
@@ -546,6 +550,7 @@ export const useNexStore = create<AppState>((set, get) => ({
     ]);
     set({
       agentProfiles: agentProfiles || [],
+      memories: memories || [],
       skills: skills || [],
       plugins: plugins || [],
       mcpServers: mcpServers || [],
@@ -683,6 +688,14 @@ export const useNexStore = create<AppState>((set, get) => ({
     );
     const effectiveThinkingEffort = resolveEffectiveEffort(activeModel, s.thinkingEffort);
 
+    let effectivePermMode = s.permissionMode;
+    let promptText = text;
+    if (/^\/plan(?:\s+|$)/i.test(text)) {
+      effectivePermMode = 'plan';
+      promptText = text.replace(/^\/plan\s*/i, '').trim() || text;
+      set({ permissionMode: 'plan' });
+    }
+
     wsClient.sendEnvelope(
       'session.prompt',
       {
@@ -692,8 +705,8 @@ export const useNexStore = create<AppState>((set, get) => ({
         provider_id: s.selectedProviderId,
         model_id: s.selectedModelId,
         thinking_effort: effectiveThinkingEffort,
-        permission_mode: s.permissionMode,
-        text,
+        permission_mode: effectivePermMode,
+        text: promptText,
         images,
       },
       { session_id: sessionId, runner_id: s.selectedRunnerId },

@@ -65,6 +65,8 @@ func DefaultCodingToolsWithCleanup() ([]Tool, func()) {
 		NewTodoWriteTool(todoStore),
 		NewTodoReadTool(todoStore),
 		NewWebFetchTool(),
+		NewWebSearchTool(),
+		NewExitPlanModeTool(),
 		NewTaskOutputTool(bgMgr),
 		NewTaskStopTool(bgMgr),
 	}

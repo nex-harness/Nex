@@ -348,6 +348,8 @@ func (n *Node) ExecutePrompt(
 			hasUI:     hasUI,
 		}),
 		tools.NewReadSessionContextTool(sessionLookup, sessRec.ID),
+		tools.NewMemorySaveTool(n.store, workDir),
+		tools.NewMemoryListTool(n.store, workDir),
 	)
 
 	var hooks agent.Hooks
@@ -699,6 +701,7 @@ func buildPromptSections(ctx context.Context, n *Node, sessRec *store.SessionRec
 	opts.CustomPrompt = agentProfilePrompt(ctx, n, sessRec.AgentProfileSlug)
 
 	opts.Skills = loadSkillInfos(ctx, n)
+	opts.Memories = loadMemoryLines(ctx, n, workDir)
 	opts.MCPNamespaces = loadMCPNamespaceSummary(ctx, n)
 
 	return prompts.BuildSessionSections(opts)
@@ -745,6 +748,18 @@ func loadSkillInfos(ctx context.Context, n *Node) []prompts.SkillInfo {
 			Description: sk.Description,
 			Path:        filepath.Join(n.cfg.DataDir, "skills", sk.Name, "SKILL.md"),
 		})
+	}
+	return out
+}
+
+func loadMemoryLines(ctx context.Context, n *Node, workDir string) []string {
+	mems, err := n.store.ListMemories(ctx, workDir)
+	if err != nil || len(mems) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(mems))
+	for _, m := range mems {
+		out = append(out, fmt.Sprintf("[%s/%s] %s: %s", m.Scope, m.Category, m.Title, m.Content))
 	}
 	return out
 }

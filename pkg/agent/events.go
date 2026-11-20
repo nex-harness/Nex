@@ -64,6 +64,7 @@ const (
 	PermissionInteractive PermissionMode = "interactive"
 	PermissionAutonomous  PermissionMode = "autonomous"
 	PermissionReadOnly    PermissionMode = "read_only"
+	PermissionPlan        PermissionMode = "plan"
 )
 
 // ApprovalRequest describes a sensitive tool execution awaiting authorization.

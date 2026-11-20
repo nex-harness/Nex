@@ -250,6 +250,7 @@ func (s *Server) buildConfigSnapshot(ctx context.Context, runnerID string) (*pro
 		}
 	}
 
+	memories, _ := s.store.ListMemories(ctx, "")
 	return &protocol.ConfigSnapshot{
 		ConfigRev:     rev,
 		ServerBaseURL: s.cfg.PublicBaseURL,
@@ -260,6 +261,7 @@ func (s *Server) buildConfigSnapshot(ctx context.Context, runnerID string) (*pro
 		Plugins:       plugins,
 		MCPServers:    mcps,
 		CronJobs:      crons,
+		Memories:      memories,
 	}, nil
 }
 

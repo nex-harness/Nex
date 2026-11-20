@@ -133,7 +133,7 @@ export interface SessionRecord {
   agent_profile_slug: string;
   model_id: string;
   provider_id: string;
-  permission_mode: 'full_access' | 'interactive' | 'autonomous' | 'read_only';
+  permission_mode: 'full_access' | 'interactive' | 'autonomous' | 'read_only' | 'plan';
   status: string;
   latest_context_tokens: number;
   context_window_limit: number;
@@ -362,12 +362,24 @@ export interface UsageSummary {
   }>;
 }
 
+export interface MemoryRecord {
+  id: string;
+  scope: 'global' | 'project';
+  workspace_path?: string;
+  category: 'preference' | 'architecture' | 'convention' | 'fact' | string;
+  title: string;
+  content: string;
+  created_at: number;
+  updated_at: number;
+}
+
 export type SettingsSectionId =
   | 'general'
   | 'appearance'
   | 'providers'
   | 'runners'
   | 'agents'
+  | 'memories'
   | 'plugins'
   | 'mcp'
   | 'skills'

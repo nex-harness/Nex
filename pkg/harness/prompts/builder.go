@@ -67,10 +67,11 @@ type SessionOptions struct {
 	Now      time.Time
 
 	Skills         []SkillInfo
+	Memories       []string
 	MCPNamespaces  string
 	SubagentType   string // "" = main agent; "explore"/"worker" = subagent role
 	CustomPrompt   string // optional agent-profile instructions appended to the core
-	PermissionMode string // "full_access" | "interactive" | "autonomous" | "read_only"
+	PermissionMode string // "full_access" | "interactive" | "autonomous" | "read_only" | "plan"
 
 	AgentsMDGlobalPath    string // defaults to ~/.nex/AGENTS.md
 	AgentsMDWorkspacePath string // defaults to multi-level discovery from <WorkDir> up to git root
@@ -254,13 +255,27 @@ func buildMetaContext(opts SessionOptions) string {
 	}
 	sb.WriteString("- Today's date: " + now.Format("2006-01-02"))
 
-	if strings.TrimSpace(opts.PermissionMode) == "read_only" {
+	if mode := strings.TrimSpace(opts.PermissionMode); mode == "read_only" || mode == "plan" {
 		sb.WriteString("\n\n# Plan Mode (Read-Only)\n")
-		sb.WriteString("This session is currently in read-only Plan Mode (`read_only`).\n")
+		sb.WriteString("This session is currently in read-only Plan Mode (`" + mode + "`).\n")
 		sb.WriteString("- Mutating operations (`write`, `edit`, and state-changing `bash` commands) are blocked by the harness.\n")
-		sb.WriteString("- Use read-only tools (`read`, `grep`, `glob`, `webfetch`, and read-only `bash` inspection commands like `git status`, `git diff`, `git log`) to explore the codebase thoroughly.\n")
+		sb.WriteString("- Use read-only tools (`read`, `grep`, `glob`, `websearch`, `webfetch`, and read-only `bash` inspection commands like `git status`, `git diff`, `git log`) to explore the codebase thoroughly.\n")
 		sb.WriteString("- If key requirements or architectural choices are ambiguous, use `ask_user_question` to clarify before finalizing your plan.\n")
-		sb.WriteString("- Deliver a clear, concrete implementation plan citing exact `file_path:line_number` references, trade-offs, and verification steps.")
+		sb.WriteString("- When your implementation plan is ready, call `exit_plan_mode` with a structured Markdown plan citing exact `file_path:line_number` references, trade-offs, and verification steps, then wait for user approval.")
+	}
+
+	if len(opts.Memories) > 0 {
+		sb.WriteString("\n\n# Long-term memories\n")
+		sb.WriteString("Persistent preferences and project facts recalled from prior sessions (update or add new ones via `memory_save` when the user shares durable preferences or architectural decisions):\n")
+		memBudget := 8 * 1024
+		for _, m := range opts.Memories {
+			line := "- " + strings.TrimSpace(m) + "\n"
+			if len(line) > memBudget {
+				break
+			}
+			sb.WriteString(line)
+			memBudget -= len(line)
+		}
 	}
 
 	if gitInfo.IsRepo {

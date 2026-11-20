@@ -230,6 +230,19 @@ CREATE TABLE IF NOT EXISTS usage_rollups_hourly (
 );
 
 CREATE INDEX IF NOT EXISTS idx_rollups_runner_hour ON usage_rollups_hourly(runner_id, hour_bucket);
+
+CREATE TABLE IF NOT EXISTS memories (
+    id             TEXT PRIMARY KEY,
+    scope          TEXT NOT NULL DEFAULT 'project',
+    workspace_path TEXT NOT NULL DEFAULT '',
+    category       TEXT NOT NULL DEFAULT 'fact',
+    title          TEXT NOT NULL,
+    content        TEXT NOT NULL,
+    created_at     INTEGER NOT NULL,
+    updated_at     INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_scope_ws ON memories(scope, workspace_path, updated_at DESC);
 `
 
 const archiveSchemaSQL = `

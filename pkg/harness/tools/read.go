@@ -40,7 +40,7 @@ func (t *ReadTool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
 		Name:        "read",
 		Category:    "system",
-		Description: "Read a file from the local filesystem. Returns up to 2000 lines by default in `cat -n` format: each line is prefixed with its 1-based line number and a tab, which is clickable when referenced as `file_path:line_number`.\n\n- Use `offset` and `limit` to slice large files; read the region you need instead of the whole file.\n- Supports PNG, JPG, GIF, and WEBP images, which are returned as multimodal image content.\n- Do NOT re-read a file immediately after `edit` or `write` to verify the change; those tools already report the result and a diff.\n- Binary and oversized files are rejected with an explanation.",
+		Description: "Read a file from the local filesystem. Returns up to 2000 lines by default in `cat -n` format: each line is prefixed with its 1-based line number and a tab, which is clickable when referenced as `file_path:line_number`.\n\n- Use `offset` and `limit` to slice large files; read the region you need instead of the whole file.\n- Supports PNG, JPG, GIF, and WEBP images (returned as multimodal image content) and PDF documents (extracted page-by-page text).\n- Do NOT re-read a file immediately after `edit` or `write` to verify the change; those tools already report the result and a diff.\n- Other binary and oversized files are rejected with an explanation.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -87,7 +87,7 @@ func isBinaryBytes(data []byte) bool {
 	return bytes.IndexByte(sniff, 0) >= 0
 }
 
-func (t *ReadTool) Execute(_ context.Context, workDir string, rawArgs json.RawMessage, _ UpdateFunc) (Result, error) {
+func (t *ReadTool) Execute(ctx context.Context, workDir string, rawArgs json.RawMessage, _ UpdateFunc) (Result, error) {
 	var args readArgs
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return Result{Output: "invalid read arguments: " + err.Error(), IsError: true}, nil
@@ -119,6 +119,19 @@ func (t *ReadTool) Execute(_ context.Context, workDir string, rawArgs json.RawMe
 		return Result{
 			Output:      fmt.Sprintf("Read image %s (%s, %d bytes)", args.FilePath, mime, len(raw)),
 			ExtraBlocks: []ai.ContentBlock{ai.ImageBase64Block(mime, b64)},
+		}, nil
+	}
+
+	if isPDFFile(absPath, raw) {
+		pdfText, pageCount := extractPDFText(ctx, absPath, raw)
+		inline, spillPath := SpillLargeOutput("pdf", pdfText, defaultSpillMaxChars)
+		meta := map[string]any{"format": "pdf", "pages": pageCount}
+		if spillPath != "" {
+			meta["spill_path"] = spillPath
+		}
+		return Result{
+			Output:   fmt.Sprintf("Read PDF %s (%d pages, %d bytes):\n\n%s", args.FilePath, pageCount, len(raw), inline),
+			Metadata: meta,
 		}, nil
 	}
 

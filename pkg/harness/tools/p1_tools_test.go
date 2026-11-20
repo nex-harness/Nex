@@ -330,3 +330,69 @@ func TestSpillLargeOutputToDisk(t *testing.T) {
 		t.Fatalf("expected full spilled output on disk, err=%v len=%d", err, len(raw))
 	}
 }
+
+func TestWebSearchPDFExitPlanAndMemoryTools(t *testing.T) {
+	// 1. WebSearch with custom mock JSON server + domain filter + cache
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"results":[
+			{"title":"Go Docs","url":"https://pkg.go.dev/net/http","content":"HTTP client and server"},
+			{"title":"Noise","url":"https://spam.example.com/x","content":"ignore me"}
+		]}`))
+	}))
+	defer srv.Close()
+
+	ws := NewWebSearchTool()
+	ws.customURL = srv.URL
+	res, err := ws.Execute(context.Background(), "", json.RawMessage(`{"query":"golang http","allowed_domains":["pkg.go.dev"]}`), nil)
+	if err != nil || res.IsError {
+		t.Fatalf("websearch failed: %+v err=%v", res, err)
+	}
+	if !strings.Contains(res.Output, "Go Docs") || strings.Contains(res.Output, "spam.example.com") {
+		t.Fatalf("unexpected websearch output:\n%s", res.Output)
+	}
+	res2, _ := ws.Execute(context.Background(), "", json.RawMessage(`{"query":"golang http","allowed_domains":["pkg.go.dev"]}`), nil)
+	if res2.Metadata["cached"] != true || atomic.LoadInt32(&hits) != 1 {
+		t.Fatalf("expected cached websearch hit, got meta=%+v hits=%d", res2.Metadata, hits)
+	}
+
+	// 2. Pure-Go PDF extraction via ReadTool
+	dir := t.TempDir()
+	pdfPath := filepath.Join(dir, "sample.pdf")
+	pdfBytes := []byte("%PDF-1.4\n1 0 obj\n<< /Length 44 >>\nstream\nBT /F1 12 Tf (Hello Nex PDF Reader) Tj ET\nendstream\nendobj\n%%EOF\n")
+	if err := os.WriteFile(pdfPath, pdfBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rt := NewReadTool()
+	pdfRes, err := rt.Execute(context.Background(), dir, json.RawMessage(`{"file_path":"sample.pdf"}`), nil)
+	if err != nil || pdfRes.IsError || !strings.Contains(pdfRes.Output, "Hello Nex PDF Reader") {
+		t.Fatalf("unexpected PDF read result: %+v err=%v", pdfRes, err)
+	}
+
+	// 3. exit_plan_mode tool
+	ep := NewExitPlanModeTool()
+	epRes, err := ep.Execute(context.Background(), dir, json.RawMessage(`{"title":"Auth Plan","plan_markdown":"## Steps\n1. Add JWT"}`), nil)
+	if err != nil || epRes.IsError || epRes.Metadata["kind"] != "plan_proposal" {
+		t.Fatalf("unexpected exit_plan_mode result: %+v err=%v", epRes, err)
+	}
+
+	// 4. Memory save & list tools backed by real SQLite store
+	st, err := store.Open(filepath.Join(dir, "store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	ms := NewMemorySaveTool(st, dir)
+	ml := NewMemoryListTool(st, dir)
+	mRes, err := ms.Execute(context.Background(), dir, json.RawMessage(`{"scope":"global","category":"preference","title":"Static Go","content":"Always use CGO_ENABLED=0"}`), nil)
+	if err != nil || mRes.IsError {
+		t.Fatalf("memory_save failed: %+v err=%v", mRes, err)
+	}
+	lRes, err := ml.Execute(context.Background(), dir, json.RawMessage(`{}`), nil)
+	if err != nil || lRes.IsError || !strings.Contains(lRes.Output, "Always use CGO_ENABLED=0") {
+		t.Fatalf("memory_list failed: %+v err=%v", lRes, err)
+	}
+}

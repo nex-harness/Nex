@@ -649,6 +649,11 @@ func (l *Loop) executeSingleTool(ctx context.Context, turnNo int, call ai.Conten
 			l.emit(Event{Type: EventToolExecutionEnd, TurnIdx: turnNo, ToolCallID: call.ToolCallID, ToolName: call.ToolName, ToolResult: &res})
 			return res, nil
 
+		case PermissionPlan:
+			res := tools.Result{Output: "permission denied: session is in plan mode — explore read-only and call exit_plan_mode to present your implementation plan for user approval before modifying files", IsError: true}
+			l.emit(Event{Type: EventToolExecutionEnd, TurnIdx: turnNo, ToolCallID: call.ToolCallID, ToolName: call.ToolName, ToolResult: &res})
+			return res, nil
+
 		case PermissionAutonomous:
 			// Headless / offline mode: if no Approver is wired, non-allowlisted writes are denied without hanging forever!
 			if l.cfg.Approver != nil {

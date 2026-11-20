@@ -810,13 +810,14 @@ function WorkGroup({
 }
 
 const PERMISSION_OPTIONS: Array<{
-  value: 'interactive' | 'full_access' | 'read_only';
+  value: 'interactive' | 'full_access' | 'read_only' | 'plan';
   icon: typeof Hand;
   labelKey: MessageKey;
   descKey: MessageKey;
 }> = [
   { value: 'interactive', icon: Hand, labelKey: 'mode.default', descKey: 'mode.default.desc' },
   { value: 'full_access', icon: ShieldCheck, labelKey: 'mode.fullAccess', descKey: 'mode.fullAccess.desc' },
+  { value: 'plan', icon: ListTodo, labelKey: 'mode.plan', descKey: 'mode.plan.desc' },
   { value: 'read_only', icon: BookOpen, labelKey: 'mode.readOnly', descKey: 'mode.readOnly.desc' },
 ];
 
@@ -1008,7 +1009,7 @@ function Composer({
   selectedProviderId: string;
   selectedModelId: string;
   thinkingEffort: ThinkingEffort;
-  permissionMode: 'full_access' | 'interactive' | 'read_only';
+  permissionMode: 'full_access' | 'interactive' | 'read_only' | 'plan';
   selectedRunnerId: string;
   selectedWorkspacePath: string;
   activeModelLimit: number;
@@ -1017,7 +1018,7 @@ function Composer({
   setSelectedProvider: (providerId: string) => void;
   setSelectedModel: (providerId: string, modelId: string) => void;
   setThinkingEffort: (effort: ThinkingEffort) => void;
-  setPermissionMode: (mode: 'full_access' | 'interactive' | 'read_only') => void;
+  setPermissionMode: (mode: 'full_access' | 'interactive' | 'read_only' | 'plan') => void;
   sendPromptOrSteer: (overrideText?: string, mode?: 'follow_up' | 'steer') => void;
   abortActiveSession: () => void;
   composerText: string;
@@ -1216,6 +1217,15 @@ function Composer({
           locale === 'en-US'
             ? 'Goal-driven thorough execution loop until deliverables are verified'
             : '启动目标导向彻底执行闭环，直到交付物验证通过',
+      },
+      {
+        command: '/plan',
+        insertText: '/plan ',
+        badge: locale === 'en-US' ? 'Built-in' : '内置',
+        description:
+          locale === 'en-US'
+            ? 'Switch to Plan Mode: explore read-only and draft a plan for approval'
+            : '切换计划模式：只读探索并先输出实施计划等待批准',
       },
       {
         command: '/compact',
@@ -1787,9 +1797,11 @@ function Composer({
           className={`flex h-7 min-w-0 shrink items-center gap-1 rounded-lg px-2 text-ui-sm transition-colors hover:bg-hover ${
             permissionMode === 'full_access'
               ? 'text-amber-600 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-400'
-              : permissionMode === 'read_only'
-                ? 'text-brand-blue hover:text-brand-blue'
-                : 'text-foreground-subtle hover:text-foreground'
+              : permissionMode === 'plan'
+                ? 'text-violet-600 hover:text-violet-600 dark:text-violet-400 dark:hover:text-violet-400'
+                : permissionMode === 'read_only'
+                  ? 'text-brand-blue hover:text-brand-blue'
+                  : 'text-foreground-subtle hover:text-foreground'
           }`}
         >
           <PermissionIcon className="size-3.5 shrink-0" />
@@ -2423,20 +2435,29 @@ const EMPTY_STREAM = emptyStreamState();
 
 const MemoTurnItem = memo(function MemoTurnItemImpl({
   item,
+  isLast,
   locale,
   registerRef,
 }: {
   item: ChatTurnItem;
+  isLast: boolean;
   locale: 'zh-CN' | 'en-US';
   registerRef: (id: string, el: HTMLDivElement | null) => void;
 }) {
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
   const [copiedReply, setCopiedReply] = useState(false);
   const activeSessionId = useNexStore((s) => s.activeSessionId);
+  const permissionMode = useNexStore((s) => s.permissionMode);
+  const setPermissionMode = useNexStore((s) => s.setPermissionMode);
+  const setComposerText = useNexStore((s) => s.setComposerText);
+  const sendPromptOrSteer = useNexStore((s) => s.sendPromptOrSteer);
   const forkSession = useNexStore((s) => s.forkSession);
   const expandThinking = useNexStore((s) => s.preferences.expand_thinking);
   const defaultOpen = Boolean(item.streaming) || Boolean(expandThinking && item.thinking);
   const workExpanded = manualOpen ?? defaultOpen;
+  const hasExitPlanCall = item.toolCalls.some((tc) => tc.name === 'exit_plan_mode');
+  const showPlanApproval =
+    isLast && !item.streaming && (hasExitPlanCall || (permissionMode === 'plan' && Boolean(item.text)));
 
   return (
     <div
@@ -2460,6 +2481,46 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
           {item.text && <MarkdownRenderer content={item.text} streaming={Boolean(item.streaming)} />}
 
           <ChangeSummaryCard item={item} />
+
+          {showPlanApproval && (
+            <div
+              data-testid="plan-approval-bar"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-violet-500/30 bg-violet-500/8 px-3.5 py-2.5"
+            >
+              <div className="flex items-center gap-2 text-ui-sm text-foreground">
+                <ListTodo className="size-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                <span className="font-medium">
+                  {locale === 'en-US' ? 'Plan ready for review' : '实施计划已就绪，确认后即可开始执行'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setComposerText(locale === 'en-US' ? 'Please revise the plan: ' : '请调整计划：')}
+                  className="h-7 rounded-lg border border-border bg-card px-2.5 text-ui-xs font-medium text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+                >
+                  {locale === 'en-US' ? 'Revise plan' : '调整计划'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="approve-plan-btn"
+                  onClick={() => {
+                    setPermissionMode('full_access');
+                    sendPromptOrSteer(
+                      locale === 'en-US'
+                        ? 'Plan approved. Proceed with implementation step by step and verify all tests.'
+                        : '计划已批准，请按步骤开始实施并完成测试验证。',
+                      'follow_up',
+                    );
+                  }}
+                  className="inline-flex h-7 items-center gap-1 rounded-lg bg-violet-600 px-3 text-ui-xs font-medium text-white transition-opacity hover:opacity-90"
+                >
+                  <Check className="size-3.5" />
+                  <span>{locale === 'en-US' ? 'Approve & execute' : '批准并开始执行'}</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {!item.streaming && (item.text || item.toolCalls.length > 0) && (
             <div className="flex items-center gap-1 pt-0.5 opacity-0 transition-opacity group-hover/assistant:opacity-100">
@@ -2980,8 +3041,14 @@ export function ConversationPane() {
             </div>
           ) : (
             <div ref={contentRef} className="mx-auto max-w-4xl space-y-5">
-              {items.map((item) => (
-                <MemoTurnItem key={item.id} item={item} locale={locale} registerRef={registerTurnRef} />
+              {items.map((item, idx) => (
+                <MemoTurnItem
+                  key={item.id}
+                  item={item}
+                  isLast={idx === items.length - 1}
+                  locale={locale}
+                  registerRef={registerTurnRef}
+                />
               ))}
             </div>
           )}

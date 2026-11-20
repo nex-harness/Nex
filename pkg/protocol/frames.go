@@ -112,6 +112,7 @@ type ConfigSnapshot struct {
 	Plugins       []store.PluginRecord    `json:"plugins,omitempty"`
 	MCPServers    []store.MCPServerRecord `json:"mcp_servers,omitempty"`
 	CronJobs      []store.CronJobRecord   `json:"cron_jobs,omitempty"`
+	Memories      []store.MemoryRecord    `json:"memories,omitempty"`
 }
 
 // RunnerWelcomePayload acknowledges Runner registration and optionally pushes updated config.

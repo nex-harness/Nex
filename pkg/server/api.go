@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"path"
 	"strconv"
@@ -51,6 +52,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/mcp/", s.handleMCPDelete)
 	s.mux.HandleFunc("/api/v1/cron", s.handleCronJobs)
 	s.mux.HandleFunc("/api/v1/cron/", s.handleCronDelete)
+	s.mux.HandleFunc("/api/v1/memories", s.handleMemories)
+	s.mux.HandleFunc("/api/v1/memories/", s.handleMemoryDelete)
 
 	// Embedded Web UI SPA fallback
 	if s.cfg.StaticFS != nil {
@@ -855,4 +858,54 @@ func (s *Server) handlePluginDelete(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) handleMCPDelete(w http.ResponseWriter, r *http.Request) {
 	s.deleteRegistryHandler(w, r, "/api/v1/mcp/", "mcp_servers", "name")
+}
+
+func (s *Server) handleMemories(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		ws := r.URL.Query().Get("workspace_path")
+		list, err := s.store.ListMemories(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, list)
+	case http.MethodPost, http.MethodPut:
+		var rec store.MemoryRecord
+		if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+		if strings.TrimSpace(rec.Title) == "" || strings.TrimSpace(rec.Content) == "" {
+			writeErr(w, http.StatusBadRequest, fmt.Errorf("title and content are required"))
+			return
+		}
+		saved, err := s.store.UpsertMemory(r.Context(), rec)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		s.BroadcastConfigSync(r.Context())
+		writeJSON(w, http.StatusOK, saved)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleMemoryDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/memories/")
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if err := s.store.DeleteMemory(r.Context(), id); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.BroadcastConfigSync(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": id})
 }

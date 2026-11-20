@@ -5,6 +5,7 @@ import {
   BarChart3,
   Blocks,
   Bot,
+  Brain,
   Cable,
   Check,
   Copy,
@@ -40,6 +41,7 @@ import {
   AgentsSettingsSection,
   AutomationsSection,
   MCPSettingsSection,
+  MemoriesSettingsSection,
   SkillsAndPluginsSection,
 } from './SettingsCapabilities';
 
@@ -150,6 +152,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'runners', icon: HardDrive, titleKey: 'settings.remoteDevices.title', descKey: 'settings.remoteDevices.desc', groupKey: 'settings.group.basics' },
 
   { id: 'agents', icon: Bot, titleKey: 'settings.subagents.title', descKey: 'settings.subagents.desc', groupKey: 'settings.group.agentCapabilities' },
+  { id: 'memories', icon: Brain, titleKey: 'settings.memories.title', descKey: 'settings.memories.desc', groupKey: 'settings.group.agentCapabilities' },
   { id: 'plugins', icon: Blocks, titleKey: 'settings.plugins.title', descKey: 'settings.plugins.desc', groupKey: 'settings.group.agentCapabilities' },
   { id: 'mcp', icon: Cable, titleKey: 'settings.mcp.title', descKey: 'settings.mcp.desc', groupKey: 'settings.group.agentCapabilities' },
   { id: 'skills', icon: WandSparkles, titleKey: 'settings.skills.title', descKey: 'settings.skills.desc', groupKey: 'settings.group.agentCapabilities' },
@@ -282,6 +285,7 @@ export function SettingsPage() {
           )}
           {activeMeta.id === 'runners' && <RunnersSection />}
           {activeMeta.id === 'agents' && <AgentsSettingsSection onFlash={showFlash} />}
+          {activeMeta.id === 'memories' && <MemoriesSettingsSection onFlash={showFlash} />}
           {activeMeta.id === 'plugins' && (
             <SkillsAndPluginsSection mode="plugins" onFlash={showFlash} />
           )}

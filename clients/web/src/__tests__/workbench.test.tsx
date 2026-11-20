@@ -1015,4 +1015,74 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     fireEvent.click(screen.getByTestId('followup-remove-0'));
     expect(useNexStore.getState().followUpQueues['sess_b1']?.length).toBe(0);
   });
+
+  it('renders Plan Mode approval bar and Memory settings management section', () => {
+    useNexStore.setState({
+      locale: 'zh-CN',
+      mainView: 'workspace',
+      activeSessionId: 'sess_plan_1',
+      selectedRunnerId: 'run_1',
+      permissionMode: 'plan',
+      memories: [
+        {
+          id: 'mem_1',
+          scope: 'global',
+          category: 'preference',
+          title: '纯 Go 静态构建',
+          content: '始终使用 CGO_ENABLED=0 构建二进制',
+          created_at: 1000,
+          updated_at: 2000,
+        },
+      ],
+      sessions: [
+        {
+          id: 'sess_plan_1',
+          runner_id: 'run_1',
+          depth: 0,
+          title: 'Plan Test',
+          workspace_path: '/tmp/ws',
+          agent_profile_slug: 'main',
+          model_id: 'group/grok-4.7',
+          provider_id: 'openai',
+          permission_mode: 'plan',
+          status: 'idle',
+          latest_context_tokens: 1000,
+          context_window_limit: 500000,
+          created_at: 1000,
+          updated_at: 2000,
+          last_active_at: 2000,
+        },
+      ],
+      streams: {
+        sess_plan_1: {
+          lastSeq: 2,
+          running: false,
+          items: [
+            { id: 'usr_1', seq: 1, role: 'user', text: 'Plan refactor', thinking: '', toolCalls: [] },
+            { id: 'ast_2', seq: 2, role: 'assistant', text: '## 实施计划\n1. 拆分模块', thinking: '', toolCalls: [] },
+          ],
+          latestTelemetry: null,
+          turnTelemetries: [],
+          uiBadges: {},
+          pendingApproval: null,
+          pendingUIPrompt: null,
+          todos: [],
+          goals: [],
+        },
+      },
+    });
+
+    const { rerender } = render(<App />);
+
+    // 1. Plan approval bar appears and Approve switches permissionMode to full_access
+    expect(screen.getByTestId('plan-approval-bar')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('approve-plan-btn'));
+    expect(useNexStore.getState().permissionMode).toBe('full_access');
+
+    // 2. Settings -> Memory section renders saved memories & editor
+    useNexStore.setState({ mainView: 'settings', settingsSection: 'memories' });
+    rerender(<App />);
+    expect(screen.getByTestId('memory-title-input')).toBeTruthy();
+    expect(screen.getByText('纯 Go 静态构建')).toBeTruthy();
+  });
 });

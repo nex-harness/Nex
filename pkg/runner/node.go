@@ -383,6 +383,9 @@ func (n *Node) ApplyConfigSnapshot(ctx context.Context, snap *protocol.ConfigSna
 	for _, cj := range snap.CronJobs {
 		_, _ = n.store.UpsertCronJob(ctx, cj)
 	}
+	for _, mem := range snap.Memories {
+		_, _ = n.store.UpsertMemory(ctx, mem)
+	}
 	if n.cfg.Extensions != nil {
 		n.cfg.Extensions.OnSnapshotApplied(ctx, snap)
 	}

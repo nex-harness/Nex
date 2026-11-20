@@ -833,3 +833,168 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
     </div>
   );
 }
+
+
+/* -------------------------------------------------------------------------- */
+/* Long-term Memories                                                         */
+/* -------------------------------------------------------------------------- */
+
+export function MemoriesSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {
+  const { locale, memories, selectedWorkspacePath, refreshRegistries } = useNexStore();
+  const isEn = locale === 'en-US';
+
+  const [scope, setScope] = useState<'global' | 'project'>('global');
+  const [category, setCategory] = useState<'preference' | 'architecture' | 'convention' | 'fact'>('preference');
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [filterScope, setFilterScope] = useState<'all' | 'global' | 'project'>('all');
+
+  const saveMemory = async () => {
+    if (!title.trim() || !content.trim()) return;
+    await apiFetch('/api/v1/memories', {
+      method: 'POST',
+      body: JSON.stringify({
+        scope,
+        workspace_path: scope === 'project' ? selectedWorkspacePath : '',
+        category,
+        title: title.trim(),
+        content: content.trim(),
+      }),
+    });
+    setTitle('');
+    setContent('');
+    await refreshRegistries();
+    onFlash(isEn ? 'Memory saved and synced to runners' : '长期记忆已保存并同步至所有节点');
+  };
+
+  const removeMemory = async (id: string) => {
+    await apiFetch(`/api/v1/memories/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    await refreshRegistries();
+  };
+
+  const visibleMemories = memories.filter((m) => filterScope === 'all' || m.scope === filterScope);
+
+  return (
+    <div className="space-y-6">
+      <SettingsGroupCard>
+        <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-3">
+          <Field label={isEn ? 'Scope' : '作用域'}>
+            <select
+              value={scope}
+              onChange={(e) => setScope(e.target.value as 'global' | 'project')}
+              className={settingsSelectClass}
+            >
+              <option value="global">{isEn ? 'Global (all workspaces)' : '全局（所有项目生效）'}</option>
+              <option value="project">{isEn ? 'Current project' : '当前项目工作区'}</option>
+            </select>
+          </Field>
+          <Field label={isEn ? 'Category' : '分类'}>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as 'preference' | 'architecture' | 'convention' | 'fact')}
+              className={settingsSelectClass}
+            >
+              <option value="preference">{isEn ? 'Preference' : '个人偏好'}</option>
+              <option value="convention">{isEn ? 'Convention' : '编码规范'}</option>
+              <option value="architecture">{isEn ? 'Architecture' : '架构决策'}</option>
+              <option value="fact">{isEn ? 'Fact' : '项目事实'}</option>
+            </select>
+          </Field>
+          <Field label={isEn ? 'Title' : '标题'}>
+            <input
+              data-testid="memory-title-input"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={isEn ? 'e.g. Prefer CGO_ENABLED=0' : '例如：强制纯 Go 静态构建'}
+              className={settingsInputClass}
+            />
+          </Field>
+        </div>
+
+        <div className="space-y-3 border-t border-border px-5 py-4">
+          <Field label={isEn ? 'Memory content' : '记忆内容'}>
+            <CodeEditorWithHighlight
+              testId="memory-content-editor"
+              rows={4}
+              language="markdown"
+              value={content}
+              onChange={setContent}
+              placeholder={
+                isEn
+                  ? 'Concise fact or preference recalled automatically in future sessions…'
+                  : '填写希望在后续对话自动召回的偏好、约定或项目事实…'
+              }
+            />
+          </Field>
+          <div className="flex justify-end">
+            <SaveButton label={isEn ? 'Save memory' : '保存记忆'} onClick={() => void saveMemory()} />
+          </div>
+        </div>
+      </SettingsGroupCard>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SectionHeading
+          title={isEn ? `Saved memories (${visibleMemories.length})` : `已保存记忆 (${visibleMemories.length})`}
+        />
+        <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-ui-xs">
+          {(['all', 'global', 'project'] as const).map((sc) => (
+            <button
+              key={sc}
+              type="button"
+              onClick={() => setFilterScope(sc)}
+              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                filterScope === sc ? 'bg-popover text-foreground shadow-xs' : 'text-foreground-subtle hover:text-foreground'
+              }`}
+            >
+              {sc === 'all'
+                ? isEn
+                  ? 'All'
+                  : '全部'
+                : sc === 'global'
+                  ? isEn
+                    ? 'Global'
+                    : '全局'
+                  : isEn
+                    ? 'Project'
+                    : '项目'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <SettingsGroupCard>
+        {visibleMemories.length === 0 ? (
+          <EmptyRow>
+            {isEn
+              ? 'No memories saved yet. Add one above or ask Nex to remember something via memory_save.'
+              : '暂无长期记忆。可在上方添加，或在对话中直接让 Nex 记住你的偏好（调用 memory_save）。'}
+          </EmptyRow>
+        ) : (
+          visibleMemories.map((m) => (
+            <div key={m.id} className="flex items-start justify-between gap-3 px-5 py-3.5">
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-ui-base font-medium text-foreground">{m.title}</span>
+                  <MetaBadge mono>{m.scope}</MetaBadge>
+                  <MetaBadge mono>{m.category}</MetaBadge>
+                </div>
+                <p className="whitespace-pre-wrap text-ui-sm text-foreground-subtle">{m.content}</p>
+                {m.workspace_path ? (
+                  <p className="font-mono text-ui-xs text-foreground-subtlest">{m.workspace_path}</p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => void removeMemory(m.id)}
+                aria-label={isEn ? 'Delete memory' : '删除记忆'}
+                className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </div>
+          ))
+        )}
+      </SettingsGroupCard>
+    </div>
+  );
+}
