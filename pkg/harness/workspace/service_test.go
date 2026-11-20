@@ -176,6 +176,8 @@ func TestGitStageUnstageDiscardCommitAndBranches(t *testing.T) {
 		}
 	}
 	run("init", "-b", "main")
+	run("config", "user.name", "Tester")
+	run("config", "user.email", "t@example.com")
 	_ = os.WriteFile(filepath.Join(dir, "a.txt"), []byte("line1\n"), 0o644)
 	run("add", "a.txt")
 	run("commit", "-m", "init")

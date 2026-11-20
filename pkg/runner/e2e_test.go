@@ -116,7 +116,16 @@ func TestEndToEndOfflineOutboxOnlineApprovalAndBlobPull(t *testing.T) {
 	}
 
 	// 3. Connect Runner to Server -> Outbox must flush automatically!
-	go node.StartConnectLoop(ctx)
+	connectDone := make(chan struct{})
+	go func() {
+		defer close(connectDone)
+		node.StartConnectLoop(ctx)
+	}()
+	defer func() {
+		cancel()
+		httpSrv.Close()
+		<-connectDone
+	}()
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
