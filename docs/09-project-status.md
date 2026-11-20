@@ -46,8 +46,8 @@ Nex-v3 是一套 **Go 原生、零 CGO** 的多 Runner Agent Harness，对标 `p
 | 检查项 | 结果 |
 | :--- | :--- |
 | `go test ./...` | 全部通过（15 个包有测试，0 失败，`-race -cover`） |
-| 后端覆盖率 | `prompts` **89.2%**、`pty` 75.5%、`workspace` 75.3%、`tools` **74.5%**、`scheduler` 73.2%、`ai` **71.8%**、`agent` **71.5%**、`extension` **69.8%**、`runner` **65.3%**、`protocol` 63.6%、`subagent` 62.3%、`codemode` 59.1%、`store` 56.7%、`server` **50.9%** |
-| 前端测试 | Vitest 10 个用例全部通过（0 unhandled errors），覆盖 PTY 协议、流式 reducer、O(tail) 冻结、todo/goal 状态、Provider 切换子菜单、Effort 升序滑块与 `^T`、目录浏览器弹窗、Subagent 检视与 Side Pane 动效 |
+| 后端覆盖率 | `prompts` **89.2%**、`pty` **78.8%**、`tools` **74.5%**、`workspace` **74.2%**、`scheduler` 73.2%、`ai` **71.8%**、`agent` **71.5%**、`extension` **69.8%**、`runner` **64.4%**、`protocol` 63.6%、`subagent` 62.3%、`codemode` 59.1%、`store` 54.5%、`server` **51.5%** |
+| 前端测试 | Vitest **12 个用例全部通过**（0 unhandled errors），覆盖 PTY 协议、流式 reducer、O(tail) 冻结、todo/goal 状态、Provider 切换子菜单、Effort 升序滑块与 `^T`、目录浏览器弹窗、Subagent 检视、Composer `@` 文件引用 / `/` 命令补全 / 图片附件、会话分支编辑重发与 Git Review Stage/Commit |
 | 零 CGO 交叉编译 | `verify-nocgo.sh` 通过，3 平台 × 3 二进制共 9 次构建全部成功 |
 | 前端构建 | `tsc -b && vite build` 通过，产物自动嵌入 `pkg/webui/dist` |
 
@@ -145,7 +145,10 @@ Nex-v3 是一套 **Go 原生、零 CGO** 的多 Runner Agent Harness，对标 `p
   - **推理强度（Effort）修复与对齐 ZCode**：修正档位顺序为严格升序 `关闭(off) → 低(low) → 中(medium) → 高(high) → 极高(xhigh)/最高(max)`（默认 `medium` 并持久化，不再误落到「关闭」）；`ModelMeta` 携带 `reasoning_levels`，前端对齐 ZCode 绿色填充 / 最高档 oklch 绿蓝渐变 + 流动气泡 + 档位圆点 hover 放大，并绑定全局 `^T`（Ctrl+T）快捷键与工具栏垂直滚动标签。
   - **ZCode 动效体系对齐**：补齐左右侧栏与底部终端的 `200ms` 锁宽折叠/展开动效、浮层与弹窗进场缩放/淡入动效、草稿页建议芯片瀑布流（`zcode-draft-prompt-waterfall`）、折叠区 Grid 平滑展开、运行中工具 indeterminate 扫光进度条、状态面板悬浮胶囊 `Maximize2` 图标切换、复制回弹微动效及 `prefers-reduced-motion` 支持。
   - **Plan 模式与 Subagent 修复**：权限选择新增 `计划 / 只读`（`read_only`）；修复 `openSubagentTab` 状态字段拼写（`sidePaneVisible`）并补齐中英双语 i18n。
-  - **模型管理能力**：模型可见性开关（`localStorage` 持久化）、从 `/v1/models` 批量添加、手动添加模型 + `models.dev` 退避自动填充、每行连通性测试探针。
+  - **ZCode Composer 完整交互对齐**：新增 `@` 工作区文件实时搜索补全浮层（键盘上下/Tab/Enter/Esc）、`/` 斜杠命令补全（内置 `/goal`、`/compact` + 已启用插件命令 + 技能）、多模态图片粘贴（`onPaste`）、拖拽上传、文件选择与缩略图预览条，并在对话流 `UserBubble` 中渲染图片附件。
+  - **消息历史分支与编辑重发**：后端新增 `POST /api/v1/sessions/{id}/fork` 与 `session.fork_sync` Runner 同步协议；用户消息悬停支持「编辑分支」，助手回复支持「从此分支」，无损分叉历史并立即切换继续对话。
+  - **Git 快捷工作流（Review Tab）**：后端 `workspace` 新增 `git_stage`、`git_unstage`、`git_discard`、`git_commit`、`git_branches`、`git_checkout` 及精确 `staged`/`unstaged` 状态解析；前端 Review 面板支持单文件/全量暂存与撤销、放弃未暂存改动、分支切换/新建、一键填写 Commit 信息提交。
+  - **模型管理能力**：模型可见性开关、拖拽排序（`localStorage` 持久化并同步至输入框下拉）、行内重命名显示名、从 `/v1/models` 批量添加、手动添加模型 + `models.dev` 退避自动填充、每行连通性测试探针。
 
 ---
 
@@ -157,7 +160,7 @@ Nex-v3 是一套 **Go 原生、零 CGO** 的多 Runner Agent Harness，对标 `p
 | :--- | :--- | :--- |
 | `mygo` 原生容器 | `clients/app` 只有 Go 侧 `NativeBridge` 与 All-in-One 宿主；`nex-app` 目前用系统浏览器打开 | M6 未真正交付桌面/移动原生壳，`go.mod` 里也没有 `mygo` 依赖 |
 | 推送通知 | `SetMobilePushToken` 仅本地持久化，未对接 APNs / FCM | 移动端锁屏审批唤醒不可用 |
-| 模型管理细节 | 不支持拖拽排序、行内重命名 | 与 ZCode 设置页仍有差距 |
+| ZCode Workflow 编排 | 按需暂缓 | 当前聚焦单会话与多子智能体开发体验 |
 
 ### 4.2 质量缺口
 

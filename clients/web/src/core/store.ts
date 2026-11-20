@@ -67,6 +67,7 @@ export interface AppState {
   selectedProviderId: string;
   selectedModelId: string;
   hiddenModelKeys: Record<string, boolean>;
+  modelOrder: Record<string, string[]>;
   thinkingEffort: ThinkingEffort;
   permissionMode: 'full_access' | 'interactive' | 'read_only';
   activeSessionId: string;
@@ -99,6 +100,7 @@ export interface AppState {
   setSelectedProvider: (providerId: string) => void;
   setSelectedModel: (providerId: string, modelId: string) => void;
   toggleModelVisibility: (providerId: string, modelId: string) => void;
+  reorderProviderModels: (providerId: string, orderedIds: string[]) => void;
   setThinkingEffort: (effort: ThinkingEffort) => void;
   setPermissionMode: (mode: 'full_access' | 'interactive' | 'read_only') => void;
   updateThemeQuick: (theme: UserPreferences['theme']) => Promise<void>;
@@ -198,6 +200,14 @@ export const useNexStore = create<AppState>((set, get) => ({
     try {
       const raw = safeStorageGet('nex.hiddenModels');
       return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    } catch {
+      return {};
+    }
+  })(),
+  modelOrder: (() => {
+    try {
+      const raw = safeStorageGet('nex.modelOrder');
+      return raw ? (JSON.parse(raw) as Record<string, string[]>) : {};
     } catch {
       return {};
     }
@@ -317,6 +327,12 @@ export const useNexStore = create<AppState>((set, get) => ({
       const next = { ...s.hiddenModelKeys, [key]: !s.hiddenModelKeys[key] };
       safeStorageSet('nex.hiddenModels', JSON.stringify(next));
       return { hiddenModelKeys: next };
+    }),
+  reorderProviderModels: (providerId, orderedIds) =>
+    set((s) => {
+      const next = { ...s.modelOrder, [providerId]: orderedIds };
+      safeStorageSet('nex.modelOrder', JSON.stringify(next));
+      return { modelOrder: next };
     }),
   setThinkingEffort: (effort) => {
     safeStorageSet('nex.thinkingEffort', effort);

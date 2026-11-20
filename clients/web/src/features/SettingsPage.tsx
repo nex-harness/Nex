@@ -11,11 +11,13 @@ import {
   Eye,
   EyeOff,
   Globe,
+  GripVertical,
   HardDrive,
   Monitor,
   Moon,
   Package,
   Palette,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -753,6 +755,8 @@ function ProvidersAndModelsSection({
     refreshInitialData,
     hiddenModelKeys,
     toggleModelVisibility,
+    modelOrder,
+    reorderProviderModels,
   } = useNexStore();
   const isEn = locale === 'en-US';
 
@@ -777,6 +781,9 @@ function ProvidersAndModelsSection({
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; msg: string }>>({});
   const [syncing, setSyncing] = useState(false);
   const [hiddenModelIds, setHiddenModelIds] = useState<Record<string, boolean>>({});
+  const [draggingModelId, setDraggingModelId] = useState<string | null>(null);
+  const [renamingModelId, setRenamingModelId] = useState<string | null>(null);
+  const [renameModelDraft, setRenameModelDraft] = useState('');
 
   useEffect(() => {
     if (draft) return;
@@ -1031,9 +1038,30 @@ function ProvidersAndModelsSection({
     onFlash(isEn ? `Deleted "${m.id}"` : `已删除模型 "${m.id}"`);
   };
 
-  const providerModels = draft
-    ? models.filter((m) => m.provider_id === draft.id && !hiddenModelIds[m.id])
-    : [];
+  const renameModel = async (m: ModelMeta, nextName: string) => {
+    const clean = nextName.trim();
+    setRenamingModelId(null);
+    if (!clean || clean === (m.display_name || m.id)) return;
+    await apiFetch('/api/v1/models', {
+      method: 'POST',
+      body: JSON.stringify({ ...m, display_name: clean }),
+    }).catch(() => {});
+    await refreshInitialData();
+    onFlash(isEn ? `Renamed model to "${clean}"` : `已重命名为 "${clean}"`);
+  };
+
+  const providerModels = (() => {
+    if (!draft) return [];
+    const base = models.filter((m) => m.provider_id === draft.id && !hiddenModelIds[m.id]);
+    const customOrder = modelOrder[draft.id];
+    if (!customOrder || customOrder.length === 0) return base;
+    const rank = new Map(customOrder.map((id, i) => [id, i]));
+    return [...base].sort((a, b) => {
+      const ra = rank.has(a.id) ? rank.get(a.id)! : Number.MAX_SAFE_INTEGER;
+      const rb = rank.has(b.id) ? rank.get(b.id)! : Number.MAX_SAFE_INTEGER;
+      return ra - rb;
+    });
+  })();
   const isSavedDraft = Boolean(draft?.id && providers.some((p) => p.id === draft.id));
 
   return (
@@ -1532,10 +1560,33 @@ function ProvidersAndModelsSection({
                     {providerModels.map((m) => {
                       const visible = !hiddenModelKeys[`${m.provider_id}::${m.id}`];
                       const testRes = testResults[m.id];
+                      const isRenaming = renamingModelId === m.id;
                       return (
                         <div
                           key={m.id}
-                          className="flex h-11 items-center justify-between gap-2"
+                          draggable
+                          onDragStart={() => setDraggingModelId(m.id)}
+                          onDragOver={(e) => {
+                            if (draggingModelId && draggingModelId !== m.id) e.preventDefault();
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            if (!draft || !draggingModelId || draggingModelId === m.id) return;
+                            const ids = providerModels.map((x) => x.id);
+                            const from = ids.indexOf(draggingModelId);
+                            const to = ids.indexOf(m.id);
+                            if (from >= 0 && to >= 0) {
+                              const next = [...ids];
+                              const [moved] = next.splice(from, 1);
+                              next.splice(to, 0, moved);
+                              reorderProviderModels(draft.id, next);
+                            }
+                            setDraggingModelId(null);
+                          }}
+                          onDragEnd={() => setDraggingModelId(null)}
+                          className={`flex h-11 items-center justify-between gap-2 transition-opacity ${
+                            draggingModelId === m.id ? 'opacity-45' : ''
+                          }`}
                           title={
                             isEn
                               ? `In $${m.pricing.input_per_1m}/1M · Out $${m.pricing.output_per_1m}/1M`
@@ -1543,9 +1594,31 @@ function ProvidersAndModelsSection({
                           }
                         >
                           <div className="flex min-w-0 items-center gap-1.5">
-                            <span className="truncate font-mono text-ui-base text-foreground">
-                              {m.id}
-                            </span>
+                            <GripVertical className="size-3.5 shrink-0 cursor-grab text-foreground-subtlest" />
+                            {isRenaming ? (
+                              <input
+                                autoFocus
+                                value={renameModelDraft}
+                                onChange={(e) => setRenameModelDraft(e.target.value)}
+                                onBlur={() => void renameModel(m, renameModelDraft)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') void renameModel(m, renameModelDraft);
+                                  if (e.key === 'Escape') setRenamingModelId(null);
+                                }}
+                                className="h-7 w-44 rounded-md border border-border bg-input px-2 text-ui-sm text-foreground focus:border-primary focus:outline-none"
+                              />
+                            ) : (
+                              <>
+                                <span className="truncate font-mono text-ui-base text-foreground">
+                                  {m.display_name && m.display_name !== m.id ? m.display_name : m.id}
+                                </span>
+                                {m.display_name && m.display_name !== m.id && (
+                                  <span className="hidden truncate font-mono text-ui-xs text-foreground-subtlest sm:inline">
+                                    ({m.id})
+                                  </span>
+                                )}
+                              </>
+                            )}
                             <ModelBadge>{contextLabel(m.context_window)}</ModelBadge>
                             {m.supports_vision ? <ModelBadge>Vision</ModelBadge> : null}
                             {m.supports_reasoning ? <ModelBadge>Reasoning</ModelBadge> : null}
@@ -1561,6 +1634,17 @@ function ProvidersAndModelsSection({
                                 {testRes.ok ? testRes.msg : 'ERR'}
                               </span>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRenamingModelId(m.id);
+                                setRenameModelDraft(m.display_name || m.id);
+                              }}
+                              title={isEn ? 'Rename display name' : '重命名显示名称'}
+                              className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
                             <button
                               type="button"
                               disabled={testingModelId === m.id}

@@ -990,6 +990,7 @@ function Composer({
   const plugins = useNexStore((s) => s.plugins);
   const recentWorkspaces = useNexStore((s) => s.recentWorkspaces);
   const hiddenModelKeys = useNexStore((s) => s.hiddenModelKeys);
+  const modelOrder = useNexStore((s) => s.modelOrder);
   const composerAttachments = useNexStore((s) => s.composerAttachments);
   const addComposerAttachment = useNexStore((s) => s.addComposerAttachment);
   const removeComposerAttachment = useNexStore((s) => s.removeComposerAttachment);
@@ -1069,9 +1070,18 @@ function Composer({
     [models, hiddenModelKeys],
   );
   const providerModels = useMemo(() => {
-    if (!effectiveProviderId) return allVisibleModels;
-    return allVisibleModels.filter((m) => m.provider_id === effectiveProviderId);
-  }, [allVisibleModels, effectiveProviderId]);
+    const base = !effectiveProviderId
+      ? allVisibleModels
+      : allVisibleModels.filter((m) => m.provider_id === effectiveProviderId);
+    const customOrder = effectiveProviderId ? modelOrder[effectiveProviderId] : undefined;
+    if (!customOrder || customOrder.length === 0) return base;
+    const rank = new Map(customOrder.map((id, i) => [id, i]));
+    return [...base].sort((a, b) => {
+      const ra = rank.has(a.id) ? rank.get(a.id)! : Number.MAX_SAFE_INTEGER;
+      const rb = rank.has(b.id) ? rank.get(b.id)! : Number.MAX_SAFE_INTEGER;
+      return ra - rb;
+    });
+  }, [allVisibleModels, effectiveProviderId, modelOrder]);
 
   const modelLabel =
     activeModel?.display_name || activeModel?.id || selectedModelId || formatMsg(locale, 'chat.model.selectModel');
