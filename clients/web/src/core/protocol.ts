@@ -85,6 +85,22 @@ export function safeStorageSet(key: string, value: string): void {
   }
 }
 
+export function safeStorageRemove(key: string): void {
+  try {
+    if (typeof localStorage !== 'undefined' && typeof localStorage.removeItem === 'function') {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // ignore storage access errors
+  }
+}
+
+let authRequiredHandler: (() => void) | null = null;
+
+export function setAuthRequiredHandler(fn: (() => void) | null): void {
+  authRequiredHandler = fn;
+}
+
 export function resolveApiBase(): string {
   if (typeof window === 'undefined') return 'http://127.0.0.1:8080';
   const override = safeStorageGet('nex.server.url');
@@ -94,23 +110,46 @@ export function resolveApiBase(): string {
 
 export function resolveWsUrl(): string {
   const base = resolveApiBase();
+  const token = safeStorageGet('nex.auth.token');
+  const query = token ? `?token=${encodeURIComponent(token)}` : '';
   if (base.startsWith('https://')) {
-    return 'wss://' + base.slice('https://'.length) + '/ws/client';
+    return 'wss://' + base.slice('https://'.length) + '/ws/client' + query;
   }
   if (base.startsWith('http://')) {
-    return 'ws://' + base.slice('http://'.length) + '/ws/client';
+    return 'ws://' + base.slice('http://'.length) + '/ws/client' + query;
   }
-  return `ws://127.0.0.1:8080/ws/client`;
+  return `ws://127.0.0.1:8080/ws/client${query}`;
+}
+
+function buildAuthHeaders(extra?: HeadersInit, includeJsonContentType = true): Record<string, string> {
+  const headers: Record<string, string> = includeJsonContentType ? { 'Content-Type': 'application/json' } : {};
+  const token = safeStorageGet('nex.auth.token');
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  if (extra) {
+    if (extra instanceof Headers) {
+      extra.forEach((v, k) => {
+        headers[k] = v;
+      });
+    } else if (Array.isArray(extra)) {
+      for (const [k, v] of extra) headers[k] = v;
+    } else {
+      Object.assign(headers, extra);
+    }
+  }
+  return headers;
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${resolveApiBase()}${path}`, {
+    credentials: 'same-origin',
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
+    headers: buildAuthHeaders(init?.headers, true),
   });
+  if (res.status === 401 && !path.startsWith('/api/v1/auth/')) {
+    authRequiredHandler?.();
+  }
   if (!res.ok) {
     const errText = await res.text();
     throw new Error(`API ${res.status}: ${errText}`);
@@ -119,7 +158,13 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 }
 
 export async function apiFetchText(path: string): Promise<string> {
-  const res = await fetch(`${resolveApiBase()}${path}`);
+  const res = await fetch(`${resolveApiBase()}${path}`, {
+    credentials: 'same-origin',
+    headers: buildAuthHeaders(undefined, false),
+  });
+  if (res.status === 401) {
+    authRequiredHandler?.();
+  }
   if (!res.ok) {
     throw new Error(`Blob fetch ${res.status}`);
   }

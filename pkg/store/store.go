@@ -180,6 +180,25 @@ func (s *Store) GetConfigRev(ctx context.Context) (int64, error) {
 	return rev, nil
 }
 
+// GetKVSetting returns a raw JSON/string setting stored in kv_settings.
+func (s *Store) GetKVSetting(ctx context.Context, key string) (string, error) {
+	var raw string
+	err := s.mainDB.QueryRowContext(ctx, `SELECT value_json FROM kv_settings WHERE key = ?`, key).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return raw, err
+}
+
+// SetKVSetting upserts a raw JSON/string setting in kv_settings.
+func (s *Store) SetKVSetting(ctx context.Context, key, value string) error {
+	_, err := s.mainDB.ExecContext(ctx, `
+		INSERT INTO kv_settings (key, value_json, updated_at) VALUES (?, ?, ?)
+		ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
+	`, key, value, time.Now().UnixMilli())
+	return err
+}
+
 // --- Providers & Models ---
 
 type ProviderRecord struct {

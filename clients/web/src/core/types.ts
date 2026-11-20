@@ -392,6 +392,45 @@ export interface RewindResult {
   errors?: string[];
 }
 
+export interface SSHConfigHost {
+  alias: string;
+  hostname: string;
+  user?: string;
+  port: number;
+  identity_file?: string;
+}
+
+export interface SSHTargetRecord {
+  id: string;
+  name: string;
+  ssh_alias?: string;
+  host: string;
+  port: number;
+  username: string;
+  auth_method: 'agent' | 'key' | 'password';
+  key_path?: string;
+  password?: string;
+  has_password?: boolean;
+  workspace_path?: string;
+  install_dir?: string;
+  server_ws_url?: string;
+  install_mode: 'scp' | 'remote_install';
+  download_url?: string;
+  last_status: 'idle' | 'testing' | 'deploying' | 'connected' | 'error' | string;
+  last_error?: string;
+  last_log?: string;
+  last_deployed_at?: number;
+  created_at?: number;
+  updated_at?: number;
+}
+
+export interface StagedBinaryInfo {
+  os: string;
+  arch: string;
+  size_bytes: number;
+  updated_at: number;
+}
+
 export type SettingsSectionId =
   | 'general'
   | 'appearance'

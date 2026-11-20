@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { hostBridge } from '../host/bridge';
 import { resolveEffectiveEffort } from './effort';
-import { apiFetch, safeStorageGet, safeStorageSet } from './protocol';
+import { apiFetch, safeStorageGet, safeStorageRemove, safeStorageSet, setAuthRequiredHandler } from './protocol';
 import { applySessionEvent, emptyStreamState, RawSessionEventRow, SessionStreamState } from './reducer';
 import {
   AgentProfile,
@@ -23,6 +23,7 @@ import {
   SessionSearchHit,
   SettingsSectionId,
   SkillRecord,
+  SSHTargetRecord,
   ThinkingEffort,
   TurnTelemetry,
   UsageSummary,
@@ -31,6 +32,44 @@ import {
   WorkbenchTabKind,
 } from './types';
 import { wsClient } from './wsClient';
+
+const ACTIVE_SESSION_STORAGE_KEY = 'nex.activeSessionId';
+
+export function readPersistedSessionId(): string {
+  if (typeof window !== 'undefined') {
+    try {
+      const fromQuery = new URLSearchParams(window.location.search).get('session')?.trim();
+      if (fromQuery) return fromQuery;
+    } catch {
+      // ignore URL parse errors
+    }
+  }
+  return safeStorageGet(ACTIVE_SESSION_STORAGE_KEY)?.trim() || '';
+}
+
+export function persistActiveSessionId(sessionId: string): void {
+  const clean = (sessionId || '').trim();
+  if (clean) {
+    safeStorageSet(ACTIVE_SESSION_STORAGE_KEY, clean);
+  } else {
+    safeStorageRemove(ACTIVE_SESSION_STORAGE_KEY);
+  }
+  if (typeof window !== 'undefined' && typeof window.history?.replaceState === 'function') {
+    try {
+      const url = new URL(window.location.href);
+      if (clean) {
+        url.searchParams.set('session', clean);
+      } else {
+        url.searchParams.delete('session');
+      }
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    } catch {
+      // ignore history errors in non-http test environments
+    }
+  }
+}
+
+let wsHandlersWired = false;
 
 export function applyDocumentTheme(theme: UserPreferences['theme']): void {
   if (typeof document === 'undefined') return;
@@ -44,6 +83,9 @@ export function applyDocumentTheme(theme: UserPreferences['theme']): void {
 
 export interface AppState {
   wsConnected: boolean;
+  authChecked: boolean;
+  authEnabled: boolean;
+  authenticated: boolean;
   locale: 'zh-CN' | 'en-US';
   mainView: 'workspace' | 'settings';
   settingsSection: SettingsSectionId;
@@ -61,6 +103,7 @@ export interface AppState {
   archivedSessions: SessionRecord[];
   agentProfiles: AgentProfile[];
   memories: MemoryRecord[];
+  sshTargets: SSHTargetRecord[];
   skills: SkillRecord[];
   plugins: PluginRecord[];
   mcpServers: MCPServerRecord[];
@@ -113,6 +156,10 @@ export interface AppState {
   updateThemeQuick: (theme: UserPreferences['theme']) => Promise<void>;
 
   bootstrap: () => Promise<void>;
+  checkAuthStatus: () => Promise<{ enabled: boolean; authenticated: boolean }>;
+  loginWithPassword: (password: string) => Promise<{ ok: boolean; error?: string }>;
+  logoutWeb: () => Promise<void>;
+  updateWebPassword: (currentPassword: string, newPassword: string) => Promise<{ ok: boolean; enabled?: boolean; error?: string }>;
   refreshInitialData: () => Promise<void>;
   refreshRegistries: () => Promise<void>;
   selectSession: (sessionId: string) => Promise<void>;
@@ -172,6 +219,9 @@ const DEFAULT_PREFS: UserPreferences = {
 
 export const useNexStore = create<AppState>((set, get) => ({
   wsConnected: false,
+  authChecked: false,
+  authEnabled: false,
+  authenticated: true,
   locale: (safeStorageGet('nex.locale') as 'zh-CN' | 'en-US') || 'zh-CN',
   mainView: 'workspace',
   settingsSection: 'general',
@@ -195,6 +245,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   archivedSessions: [],
   agentProfiles: [],
   memories: [],
+  sshTargets: [],
   skills: [],
   plugins: [],
   mcpServers: [],
@@ -366,151 +417,237 @@ export const useNexStore = create<AppState>((set, get) => ({
     await apiFetch('/api/v1/preferences', { method: 'PUT', body: JSON.stringify(nextPrefs) }).catch(() => {});
   },
 
+  checkAuthStatus: async () => {
+    try {
+      const st = await apiFetch<{ enabled: boolean; authenticated: boolean }>('/api/v1/auth/status');
+      const enabled = Boolean(st?.enabled);
+      const authenticated = enabled ? Boolean(st?.authenticated) : true;
+      set({ authChecked: true, authEnabled: enabled, authenticated });
+      return { enabled, authenticated };
+    } catch {
+      set({ authChecked: true, authEnabled: false, authenticated: true });
+      return { enabled: false, authenticated: true };
+    }
+  },
+
+  loginWithPassword: async (password) => {
+    try {
+      const res = await apiFetch<{ ok?: boolean; enabled?: boolean; token?: string }>('/api/v1/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      });
+      if (res?.token) {
+        safeStorageSet('nex.auth.token', res.token);
+      }
+      set({ authChecked: true, authEnabled: Boolean(res?.enabled ?? true), authenticated: true });
+      await get().bootstrap();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Login failed' };
+    }
+  },
+
+  logoutWeb: async () => {
+    try {
+      await apiFetch('/api/v1/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    safeStorageRemove('nex.auth.token');
+    wsClient.disconnect();
+    set({ authenticated: false, wsConnected: false, mainView: 'workspace' });
+  },
+
+  updateWebPassword: async (currentPassword, newPassword) => {
+    try {
+      const res = await apiFetch<{ ok?: boolean; enabled?: boolean; token?: string }>('/api/v1/auth/password', {
+        method: 'PUT',
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      });
+      if (res?.token) {
+        safeStorageSet('nex.auth.token', res.token);
+      } else if (!res?.enabled) {
+        safeStorageRemove('nex.auth.token');
+      }
+      set({ authEnabled: Boolean(res?.enabled), authenticated: true });
+      return { ok: true, enabled: Boolean(res?.enabled) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Failed to update password' };
+    }
+  },
+
   bootstrap: async () => {
     hostBridge.setDeviceFontScale(hostBridge.getDeviceFontScale());
 
-    wsClient.onStatus((connected) => {
-      set({ wsConnected: connected });
-      if (connected) {
-        const activeId = get().activeSessionId;
-        if (activeId) {
-          const lastSeq = get().streams[activeId]?.lastSeq || 0;
-          wsClient.sendEnvelope('client.subscribe', { session_id: activeId, last_seen_seq: lastSeq });
-        }
-        void get().refreshGitSummary(false);
-      }
+    setAuthRequiredHandler(() => {
+      safeStorageRemove('nex.auth.token');
+      wsClient.disconnect();
+      set({ authEnabled: true, authenticated: false, wsConnected: false });
     });
 
-    // ZCode-style per-frame event coalescing buffer: at most ONE Zustand commit per animation frame!
-    const pendingEvents = new Map<string, { runnerId: string; rows: RawSessionEventRow[] }>();
-    let flushScheduled = false;
+    const auth = await get().checkAuthStatus();
+    if (auth.enabled && !auth.authenticated) {
+      return;
+    }
 
-    const flushPendingEvents = () => {
-      flushScheduled = false;
-      if (pendingEvents.size === 0) return;
-      const batch = Array.from(pendingEvents.entries());
-      pendingEvents.clear();
-
-      let shouldRefreshGit = false;
-      let shouldRefreshData = false;
-      const endedSessions: string[] = [];
-
-      set((state) => {
-        const nextStreams = { ...state.streams };
-        let nextSessions = state.sessions;
-        for (const [sid, group] of batch) {
-          let cur = nextStreams[sid] || emptyStreamState();
-          const prevApproval = cur.pendingApproval;
-          for (const raw of group.rows) {
-            if (raw.event_type === 'session_title_updated') {
-              const newTitle = String((raw.payload || {}).title || '').trim();
-              if (newTitle) {
-                nextSessions = nextSessions.map((s) => (s.id === sid ? { ...s, title: newTitle } : s));
-              }
-              continue;
-            }
-            cur = applySessionEvent(cur, group.runnerId, raw);
-            if (raw.event_type === 'tool_execution_end') shouldRefreshGit = true;
-            if (raw.event_type === 'agent_end') {
-              shouldRefreshGit = true;
-              shouldRefreshData = true;
-              endedSessions.push(sid);
-            }
+    if (!wsHandlersWired) {
+      wsHandlersWired = true;
+      wsClient.onStatus((connected) => {
+        set({ wsConnected: connected });
+        if (connected) {
+          const activeId = get().activeSessionId;
+          if (activeId) {
+            const lastSeq = get().streams[activeId]?.lastSeq || 0;
+            wsClient.sendEnvelope('client.subscribe', { session_id: activeId, last_seen_seq: lastSeq });
           }
-          if (cur.pendingApproval && cur.pendingApproval !== prevApproval) {
-            void hostBridge.notifyApprovalRequested({
-              sessionId: sid,
-              runnerName: group.runnerId,
-              toolName: cur.pendingApproval.toolName,
-            });
-          }
-          nextStreams[sid] = cur;
+          void get().refreshGitSummary(false);
         }
-        return nextSessions !== state.sessions
-          ? { streams: nextStreams, sessions: nextSessions }
-          : { streams: nextStreams };
       });
 
-      // Automatically drain next queued follow-up message once the session run completes
-      for (const sid of endedSessions) {
-        const q = get().followUpQueues[sid];
-        if (q && q.length > 0) {
-          const [nextItem, ...rest] = q;
-          set((st) => ({
-            followUpQueues: {
-              ...st.followUpQueues,
-              [sid]: rest,
-            },
-          }));
-          const stNow = get();
-          const activeModel = stNow.models.find(
-            (m) => m.provider_id === stNow.selectedProviderId && m.id === stNow.selectedModelId,
-          );
-          const effectiveThinkingEffort = resolveEffectiveEffort(activeModel, stNow.thinkingEffort);
-          wsClient.sendEnvelope(
-            'session.prompt',
-            {
-              session_id: sid,
-              runner_id: stNow.selectedRunnerId,
-              workspace_path: stNow.selectedWorkspacePath || undefined,
-              provider_id: stNow.selectedProviderId,
-              model_id: stNow.selectedModelId,
-              thinking_effort: effectiveThinkingEffort,
-              permission_mode: stNow.permissionMode,
-              text: nextItem.text,
-            },
-            { session_id: sid, runner_id: stNow.selectedRunnerId },
-          );
+      // ZCode-style per-frame event coalescing buffer: at most ONE Zustand commit per animation frame!
+      const pendingEvents = new Map<string, { runnerId: string; rows: RawSessionEventRow[] }>();
+      let flushScheduled = false;
+
+      const flushPendingEvents = () => {
+        flushScheduled = false;
+        if (pendingEvents.size === 0) return;
+        const batch = Array.from(pendingEvents.entries());
+        pendingEvents.clear();
+
+        let shouldRefreshGit = false;
+        let shouldRefreshData = false;
+        const endedSessions: string[] = [];
+
+        set((state) => {
+          const nextStreams = { ...state.streams };
+          let nextSessions = state.sessions;
+          for (const [sid, group] of batch) {
+            let cur = nextStreams[sid] || emptyStreamState();
+            const prevApproval = cur.pendingApproval;
+            for (const raw of group.rows) {
+              if (raw.event_type === 'session_title_updated') {
+                const newTitle = String((raw.payload || {}).title || '').trim();
+                if (newTitle) {
+                  nextSessions = nextSessions.map((s) => (s.id === sid ? { ...s, title: newTitle } : s));
+                }
+                continue;
+              }
+              cur = applySessionEvent(cur, group.runnerId, raw);
+              if (raw.event_type === 'tool_execution_end') shouldRefreshGit = true;
+              if (raw.event_type === 'agent_end') {
+                shouldRefreshGit = true;
+                shouldRefreshData = true;
+                endedSessions.push(sid);
+              }
+            }
+            if (cur.pendingApproval && cur.pendingApproval !== prevApproval) {
+              void hostBridge.notifyApprovalRequested({
+                sessionId: sid,
+                runnerName: group.runnerId,
+                toolName: cur.pendingApproval.toolName,
+              });
+            }
+            nextStreams[sid] = cur;
+          }
+          return nextSessions !== state.sessions
+            ? { streams: nextStreams, sessions: nextSessions }
+            : { streams: nextStreams };
+        });
+
+        // Automatically drain next queued follow-up message once the session run completes
+        for (const sid of endedSessions) {
+          const q = get().followUpQueues[sid];
+          if (q && q.length > 0) {
+            const [nextItem, ...rest] = q;
+            set((st) => ({
+              followUpQueues: {
+                ...st.followUpQueues,
+                [sid]: rest,
+              },
+            }));
+            const stNow = get();
+            const activeModel = stNow.models.find(
+              (m) => m.provider_id === stNow.selectedProviderId && m.id === stNow.selectedModelId,
+            );
+            const effectiveThinkingEffort = resolveEffectiveEffort(activeModel, stNow.thinkingEffort);
+            wsClient.sendEnvelope(
+              'session.prompt',
+              {
+                session_id: sid,
+                runner_id: stNow.selectedRunnerId,
+                workspace_path: stNow.selectedWorkspacePath || undefined,
+                provider_id: stNow.selectedProviderId,
+                model_id: stNow.selectedModelId,
+                thinking_effort: effectiveThinkingEffort,
+                permission_mode: stNow.permissionMode,
+                text: nextItem.text,
+              },
+              { session_id: sid, runner_id: stNow.selectedRunnerId },
+            );
+          }
         }
-      }
 
-      if (shouldRefreshGit) void get().refreshGitSummary(false);
-      if (shouldRefreshData) void get().refreshInitialData();
-    };
+        if (shouldRefreshGit) void get().refreshGitSummary(false);
+        if (shouldRefreshData) void get().refreshInitialData();
+      };
 
-    const scheduleFrameFlush = (immediate: boolean) => {
-      if (immediate) {
-        flushPendingEvents();
-        return;
-      }
-      if (flushScheduled) return;
-      flushScheduled = true;
-      if (typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(flushPendingEvents);
-      } else {
-        setTimeout(flushPendingEvents, 16);
-      }
-    };
-
-    wsClient.onFrame((env) => {
-      if (env.type === 'runner.status') {
-        void get().refreshInitialData();
-        return;
-      }
-      if (env.type === 'memory.sync') {
-        void get().refreshRegistries();
-        return;
-      }
-      if (env.type === 'session.event' && env.payload) {
-        const raw = env.payload as RawSessionEventRow;
-        const sid = raw.session_id || env.session_id || '';
-        if (!sid) return;
-        const rid = env.runner_id || get().selectedRunnerId;
-        let group = pendingEvents.get(sid);
-        if (!group) {
-          group = { runnerId: rid, rows: [] };
-          pendingEvents.set(sid, group);
+      const scheduleFrameFlush = (immediate: boolean) => {
+        if (immediate) {
+          flushPendingEvents();
+          return;
         }
-        group.rows.push(raw);
+        if (flushScheduled) return;
+        flushScheduled = true;
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(flushPendingEvents);
+        } else {
+          setTimeout(flushPendingEvents, 16);
+        }
+      };
 
-        const isHighFreqDelta = raw.event_type === 'message_update' || raw.event_type === 'tool_execution_update';
-        scheduleFrameFlush(!isHighFreqDelta);
-      }
-    });
+      wsClient.onFrame((env) => {
+        if (env.type === 'runner.status') {
+          void get().refreshInitialData();
+          return;
+        }
+        if (env.type === 'memory.sync') {
+          void get().refreshRegistries();
+          return;
+        }
+        if (env.type === 'session.event' && env.payload) {
+          const raw = env.payload as RawSessionEventRow;
+          const sid = raw.session_id || env.session_id || '';
+          if (!sid) return;
+          const rid = env.runner_id || get().selectedRunnerId;
+          let group = pendingEvents.get(sid);
+          if (!group) {
+            group = { runnerId: rid, rows: [] };
+            pendingEvents.set(sid, group);
+          }
+          group.rows.push(raw);
+
+          const isHighFreqDelta = raw.event_type === 'message_update' || raw.event_type === 'tool_execution_update';
+          scheduleFrameFlush(!isHighFreqDelta);
+        }
+      });
+    }
 
     wsClient.connect();
     await get().refreshInitialData();
     await get().refreshRegistries();
+
+    // Restore active conversation across page reload (from URL `?session=` or localStorage)
+    if (!get().activeSessionId) {
+      const savedSessionId = readPersistedSessionId();
+      if (savedSessionId) {
+        const exists = get().sessions.some((s) => s.id === savedSessionId);
+        if (exists) {
+          await get().selectSession(savedSessionId);
+        } else {
+          persistActiveSessionId('');
+        }
+      }
+    }
   },
 
   refreshInitialData: async () => {
@@ -553,9 +690,10 @@ export const useNexStore = create<AppState>((set, get) => ({
   },
 
   refreshRegistries: async () => {
-    const [agentProfiles, memories, skills, plugins, mcpServers, cronJobs] = await Promise.all([
+    const [agentProfiles, memories, sshTargets, skills, plugins, mcpServers, cronJobs] = await Promise.all([
       apiFetch<AgentProfile[]>('/api/v1/agents').catch(() => []),
       apiFetch<MemoryRecord[]>('/api/v1/memories').catch(() => []),
+      apiFetch<SSHTargetRecord[]>('/api/v1/ssh/targets').catch(() => []),
       apiFetch<SkillRecord[]>('/api/v1/skills').catch(() => []),
       apiFetch<PluginRecord[]>('/api/v1/plugins').catch(() => []),
       apiFetch<MCPServerRecord[]>('/api/v1/mcp').catch(() => []),
@@ -564,6 +702,7 @@ export const useNexStore = create<AppState>((set, get) => ({
     set({
       agentProfiles: agentProfiles || [],
       memories: memories || [],
+      sshTargets: sshTargets || [],
       skills: skills || [],
       plugins: plugins || [],
       mcpServers: mcpServers || [],
@@ -572,6 +711,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   },
 
   selectSession: async (sessionId) => {
+    persistActiveSessionId(sessionId);
     set({ mainView: 'workspace', activeSessionId: sessionId });
     const [evs, tels] = await Promise.all([
       apiFetch<RawSessionEventRow[]>(`/api/v1/sessions/${sessionId}/events`).catch(() => []),
@@ -605,6 +745,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   },
 
   startNewSession: (runnerId, workspacePath) => {
+    persistActiveSessionId('');
     set((s) => ({
       mainView: 'workspace',
       activeSessionId: '',
@@ -623,7 +764,10 @@ export const useNexStore = create<AppState>((set, get) => ({
 
   deleteSession: async (sessionId) => {
     await apiFetch(`/api/v1/sessions/${sessionId}`, { method: 'DELETE' });
-    if (get().activeSessionId === sessionId) set({ activeSessionId: '' });
+    if (get().activeSessionId === sessionId) {
+      persistActiveSessionId('');
+      set({ activeSessionId: '' });
+    }
     await get().refreshInitialData();
   },
 
@@ -680,6 +824,7 @@ export const useNexStore = create<AppState>((set, get) => ({
 
     if (!sessionId) {
       sessionId = `sess_${crypto.randomUUID()}`;
+      persistActiveSessionId(sessionId);
       set((prev) => ({
         mainView: 'workspace',
         activeSessionId: sessionId,
@@ -794,7 +939,10 @@ export const useNexStore = create<AppState>((set, get) => ({
 
   archiveSession: async (sessionId) => {
     await apiFetch(`/api/v1/sessions/${sessionId}/archive`, { method: 'POST' });
-    if (get().activeSessionId === sessionId) set({ activeSessionId: '' });
+    if (get().activeSessionId === sessionId) {
+      persistActiveSessionId('');
+      set({ activeSessionId: '' });
+    }
     await get().refreshInitialData();
   },
 

@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import { decodePTYBinaryFrame, encodePTYBinaryFrame, PTY_BINARY_STDOUT } from '../core/protocol';
 import { applySessionEvent, emptyStreamState } from '../core/reducer';
-import { useNexStore } from '../core/store';
+import { persistActiveSessionId, readPersistedSessionId, useNexStore } from '../core/store';
+import { parsePastedSSHTarget } from '../features/SettingsRunners';
 
 afterEach(() => {
   cleanup();
@@ -1218,5 +1219,84 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     fireEvent.click(rewindBtn);
     await waitFor(() => expect(rewindSpy).toHaveBeenCalledWith('sess_b3', 10));
     expect(screen.getByTestId('rewind-notice').textContent).toContain('已回滚 1 个文件');
+  });
+
+  it('persists active session across reload, enforces AuthGate password lock, and renders SSH server manager', async () => {
+    // 1. Session persistence round-trip via URL query + storage
+    persistActiveSessionId('sess_reload_keep');
+    expect(window.location.search).toContain('session=sess_reload_keep');
+    expect(readPersistedSessionId()).toBe('sess_reload_keep');
+    persistActiveSessionId('');
+    expect(window.location.search).not.toContain('session=');
+
+    // 2. Smart SSH paste parser (ZCode RDUX-27)
+    expect(parsePastedSSHTarget('ssh tylinux@192.168.123.42 -p 2222')).toEqual({
+      host: '192.168.123.42',
+      username: 'tylinux',
+      port: '2222',
+    });
+    expect(parsePastedSSHTarget('root@10.0.0.5:2200')).toEqual({
+      host: '10.0.0.5',
+      username: 'root',
+      port: '2200',
+    });
+
+    // 3. AuthGate blocks workspace when authEnabled && !authenticated
+    const origBootstrap = useNexStore.getState().bootstrap;
+    const loginSpy = vi.fn().mockResolvedValue({ ok: true });
+    useNexStore.setState({
+      locale: 'zh-CN',
+      authChecked: true,
+      authEnabled: true,
+      authenticated: false,
+      bootstrap: vi.fn().mockResolvedValue(undefined),
+      loginWithPassword: loginSpy,
+    });
+    try {
+      const { rerender } = render(<App />);
+      expect(screen.getByTestId('auth-gate')).toBeTruthy();
+      fireEvent.change(screen.getByTestId('auth-password-input'), { target: { value: 'mysecret' } });
+      fireEvent.click(screen.getByTestId('auth-submit-btn'));
+      await waitFor(() => expect(loginSpy).toHaveBeenCalledWith('mysecret'));
+
+      // 4. General Settings exposes Web Access Password controls
+      useNexStore.setState({
+        authEnabled: true,
+        authenticated: true,
+        mainView: 'settings',
+        settingsSection: 'general',
+      });
+      rerender(<App />);
+      expect(screen.getByTestId('web-auth-status-badge')).toBeTruthy();
+      expect(screen.getByTestId('web-password-new')).toBeTruthy();
+      expect(screen.getByTestId('web-logout-btn')).toBeTruthy();
+
+      // 5. Remote Devices (Runners) Settings exposes SSH targets + ZCode-style Add SSH modal (SCP & Remote Install)
+      useNexStore.setState({
+        settingsSection: 'runners',
+        sshTargets: [
+          {
+            id: 'ssh_rb1',
+            name: 'RemoteBuilder',
+            ssh_alias: 'remotebuilder',
+            host: '192.168.123.42',
+            port: 22,
+            username: 'tylinux',
+            auth_method: 'key',
+            install_mode: 'scp',
+            last_status: 'idle',
+          },
+        ],
+      });
+      rerender(<App />);
+      expect(screen.getByTestId('ssh-target-ssh_rb1')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('add-ssh-server-btn'));
+      expect(screen.getByTestId('ssh-server-modal')).toBeTruthy();
+      expect(screen.getByTestId('ssh-import-config-btn')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('ssh-mode-remote_install'));
+      expect(screen.getByTestId('ssh-download-url-input')).toBeTruthy();
+    } finally {
+      useNexStore.setState({ bootstrap: origBootstrap, authEnabled: false, authenticated: true });
+    }
   });
 });

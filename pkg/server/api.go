@@ -25,6 +25,10 @@ func (s *Server) registerRoutes() {
 
 	// REST API v1
 	s.mux.HandleFunc("/api/v1/health", s.handleHealth)
+	s.mux.HandleFunc("/api/v1/auth/status", s.handleAuthStatus)
+	s.mux.HandleFunc("/api/v1/auth/login", s.handleAuthLogin)
+	s.mux.HandleFunc("/api/v1/auth/logout", s.handleAuthLogout)
+	s.mux.HandleFunc("/api/v1/auth/password", s.handleAuthPassword)
 	s.mux.HandleFunc("/api/v1/preferences", s.handlePreferences)
 	s.mux.HandleFunc("/api/v1/providers", s.handleProviders)
 	s.mux.HandleFunc("/api/v1/providers/", s.handleProviderDelete)
@@ -56,6 +60,11 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/memories", s.handleMemories)
 	s.mux.HandleFunc("/api/v1/memories/consolidate", s.handleMemoryConsolidate)
 	s.mux.HandleFunc("/api/v1/memories/", s.handleMemoryDelete)
+	s.mux.HandleFunc("/api/v1/ssh/config-hosts", s.handleSSHConfigHosts)
+	s.mux.HandleFunc("/api/v1/ssh/targets", s.handleSSHTargets)
+	s.mux.HandleFunc("/api/v1/ssh/targets/", s.handleSSHTargetSubroutes)
+	s.mux.HandleFunc("/api/v1/ssh/binaries", s.handleSSHBinaries)
+	s.mux.HandleFunc("/api/v1/ssh/binary", s.handleSSHBinaryDownload)
 
 	// Embedded Web UI SPA fallback
 	if s.cfg.StaticFS != nil {

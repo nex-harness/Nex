@@ -257,6 +257,29 @@ CREATE TABLE IF NOT EXISTS file_checkpoints (
 );
 
 CREATE INDEX IF NOT EXISTS idx_file_checkpoints_sess ON file_checkpoints(session_id, event_seq);
+
+CREATE TABLE IF NOT EXISTS ssh_targets (
+    id               TEXT PRIMARY KEY,
+    name             TEXT NOT NULL,
+    ssh_alias        TEXT NOT NULL DEFAULT '',
+    host             TEXT NOT NULL,
+    port             INTEGER NOT NULL DEFAULT 22,
+    username         TEXT NOT NULL DEFAULT '',
+    auth_method      TEXT NOT NULL DEFAULT 'key',
+    key_path         TEXT NOT NULL DEFAULT '',
+    password         TEXT NOT NULL DEFAULT '',
+    workspace_path   TEXT NOT NULL DEFAULT '',
+    install_dir      TEXT NOT NULL DEFAULT '~/.nex-runner',
+    server_ws_url    TEXT NOT NULL DEFAULT '',
+    install_mode     TEXT NOT NULL DEFAULT 'scp',
+    download_url     TEXT NOT NULL DEFAULT '',
+    last_status      TEXT NOT NULL DEFAULT 'idle',
+    last_error       TEXT NOT NULL DEFAULT '',
+    last_log         TEXT NOT NULL DEFAULT '',
+    last_deployed_at INTEGER NOT NULL DEFAULT 0,
+    created_at       INTEGER NOT NULL,
+    updated_at       INTEGER NOT NULL
+);
 `
 
 const archiveSchemaSQL = `

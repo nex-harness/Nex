@@ -1,7 +1,8 @@
 import { Plus, SquareTerminal, X } from 'lucide-react';
 import { type PointerEvent as ReactPointerEvent, useEffect, useState } from 'react';
 import { emptyStreamState } from './core/reducer';
-import { useNexStore } from './core/store';
+import { readPersistedSessionId, useNexStore } from './core/store';
+import { AuthGate } from './features/AuthGate';
 import { CommandPaletteModal } from './features/CommandPaletteModal';
 import { ApprovalModal, UIPromptModal } from './features/ControlModals';
 import { ConversationPane } from './features/ConversationPane';
@@ -13,6 +14,8 @@ import { WorkbenchSidebar } from './features/WorkbenchSidebar';
 import { formatMsg } from './i18n/messages';
 
 export function App() {
+  const authEnabled = useNexStore((s) => s.authEnabled);
+  const authenticated = useNexStore((s) => s.authenticated);
   const locale = useNexStore((s) => s.locale);
   const mainView = useNexStore((s) => s.mainView);
   const sidebarVisible = useNexStore((s) => s.sidebarVisible);
@@ -57,11 +60,22 @@ export function App() {
         st.setQuickSearchOpen(!st.quickSearchOpen);
       }
     };
+    const onPopState = () => {
+      const sid = readPersistedSessionId();
+      const st = useNexStore.getState();
+      if (sid && sid !== st.activeSessionId) {
+        void st.selectSession(sid);
+      } else if (!sid && st.activeSessionId) {
+        st.startNewSession();
+      }
+    };
     window.addEventListener('resize', onResize);
     window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('popstate', onPopState);
     return () => {
       window.removeEventListener('resize', onResize);
       window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('popstate', onPopState);
     };
   }, []);
 
@@ -124,6 +138,10 @@ export function App() {
   const shouldMountTerminal = showBottomPanel || hasOpenedTerminal;
 
   const activeBottomTerm = bottomTerminals.find((t) => t.id === activeBottomTermId) || bottomTerminals[0];
+
+  if (authEnabled && !authenticated) {
+    return <AuthGate />;
+  }
 
   if (mainView === 'settings') {
     return (

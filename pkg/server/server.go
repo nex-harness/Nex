@@ -154,7 +154,7 @@ func (s *Server) seedBuiltInProvidersAndModels(ctx context.Context) error {
 
 // Handler returns the root http.Handler for the server.
 func (s *Server) Handler() http.Handler {
-	return corsMiddleware(s.mux)
+	return corsMiddleware(s.authMiddleware(s.mux))
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

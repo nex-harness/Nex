@@ -14,6 +14,8 @@ import {
   Globe,
   GripVertical,
   HardDrive,
+  Lock,
+  LogOut,
   Monitor,
   Moon,
   Package,
@@ -44,6 +46,7 @@ import {
   MemoriesSettingsSection,
   SkillsAndPluginsSection,
 } from './SettingsCapabilities';
+import { RunnersSettingsSection } from './SettingsRunners';
 
 /* -------------------------------------------------------------------------- */
 /* Shared settings primitives (also consumed by the sibling settings files)    */
@@ -283,7 +286,7 @@ export function SettingsPage() {
               description={formatMsg(locale, activeMeta.descKey)}
             />
           )}
-          {activeMeta.id === 'runners' && <RunnersSection />}
+          {activeMeta.id === 'runners' && <RunnersSettingsSection onFlash={showFlash} />}
           {activeMeta.id === 'agents' && <AgentsSettingsSection onFlash={showFlash} />}
           {activeMeta.id === 'memories' && <MemoriesSettingsSection onFlash={showFlash} />}
           {activeMeta.id === 'plugins' && (
@@ -319,6 +322,9 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
     permissionMode,
     setPermissionMode,
     preferences,
+    authEnabled,
+    updateWebPassword,
+    logoutWeb,
     refreshInitialData,
     updateThemeQuick,
   } = useNexStore();
@@ -330,6 +336,53 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
   const [archiveDays, setArchiveDays] = useState(
     preferences.auto_archive_after_days > 0 ? preferences.auto_archive_after_days : 30,
   );
+  const [currentPwd, setCurrentPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [pwdError, setPwdError] = useState('');
+  const [pwdBusy, setPwdBusy] = useState(false);
+
+  const handleSavePassword = async () => {
+    setPwdError('');
+    if (newPwd.length < 4) {
+      setPwdError(isEn ? 'Password must be at least 4 characters.' : '密码长度至少为 4 位。');
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      setPwdError(isEn ? 'Passwords do not match.' : '两次输入的新密码不一致。');
+      return;
+    }
+    setPwdBusy(true);
+    const res = await updateWebPassword(currentPwd, newPwd);
+    setPwdBusy(false);
+    if (!res.ok) {
+      setPwdError(res.error || (isEn ? 'Failed to save password' : '保存密码失败'));
+      return;
+    }
+    setCurrentPwd('');
+    setNewPwd('');
+    setConfirmPwd('');
+    onFlash(isEn ? 'Web access password updated' : 'Web 访问密码已设置生效');
+  };
+
+  const handleClearPassword = async () => {
+    setPwdError('');
+    if (!currentPwd) {
+      setPwdError(isEn ? 'Enter current password to disable protection.' : '请先输入当前密码以移除保护。');
+      return;
+    }
+    setPwdBusy(true);
+    const res = await updateWebPassword(currentPwd, '');
+    setPwdBusy(false);
+    if (!res.ok) {
+      setPwdError(res.error || (isEn ? 'Failed to remove password' : '移除密码失败'));
+      return;
+    }
+    setCurrentPwd('');
+    setNewPwd('');
+    setConfirmPwd('');
+    onFlash(isEn ? 'Web access password disabled' : '已移除 Web 访问密码');
+  };
 
   const savePreferences = async (patch: Partial<UserPreferences>) => {
     await apiFetch('/api/v1/preferences', {
@@ -468,6 +521,138 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
             </select>
           </SettingsRow>
         ) : null}
+      </SettingsGroupCard>
+
+      <SectionHeading
+        title={isEn ? 'Web access password' : 'Web 访问密码'}
+        description={
+          isEn
+            ? 'Require a password when opening Nex in a browser. API and WebSocket requests are verified server-side.'
+            : '开启后，首次打开 Web 端需输入密码验证才能查看和使用（后端强制校验 API 与 WebSocket）。'
+        }
+      />
+
+      <SettingsGroupCard>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <Lock className="size-4 text-foreground-subtle" />
+            <span className="text-ui-base font-medium text-foreground">
+              {isEn ? 'Password protection' : '密码保护状态'}
+            </span>
+            <span
+              data-testid="web-auth-status-badge"
+              className={`rounded-md px-2 py-0.5 text-ui-xs font-medium ${
+                authEnabled
+                  ? 'bg-success-surface text-success-surface-fg'
+                  : 'bg-surface text-foreground-subtle'
+              }`}
+            >
+              {authEnabled
+                ? isEn
+                  ? 'Enabled'
+                  : '已启用'
+                : isEn
+                  ? 'Disabled'
+                  : '未设置'}
+            </span>
+          </div>
+          {authEnabled && (
+            <button
+              type="button"
+              data-testid="web-logout-btn"
+              onClick={() => void logoutWeb()}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover"
+            >
+              <LogOut className="size-3.5" />
+              <span>{isEn ? 'Lock / Log out' : '锁定并退出登录'}</span>
+            </button>
+          )}
+        </div>
+
+        <div className="space-y-3 border-t border-border px-5 py-4">
+          <div className={`grid grid-cols-1 gap-3 ${authEnabled ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+            {authEnabled && (
+              <label className="block space-y-1">
+                <span className="text-ui-xs text-foreground-subtle">
+                  {isEn ? 'Current password' : '当前密码'}
+                </span>
+                <input
+                  type="password"
+                  data-testid="web-password-current"
+                  value={currentPwd}
+                  onChange={(e) => setCurrentPwd(e.target.value)}
+                  placeholder={isEn ? 'Required to change/remove' : '修改或移除时必填'}
+                  className={settingsInputClass}
+                />
+              </label>
+            )}
+            <label className="block space-y-1">
+              <span className="text-ui-xs text-foreground-subtle">
+                {authEnabled
+                  ? isEn
+                    ? 'New password'
+                    : '新密码'
+                  : isEn
+                    ? 'Set password'
+                    : '设置访问密码'}
+              </span>
+              <input
+                type="password"
+                data-testid="web-password-new"
+                value={newPwd}
+                onChange={(e) => setNewPwd(e.target.value)}
+                placeholder={isEn ? 'At least 4 characters' : '至少 4 位字符'}
+                className={settingsInputClass}
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-ui-xs text-foreground-subtle">
+                {isEn ? 'Confirm password' : '确认新密码'}
+              </span>
+              <input
+                type="password"
+                data-testid="web-password-confirm"
+                value={confirmPwd}
+                onChange={(e) => setConfirmPwd(e.target.value)}
+                placeholder={isEn ? 'Repeat new password' : '再次输入新密码'}
+                className={settingsInputClass}
+              />
+            </label>
+          </div>
+
+          {pwdError && (
+            <p className="text-ui-xs text-destructive">{pwdError}</p>
+          )}
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {authEnabled && (
+              <button
+                type="button"
+                data-testid="web-password-clear-btn"
+                disabled={pwdBusy}
+                onClick={() => void handleClearPassword()}
+                className="h-8 rounded-lg border border-destructive/30 px-3 text-ui-xs font-medium text-destructive transition-colors hover:bg-destructive-surface disabled:opacity-50"
+              >
+                {isEn ? 'Disable password' : '移除密码保护'}
+              </button>
+            )}
+            <button
+              type="button"
+              data-testid="web-password-save-btn"
+              disabled={pwdBusy || !newPwd}
+              onClick={() => void handleSavePassword()}
+              className="h-8 rounded-lg bg-foreground px-3.5 text-ui-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-45"
+            >
+              {authEnabled
+                ? isEn
+                  ? 'Update password'
+                  : '更新密码'
+                : isEn
+                  ? 'Enable password'
+                  : '保存并启用密码'}
+            </button>
+          </div>
+        </div>
       </SettingsGroupCard>
     </div>
   );
@@ -1796,113 +1981,5 @@ function ProvidersAndModelsSection({
         </div>
       </div>
     </>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Remote devices (runners)                                                   */
-/* -------------------------------------------------------------------------- */
-
-function RunnersSection() {
-  const { locale, runners } = useNexStore();
-  const isEn = locale === 'en-US';
-  const [copied, setCopied] = useState(false);
-  const wsHost = typeof window !== 'undefined' ? window.location.host : '127.0.0.1:8080';
-  const joinCmd = `./nex-runner -name "My-Linux-Box" -server ws://${wsHost}/ws/runner`;
-
-  return (
-    <div className="space-y-6">
-      <SettingsGroupCard>
-        <div className="space-y-3 px-5 py-4">
-          <div>
-            <div className="text-ui-base font-medium text-foreground">
-              {isEn ? 'Join a new runner' : '接入新的远程设备'}
-            </div>
-            <p className="mt-1 text-ui-sm leading-relaxed text-foreground-subtle">
-              {isEn
-                ? 'Run the single static binary on macOS, Linux, or Windows. It dials back over a long-lived connection and traverses NAT automatically.'
-                : '在目标 macOS、Linux 或 Windows 机器上运行单文件二进制，即可通过反向长连接穿透内网接入控制中心。'}
-            </p>
-          </div>
-          <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2">
-            <code className="truncate font-mono text-ui-sm text-foreground">{joinCmd}</code>
-            <button
-              type="button"
-              onClick={() => {
-                void navigator.clipboard?.writeText(joinCmd);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
-              }}
-              className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-ui-xs text-foreground transition-colors hover:bg-hover"
-            >
-              {copied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
-              <span>
-                {copied ? (isEn ? 'Copied' : '已复制') : isEn ? 'Copy command' : '复制命令'}
-              </span>
-            </button>
-          </div>
-        </div>
-      </SettingsGroupCard>
-
-      <SectionHeading
-        title={isEn ? `Connected runners (${runners.length})` : `已连接设备 (${runners.length})`}
-        description={
-          isEn
-            ? 'Status, platform, workspace, and the config revision each runner has synced.'
-            : '状态、平台、默认工作区与已同步配置修订号。'
-        }
-      />
-
-      <SettingsGroupCard>
-        {runners.length === 0 ? (
-          <div className="px-5 py-10 text-center text-ui-sm text-foreground-subtlest">
-            {isEn ? 'No runners connected yet.' : '暂无已连接的远程设备。'}
-          </div>
-        ) : (
-          runners.map((r) => (
-            <div
-              key={r.id}
-              className="grid grid-cols-1 items-center gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto]"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`size-2 shrink-0 rounded-full ${
-                      r.status === 'online' ? 'bg-success' : 'bg-foreground-subtlest'
-                    }`}
-                  />
-                  <span className="truncate text-ui-base font-medium text-foreground">
-                    {r.name}
-                  </span>
-                  <span
-                    className={`rounded-md px-1.5 py-0.5 text-ui-xs font-medium ${
-                      r.status === 'online'
-                        ? 'bg-success-surface text-success-surface-fg'
-                        : 'bg-tag text-foreground-subtle'
-                    }`}
-                  >
-                    {r.status}
-                  </span>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-ui-xs text-foreground-subtle">
-                  <span className="rounded bg-surface px-1.5 py-0.5 font-mono">{r.os}</span>
-                  <span className="rounded bg-surface px-1.5 py-0.5 font-mono">{r.arch}</span>
-                  <span className="rounded bg-surface px-1.5 py-0.5 font-mono">
-                    {r.shell || 'default'}
-                  </span>
-                  {r.hostname ? <span className="font-mono">{r.hostname}</span> : null}
-                  {r.workspace_default ? (
-                    <span className="truncate font-mono">{r.workspace_default}</span>
-                  ) : null}
-                </div>
-              </div>
-              <div className="font-mono text-ui-xs tabular-nums text-foreground-subtlest sm:text-right">
-                rev #{r.synced_config_rev}
-              </div>
-            </div>
-          ))
-        )}
-      </SettingsGroupCard>
-    </div>
   );
 }
