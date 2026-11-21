@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -176,6 +177,8 @@ func (n *Node) StartConnectLoop(ctx context.Context) {
 		return
 	}
 	backoff := 200 * time.Millisecond
+	var lastErrStr string
+	var lastErrLog time.Time
 	for {
 		if ctx.Err() != nil {
 			return
@@ -187,9 +190,20 @@ func (n *Node) StartConnectLoop(ctx context.Context) {
 		}
 		if time.Since(connectedTS) > 5*time.Second {
 			backoff = 200 * time.Millisecond
+			lastErrStr = ""
 		}
-		if err != nil && backoff < 5*time.Second {
-			backoff *= 2
+		if err != nil {
+			msg := err.Error()
+			if msg != lastErrStr || time.Since(lastErrLog) >= 30*time.Second {
+				log.Printf("nex-runner (%s): connection to %s failed: %v (retrying in %s)", n.cfg.RunnerID, n.cfg.ServerWSURL, err, backoff)
+				lastErrStr = msg
+				lastErrLog = time.Now()
+			}
+			if backoff < 5*time.Second {
+				backoff *= 2
+			}
+		} else {
+			lastErrStr = ""
 		}
 		select {
 		case <-time.After(backoff):
@@ -246,6 +260,7 @@ func (n *Node) connectOnce(ctx context.Context) error {
 	n.wsMu.Lock()
 	n.ws = ws
 	n.wsMu.Unlock()
+	log.Printf("nex-runner (%s): connected to %s (workspace=%s)", n.cfg.RunnerID, n.cfg.ServerWSURL, n.cfg.WorkspaceDefault)
 	defer func() {
 		n.wsMu.Lock()
 		if n.ws == ws {

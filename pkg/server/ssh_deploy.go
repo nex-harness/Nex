@@ -8,6 +8,7 @@ import (
 	"debug/elf"
 	"debug/macho"
 	"debug/pe"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -901,9 +902,10 @@ func (s *Server) handleSSHTargetTest(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	logMsg := fmt.Sprintf("Connected to %s (%s/%s, home=%s, runner_running=%v)", info.Hostname, info.OS, info.Arch, info.HomeDir, info.RunnerRunning)
+	serverOnline := s.isRunnerOnline(sshTargetRunnerID(target.Name))
+	logMsg := fmt.Sprintf("Connected to %s (%s/%s, home=%s, runner_running=%v, server_online=%v)", info.Hostname, info.OS, info.Arch, info.HomeDir, info.RunnerRunning, serverOnline)
 	status := "idle"
-	if info.RunnerRunning {
+	if serverOnline {
 		status = "connected"
 	}
 	_ = s.store.UpdateSSHTargetStatus(r.Context(), id, status, "", logMsg, 0)
@@ -914,8 +916,75 @@ func (s *Server) handleSSHTargetTest(w http.ResponseWriter, r *http.Request, id 
 		"hostname":       info.Hostname,
 		"home_dir":       info.HomeDir,
 		"runner_running": info.RunnerRunning,
+		"server_online":  serverOnline,
 		"log":            logMsg,
 	})
+}
+
+func sshTargetRunnerID(name string) string {
+	var sb strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			sb.WriteRune(r)
+		} else {
+			sb.WriteByte('_')
+		}
+	}
+	s := strings.Trim(sb.String(), "_")
+	if s == "" {
+		s = "remote"
+	}
+	return "run_" + s
+}
+
+func darwinLaunchAgentLabel(runnerID string) string {
+	return "com.nex.runner." + runnerID
+}
+
+func xmlEscape(s string) string {
+	r := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+		"'", "&apos;",
+	)
+	return r.Replace(s)
+}
+
+func buildDarwinLaunchAgentPlist(label, binPath, runnerID, name, wsURL, workspace, dataDir, pairingToken, homeDir, logFile string) string {
+	args := []string{
+		binPath,
+		"-id", runnerID,
+		"-name", name,
+		"-server", wsURL,
+		"-workspace", workspace,
+		"-data-dir", dataDir,
+	}
+	if pairingToken != "" {
+		args = append(args, "-token", pairingToken)
+	}
+	var sb strings.Builder
+	sb.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+	sb.WriteString("<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n")
+	sb.WriteString("<plist version=\"1.0\">\n<dict>\n")
+	sb.WriteString("  <key>Label</key>\n  <string>" + xmlEscape(label) + "</string>\n")
+	sb.WriteString("  <key>ProgramArguments</key>\n  <array>\n")
+	for _, a := range args {
+		sb.WriteString("    <string>" + xmlEscape(a) + "</string>\n")
+	}
+	sb.WriteString("  </array>\n")
+	sb.WriteString("  <key>WorkingDirectory</key>\n  <string>" + xmlEscape(workspace) + "</string>\n")
+	sb.WriteString("  <key>EnvironmentVariables</key>\n  <dict>\n")
+	sb.WriteString("    <key>HOME</key>\n    <string>" + xmlEscape(homeDir) + "</string>\n")
+	sb.WriteString("    <key>PATH</key>\n    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>\n")
+	sb.WriteString("  </dict>\n")
+	sb.WriteString("  <key>RunAtLoad</key>\n  <true/>\n")
+	sb.WriteString("  <key>KeepAlive</key>\n  <true/>\n")
+	sb.WriteString("  <key>StandardOutPath</key>\n  <string>" + xmlEscape(logFile) + "</string>\n")
+	sb.WriteString("  <key>StandardErrorPath</key>\n  <string>" + xmlEscape(logFile) + "</string>\n")
+	sb.WriteString("</dict>\n</plist>\n")
+	return sb.String()
 }
 
 func (s *Server) resolveOrBuildRunnerBinary(ctx context.Context, targetOS, targetArch string, logBuf *strings.Builder) (string, error) {
@@ -1157,12 +1226,13 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 	}
 
 	// Step 4: Restart remote nex-runner daemon and verify PID
-	runnerID := "run_" + strings.ToLower(strings.ReplaceAll(strings.TrimSpace(target.Name), " ", "_"))
+	runnerID := sshTargetRunnerID(target.Name)
 	pidFile := joinRemotePath(installDir, "runner.pid", info.OS)
 	logFile := joinRemotePath(installDir, "runner.log", info.OS)
 
 	var startCmd string
-	if info.OS == "windows" {
+	switch info.OS {
+	case "windows":
 		psArgs := fmt.Sprintf(`'-id','%s','-name','%s','-server','%s','-workspace','%s','-data-dir','%s'`,
 			strings.ReplaceAll(runnerID, "'", "''"),
 			strings.ReplaceAll(target.Name, "'", "''"),
@@ -1180,7 +1250,61 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 			strings.ReplaceAll(remoteBin, "'", "''"),
 			psArgs,
 		)
-	} else {
+
+	case "darwin":
+		remoteHome := strings.TrimSpace(info.HomeDir)
+		if remoteHome == "" {
+			remoteHome = inferRemoteHomeDir("darwin", target.Username)
+		}
+		label := darwinLaunchAgentLabel(runnerID)
+		launchAgentsDir := joinRemotePath(remoteHome, "Library/LaunchAgents", "darwin")
+		plistPath := joinRemotePath(launchAgentsDir, label+".plist", "darwin")
+		plistContent := buildDarwinLaunchAgentPlist(
+			label, remoteBin, runnerID, target.Name, wsURL, workspace, remoteDataDir, s.cfg.PairingSecret, remoteHome, logFile,
+		)
+		plistB64 := base64.StdEncoding.EncodeToString([]byte(plistContent))
+		tokenFlag := ""
+		if s.cfg.PairingSecret != "" {
+			tokenFlag = " -token " + shellQuote(s.cfg.PairingSecret)
+		}
+		logf("Installing macOS LaunchAgent %s (%s)...", label, plistPath)
+		startCmd = fmt.Sprintf(
+			"if [ -f %s ]; then oldpid=$(cat %s 2>/dev/null || true); [ -n \"$oldpid\" ] && kill \"$oldpid\" 2>/dev/null || true; rm -f %s; fi; "+
+				"pkill -f -- %s 2>/dev/null || true; "+
+				"mkdir -p %s && printf '%%s' %s | base64 -d > %s && : > %s; "+
+				"uid=$(id -u); domain=''; "+
+				"launchctl bootout \"gui/$uid/%s\" 2>/dev/null || true; "+
+				"launchctl bootout \"user/$uid/%s\" 2>/dev/null || true; "+
+				"sleep 0.3; "+
+				"if launchctl bootstrap \"gui/$uid\" %s 2>/dev/null; then "+
+				"  domain=\"gui/$uid\"; launchctl kickstart -k \"$domain/%s\" 2>/dev/null || true; "+
+				"elif launchctl bootstrap \"user/$uid\" %s 2>/dev/null; then "+
+				"  domain=\"user/$uid\"; launchctl kickstart -k \"$domain/%s\" 2>/dev/null || true; "+
+				"else "+
+				"  echo 'WARN: launchctl bootstrap failed; falling back to nohup'; "+
+				"  nohup %s -id %s -name %s -server %s -workspace %s -data-dir %s%s > %s 2>&1 < /dev/null & "+
+				"  newpid=$!; echo \"$newpid\" > %s; "+
+				"fi; "+
+				"sleep 1; "+
+				"newpid=''; "+
+				"if [ -n \"$domain\" ]; then newpid=$(launchctl print \"$domain/%s\" 2>/dev/null | awk '/pid =/{print $3; exit}'); fi; "+
+				"if [ -z \"$newpid\" ]; then newpid=$(pgrep -f -- %s 2>/dev/null | head -n 1 || true); fi; "+
+				"if [ -n \"$newpid\" ]; then echo \"$newpid\" > %s; echo \"STARTED_PID=$newpid (launchd=${domain:-nohup})\"; tail -n 15 %s 2>/dev/null || true; "+
+				"else echo 'Runner failed to start:' >&2; tail -n 20 %s 2>/dev/null >&2 || true; exit 1; fi",
+			shellQuote(pidFile), shellQuote(pidFile), shellQuote(pidFile),
+			shellQuote("-id "+runnerID),
+			shellQuote(launchAgentsDir), shellQuote(plistB64), shellQuote(plistPath), shellQuote(logFile),
+			label, label,
+			shellQuote(plistPath), label,
+			shellQuote(plistPath), label,
+			shellQuote(remoteBin), shellQuote(runnerID), shellQuote(target.Name), shellQuote(wsURL), shellQuote(workspace), shellQuote(remoteDataDir), tokenFlag, shellQuote(logFile),
+			shellQuote(pidFile),
+			label,
+			shellQuote("-id "+runnerID),
+			shellQuote(pidFile), shellQuote(logFile), shellQuote(logFile),
+		)
+
+	default:
 		tokenFlag := ""
 		if s.cfg.PairingSecret != "" {
 			tokenFlag = " -token " + shellQuote(s.cfg.PairingSecret)
@@ -1211,7 +1335,49 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	logf("Deployment succeeded! Runner %q is dialing %s.", target.Name, wsURL)
+	// Step 5: Verify the remote runner actually registers online with this Server
+	logf("Waiting for runner %q to register online...", runnerID)
+	deadline := time.Now().Add(6 * time.Second)
+	connected := false
+	for time.Now().Before(deadline) {
+		if s.isRunnerOnline(runnerID) {
+			connected = true
+			break
+		}
+		select {
+		case <-ctx.Done():
+			break
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+
+	if !connected {
+		var tailCmd string
+		if info.OS == "windows" {
+			tailCmd = fmt.Sprintf(`powershell -NoProfile -NonInteractive -Command "Get-Content -Tail 30 '%s' -ErrorAction SilentlyContinue"`, strings.ReplaceAll(logFile, "'", "''"))
+		} else {
+			tailCmd = fmt.Sprintf("tail -n 30 %s 2>/dev/null || true", shellQuote(logFile))
+		}
+		remoteTail, _ := runSSHCommand(ctx, *target, tailCmd)
+		if strings.TrimSpace(remoteTail) != "" {
+			logf("Remote runner.log:\n%s", strings.TrimSpace(remoteTail))
+		}
+		errMsg := fmt.Sprintf("Runner started remotely, but did not connect to %s within 6s.", wsURL)
+		if info.OS == "darwin" && strings.Contains(remoteTail, "no route to host") {
+			errMsg += " macOS Local Network privacy blocked outgoing LAN access; grant Local Network permission to nex-runner (or run inside user GUI LaunchAgent)."
+		}
+		logf("Verification failed: %s", errMsg)
+		_ = s.store.UpdateSSHTargetStatus(r.Context(), id, "error", errMsg, logBuf.String(), 0)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":        false,
+			"runner_id": runnerID,
+			"error":     errMsg,
+			"log":       logBuf.String(),
+		})
+		return
+	}
+
+	logf("Deployment succeeded! Runner %q (%s) is online at %s.", target.Name, runnerID, wsURL)
 	_ = s.store.UpdateSSHTargetStatus(r.Context(), id, "connected", "", logBuf.String(), time.Now().UnixMilli())
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":        true,
@@ -1233,15 +1399,31 @@ func (s *Server) handleSSHTargetStop(w http.ResponseWriter, r *http.Request, id 
 
 	info, _, _ := probeRemoteHost(ctx, *target)
 	installDir, _, _ := resolveRemotePaths(*target, info)
+	runnerID := sshTargetRunnerID(target.Name)
 
 	var stopCmd string
-	if info.OS == "windows" {
+	switch info.OS {
+	case "windows":
 		pidFile := joinRemotePath(installDir, "runner.pid", "windows")
 		stopCmd = fmt.Sprintf(
 			`powershell -NoProfile -NonInteractive -Command "$pidf='%s'; if (Test-Path $pidf) { $p=Get-Content $pidf -ErrorAction SilentlyContinue; if ($p) { Stop-Process -Id ([int]$p) -Force -ErrorAction SilentlyContinue }; Remove-Item -Force $pidf; Write-Output 'Stopped runner.' } else { Write-Output 'No pid file found.' }"`,
 			strings.ReplaceAll(pidFile, "'", "''"),
 		)
-	} else {
+	case "darwin":
+		remoteHome := strings.TrimSpace(info.HomeDir)
+		if remoteHome == "" {
+			remoteHome = inferRemoteHomeDir("darwin", target.Username)
+		}
+		label := darwinLaunchAgentLabel(runnerID)
+		plistPath := joinRemotePath(joinRemotePath(remoteHome, "Library/LaunchAgents", "darwin"), label+".plist", "darwin")
+		pidFile := joinRemotePath(installDir, "runner.pid", "darwin")
+		stopCmd = fmt.Sprintf(
+			"uid=$(id -u); launchctl bootout \"gui/$uid/%s\" 2>/dev/null || true; launchctl bootout \"user/$uid/%s\" 2>/dev/null || true; rm -f %s; "+
+				"pidf=%s; if [ -f \"$pidf\" ]; then kill $(cat \"$pidf\") 2>/dev/null || true; rm -f \"$pidf\"; fi; "+
+				"pkill -f -- %s 2>/dev/null || true; echo 'Stopped runner.'",
+			label, label, shellQuote(plistPath), shellQuote(pidFile), shellQuote("-id "+runnerID),
+		)
+	default:
 		pidFile := joinRemotePath(installDir, "runner.pid", info.OS)
 		stopCmd = fmt.Sprintf("pidf=%s; if [ -f \"$pidf\" ]; then kill $(cat \"$pidf\") 2>/dev/null || true; rm -f \"$pidf\"; echo 'Stopped runner.'; else echo 'No pid file found.'; fi", shellQuote(pidFile))
 	}

@@ -281,4 +281,50 @@ func TestRemoteOSArchResolutionAndBundledRunners(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"arch":"arm64"`) {
 		t.Fatalf("auto-detect binary upload failed: %d %s", rec.Code, rec.Body.String())
 	}
+
+	// 4. Deterministic runner ID, macOS LaunchAgent plist generation & runner delete endpoint
+	if got := sshTargetRunnerID("macM4"); got != "run_macm4" {
+		t.Fatalf("sshTargetRunnerID(macM4) = %q, want run_macm4", got)
+	}
+	if got := sshTargetRunnerID("Build Server"); got != "run_build_server" {
+		t.Fatalf("sshTargetRunnerID(Build Server) = %q, want run_build_server", got)
+	}
+	plist := buildDarwinLaunchAgentPlist(
+		darwinLaunchAgentLabel("run_macm4"),
+		"/Users/tylinux/.nex-runner/bin/nex-runner",
+		"run_macm4",
+		"mac & M4",
+		"wss://nex.tylinux.cn/ws/runner",
+		"/Users/tylinux",
+		"/Users/tylinux/.nex-runner/data",
+		"tok123",
+		"/Users/tylinux",
+		"/Users/tylinux/.nex-runner/runner.log",
+	)
+	for _, want := range []string{
+		"<string>com.nex.runner.run_macm4</string>",
+		"<string>-data-dir</string>",
+		"<string>-token</string>",
+		"<string>tok123</string>",
+		"<string>mac &amp; M4</string>",
+		"/opt/homebrew/bin:/usr/local/bin",
+	} {
+		if !strings.Contains(plist, want) {
+			t.Fatalf("LaunchAgent plist missing %q:\n%s", want, plist)
+		}
+	}
+	if strings.Contains(plist, "UserName") {
+		t.Fatalf("LaunchAgent plist should not set UserName:\n%s", plist)
+	}
+
+	if err := st.UpsertRunner(t.Context(), store.RunnerRecord{
+		ID: "run_stale_tmp", Name: "stale", Status: "offline",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/v1/runners/run_stale_tmp", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("DELETE /api/v1/runners/run_stale_tmp expected 200, got %d %s", rec.Code, rec.Body.String())
+	}
 }

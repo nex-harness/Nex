@@ -275,6 +275,7 @@ func (s *Store) DeleteActiveSession(ctx context.Context, sessionID string) error
 // DeleteResourceByName deletes an entry from a named registry table by id or name and bumps config_rev.
 func (s *Store) DeleteResourceByName(ctx context.Context, table, keyCol, val string) error {
 	allowed := map[string]string{
+		"runners":          "id",
 		"providers":        "id",
 		"agent_profiles":   "slug",
 		"skills_registry":  "name",

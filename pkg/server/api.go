@@ -386,7 +386,19 @@ func (s *Server) handleRunners(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRunnerSubroutes(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, "/api/v1/runners/")
 	runnerID, action, _ := strings.Cut(rest, "/")
-	if runnerID == "" || action != "dirs" {
+	if runnerID == "" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if action == "" && r.Method == http.MethodDelete {
+		if err := s.store.DeleteResourceByName(r.Context(), "runners", "id", runnerID); err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"deleted": runnerID})
+		return
+	}
+	if action != "dirs" {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
