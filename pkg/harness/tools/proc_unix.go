@@ -61,9 +61,12 @@ func runPlatformShellCommand(ctx context.Context, dir string, command string, ou
 	select {
 	case waitErr = <-waitDone:
 		// Also clean up any stray background grandchildren still in the process group
+		// so every write end of the pipe closes and io.Copy receives EOF after draining all bytes.
 		if cmd.Process != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
+		copyWG.Wait()
+		_ = pr.Close()
 	case <-ctx.Done():
 		if cmd.Process != nil {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -71,10 +74,8 @@ func runPlatformShellCommand(ctx context.Context, dir string, command string, ou
 		// Close pipe read end to unblock io.Copy immediately even if a grandchild somehow lingered briefly
 		_ = pr.Close()
 		waitErr = <-waitDone
+		copyWG.Wait()
 	}
-
-	_ = pr.Close()
-	copyWG.Wait()
 
 	if waitErr != nil {
 		var exitErr *exec.ExitError
