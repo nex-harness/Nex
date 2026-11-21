@@ -7,6 +7,7 @@ import { applySessionEvent, emptyStreamState, RawSessionEventRow, SessionStreamS
 import {
   AgentProfile,
   BrowseDirsResult,
+  ChatImageBlock,
   ComposerAttachment,
   CronJobRecord,
   DirEntry,
@@ -80,6 +81,32 @@ export function applyDocumentTheme(theme: UserPreferences['theme']): void {
       : true;
   const isDark = theme === 'dark' || (theme === 'system' && prefersDark);
   document.documentElement.classList.toggle('dark', isDark);
+}
+
+function appendOptimisticUserPrompt(
+  prev: SessionStreamState | undefined,
+  text: string,
+  images?: ChatImageBlock[],
+): SessionStreamState {
+  const base = prev || emptyStreamState();
+  const optId = `opt_usr_${crypto.randomUUID().slice(0, 8)}`;
+  return {
+    ...base,
+    running: true,
+    runStartedAt: Date.now(),
+    items: [
+      ...base.items,
+      {
+        id: optId,
+        role: 'user',
+        text,
+        thinking: '',
+        images: images && images.length > 0 ? images : undefined,
+        toolCalls: [],
+        optimistic: true,
+      },
+    ],
+  };
 }
 
 export interface AppState {
@@ -570,6 +597,10 @@ export const useNexStore = create<AppState>((set, get) => ({
                 ...st.followUpQueues,
                 [sid]: rest,
               },
+              streams: {
+                ...st.streams,
+                [sid]: appendOptimisticUserPrompt(st.streams[sid], nextItem.text),
+              },
             }));
             const stNow = get();
             const activeModel = stNow.models.find(
@@ -634,6 +665,42 @@ export const useNexStore = create<AppState>((set, get) => ({
 
           const isHighFreqDelta = raw.event_type === 'message_update' || raw.event_type === 'tool_execution_update';
           scheduleFrameFlush(!isHighFreqDelta);
+          return;
+        }
+        if (env.type === 'error' && env.session_id) {
+          const sid = env.session_id;
+          const errText = String((env.payload as { error?: string } | undefined)?.error || '').trim();
+          set((state) => {
+            const cur = state.streams[sid];
+            if (!cur || !cur.running) return {};
+            const last = cur.items[cur.items.length - 1];
+            const hasTailErr = Boolean(last && last.role === 'assistant' && errText && last.text.includes(errText));
+            const nextItems =
+              errText && !hasTailErr
+                ? [
+                    ...cur.items,
+                    {
+                      id: `err_${Date.now()}`,
+                      role: 'assistant' as const,
+                      text: `**Error:** ${errText}`,
+                      thinking: '',
+                      toolCalls: [],
+                      streaming: false,
+                    },
+                  ]
+                : cur.items.map((it) => (it.streaming || it.optimistic ? { ...it, streaming: false, optimistic: false } : it));
+            return {
+              streams: {
+                ...state.streams,
+                [sid]: {
+                  ...cur,
+                  running: false,
+                  runStartedAt: undefined,
+                  items: nextItems,
+                },
+              },
+            };
+          });
         }
       });
     }
@@ -735,8 +802,11 @@ export const useNexStore = create<AppState>((set, get) => ({
       st = {
         ...st,
         running: false,
+        runStartedAt: undefined,
         items: st.items.map((it) => (it.streaming ? { ...it, streaming: false } : it)),
       };
+    } else if (meta?.status === 'running' && st.running && !st.runStartedAt) {
+      st = { ...st, runStartedAt: Date.now() };
     }
     if (tels && tels.length > 0) {
       st.latestTelemetry = tels[tels.length - 1];
@@ -859,6 +929,13 @@ export const useNexStore = create<AppState>((set, get) => ({
       promptText = text.replace(/^\/plan\s*/i, '').trim() || text;
       set({ permissionMode: 'plan' });
     }
+
+    set((prev) => ({
+      streams: {
+        ...prev.streams,
+        [sessionId]: appendOptimisticUserPrompt(prev.streams[sessionId], promptText, images),
+      },
+    }));
 
     wsClient.sendEnvelope(
       'session.prompt',

@@ -102,3 +102,17 @@ export function formatRelativeTimeShort(ts: number, locale: LocaleCode): string 
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h`;
   return `${Math.floor(diffSec / 86400)}d`;
 }
+
+/** Formats running task duration with tenth-of-a-second precision (ZCode parity). */
+export function formatRunningWorkDuration(durationMs: number, locale: LocaleCode): string {
+  const tenths = Math.max(0, Math.round(durationMs / 100));
+  const hours = Math.floor(tenths / 36000);
+  const minutes = Math.floor((tenths % 36000) / 600);
+  const seconds = (tenths % 600) / 10;
+  const sep = locale === 'zh-CN' ? ' ' : '';
+  const parts: string[] = [];
+  if (hours) parts.push(`${hours}${sep}${formatMsg(locale, 'chat.duration.hour')}`);
+  if (hours || minutes) parts.push(`${minutes}${sep}${formatMsg(locale, 'chat.duration.minute')}`);
+  parts.push(`${seconds.toFixed(1)}${sep}${formatMsg(locale, 'chat.duration.second')}`);
+  return parts.join(' ');
+}

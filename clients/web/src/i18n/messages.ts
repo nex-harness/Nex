@@ -5,6 +5,7 @@ export {
   FALLBACK_LOCALE,
   formatMsg,
   formatRelativeTimeShort,
+  formatRunningWorkDuration,
   isSupportedLocale,
   LOCALE_DICTS,
   SUPPORTED_LOCALES,

@@ -52,8 +52,13 @@ import { emptyStreamState } from '../core/reducer';
 import { useNexStore } from '../core/store';
 import { ChatTurnItem, ModelMeta, ThinkingEffort, ToolCallCard } from '../core/types';
 import { formatMsg, type LocaleCode, type MessageKey } from '../i18n/messages';
+import { ChatLoading } from './ChatLoading';
 import { ContextWindowsButton } from './ContextPopover';
-import { ConversationStatusPanel } from './ConversationStatusPanel';
+import {
+  ConversationStatusPanel,
+  type StatusPanelMode,
+  useConversationStatusPanelHasContent,
+} from './ConversationStatusPanel';
 import { DirectoryBrowserModal } from './DirectoryBrowserModal';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
@@ -2553,13 +2558,6 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
               )}
             </div>
           )}
-
-          {item.streaming && !item.thinking && item.toolCalls.length === 0 && !item.text && (
-            <div className="zcode-stream-in flex items-center gap-1.5 text-ui-xs text-foreground-subtlest">
-              <LoaderCircle className="size-3 animate-spin" />
-              <span className="animated-gradient-text">{formatMsg(locale, 'chat.generating')}</span>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -2607,6 +2605,8 @@ export function ConversationPane() {
   const [copiedId, setCopiedId] = useState(false);
   const [scrolledUp, setScrolledUp] = useState(false);
   const [activeTurnId, setActiveTurnId] = useState('');
+  const [statusPanelMode, setStatusPanelMode] = useState<StatusPanelMode>('auto');
+  const hasStatusPanel = useConversationStatusPanelHasContent();
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -2778,8 +2778,28 @@ export function ConversationPane() {
     </div>
   );
 
+  const statusRightReserveClass =
+    !isDraft && hasStatusPanel
+      ? statusPanelMode === 'panel'
+        ? '@min-[960px]/conversation:!pr-[22rem]'
+        : statusPanelMode === 'auto'
+          ? '@min-[1280px]/conversation:!pr-[22rem]'
+          : ''
+      : '';
+  const statusTopClearanceClass =
+    !isDraft && hasStatusPanel
+      ? statusPanelMode === 'mini'
+        ? 'pt-14 pb-5'
+        : statusPanelMode === 'auto'
+          ? 'pt-14 pb-5 @min-[1280px]/conversation:pt-5'
+          : 'pt-14 pb-5 @min-[960px]/conversation:pt-5'
+      : 'py-5';
+
   return (
-    <section className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
+    <section
+      data-conversation-container="true"
+      className="@container/conversation relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground"
+    >
       {isDraft ? (
         <header
           className={`flex h-12 shrink-0 items-center justify-between pr-4 transition-[padding] duration-200 ${
@@ -2983,7 +3003,7 @@ export function ConversationPane() {
               setActiveTurnId(closestId);
             }
           }}
-          className="absolute inset-0 overflow-y-auto px-4 py-5 sm:px-8"
+          className={`absolute inset-0 overflow-y-auto px-4 sm:px-8 transition-[padding] duration-200 ease-out ${statusTopClearanceClass} ${statusRightReserveClass}`}
         >
           {isDraft ? (
             <div className="flex h-full flex-col items-center justify-center pb-10">
@@ -3063,6 +3083,12 @@ export function ConversationPane() {
                   registerRef={registerTurnRef}
                 />
               ))}
+              <ChatLoading
+                loading={Boolean(currentStream.running && !currentStream.pendingApproval && !currentStream.pendingUIPrompt)}
+                startedAt={currentStream.runStartedAt}
+                locale={locale}
+                className="pt-0.5"
+              />
             </div>
           )}
         </div>
@@ -3120,12 +3146,12 @@ export function ConversationPane() {
           </button>
         )}
 
-        <ConversationStatusPanel />
+        <ConversationStatusPanel mode={statusPanelMode} onModeChange={setStatusPanelMode} />
       </div>
 
       {/* Sticky bottom Composer (draft mode renders its own centered tray inside the canvas) */}
       {!isDraft && (
-        <div className="shrink-0 px-4 pb-3.5 pt-2 sm:px-8">
+        <div className={`shrink-0 px-4 pb-3.5 pt-2 sm:px-8 transition-[padding] duration-200 ease-out ${statusRightReserveClass}`}>
           <Composer
             isDraft={false}
             locale={locale}

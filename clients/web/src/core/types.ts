@@ -288,6 +288,7 @@ export interface ChatTurnItem {
   images?: ChatImageBlock[];
   toolCalls: ToolCallCard[];
   streaming?: boolean;
+  optimistic?: boolean;
 }
 
 export interface PendingApproval {

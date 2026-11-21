@@ -5,6 +5,7 @@ import { MarkdownRenderer } from '../features/MarkdownRenderer';
 import { decodePTYBinaryFrame, encodePTYBinaryFrame, PTY_BINARY_STDOUT } from '../core/protocol';
 import { applySessionEvent, emptyStreamState } from '../core/reducer';
 import { persistActiveSessionId, readPersistedSessionId, useNexStore } from '../core/store';
+import { wsClient } from '../core/wsClient';
 import { parsePastedSSHTarget } from '../features/SettingsRunners';
 
 afterEach(() => {
@@ -1355,5 +1356,258 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     render(<MarkdownRenderer content={'##### Deep Title\n\n#tag-line'} />);
     expect(screen.getByText('Deep Title')).toBeTruthy();
     expect(screen.getByText('#tag-line')).toBeTruthy();
+  });
+
+  it('suppresses ConversationStatusPanel on clean git repos and reserves space cleanly across auto/panel/mini modes', () => {
+    useNexStore.setState({
+      mainView: 'workspace',
+      activeSessionId: 'sess_panel_layout',
+      locale: 'zh-CN',
+      gitSummary: {
+        is_git_repo: true,
+        branch: 'main',
+        changed_files: 0,
+        additions: 0,
+        deletions: 0,
+      },
+      sessions: [
+        {
+          id: 'sess_panel_layout',
+          runner_id: 'run_1',
+          depth: 0,
+          title: 'Panel Layout Test',
+          workspace_path: '/tmp/ws',
+          agent_profile_slug: 'main',
+          model_id: 'm1',
+          provider_id: 'p1',
+          permission_mode: 'full_access',
+          status: 'idle',
+          latest_context_tokens: 100,
+          context_window_limit: 128000,
+          created_at: 1000,
+          updated_at: 2000,
+          last_active_at: 2000,
+        },
+      ],
+      streams: {
+        sess_panel_layout: {
+          lastSeq: 2,
+          running: false,
+          items: [
+            { id: 'usr_1', seq: 1, role: 'user', text: '整理一下当前的项目内容', thinking: '', toolCalls: [] },
+            { id: 'ast_2', seq: 2, role: 'assistant', text: '已整理完成。', thinking: '', toolCalls: [] },
+          ],
+          latestTelemetry: null,
+          turnTelemetries: [],
+          uiBadges: {},
+          pendingApproval: null,
+          pendingUIPrompt: null,
+          todos: [],
+          goals: [],
+        },
+      },
+    });
+
+    render(<App />);
+    // 1. Clean git repo with no active todos/goals/agents hides status panel completely
+    expect(screen.queryByTestId('conversation-status-panel')).toBeNull();
+    const chatStream = screen.getByTestId('chat-stream');
+    expect(chatStream.className).not.toContain('pr-[22rem]');
+
+    // 2. Dirty repo mounts status panel in 'auto' mode and reserves space cleanly
+    act(() => {
+      useNexStore.setState({
+        gitSummary: {
+          is_git_repo: true,
+          branch: 'main',
+          changed_files: 2,
+          additions: 12,
+          deletions: 3,
+        },
+      });
+    });
+
+    const panel = screen.getByTestId('conversation-status-panel');
+    expect(panel.getAttribute('data-display-mode')).toBe('auto');
+    expect(chatStream.className).toContain('pt-14');
+    expect(chatStream.className).toContain('@min-[1280px]/conversation:!pr-[22rem]');
+
+    // 3. Expanding from mini trigger enters 'panel' mode (reserves space starting at >=960px container width)
+    fireEvent.click(screen.getByTestId('status-panel-mini'));
+    expect(panel.getAttribute('data-display-mode')).toBe('panel');
+    expect(panel.getAttribute('data-state')).toBe('expanded');
+    expect(chatStream.className).toContain('@min-[960px]/conversation:!pr-[22rem]');
+
+    // 4. Collapsing to capsule enters 'mini' mode (removes right reserve while preserving top clearance)
+    fireEvent.click(screen.getByTestId('status-panel-collapse'));
+    expect(panel.getAttribute('data-display-mode')).toBe('mini');
+    expect(panel.getAttribute('data-state')).toBe('collapsed');
+    expect(chatStream.className).toContain('pt-14');
+    expect(chatStream.className).not.toContain('pr-[22rem]');
+  });
+
+  it('shows optimistic user message and ZCode ChatLoading Working indicator immediately upon send, deduplicates on user echo, and clears on approval/end', () => {
+    const sendSpy = vi.spyOn(wsClient, 'sendEnvelope').mockReturnValue('cli_test_prompt');
+    try {
+      useNexStore.setState({
+        mainView: 'workspace',
+        activeSessionId: 'sess_working_1',
+        selectedRunnerId: 'run_1',
+        selectedProviderId: 'p1',
+        selectedModelId: 'm1',
+        locale: 'zh-CN',
+        runners: [
+          {
+            id: 'run_1',
+            name: 'LocalRunner',
+            hostname: 'mac',
+            os: 'darwin',
+            arch: 'arm64',
+            shell: '/bin/zsh',
+            version: '0.3.0',
+            tags: [],
+            status: 'online',
+            last_seen_at: Date.now(),
+            synced_config_rev: 1,
+            workspace_default: '/tmp/ws',
+          },
+        ],
+        models: [
+          {
+            id: 'm1',
+            provider_id: 'p1',
+            display_name: 'Model One',
+            source: 'custom',
+            context_window: 128000,
+            max_output_tokens: 4096,
+            supports_vision: false,
+            supports_pdf: false,
+            supports_tools: true,
+            supports_reasoning: true,
+            supports_caching: false,
+            pricing: { input_per_1m: 0, output_per_1m: 0, cache_read_per_1m: 0, cache_write_per_1m: 0 },
+          },
+        ],
+        sessions: [
+          {
+            id: 'sess_working_1',
+            runner_id: 'run_1',
+            depth: 0,
+            title: 'Working Feedback Test',
+            workspace_path: '/tmp/ws',
+            agent_profile_slug: 'main',
+            model_id: 'm1',
+            provider_id: 'p1',
+            permission_mode: 'full_access',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: 1000,
+            updated_at: 2000,
+            last_active_at: 2000,
+          },
+        ],
+        streams: {
+          sess_working_1: {
+            lastSeq: 0,
+            running: false,
+            items: [],
+            latestTelemetry: null,
+            turnTelemetries: [],
+            uiBadges: {},
+            pendingApproval: null,
+            pendingUIPrompt: null,
+            todos: [],
+            goals: [],
+          },
+        },
+        composerText: '',
+      });
+
+      render(<App />);
+      expect(screen.queryByTestId('chat-loading')).toBeNull();
+
+      const input = screen.getByTestId('composer-input') as HTMLTextAreaElement;
+      fireEvent.change(input, { target: { value: '请帮我分析项目结构' } });
+      fireEvent.click(screen.getByTestId('send-btn'));
+
+      // 1. Optimistic user bubble and ChatLoading indicator appear immediately before any WS event arrives
+      expect(screen.getAllByText('请帮我分析项目结构').length).toBe(1);
+      const loadingEl = screen.getByTestId('chat-loading');
+      expect(loadingEl.textContent).toContain('工作中');
+
+      // 2. Authoritative server events replace optimistic bubble cleanly without duplication
+      act(() => {
+        const cur = useNexStore.getState().streams.sess_working_1;
+        let next = applySessionEvent(cur, 'run_1', {
+          session_id: 'sess_working_1',
+          seq: 1,
+          turn_idx: 1,
+          event_type: 'agent_start',
+          payload: {},
+        });
+        next = applySessionEvent(next, 'run_1', {
+          session_id: 'sess_working_1',
+          seq: 2,
+          turn_idx: 1,
+          event_type: 'message_end',
+          payload: { message: { role: 'user', content: [{ type: 'text', text: '请帮我分析项目结构' }] } },
+        });
+        useNexStore.setState((s) => ({
+          streams: { ...s.streams, sess_working_1: next },
+        }));
+      });
+      expect(screen.getAllByText('请帮我分析项目结构').length).toBe(1);
+      expect(screen.getByTestId('chat-loading')).toBeTruthy();
+
+      // 3. Approval prompt takes priority over ChatLoading
+      act(() => {
+        const cur = useNexStore.getState().streams.sess_working_1;
+        const next = applySessionEvent(cur, 'run_1', {
+          session_id: 'sess_working_1',
+          seq: 3,
+          turn_idx: 1,
+          event_type: 'approval_requested',
+          payload: { approval_id: 'appr_1', tool_call_id: 'tc_1', tool_name: 'bash', tool_args: { command: 'ls' } },
+        });
+        useNexStore.setState((s) => ({
+          streams: { ...s.streams, sess_working_1: next },
+        }));
+      });
+      expect(screen.queryByTestId('chat-loading')).toBeNull();
+
+      // 4. Resolving approval restores ChatLoading until agent_end
+      act(() => {
+        const cur = useNexStore.getState().streams.sess_working_1;
+        const next = applySessionEvent(cur, 'run_1', {
+          session_id: 'sess_working_1',
+          seq: 4,
+          turn_idx: 1,
+          event_type: 'approval_resolved',
+          payload: { approval_id: 'appr_1' },
+        });
+        useNexStore.setState((s) => ({
+          streams: { ...s.streams, sess_working_1: next },
+        }));
+      });
+      expect(screen.getByTestId('chat-loading')).toBeTruthy();
+
+      act(() => {
+        const cur = useNexStore.getState().streams.sess_working_1;
+        const next = applySessionEvent(cur, 'run_1', {
+          session_id: 'sess_working_1',
+          seq: 5,
+          turn_idx: 1,
+          event_type: 'agent_end',
+          payload: {},
+        });
+        useNexStore.setState((s) => ({
+          streams: { ...s.streams, sess_working_1: next },
+        }));
+      });
+      expect(screen.queryByTestId('chat-loading')).toBeNull();
+    } finally {
+      sendSpy.mockRestore();
+    }
   });
 });

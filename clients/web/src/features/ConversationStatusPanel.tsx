@@ -1,6 +1,7 @@
 import {
   ArrowRight,
   Bot,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -17,10 +18,41 @@ import {
   SquareTerminal,
   Target,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatMsg } from '../i18n/messages';
 import { useNexStore } from '../core/store';
-import { GoalEntry, ToolCallCard } from '../core/types';
+import { GitSummary, GoalEntry, ToolCallCard, TodoItem } from '../core/types';
+
+export type StatusPanelMode = 'auto' | 'panel' | 'mini';
+
+function hasGitChanges(gitSummary: GitSummary | null | undefined): boolean {
+  return Boolean(
+    gitSummary?.is_git_repo &&
+      (gitSummary.changed_files > 0 || gitSummary.additions + gitSummary.deletions > 0),
+  );
+}
+
+/** Shared visibility selector so ConversationPane layout spacing and StatusPanel agree 1:1. */
+export function useConversationStatusPanelHasContent(): boolean {
+  const activeSessionId = useNexStore((s) => s.activeSessionId);
+  const stream = useNexStore((s) => (s.activeSessionId ? s.streams[s.activeSessionId] : undefined));
+  const gitSummary = useNexStore((s) => s.gitSummary);
+  const bottomTerminals = useNexStore((s) => s.bottomTerminals);
+  const rightTabs = useNexStore((s) => s.rightTabs);
+
+  if (!activeSessionId) return false;
+  if (hasGitChanges(gitSummary)) return true;
+  if ((stream?.goals || []).length > 0) return true;
+  if ((stream?.todos || []).length > 0) return true;
+  if (bottomTerminals.length > 0 || rightTabs.some((t) => t.kind === 'terminal')) return true;
+  for (const item of stream?.items || []) {
+    for (const tc of item.toolCalls) {
+      if (tc.name === 'subagent') return true;
+      if (tc.name === 'bash' && tc.status === 'running') return true;
+    }
+  }
+  return false;
+}
 
 function parseToolArgs(tc: ToolCallCard): Record<string, unknown> {
   try {
@@ -57,7 +89,13 @@ interface TerminalEntry {
   onStop: () => void;
 }
 
-export function ConversationStatusPanel() {
+export function ConversationStatusPanel({
+  mode: controlledMode,
+  onModeChange,
+}: {
+  mode?: StatusPanelMode;
+  onModeChange?: (next: StatusPanelMode) => void;
+} = {}) {
   const locale = useNexStore((s) => s.locale);
   const activeSessionId = useNexStore((s) => s.activeSessionId);
   const stream = useNexStore((s) => (s.activeSessionId ? s.streams[s.activeSessionId] : undefined));
@@ -72,15 +110,23 @@ export function ConversationStatusPanel() {
   const closeRightTab = useNexStore((s) => s.closeRightTab);
   const abortActiveSession = useNexStore((s) => s.abortActiveSession);
 
-  const [mode, setMode] = useState<PanelMode>(() =>
-    typeof window !== 'undefined' && window.innerWidth >= 1180 ? 'panel' : 'mini',
+  const [internalMode, setInternalMode] = useState<StatusPanelMode>('auto');
+  const mode = controlledMode ?? internalMode;
+  const setMode = useCallback(
+    (next: StatusPanelMode) => {
+      if (onModeChange) onModeChange(next);
+      else setInternalMode(next);
+    },
+    [onModeChange],
   );
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoExpand, setAutoExpand] = useState(true);
   const [commitOpen, setCommitOpen] = useState(false);
   const [commitPrompt, setCommitPrompt] = useState('');
   const [endedOpen, setEndedOpen] = useState(false);
   const [, setTick] = useState(0);
+  const panelRef = useRef<HTMLElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const prevGitChangesRef = useRef(0);
   const terminalSeenRef = useRef<Record<string, number>>({});
@@ -88,7 +134,7 @@ export function ConversationStatusPanel() {
   const defaultCommitPrompt =
     formatMsg(locale, 'statusPanel.reviewTheCurrentGitStatus');
 
-  const todos = stream?.todos || [];
+  const todos: TodoItem[] = stream?.todos || [];
   const goals = stream?.goals || [];
   const items = stream?.items || [];
 
@@ -165,9 +211,7 @@ export function ConversationStatusPanel() {
     return list;
   }, [bottomTerminals, rightTerminalTabs, runningBash, closeBottomTerminal, closeRightTab, abortActiveSession]);
 
-  const hasGit = Boolean(
-    gitSummary?.is_git_repo && (gitSummary.additions + gitSummary.deletions > 0 || gitSummary.branch),
-  );
+  const hasGit = hasGitChanges(gitSummary);
   const hasGoal = goals.length > 0;
   const hasProgress = todos.length > 0;
   const hasTerminals = activeTerminals.length > 0;
@@ -184,24 +228,36 @@ export function ConversationStatusPanel() {
   }, [needsTicker]);
 
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen && mode !== 'panel') return;
     const handleDown = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      if (menuOpen && menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false);
+      }
+      if (mode === 'panel' && panelRef.current && !panelRef.current.contains(event.target as Node)) {
+        const containerEl = panelRef.current.closest('[data-conversation-container="true"]');
+        const containerWidth = containerEl
+          ? containerEl.getBoundingClientRect().width
+          : typeof window !== 'undefined'
+            ? window.innerWidth
+            : 0;
+        if (containerWidth > 0 && containerWidth < 960) {
+          setMenuOpen(false);
+          setMode('mini');
+        }
       }
     };
     document.addEventListener('mousedown', handleDown);
     return () => document.removeEventListener('mousedown', handleDown);
-  }, [menuOpen]);
+  }, [menuOpen, mode, setMode]);
 
   useEffect(() => {
     const changes = (gitSummary?.additions || 0) + (gitSummary?.deletions || 0);
     const prev = prevGitChangesRef.current;
     prevGitChangesRef.current = changes;
     if (autoExpand && mode === 'mini' && changes > prev) {
-      setMode('panel');
+      setMode('auto');
     }
-  }, [gitSummary?.additions, gitSummary?.deletions, autoExpand, mode]);
+  }, [gitSummary?.additions, gitSummary?.deletions, autoExpand, mode, setMode]);
 
   if (!activeSessionId || !(hasGit || hasGoal || hasProgress || hasTerminals || hasAgents)) return null;
 
@@ -244,101 +300,137 @@ export function ConversationStatusPanel() {
 
   return (
     <div className="pointer-events-none absolute top-0 right-4 z-20 pt-3">
-      <div className="pointer-events-auto">
-        {mode === 'mini' ? (
-          <button
-            type="button"
-            data-testid="conversation-status-panel"
-            onClick={() => setMode('panel')}
-            title={formatMsg(locale, 'chat.statusPanel.autoExpand')}
-            className="group zcode-popover-down flex h-8 items-center gap-2 rounded-full border border-border bg-popover px-3 text-ui-sm text-foreground shadow-md transition-all duration-200 hover:bg-surface-hover"
-          >
-            <span className="relative size-3.5 shrink-0">
-              <FileDiff className="absolute inset-0 size-3.5 text-foreground-subtle transition-opacity duration-150 group-hover:opacity-0" />
-              <Maximize2 className="absolute inset-0 size-3.5 text-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+      <aside
+        ref={panelRef}
+        data-testid="conversation-status-panel"
+        data-display-mode={mode}
+        data-state={mode === 'mini' ? 'collapsed' : 'expanded'}
+        className={`pointer-events-auto relative flex flex-col overflow-hidden border border-border bg-popover text-foreground shadow-md transition-[border-radius,padding,background-color,box-shadow] duration-200 ease-out ${
+          mode === 'mini'
+            ? 'inline-flex max-h-8.5 w-max max-w-[min(20rem,calc(100cqw-2rem))] rounded-full'
+            : mode === 'panel'
+              ? 'zcode-popover-down max-h-[min(74dvh,38rem)] w-80 max-w-[calc(100cqw-2rem)] rounded-2xl'
+              : 'inline-flex max-h-8.5 w-max max-w-[min(20rem,calc(100cqw-2rem))] rounded-full @min-[1280px]/conversation:max-h-[min(74dvh,38rem)] @min-[1280px]/conversation:w-80 @min-[1280px]/conversation:rounded-2xl'
+        }`}
+      >
+        {/* Mini capsule trigger: shown in 'mini' mode or below 1280px in 'auto' mode */}
+        <button
+          type="button"
+          data-testid="status-panel-mini"
+          onClick={() => setMode('panel')}
+          title={formatMsg(locale, 'chat.statusPanel.autoExpand')}
+          className={`group h-8 items-center gap-2 px-3 text-ui-sm text-foreground transition-colors hover:bg-surface-hover ${
+            mode === 'mini'
+              ? 'flex'
+              : mode === 'panel'
+                ? 'hidden'
+                : 'flex @min-[1280px]/conversation:hidden'
+          }`}
+        >
+          <span className="relative size-3.5 shrink-0">
+            <FileDiff className="absolute inset-0 size-3.5 text-foreground-subtle transition-opacity duration-150 group-hover:opacity-0" />
+            <Maximize2 className="absolute inset-0 size-3.5 text-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+          </span>
+          {gitSummary?.is_git_repo && (
+            <span className="flex items-center gap-1 font-mono text-ui-xs tabular-nums">
+              <span className="text-success">+{gitSummary?.additions || 0}</span>
+              <span className="text-destructive">-{gitSummary?.deletions || 0}</span>
             </span>
-            {gitSummary?.is_git_repo && (
-              <span className="flex items-center gap-1 font-mono text-ui-xs tabular-nums">
-                <span className="text-success">+{gitSummary?.additions || 0}</span>
-                <span className="text-destructive">-{gitSummary?.deletions || 0}</span>
-              </span>
-            )}
-            {totalCount > 0 && (
-              <span className="font-mono text-ui-xs tabular-nums text-foreground-subtle">
-                {completedCount}/{totalCount}
-              </span>
-            )}
-            <ChevronDown className="size-3.5 shrink-0 text-foreground-subtlest" />
-          </button>
-        ) : (
-          <div
-            data-testid="conversation-status-panel"
-            className="zcode-popover-down w-80 max-h-[min(74dvh,38rem)] flex flex-col overflow-hidden rounded-2xl border border-border bg-popover text-foreground shadow-md transition-[border-radius,padding,background-color,box-shadow] duration-200 ease-out"
-          >
-            {/* Sticky top-right control overlay */}
-            <div className="relative">
-              <div className="absolute right-3 top-3 z-10 flex items-center gap-0.5" ref={menuRef}>
-                <button
-                  type="button"
-                  title={formatMsg(locale, 'chat.statusPanel.autoExpand')}
-                  onClick={() => setMenuOpen((v) => !v)}
-                  className="flex size-6 items-center justify-center rounded-md text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
-                >
-                  <Ellipsis className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  title={formatMsg(locale, 'chat.statusPanel.collapse')}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setMode('mini');
-                  }}
-                  className="flex size-6 items-center justify-center rounded-md text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
-                >
-                  <Minimize2 className="size-4" />
-                </button>
+          )}
+          {totalCount > 0 && (
+            <span className="font-mono text-ui-xs tabular-nums text-foreground-subtle">
+              {completedCount}/{totalCount}
+            </span>
+          )}
+          <ChevronDown className="size-3.5 shrink-0 text-foreground-subtlest" />
+        </button>
 
-                {menuOpen && (
-                  <div className="zcode-popover-down absolute right-0 top-7 z-30 w-44 rounded-lg border border-border bg-menu p-1 shadow-md">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAutoExpand((v) => !v);
-                        setMenuOpen(false);
-                      }}
-                      className="flex h-7 w-full items-center justify-between rounded-md px-2 text-left text-ui-sm text-foreground hover:bg-menu-hover"
-                    >
-                      <span>{formatMsg(locale, 'chat.statusPanel.autoExpand')}</span>
-                      <span className="font-mono text-ui-xs text-foreground-subtlest">{autoExpand ? 'ON' : 'OFF'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void refreshGitSummary(true);
-                        setMenuOpen(false);
-                      }}
-                      className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-ui-sm text-foreground hover:bg-menu-hover"
-                    >
-                      <RefreshCw className="size-3.5 text-foreground-subtle" />
-                      <span>{formatMsg(locale, 'statusPanel.refreshChanges')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        setMode('mini');
-                      }}
-                      className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-ui-sm text-foreground hover:bg-menu-hover"
-                    >
-                      <Minimize2 className="size-3.5 text-foreground-subtle" />
-                      <span>{formatMsg(locale, 'chat.statusPanel.collapse')}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+        {/* Expanded panel shell: shown in 'panel' mode or >= 1280px in 'auto' mode */}
+        <div
+          className={
+            mode === 'mini'
+              ? 'hidden'
+              : mode === 'panel'
+                ? 'flex min-h-0 flex-1 flex-col'
+                : 'hidden min-h-0 flex-1 flex-col @min-[1280px]/conversation:flex'
+          }
+        >
+          {/* Sticky top-right control overlay */}
+          <div className="relative">
+            <div className="absolute right-3 top-3 z-10 flex items-center gap-0.5" ref={menuRef}>
+              <button
+                type="button"
+                title={formatMsg(locale, 'chat.statusPanel.autoExpand')}
+                onClick={() => setMenuOpen((v) => !v)}
+                className="flex size-6 items-center justify-center rounded-md text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+              >
+                <Ellipsis className="size-4" />
+              </button>
+              <button
+                type="button"
+                data-testid="status-panel-collapse"
+                title={formatMsg(locale, 'chat.statusPanel.collapse')}
+                onClick={() => {
+                  setMenuOpen(false);
+                  setMode('mini');
+                }}
+                className="flex size-6 items-center justify-center rounded-md text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+              >
+                <Minimize2 className="size-4" />
+              </button>
+
+              {menuOpen && (
+                <div className="zcode-popover-down absolute right-0 top-7 z-30 w-44 rounded-lg border border-border bg-menu p-1 shadow-md">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('auto');
+                      setMenuOpen(false);
+                    }}
+                    className="flex h-7 w-full items-center justify-between rounded-md px-2 text-left text-ui-sm text-foreground hover:bg-menu-hover"
+                  >
+                    <span>{formatMsg(locale, 'chat.statusPanel.modeAuto')}</span>
+                    {mode === 'auto' && <Check className="size-3.5 text-success" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAutoExpand((v) => !v);
+                      setMenuOpen(false);
+                    }}
+                    className="flex h-7 w-full items-center justify-between rounded-md px-2 text-left text-ui-sm text-foreground hover:bg-menu-hover"
+                  >
+                    <span>{formatMsg(locale, 'chat.statusPanel.autoExpand')}</span>
+                    <span className="font-mono text-ui-xs text-foreground-subtlest">{autoExpand ? 'ON' : 'OFF'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void refreshGitSummary(true);
+                      setMenuOpen(false);
+                    }}
+                    className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-ui-sm text-foreground hover:bg-menu-hover"
+                  >
+                    <RefreshCw className="size-3.5 text-foreground-subtle" />
+                    <span>{formatMsg(locale, 'statusPanel.refreshChanges')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setMode('mini');
+                    }}
+                    className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-ui-sm text-foreground hover:bg-menu-hover"
+                  >
+                    <Minimize2 className="size-3.5 text-foreground-subtle" />
+                    <span>{formatMsg(locale, 'chat.statusPanel.collapse')}</span>
+                  </button>
+                </div>
+              )}
             </div>
+          </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-3.5 space-y-3.5">
+          <div className="min-h-0 flex-1 overflow-y-auto p-3.5 space-y-3.5">
               {/* 1. Git tools */}
               {hasGit && (
                 <section className="space-y-0.5">
@@ -619,9 +711,8 @@ export function ConversationStatusPanel() {
                 </section>
               )}
             </div>
-          </div>
-        )}
-      </div>
+        </div>
+      </aside>
     </div>
   );
 }

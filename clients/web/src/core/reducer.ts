@@ -3,6 +3,7 @@ import { ChatTurnItem, GoalEntry, PendingApproval, PendingUIPrompt, TodoItem, Tu
 export interface SessionStreamState {
   lastSeq: number;
   running: boolean;
+  runStartedAt?: number;
   items: ChatTurnItem[];
   latestTelemetry: TurnTelemetry | null;
   turnTelemetries: TurnTelemetry[];
@@ -17,6 +18,7 @@ export function emptyStreamState(): SessionStreamState {
   return {
     lastSeq: 0,
     running: false,
+    runStartedAt: undefined,
     items: [],
     latestTelemetry: null,
     turnTelemetries: [],
@@ -123,6 +125,7 @@ export function applySessionEvent(
 
   let items = prev.items;
   let running = prev.running;
+  let runStartedAt = prev.runStartedAt;
   let latestTelemetry = prev.latestTelemetry;
   let turnTelemetries = prev.turnTelemetries || [];
   let uiBadges = prev.uiBadges;
@@ -224,14 +227,16 @@ export function applySessionEvent(
   switch (ev.event_type) {
     case 'agent_start':
       running = true;
+      if (!runStartedAt) runStartedAt = Date.now();
       break;
 
     case 'agent_end': {
       running = false;
+      runStartedAt = undefined;
       const lastIdx = items.length - 1;
-      if (lastIdx >= 0 && items[lastIdx].streaming) {
+      if (lastIdx >= 0 && (items[lastIdx].streaming || items[lastIdx].optimistic)) {
         items = items.slice();
-        items[lastIdx] = { ...items[lastIdx], streaming: false };
+        items[lastIdx] = { ...items[lastIdx], streaming: false, optimistic: false };
       }
       if (goals.some((g) => g.status === 'running')) {
         const completedAt = Date.now();
@@ -278,18 +283,35 @@ export function applySessionEvent(
             image_url: b.image_url ? String(b.image_url) : undefined,
           }));
         if (text || images.length > 0) {
-          items = [
-            ...items,
-            {
-              id: `usr_${ev.seq || items.length}`,
-              seq: ev.seq || undefined,
-              role: 'user',
-              text,
-              thinking: '',
-              images: images.length > 0 ? images : undefined,
-              toolCalls: [],
-            },
-          ];
+          const authUserItem: ChatTurnItem = {
+            id: `usr_${ev.seq || items.length}`,
+            seq: ev.seq || undefined,
+            role: 'user',
+            text,
+            thinking: '',
+            images: images.length > 0 ? images : undefined,
+            toolCalls: [],
+          };
+          let replacedIdx = -1;
+          for (let i = items.length - 1; i >= 0; i--) {
+            const candidate = items[i];
+            if (candidate.role === 'user' && candidate.optimistic) {
+              replacedIdx = i;
+              break;
+            }
+            if (
+              candidate.role === 'assistant' &&
+              (candidate.seq || candidate.text || candidate.thinking || candidate.toolCalls.length > 0)
+            ) {
+              break;
+            }
+          }
+          if (replacedIdx >= 0) {
+            items = items.slice();
+            items[replacedIdx] = authUserItem;
+          } else {
+            items = [...items, authUserItem];
+          }
           const goalTitle = parseGoalTitle(text);
           if (goalTitle) {
             const lastGoal = goals[goals.length - 1];
@@ -485,6 +507,7 @@ export function applySessionEvent(
   return {
     lastSeq: ev.seq > 0 ? Math.max(prev.lastSeq, ev.seq) : prev.lastSeq,
     running,
+    runStartedAt,
     items,
     latestTelemetry,
     turnTelemetries,
