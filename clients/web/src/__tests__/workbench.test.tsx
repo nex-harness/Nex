@@ -1332,7 +1332,12 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       rerender(<App />);
       expect(screen.getByTestId('ssh-target-ssh_rb1')).toBeTruthy();
       fireEvent.click(screen.getByTestId('add-ssh-server-btn'));
-      expect(screen.getByTestId('ssh-server-modal')).toBeTruthy();
+      const modal = screen.getByTestId('ssh-server-modal');
+      expect(modal).toBeTruthy();
+      expect((screen.getByTestId('ssh-username-input') as HTMLInputElement).placeholder).toBe('root');
+      expect(modal.querySelector('select')).toBeNull();
+      fireEvent.click(screen.getByTestId('ssh-advanced-toggle'));
+      expect((screen.getByTestId('ssh-workspace-input') as HTMLInputElement).placeholder).toBe('$HOME');
       expect(screen.getByTestId('ssh-import-config-btn')).toBeTruthy();
       fireEvent.click(screen.getByTestId('ssh-mode-remote_install'));
       expect(screen.getByTestId('ssh-download-url-input')).toBeTruthy();

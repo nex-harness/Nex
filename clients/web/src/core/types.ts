@@ -482,6 +482,7 @@ export interface StagedBinaryInfo {
   arch: string;
   size_bytes: number;
   updated_at: number;
+  source?: 'staged' | 'bundled' | 'local' | string;
 }
 
 export type SettingsSectionId =

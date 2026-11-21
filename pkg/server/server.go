@@ -32,6 +32,7 @@ type Config struct {
 	Store         *store.Store
 	PairingSecret string          // Optional shared pairing token for Runner registration
 	PublicBaseURL string          // Advertised base URL for /llm-proxy/*
+	RunnersDir    string          // Optional directory containing prebuilt multi-platform nex-runner-<os>-<arch> binaries
 	StaticFS      fs.FS           // Optional embedded clients/web/dist filesystem
 	HTTPClient    *http.Client    // Optional custom HTTP client (for tests / models.dev / proxy)
 	RemoteMCP     RemoteMCPExecutor

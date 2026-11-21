@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.nex.runner</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/nex-v3/bin/nex-runner</string>
+    <string>-server</string>
+    <string>ws://127.0.0.1:8080/ws/runner</string>
+    <string>-workspace</string>
+    <string>__HOME__</string>
+    <string>-data-dir</string>
+    <string>__HOME__/.nex-runner</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>__HOME__/.nex-runner/runner.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/.nex-runner/runner.err.log</string>
+</dict>
+</plist>

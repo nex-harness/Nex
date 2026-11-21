@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -174,5 +175,110 @@ Host gpu-box
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/ssh/binary?os=linux&arch=amd64&dl_token="+tok, nil))
 	if rec.Code != http.StatusOK || rec.Body.String() != "ELF-MOCK-BINARY" {
 		t.Fatalf("binary download failed: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+func makeMinimalELF(machine uint16) []byte {
+	b := make([]byte, 64)
+	copy(b[:4], "\x7fELF")
+	b[4] = 2 // ELFCLASS64
+	b[5] = 1 // ELFDATA2LSB
+	b[6] = 1 // EV_CURRENT
+	binary.LittleEndian.PutUint16(b[16:18], 2)       // ET_EXEC
+	binary.LittleEndian.PutUint16(b[18:20], machine) // EM_X86_64=62, EM_AARCH64=183
+	binary.LittleEndian.PutUint32(b[20:24], 1)       // EV_CURRENT
+	return b
+}
+
+func TestRemoteOSArchResolutionAndBundledRunners(t *testing.T) {
+	// 1. OS & Arch normalization across Linux / macOS / Windows
+	cases := [][4]string{
+		{"Linux", "x86_64", "linux", "amd64"},
+		{"Darwin", "arm64", "darwin", "arm64"},
+		{"MINGW64_NT-10.0", "AMD64", "windows", "amd64"},
+		{"windows", "aarch64", "windows", "arm64"},
+	}
+	for _, c := range cases {
+		gotOS, gotArch := normalizeTargetOSArch(c[0], c[1])
+		if gotOS != c[2] || gotArch != c[3] {
+			t.Fatalf("normalizeTargetOSArch(%q, %q) = (%q, %q), want (%q, %q)", c[0], c[1], gotOS, gotArch, c[2], c[3])
+		}
+	}
+
+	// 2. OS-aware $HOME / default workspace resolution
+	ins, ws, bin := resolveRemotePaths(store.SSHTargetRecord{Username: "root"}, remoteProbeInfo{OS: "linux", HomeDir: "/root"})
+	if ins != "/root/.nex-runner" || ws != "/root" || bin != "nex-runner" {
+		t.Fatalf("linux root paths = (%q, %q, %q)", ins, ws, bin)
+	}
+	ins, ws, bin = resolveRemotePaths(store.SSHTargetRecord{Username: "tylinux", WorkspacePath: "$HOME/code"}, remoteProbeInfo{OS: "darwin", HomeDir: "/Users/tylinux"})
+	if ins != "/Users/tylinux/.nex-runner" || ws != "/Users/tylinux/code" || bin != "nex-runner" {
+		t.Fatalf("darwin paths = (%q, %q, %q)", ins, ws, bin)
+	}
+	ins, ws, bin = resolveRemotePaths(store.SSHTargetRecord{Username: "alice", WorkspacePath: "$HOME"}, remoteProbeInfo{OS: "windows", HomeDir: `C:\Users\alice`})
+	if ins != `C:\Users\alice\.nex-runner` || ws != `C:\Users\alice` || bin != "nex-runner.exe" {
+		t.Fatalf("windows paths = (%q, %q, %q)", ins, ws, bin)
+	}
+	// Empty HomeDir falls back cleanly based on OS & username
+	_, wsFallbackWin, _ := resolveRemotePaths(store.SSHTargetRecord{Username: "bob"}, remoteProbeInfo{OS: "windows"})
+	if wsFallbackWin != `C:\Users\bob` {
+		t.Fatalf("expected C:\\Users\\bob fallback, got %q", wsFallbackWin)
+	}
+
+	// 3. ELF header auto-detection + Config.RunnersDir bundled runner discovery
+	detOS, detArch, err := detectBinaryOSArch(makeMinimalELF(183))
+	if err != nil || detOS != "linux" || detArch != "arm64" {
+		t.Fatalf("detectBinaryOSArch failed: os=%q arch=%q err=%v", detOS, detArch, err)
+	}
+
+	dir := t.TempDir()
+	bundledDir := filepath.Join(dir, "runners")
+	if err := os.MkdirAll(bundledDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundledDir, "nex-runner-linux-amd64"), makeMinimalELF(62), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundledDir, "nex-runner-windows-amd64.exe"), []byte("MZ-WIN"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := store.Open(filepath.Join(dir, "store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	srv, err := New(Config{Store: st, RunnersDir: bundledDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := srv.Handler()
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/ssh/binaries", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/ssh/binaries failed: %d", rec.Code)
+	}
+	var listed []stagedBinaryInfo
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	var seenLinux, seenWin bool
+	for _, b := range listed {
+		if b.OS == "linux" && b.Arch == "amd64" && b.Source == "bundled" {
+			seenLinux = true
+		}
+		if b.OS == "windows" && b.Arch == "amd64" && b.Source == "bundled" {
+			seenWin = true
+		}
+	}
+	if !seenLinux || !seenWin {
+		t.Fatalf("expected bundled linux/amd64 and windows/amd64 in %+v", listed)
+	}
+
+	// Auto-detect OS/arch on POST without query params
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/ssh/binaries", bytes.NewReader(makeMinimalELF(183))))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"arch":"arm64"`) {
+		t.Fatalf("auto-detect binary upload failed: %d %s", rec.Code, rec.Body.String())
 	}
 }

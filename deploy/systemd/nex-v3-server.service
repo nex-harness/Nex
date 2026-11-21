@@ -1,0 +1,20 @@
+[Unit]
+Description=Nex-v3 Central Control Plane Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/nex-v3
+EnvironmentFile=-/opt/nex-v3/config/nex-server.env
+ExecStart=/opt/nex-v3/bin/nex-server \
+  -addr ${NEX_ADDR} \
+  -data-dir ${NEX_DATA_DIR} \
+  -runners-dir ${NEX_RUNNERS_DIR} \
+  -public-url ${NEX_PUBLIC_URL}
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

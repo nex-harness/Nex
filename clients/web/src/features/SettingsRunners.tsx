@@ -19,12 +19,11 @@ import {
   Square,
   Terminal,
   Trash2,
-  Upload,
   Wifi,
   X,
 } from 'lucide-react';
 import { type ClipboardEvent, type FormEvent, useEffect, useRef, useState } from 'react';
-import { apiFetch, resolveApiBase, safeStorageGet } from '../core/protocol';
+import { apiFetch } from '../core/protocol';
 import { useNexStore } from '../core/store';
 import { SSHConfigHost, SSHTargetRecord, StagedBinaryInfo } from '../core/types';
 import {
@@ -32,7 +31,6 @@ import {
   SettingsGroupCard,
   settingsInputClass,
   settingsMonoInputClass,
-  settingsSelectClass,
 } from './SettingsPage';
 
 interface SSHFormState {
@@ -141,8 +139,6 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
   const [configLoading, setConfigLoading] = useState(false);
 
   const [stagedBinaries, setStagedBinaries] = useState<StagedBinaryInfo[]>([]);
-  const [uploadPlatform, setUploadPlatform] = useState('linux/amd64');
-  const [uploadingBin, setUploadingBin] = useState(false);
 
   const [busyById, setBusyById] = useState<Record<string, 'test' | 'deploy' | 'stop'>>({});
   const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({});
@@ -252,33 +248,6 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
     setPasteNotice(
       formatMsg(locale, 'runners.parsed', { v: parsed.username ? `${parsed.username}@` : '', host: parsed.host || '', v2: parsed.port ? `:${parsed.port}` : '' }),
     );
-  };
-
-  const handleUploadBinary = async (file: File | null) => {
-    if (!file) return;
-    const [os, arch] = uploadPlatform.split('/');
-    setUploadingBin(true);
-    try {
-      const headers: Record<string, string> = {};
-      const tok = safeStorageGet('nex.auth.token');
-      if (tok) headers.Authorization = `Bearer ${tok}`;
-      const res = await fetch(
-        `${resolveApiBase()}/api/v1/ssh/binaries?os=${encodeURIComponent(os)}&arch=${encodeURIComponent(arch)}`,
-        {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers,
-          body: file,
-        },
-      );
-      if (!res.ok) throw new Error(await res.text());
-      await loadStagedBinaries();
-      onFlash(formatMsg(locale, 'runners.uploadedNexRunner', { os, arch }));
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setUploadingBin(false);
-    }
   };
 
   const submitForm = async (e: FormEvent, deployAfterSave = false) => {
@@ -805,7 +774,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     data-testid="ssh-username-input"
                     value={form.username}
                     onChange={(e) => setForm((p) => ({ ...p, username: e.target.value }))}
-                    placeholder="root / ubuntu / tylinux"
+                    placeholder="root"
                     className={settingsMonoInputClass}
                   />
                 </label>
@@ -920,41 +889,22 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     <p className="text-ui-xs leading-relaxed text-foreground-subtle">
                       {formatMsg(locale, 'runners.probesRemoteOsArchAuto')}
                     </p>
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      <select
-                        value={uploadPlatform}
-                        onChange={(e) => setUploadPlatform(e.target.value)}
-                        className={`${settingsSelectClass} h-7 w-auto text-ui-xs`}
-                      >
-                        <option value="linux/amd64">linux/amd64</option>
-                        <option value="linux/arm64">linux/arm64</option>
-                        <option value="darwin/arm64">darwin/arm64</option>
-                        <option value="darwin/amd64">darwin/amd64</option>
-                      </select>
-                      <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover">
-                        {uploadingBin ? (
-                          <LoaderCircle className="size-3 animate-spin" />
-                        ) : (
-                          <Upload className="size-3" />
-                        )}
-                        <span>{formatMsg(locale, 'runners.uploadBinaryOptional')}</span>
-                        <input
-                          type="file"
-                          className="hidden"
-                          disabled={uploadingBin}
-                          onChange={(e) => {
-                            void handleUploadBinary(e.target.files?.[0] || null);
-                            e.currentTarget.value = '';
-                          }}
-                        />
-                      </label>
-                      {stagedBinaries.length > 0 && (
+                    {stagedBinaries.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                         <span className="text-[11px] text-foreground-subtlest">
-                          {formatMsg(locale, 'runners.ready')}
-                          {stagedBinaries.map((b) => `${b.os}/${b.arch} (${formatBytesShort(b.size_bytes)})`).join(', ')}
+                          {formatMsg(locale, 'runners.bundledRunners')}
                         </span>
-                      )}
-                    </div>
+                        {stagedBinaries.map((b) => (
+                          <span
+                            key={`${b.os}/${b.arch}`}
+                            title={formatBytesShort(b.size_bytes)}
+                            className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-foreground-subtle"
+                          >
+                            {b.os}/{b.arch}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -978,6 +928,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
               <div>
                 <button
                   type="button"
+                  data-testid="ssh-advanced-toggle"
                   onClick={() => setAdvancedOpen((v) => !v)}
                   className="inline-flex items-center gap-1 text-ui-xs font-medium text-foreground-subtle transition-colors hover:text-foreground"
                 >
@@ -991,11 +942,15 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                         {formatMsg(locale, 'runners.defaultRemoteWorkspace')}
                       </span>
                       <input
+                        data-testid="ssh-workspace-input"
                         value={form.workspace_path}
                         onChange={(e) => setForm((p) => ({ ...p, workspace_path: e.target.value }))}
-                        placeholder="/home/user/workspace"
+                        placeholder="$HOME"
                         className={settingsMonoInputClass}
                       />
+                      <span className="block text-[11px] text-foreground-subtlest">
+                        {formatMsg(locale, 'runners.defaultWorkspaceHint')}
+                      </span>
                     </label>
                     <label className="block space-y-1">
                       <span className="text-ui-xs text-foreground-subtle">

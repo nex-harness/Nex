@@ -1,0 +1,20 @@
+[Unit]
+Description=Nex-v3 Autonomous Runner Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+EnvironmentFile=-/opt/nex-v3/config/nex-runner.env
+ExecStart=/opt/nex-v3/bin/nex-runner \
+  -name ${NEX_RUNNER_NAME} \
+  -server ${NEX_SERVER_WS} \
+  -workspace %h \
+  -data-dir %h/.nex-runner
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

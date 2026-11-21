@@ -5,6 +5,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"debug/elf"
+	"debug/macho"
+	"debug/pe"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,6 +41,7 @@ type stagedBinaryInfo struct {
 	Arch      string `json:"arch"`
 	SizeBytes int64  `json:"size_bytes"`
 	UpdatedAt int64  `json:"updated_at"`
+	Source    string `json:"source,omitempty"`
 }
 
 type oneTimeBinaryToken struct {
@@ -320,10 +325,12 @@ func normalizeTargetOSArch(rawOS, rawArch string) (string, string) {
 		osName = "darwin"
 	case strings.Contains(osName, "linux"):
 		osName = "linux"
+	case strings.Contains(osName, "windows"), strings.Contains(osName, "mingw"), strings.Contains(osName, "msys"), strings.Contains(osName, "cygwin"), strings.Contains(osName, "win32"):
+		osName = "windows"
 	}
 	archName := strings.ToLower(strings.TrimSpace(rawArch))
 	switch archName {
-	case "x86_64", "amd64":
+	case "x86_64", "amd64", "x64":
 		archName = "amd64"
 	case "aarch64", "arm64":
 		archName = "arm64"
@@ -331,46 +338,200 @@ func normalizeTargetOSArch(rawOS, rawArch string) (string, string) {
 	return osName, archName
 }
 
-func (s *Server) handleSSHBinaries(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		dir := s.sshBinariesDir()
-		entries, _ := os.ReadDir(dir)
-		out := make([]stagedBinaryInfo, 0, len(entries))
+func runnerBinaryFileName(targetOS, targetArch string) string {
+	if targetOS == "windows" {
+		return fmt.Sprintf("nex-runner-%s-%s.exe", targetOS, targetArch)
+	}
+	return fmt.Sprintf("nex-runner-%s-%s", targetOS, targetArch)
+}
+
+func detectBinaryOSArch(data []byte) (string, string, error) {
+	r := bytes.NewReader(data)
+	if ef, err := elf.NewFile(r); err == nil {
+		_ = ef.Close()
+		switch ef.Machine {
+		case elf.EM_X86_64:
+			return "linux", "amd64", nil
+		case elf.EM_AARCH64:
+			return "linux", "arm64", nil
+		default:
+			return "", "", fmt.Errorf("unsupported ELF arch: %v", ef.Machine)
+		}
+	}
+	if mf, err := macho.NewFile(r); err == nil {
+		_ = mf.Close()
+		switch mf.Cpu {
+		case macho.CpuAmd64:
+			return "darwin", "amd64", nil
+		case macho.CpuArm64:
+			return "darwin", "arm64", nil
+		default:
+			return "", "", fmt.Errorf("unsupported Mach-O cpu: %v", mf.Cpu)
+		}
+	}
+	if ff, err := macho.NewFatFile(r); err == nil {
+		defer ff.Close()
+		hasAMD64 := false
+		for _, arch := range ff.Arches {
+			if arch.Cpu == macho.CpuArm64 {
+				return "darwin", "arm64", nil
+			}
+			if arch.Cpu == macho.CpuAmd64 {
+				hasAMD64 = true
+			}
+		}
+		if hasAMD64 {
+			return "darwin", "amd64", nil
+		}
+		return "", "", errors.New("unsupported Mach-O universal binary")
+	}
+	if pf, err := pe.NewFile(r); err == nil {
+		_ = pf.Close()
+		switch pf.Machine {
+		case pe.IMAGE_FILE_MACHINE_AMD64:
+			return "windows", "amd64", nil
+		case pe.IMAGE_FILE_MACHINE_ARM64:
+			return "windows", "arm64", nil
+		default:
+			return "", "", fmt.Errorf("unsupported PE machine: %v", pf.Machine)
+		}
+	}
+	return "", "", errors.New("unrecognized binary format (expected ELF, Mach-O, or PE)")
+}
+
+type runnerBinaryDirCandidate struct {
+	dir    string
+	source string
+}
+
+func (s *Server) candidateRunnersDirs() []runnerBinaryDirCandidate {
+	var dirs []runnerBinaryDirCandidate
+	seen := map[string]bool{}
+	add := func(d, src string) {
+		d = strings.TrimSpace(d)
+		if d == "" {
+			return
+		}
+		clean := filepath.Clean(d)
+		if seen[clean] {
+			return
+		}
+		seen[clean] = true
+		dirs = append(dirs, runnerBinaryDirCandidate{dir: clean, source: src})
+	}
+
+	add(s.sshBinariesDir(), "staged")
+	add(s.cfg.RunnersDir, "bundled")
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		add(filepath.Join(exeDir, "runners"), "bundled")
+		add(filepath.Join(filepath.Dir(exeDir), "runners"), "bundled")
+	}
+	add("/opt/nex-v3/runners", "bundled")
+	add("./bin/runners", "bundled")
+	add("./dist/runners", "bundled")
+	return dirs
+}
+
+func parseRunnerFileOSArch(name string) (string, string, bool) {
+	if !strings.HasPrefix(name, "nex-runner-") {
+		return "", "", false
+	}
+	rest := strings.TrimPrefix(name, "nex-runner-")
+	rest = strings.TrimSuffix(rest, ".exe")
+	parts := strings.Split(rest, "-")
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	osName, archName := normalizeTargetOSArch(parts[0], parts[1])
+	if (osName != "linux" && osName != "darwin" && osName != "windows") || (archName != "amd64" && archName != "arm64") {
+		return "", "", false
+	}
+	return osName, archName, true
+}
+
+func (s *Server) listAvailableRunnerBinaries() []stagedBinaryInfo {
+	byKey := map[string]stagedBinaryInfo{}
+	for _, cand := range s.candidateRunnersDirs() {
+		entries, err := os.ReadDir(cand.dir)
+		if err != nil {
+			continue
+		}
 		for _, e := range entries {
-			if e.IsDir() || !strings.HasPrefix(e.Name(), "nex-runner-") {
+			if e.IsDir() {
 				continue
 			}
-			parts := strings.Split(strings.TrimPrefix(e.Name(), "nex-runner-"), "-")
-			if len(parts) != 2 {
+			osName, archName, ok := parseRunnerFileOSArch(e.Name())
+			if !ok {
 				continue
 			}
 			info, err := e.Info()
-			if err != nil {
+			if err != nil || info.Size() <= 0 {
 				continue
 			}
-			out = append(out, stagedBinaryInfo{
-				OS:        parts[0],
-				Arch:      parts[1],
-				SizeBytes: info.Size(),
-				UpdatedAt: info.ModTime().UnixMilli(),
-			})
+			key := osName + "/" + archName
+			if _, exists := byKey[key]; !exists {
+				byKey[key] = stagedBinaryInfo{
+					OS:        osName,
+					Arch:      archName,
+					SizeBytes: info.Size(),
+					UpdatedAt: info.ModTime().UnixMilli(),
+					Source:    cand.source,
+				}
+			}
 		}
-		writeJSON(w, http.StatusOK, out)
+	}
+
+	// Host binary fallback for current runtime.GOOS/runtime.GOARCH
+	hostKey := runtime.GOOS + "/" + runtime.GOARCH
+	if _, exists := byKey[hostKey]; !exists {
+		exeName := "nex-runner"
+		if runtime.GOOS == "windows" {
+			exeName = "nex-runner.exe"
+		}
+		candidates := []string{filepath.Join("./bin", exeName), filepath.Join("/opt/nex-v3/bin", exeName)}
+		if exe, err := os.Executable(); err == nil {
+			candidates = append([]string{filepath.Join(filepath.Dir(exe), exeName)}, candidates...)
+		}
+		for _, c := range candidates {
+			if st, err := os.Stat(c); err == nil && !st.IsDir() && st.Size() > 0 {
+				byKey[hostKey] = stagedBinaryInfo{
+					OS:        runtime.GOOS,
+					Arch:      runtime.GOARCH,
+					SizeBytes: st.Size(),
+					UpdatedAt: st.ModTime().UnixMilli(),
+					Source:    "local",
+				}
+				break
+			}
+		}
+	}
+
+	out := make([]stagedBinaryInfo, 0, len(byKey))
+	for _, v := range byKey {
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].OS != out[j].OS {
+			return out[i].OS < out[j].OS
+		}
+		return out[i].Arch < out[j].Arch
+	})
+	return out
+}
+
+func (s *Server) handleSSHBinaries(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.listAvailableRunnerBinaries())
 
 	case http.MethodPost:
-		targetOS, targetArch := normalizeTargetOSArch(r.URL.Query().Get("os"), r.URL.Query().Get("arch"))
-		if (targetOS != "linux" && targetOS != "darwin") || (targetArch != "amd64" && targetArch != "arm64") {
-			writeErr(w, http.StatusBadRequest, errors.New("os must be linux|darwin and arch must be amd64|arm64"))
-			return
-		}
 		dir := s.sshBinariesDir()
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
 		}
-		dst := filepath.Join(dir, fmt.Sprintf("nex-runner-%s-%s", targetOS, targetArch))
-		tmp := dst + ".uploading"
+		tmp := filepath.Join(dir, fmt.Sprintf("nex-runner-%d.uploading", time.Now().UnixNano()))
 		f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o700)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
@@ -387,6 +548,28 @@ func (s *Server) handleSSHBinaries(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+
+		rawOS := strings.TrimSpace(r.URL.Query().Get("os"))
+		rawArch := strings.TrimSpace(r.URL.Query().Get("arch"))
+		var targetOS, targetArch string
+		if rawOS != "" && rawArch != "" {
+			targetOS, targetArch = normalizeTargetOSArch(rawOS, rawArch)
+		} else {
+			headerBytes, _ := os.ReadFile(tmp)
+			detOS, detArch, detErr := detectBinaryOSArch(headerBytes)
+			if detErr != nil {
+				_ = os.Remove(tmp)
+				writeErr(w, http.StatusBadRequest, fmt.Errorf("failed to detect binary os/arch: %w", detErr))
+				return
+			}
+			targetOS, targetArch = detOS, detArch
+		}
+		if (targetOS != "linux" && targetOS != "darwin" && targetOS != "windows") || (targetArch != "amd64" && targetArch != "arm64") {
+			_ = os.Remove(tmp)
+			writeErr(w, http.StatusBadRequest, errors.New("os must be linux|darwin|windows and arch must be amd64|arm64"))
+			return
+		}
+		dst := filepath.Join(dir, runnerBinaryFileName(targetOS, targetArch))
 		if err := os.Rename(tmp, dst); err != nil {
 			_ = os.Remove(tmp)
 			writeErr(w, http.StatusInternalServerError, err)
@@ -397,6 +580,7 @@ func (s *Server) handleSSHBinaries(w http.ResponseWriter, r *http.Request) {
 			Arch:      targetArch,
 			SizeBytes: n,
 			UpdatedAt: time.Now().UnixMilli(),
+			Source:    "staged",
 		})
 
 	default:
@@ -426,7 +610,7 @@ func (s *Server) handleSSHBinaryDownload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"nex-runner-%s-%s\"", targetOS, targetArch))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", runnerBinaryFileName(targetOS, targetArch)))
 	http.ServeFile(w, r, binPath)
 }
 
@@ -543,19 +727,15 @@ type remoteProbeInfo struct {
 	RunnerRunning bool
 }
 
-func probeRemoteHost(ctx context.Context, t store.SSHTargetRecord) (remoteProbeInfo, string, error) {
-	script := `printf "OS=%s\nARCH=%s\nHOST=%s\nHOME=%s\nRUNNING=%s\n" "$(uname -s)" "$(uname -m)" "$(hostname)" "$HOME" "$(pgrep -f nex-runner >/dev/null 2>&1 && echo 1 || echo 0)"`
-	out, err := runSSHCommand(ctx, t, script)
-	if err != nil {
-		return remoteProbeInfo{}, out, err
-	}
+func parseProbeLines(out string) remoteProbeInfo {
 	var info remoteProbeInfo
 	for _, line := range strings.Split(out, "\n") {
 		k, v, ok := strings.Cut(strings.TrimSpace(line), "=")
 		if !ok {
 			continue
 		}
-		switch k {
+		v = strings.TrimSpace(v)
+		switch strings.ToUpper(strings.TrimSpace(k)) {
 		case "OS":
 			info.OS = v
 		case "ARCH":
@@ -569,7 +749,132 @@ func probeRemoteHost(ctx context.Context, t store.SSHTargetRecord) (remoteProbeI
 		}
 	}
 	info.OS, info.Arch = normalizeTargetOSArch(info.OS, info.Arch)
-	return info, out, nil
+	return info
+}
+
+func probeRemoteHost(ctx context.Context, t store.SSHTargetRecord) (remoteProbeInfo, string, error) {
+	posixScript := `printf "OS=%s\nARCH=%s\nHOST=%s\nHOME=%s\nRUNNING=%s\n" "$(uname -s)" "$(uname -m)" "$(hostname)" "${HOME:-$(eval echo ~)}" "$(pgrep -f nex-runner >/dev/null 2>&1 && echo 1 || echo 0)"`
+	out, err := runSSHCommand(ctx, t, posixScript)
+	if err == nil {
+		info := parseProbeLines(out)
+		if info.OS != "" && info.Arch != "" {
+			return info, out, nil
+		}
+	}
+
+	// Fallback for Windows OpenSSH targets (cmd.exe / PowerShell)
+	cmdScript := `cmd /c "echo OS=windows& echo ARCH=%PROCESSOR_ARCHITECTURE%& echo HOST=%COMPUTERNAME%& echo HOME=%USERPROFILE%"`
+	winOut, winErr := runSSHCommand(ctx, t, cmdScript)
+	if winErr == nil {
+		info := parseProbeLines(winOut)
+		if info.OS != "" && info.HomeDir != "" {
+			if info.Arch == "" {
+				info.Arch = "amd64"
+			}
+			return info, winOut, nil
+		}
+	}
+
+	psScript := `powershell -NoProfile -NonInteractive -Command "Write-Output 'OS=windows'; Write-Output ('ARCH=' + $env:PROCESSOR_ARCHITECTURE); Write-Output ('HOST=' + $env:COMPUTERNAME); Write-Output ('HOME=' + $env:USERPROFILE)"`
+	psOut, psErr := runSSHCommand(ctx, t, psScript)
+	if psErr == nil {
+		info := parseProbeLines(psOut)
+		if info.OS != "" {
+			if info.Arch == "" {
+				info.Arch = "amd64"
+			}
+			return info, psOut, nil
+		}
+	}
+
+	if err != nil {
+		return remoteProbeInfo{}, out, err
+	}
+	return remoteProbeInfo{}, winOut, winErr
+}
+
+func joinRemotePath(base, rel, targetOS string) string {
+	rel = strings.TrimLeft(rel, "/\\")
+	if targetOS == "windows" {
+		base = strings.TrimRight(strings.ReplaceAll(base, "/", "\\"), "\\")
+		if rel == "" {
+			return base
+		}
+		return base + "\\" + strings.ReplaceAll(rel, "/", "\\")
+	}
+	base = strings.TrimRight(base, "/")
+	if rel == "" {
+		return base
+	}
+	return base + "/" + strings.ReplaceAll(rel, "\\", "/")
+}
+
+func inferRemoteHomeDir(targetOS, username string) string {
+	u := strings.TrimSpace(username)
+	switch targetOS {
+	case "darwin":
+		if u == "root" {
+			return "/var/root"
+		}
+		if u != "" {
+			return "/Users/" + u
+		}
+		return "/Users"
+	case "windows":
+		if u != "" {
+			return `C:\Users\` + u
+		}
+		return `C:\Users\Public`
+	default: // linux
+		if u == "root" || u == "" {
+			return "/root"
+		}
+		return "/home/" + u
+	}
+}
+
+func expandRemoteEnvPath(raw, remoteHome, targetOS string) string {
+	p := strings.TrimSpace(raw)
+	switch {
+	case p == "", p == "~", p == "$HOME", p == "${HOME}", strings.EqualFold(p, "%USERPROFILE%"):
+		return remoteHome
+	case strings.HasPrefix(p, "~/") || strings.HasPrefix(p, "~\\"):
+		return joinRemotePath(remoteHome, p[2:], targetOS)
+	case strings.HasPrefix(p, "$HOME/") || strings.HasPrefix(p, "$HOME\\"):
+		return joinRemotePath(remoteHome, p[len("$HOME/"):], targetOS)
+	case strings.HasPrefix(p, "${HOME}/") || strings.HasPrefix(p, "${HOME}\\"):
+		return joinRemotePath(remoteHome, p[len("${HOME}/"):], targetOS)
+	case len(p) >= len("%USERPROFILE%/") && strings.EqualFold(p[:len("%USERPROFILE%")], "%USERPROFILE%") && (p[len("%USERPROFILE%")] == '/' || p[len("%USERPROFILE%")] == '\\'):
+		return joinRemotePath(remoteHome, p[len("%USERPROFILE%")+1:], targetOS)
+	default:
+		return p
+	}
+}
+
+// resolveRemotePaths computes OS-aware installDir, workspace, and binary name for a probed remote host.
+// Empty or "$HOME" workspace paths resolve to the remote host's detected $HOME (or OS-specific default).
+func resolveRemotePaths(t store.SSHTargetRecord, info remoteProbeInfo) (installDir, workspace, binName string) {
+	targetOS := info.OS
+	if targetOS == "" {
+		targetOS = "linux"
+	}
+	remoteHome := strings.TrimSpace(info.HomeDir)
+	if remoteHome == "" {
+		remoteHome = inferRemoteHomeDir(targetOS, t.Username)
+	}
+
+	rawInstall := strings.TrimSpace(t.InstallDir)
+	if rawInstall == "" {
+		rawInstall = "~/.nex-runner"
+	}
+	installDir = expandRemoteEnvPath(rawInstall, remoteHome, targetOS)
+	workspace = expandRemoteEnvPath(t.WorkspacePath, remoteHome, targetOS)
+
+	binName = "nex-runner"
+	if targetOS == "windows" {
+		binName = "nex-runner.exe"
+	}
+	return installDir, workspace, binName
 }
 
 func (s *Server) handleSSHTargetTest(w http.ResponseWriter, r *http.Request, id string) {
@@ -620,21 +925,29 @@ func (s *Server) resolveOrBuildRunnerBinary(ctx context.Context, targetOS, targe
 		}
 	}
 
-	// 1. Check explicitly uploaded/cached binary under <dataDir>/runner-binaries/
-	staged := filepath.Join(s.sshBinariesDir(), fmt.Sprintf("nex-runner-%s-%s", targetOS, targetArch))
-	if st, err := os.Stat(staged); err == nil && st.Size() > 0 {
-		logf("Using staged binary: %s (%d bytes)", staged, st.Size())
-		return staged, nil
+	fileName := runnerBinaryFileName(targetOS, targetArch)
+
+	// 1. Check staged & bundled runner directories (<dataDir>/runner-binaries, Config.RunnersDir, <exeDir>/runners, /opt/nex-v3/runners, ./bin/runners)
+	for _, cand := range s.candidateRunnersDirs() {
+		p := filepath.Join(cand.dir, fileName)
+		if st, err := os.Stat(p); err == nil && !st.IsDir() && st.Size() > 0 {
+			logf("Using %s binary: %s (%d bytes)", cand.source, p, st.Size())
+			return p, nil
+		}
 	}
 
 	// 2. If target matches host OS/Arch, check local nex-runner binaries next to executable or ./bin
 	if targetOS == runtime.GOOS && targetArch == runtime.GOARCH {
-		candidates := []string{"./bin/nex-runner", "/opt/nex-v3/bin/nex-runner"}
+		exeName := "nex-runner"
+		if targetOS == "windows" {
+			exeName = "nex-runner.exe"
+		}
+		candidates := []string{filepath.Join("./bin", exeName), filepath.Join("/opt/nex-v3/bin", exeName)}
 		if exe, err := os.Executable(); err == nil {
-			candidates = append([]string{filepath.Join(filepath.Dir(exe), "nex-runner")}, candidates...)
+			candidates = append([]string{filepath.Join(filepath.Dir(exe), exeName)}, candidates...)
 		}
 		for _, c := range candidates {
-			if st, err := os.Stat(c); err == nil && st.Size() > 0 {
+			if st, err := os.Stat(c); err == nil && !st.IsDir() && st.Size() > 0 {
 				logf("Using local host binary: %s (%d bytes)", c, st.Size())
 				return c, nil
 			}
@@ -642,6 +955,7 @@ func (s *Server) resolveOrBuildRunnerBinary(ctx context.Context, targetOS, targe
 	}
 
 	// 3. If running inside a Go source tree with cmd/nex-runner, cross-compile cleanly (CGO_ENABLED=0)!
+	staged := filepath.Join(s.sshBinariesDir(), fileName)
 	if _, err := os.Stat("cmd/nex-runner/main.go"); err == nil {
 		if _, goErr := exec.LookPath("go"); goErr == nil {
 			if err := os.MkdirAll(s.sshBinariesDir(), 0o700); err == nil {
@@ -658,7 +972,7 @@ func (s *Server) resolveOrBuildRunnerBinary(ctx context.Context, targetOS, targe
 		}
 	}
 
-	return "", fmt.Errorf("no nex-runner binary found for %s/%s; upload one in Settings -> Remote Devices or switch to Remote Install URL", targetOS, targetArch)
+	return "", fmt.Errorf("no nex-runner binary found for %s/%s in bundled runners directory or local build environment", targetOS, targetArch)
 }
 
 func resolveServerEndpointsForRemote(r *http.Request, publicBase, overrideWS string) (wsURL, httpBase string) {
@@ -715,25 +1029,28 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 	}
 	logf("Remote host: %s (%s/%s, home=%s)", info.Hostname, info.OS, info.Arch, info.HomeDir)
 
-	installDir := strings.TrimSpace(target.InstallDir)
-	if installDir == "" {
-		installDir = "~/.nex-runner"
-	}
-	if strings.HasPrefix(installDir, "~/") && info.HomeDir != "" {
-		installDir = filepath.ToSlash(filepath.Join(info.HomeDir, installDir[2:]))
-	} else if installDir == "~" && info.HomeDir != "" {
-		installDir = info.HomeDir
-	}
-	workspace := strings.TrimSpace(target.WorkspacePath)
-	if workspace == "" {
-		workspace = info.HomeDir
-	}
+	installDir, workspace, binName := resolveRemotePaths(*target, info)
 
 	wsURL, httpBase := resolveServerEndpointsForRemote(r, s.cfg.PublicBaseURL, target.ServerWSURL)
-	logf("Install dir: %s | Runner WS target: %s", installDir, wsURL)
+	logf("Install dir: %s | Workspace: %s | Runner WS target: %s", installDir, workspace, wsURL)
+
+	remoteBinDir := joinRemotePath(installDir, "bin", info.OS)
+	remoteDataDir := joinRemotePath(installDir, "data", info.OS)
+	remoteBin := joinRemotePath(remoteBinDir, binName, info.OS)
+	remoteBinNew := remoteBin + ".new"
 
 	// Step 2: Prepare remote directory
-	if out, err := runSSHCommand(ctx, *target, fmt.Sprintf("mkdir -p %s/bin %s/data", shellQuote(installDir), shellQuote(installDir))); err != nil {
+	var mkdirCmd string
+	if info.OS == "windows" {
+		mkdirCmd = fmt.Sprintf(
+			`powershell -NoProfile -NonInteractive -Command "New-Item -ItemType Directory -Force -Path '%s','%s' | Out-Null"`,
+			strings.ReplaceAll(remoteBinDir, "'", "''"),
+			strings.ReplaceAll(remoteDataDir, "'", "''"),
+		)
+	} else {
+		mkdirCmd = fmt.Sprintf("mkdir -p %s %s", shellQuote(remoteBinDir), shellQuote(remoteDataDir))
+	}
+	if out, err := runSSHCommand(ctx, *target, mkdirCmd); err != nil {
 		errMsg := strings.TrimSpace(out)
 		if errMsg == "" {
 			errMsg = err.Error()
@@ -743,9 +1060,6 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": errMsg, "log": logBuf.String()})
 		return
 	}
-
-	remoteBinNew := installDir + "/bin/nex-runner.new"
-	remoteBin := installDir + "/bin/nex-runner"
 
 	// Step 3: Deliver binary via SCP OR Remote Install
 	if target.InstallMode == "remote_install" {
@@ -767,12 +1081,23 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 			logf("Remote installing from URL: %s", dlURL)
 		}
 
-		dlCmd := fmt.Sprintf(
-			"if command -v curl >/dev/null 2>&1; then curl -fsSL %s -o %s; elif command -v wget >/dev/null 2>&1; then wget -qO %s %s; else echo 'neither curl nor wget installed' >&2; exit 1; fi && chmod +x %s && mv -f %s %s",
-			shellQuote(dlURL), shellQuote(remoteBinNew),
-			shellQuote(remoteBinNew), shellQuote(dlURL),
-			shellQuote(remoteBinNew), shellQuote(remoteBinNew), shellQuote(remoteBin),
-		)
+		var dlCmd string
+		if info.OS == "windows" {
+			dlCmd = fmt.Sprintf(
+				`powershell -NoProfile -NonInteractive -Command "Invoke-WebRequest -UseBasicParsing -Uri '%s' -OutFile '%s'; Move-Item -Force '%s' '%s'"`,
+				strings.ReplaceAll(dlURL, "'", "''"),
+				strings.ReplaceAll(remoteBinNew, "'", "''"),
+				strings.ReplaceAll(remoteBinNew, "'", "''"),
+				strings.ReplaceAll(remoteBin, "'", "''"),
+			)
+		} else {
+			dlCmd = fmt.Sprintf(
+				"if command -v curl >/dev/null 2>&1; then curl -fsSL %s -o %s; elif command -v wget >/dev/null 2>&1; then wget -qO %s %s; else echo 'neither curl nor wget installed' >&2; exit 1; fi && chmod +x %s && mv -f %s %s",
+				shellQuote(dlURL), shellQuote(remoteBinNew),
+				shellQuote(remoteBinNew), shellQuote(dlURL),
+				shellQuote(remoteBinNew), shellQuote(remoteBinNew), shellQuote(remoteBin),
+			)
+		}
 		if out, err := runSSHCommand(ctx, *target, dlCmd); err != nil {
 			errMsg := strings.TrimSpace(out)
 			if errMsg == "" {
@@ -793,8 +1118,12 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": bErr.Error(), "log": logBuf.String()})
 			return
 		}
-		logf("Uploading %s via SCP to %s...", localBin, remoteBinNew)
-		if out, err := runSCPFile(ctx, *target, localBin, remoteBinNew); err != nil {
+		scpDest := remoteBinNew
+		if info.OS == "windows" {
+			scpDest = strings.ReplaceAll(remoteBinNew, "\\", "/")
+		}
+		logf("Uploading %s via SCP to %s...", localBin, scpDest)
+		if out, err := runSCPFile(ctx, *target, localBin, scpDest); err != nil {
 			errMsg := strings.TrimSpace(out)
 			if errMsg == "" {
 				errMsg = err.Error()
@@ -804,7 +1133,17 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": errMsg, "log": logBuf.String()})
 			return
 		}
-		if out, err := runSSHCommand(ctx, *target, fmt.Sprintf("chmod +x %s && mv -f %s %s", shellQuote(remoteBinNew), shellQuote(remoteBinNew), shellQuote(remoteBin))); err != nil {
+		var swapCmd string
+		if info.OS == "windows" {
+			swapCmd = fmt.Sprintf(
+				`powershell -NoProfile -NonInteractive -Command "Move-Item -Force '%s' '%s'"`,
+				strings.ReplaceAll(remoteBinNew, "'", "''"),
+				strings.ReplaceAll(remoteBin, "'", "''"),
+			)
+		} else {
+			swapCmd = fmt.Sprintf("chmod +x %s && mv -f %s %s", shellQuote(remoteBinNew), shellQuote(remoteBinNew), shellQuote(remoteBin))
+		}
+		if out, err := runSSHCommand(ctx, *target, swapCmd); err != nil {
 			errMsg := strings.TrimSpace(out)
 			if errMsg == "" {
 				errMsg = err.Error()
@@ -819,19 +1158,43 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 
 	// Step 4: Restart remote nex-runner daemon and verify PID
 	runnerID := "run_" + strings.ToLower(strings.ReplaceAll(strings.TrimSpace(target.Name), " ", "_"))
-	pidFile := installDir + "/runner.pid"
-	logFile := installDir + "/runner.log"
-	dataDir := installDir + "/data"
+	pidFile := joinRemotePath(installDir, "runner.pid", info.OS)
+	logFile := joinRemotePath(installDir, "runner.log", info.OS)
 
-	startCmd := fmt.Sprintf(
-		"if [ -f %s ]; then oldpid=$(cat %s); kill \"$oldpid\" 2>/dev/null || true; sleep 0.5; fi; "+
-			"nohup %s -id %s -name %s -server %s -workspace %s -data %s > %s 2>&1 < /dev/null & "+
-			"newpid=$!; echo \"$newpid\" > %s; sleep 1; "+
-			"if kill -0 \"$newpid\" 2>/dev/null; then echo \"STARTED_PID=$newpid\"; tail -n 10 %s 2>/dev/null || true; else echo 'Runner exited immediately:' >&2; tail -n 20 %s >&2; exit 1; fi",
-		shellQuote(pidFile), shellQuote(pidFile),
-		shellQuote(remoteBin), shellQuote(runnerID), shellQuote(target.Name), shellQuote(wsURL), shellQuote(workspace), shellQuote(dataDir), shellQuote(logFile),
-		shellQuote(pidFile), shellQuote(logFile), shellQuote(logFile),
-	)
+	var startCmd string
+	if info.OS == "windows" {
+		psArgs := fmt.Sprintf(`'-id','%s','-name','%s','-server','%s','-workspace','%s','-data-dir','%s'`,
+			strings.ReplaceAll(runnerID, "'", "''"),
+			strings.ReplaceAll(target.Name, "'", "''"),
+			strings.ReplaceAll(wsURL, "'", "''"),
+			strings.ReplaceAll(workspace, "'", "''"),
+			strings.ReplaceAll(remoteDataDir, "'", "''"),
+		)
+		if s.cfg.PairingSecret != "" {
+			psArgs += fmt.Sprintf(`','-token','%s`, strings.ReplaceAll(s.cfg.PairingSecret, "'", "''"))
+		}
+		startCmd = fmt.Sprintf(
+			`powershell -NoProfile -NonInteractive -Command "$pidFile='%s'; $logFile='%s'; if (Test-Path $pidFile) { $old=Get-Content $pidFile -ErrorAction SilentlyContinue; if ($old) { Stop-Process -Id ([int]$old) -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 500 }; $p = Start-Process -FilePath '%s' -ArgumentList @(%s) -RedirectStandardOutput $logFile -RedirectStandardError ($logFile + '.err') -WindowStyle Hidden -PassThru; Set-Content -Path $pidFile -Value $p.Id; Start-Sleep -Seconds 1; if (Get-Process -Id $p.Id -ErrorAction SilentlyContinue) { Write-Output ('STARTED_PID=' + $p.Id) } else { Write-Error 'Runner exited immediately'; exit 1 }"`,
+			strings.ReplaceAll(pidFile, "'", "''"),
+			strings.ReplaceAll(logFile, "'", "''"),
+			strings.ReplaceAll(remoteBin, "'", "''"),
+			psArgs,
+		)
+	} else {
+		tokenFlag := ""
+		if s.cfg.PairingSecret != "" {
+			tokenFlag = " -token " + shellQuote(s.cfg.PairingSecret)
+		}
+		startCmd = fmt.Sprintf(
+			"if [ -f %s ]; then oldpid=$(cat %s); kill \"$oldpid\" 2>/dev/null || true; sleep 0.5; fi; "+
+				"nohup %s -id %s -name %s -server %s -workspace %s -data-dir %s%s > %s 2>&1 < /dev/null & "+
+				"newpid=$!; echo \"$newpid\" > %s; sleep 1; "+
+				"if kill -0 \"$newpid\" 2>/dev/null; then echo \"STARTED_PID=$newpid\"; tail -n 10 %s 2>/dev/null || true; else echo 'Runner exited immediately:' >&2; tail -n 20 %s >&2; exit 1; fi",
+			shellQuote(pidFile), shellQuote(pidFile),
+			shellQuote(remoteBin), shellQuote(runnerID), shellQuote(target.Name), shellQuote(wsURL), shellQuote(workspace), shellQuote(remoteDataDir), tokenFlag, shellQuote(logFile),
+			shellQuote(pidFile), shellQuote(logFile), shellQuote(logFile),
+		)
+	}
 
 	startOut, startErr := runSSHCommand(ctx, *target, startCmd)
 	if strings.TrimSpace(startOut) != "" {
@@ -868,11 +1231,20 @@ func (s *Server) handleSSHTargetStop(w http.ResponseWriter, r *http.Request, id 
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
-	installDir := strings.TrimSpace(target.InstallDir)
-	if installDir == "" {
-		installDir = "~/.nex-runner"
+	info, _, _ := probeRemoteHost(ctx, *target)
+	installDir, _, _ := resolveRemotePaths(*target, info)
+
+	var stopCmd string
+	if info.OS == "windows" {
+		pidFile := joinRemotePath(installDir, "runner.pid", "windows")
+		stopCmd = fmt.Sprintf(
+			`powershell -NoProfile -NonInteractive -Command "$pidf='%s'; if (Test-Path $pidf) { $p=Get-Content $pidf -ErrorAction SilentlyContinue; if ($p) { Stop-Process -Id ([int]$p) -Force -ErrorAction SilentlyContinue }; Remove-Item -Force $pidf; Write-Output 'Stopped runner.' } else { Write-Output 'No pid file found.' }"`,
+			strings.ReplaceAll(pidFile, "'", "''"),
+		)
+	} else {
+		pidFile := joinRemotePath(installDir, "runner.pid", info.OS)
+		stopCmd = fmt.Sprintf("pidf=%s; if [ -f \"$pidf\" ]; then kill $(cat \"$pidf\") 2>/dev/null || true; rm -f \"$pidf\"; echo 'Stopped runner.'; else echo 'No pid file found.'; fi", shellQuote(pidFile))
 	}
-	stopCmd := fmt.Sprintf("pidf=%s/runner.pid; if [ -f \"$pidf\" ]; then kill $(cat \"$pidf\") 2>/dev/null || true; rm -f \"$pidf\"; echo 'Stopped runner.'; else echo 'No pid file found.'; fi", installDir)
 	out, stopErr := runSSHCommand(ctx, *target, stopCmd)
 	if stopErr != nil {
 		msg := strings.TrimSpace(out)

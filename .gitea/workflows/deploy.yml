@@ -35,12 +35,18 @@ jobs:
       - name: Run Go Unit Tests (CGO_ENABLED=0)
         run: CGO_ENABLED=0 go test ./...
 
-      - name: Build Linux amd64 Binaries (CGO_ENABLED=0)
+      - name: Build Linux amd64 Binaries & Multi-Platform Runners (CGO_ENABLED=0)
         run: |
-          mkdir -p dist
+          mkdir -p dist/runners
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/nex-server ./cmd/nex-server
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/nex-runner ./cmd/nex-runner
-          ls -lh dist/nex-server dist/nex-runner
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/runners/nex-runner-linux-amd64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/runners/nex-runner-linux-arm64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o dist/runners/nex-runner-darwin-arm64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -o dist/runners/nex-runner-darwin-amd64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o dist/runners/nex-runner-windows-amd64.exe ./cmd/nex-runner
+          SKIP_WEB=1 ./scripts/package-server.sh linux amd64
+          ls -lh dist/nex-server dist/nex-runner dist/runners/
 
       - name: Deploy to RemoteBuilder (nex.tylinux.cn)
         env:
@@ -59,14 +65,16 @@ jobs:
 
           SSH_OPTS="-i $TMP_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
 
-          # Upload new binaries to staging paths on RemoteBuilder
-          ssh $SSH_OPTS "${USER}@${HOST}" "mkdir -p /opt/nex-v3/bin"
+          # Upload new binaries, bundled multi-platform runners, and startup config templates on RemoteBuilder
+          ssh $SSH_OPTS "${USER}@${HOST}" "mkdir -p /opt/nex-v3/bin /opt/nex-v3/runners /opt/nex-v3/config"
           scp $SSH_OPTS dist/nex-server "${USER}@${HOST}:/opt/nex-v3/bin/nex-server.new"
           scp $SSH_OPTS dist/nex-runner "${USER}@${HOST}:/opt/nex-v3/bin/nex-runner.new"
+          scp $SSH_OPTS dist/runners/* "${USER}@${HOST}:/opt/nex-v3/runners/"
+          scp -r $SSH_OPTS deploy/* "${USER}@${HOST}:/opt/nex-v3/config/"
 
           # Atomically swap binaries and restart systemd services
           ssh $SSH_OPTS "${USER}@${HOST}" 'set -euo pipefail
-            chmod +x /opt/nex-v3/bin/nex-server.new /opt/nex-v3/bin/nex-runner.new
+            chmod +x /opt/nex-v3/bin/nex-server.new /opt/nex-v3/bin/nex-runner.new /opt/nex-v3/runners/nex-runner-*
             mv -f /opt/nex-v3/bin/nex-server.new /opt/nex-v3/bin/nex-server
             mv -f /opt/nex-v3/bin/nex-runner.new /opt/nex-v3/bin/nex-runner
             sudo systemctl restart nex-v3-server.service

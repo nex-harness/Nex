@@ -18,6 +18,7 @@ func main() {
 	dataDir := flag.String("data-dir", defaultDir, "Server data directory (main.db, archive.db, blobs)")
 	pairingToken := flag.String("pairing-token", os.Getenv("NEX_PAIRING_TOKEN"), "Optional shared pairing token for Runners")
 	publicURL := flag.String("public-url", os.Getenv("NEX_PUBLIC_URL"), "Public base URL advertised for /llm-proxy")
+	runnersDir := flag.String("runners-dir", os.Getenv("NEX_RUNNERS_DIR"), "Optional directory containing prebuilt multi-platform nex-runner binaries")
 	flag.Parse()
 
 	st, err := store.Open(*dataDir)
@@ -30,6 +31,7 @@ func main() {
 		Store:         st,
 		PairingSecret: *pairingToken,
 		PublicBaseURL: *publicURL,
+		RunnersDir:    *runnersDir,
 		StaticFS:      embeddedWebFS(),
 	})
 	if err != nil {
