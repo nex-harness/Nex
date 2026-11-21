@@ -5,8 +5,8 @@
 :root {
   --ui-font-size: 14px;
   --code-font-size: 13px;
-  --nex-font-sans: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif;
-  --nex-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "PingFang SC", monospace;
+  --nex-font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --nex-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", monospace;
 
   /* Zai Light Foundation (Default Light) */
   --shadow-composer-soft: 0 1px 3px rgb(0 0 0 / 4%), 0 6px 18px rgb(0 0 0 / 4%);
@@ -17,7 +17,7 @@
   --color-sidebar: #f0f0f0;
   --color-surface: rgba(13, 13, 13, 0.03);
   --color-surface-hover: rgba(13, 13, 13, 0.055);
-  --color-user-message-bubble: rgba(13, 13, 13, 0.055);
+  --color-user-message-bubble: rgba(13, 13, 13, 0.03);
   --color-card: #ffffff;
   --color-card-selected: #f2f2f4;
   --color-popover: #ffffff;
@@ -29,13 +29,14 @@
   --color-tab: #f0f0f0;
   --color-tab-active: #ffffff;
   --color-tag: #e6e6e6;
+  --color-markdown-inline-code: var(--color-tag);
 
-  --color-foreground: #111111;
-  --color-foreground-subtle: rgba(17, 17, 17, 0.78);
-  --color-foreground-subtlest: rgba(17, 17, 17, 0.56);
+  --color-foreground: oklch(0.269 0 0);
+  --color-foreground-subtle: color-mix(in oklab, oklch(0.269 0 0) 68%, transparent);
+  --color-foreground-subtlest: color-mix(in oklab, oklch(0.269 0 0) 44%, transparent);
   --color-remote-muted: #525252;
 
-  --color-border: rgba(13, 13, 13, 0.09);
+  --color-border: rgba(13, 13, 13, 0.1);
   --color-border-hover: rgba(13, 13, 13, 0.16);
   --color-hover: rgba(13, 13, 13, 0.05);
   --color-selected: rgba(13, 13, 13, 0.065);
@@ -45,6 +46,7 @@
   --color-primary-foreground: #ffffff;
   --color-secondary: #e6e6e6;
   --color-brand-blue: #0b7fff;
+  --color-icon-blue: #0066dd;
 
   /* Semantic Status & Diff Tokens */
   --color-success: #1e8a3e;
@@ -108,6 +110,8 @@
   --color-primary-foreground: #000000;
   --color-secondary: #363636;
   --color-brand-blue: #4099ff;
+  --color-icon-blue: #58a6ff;
+  --color-markdown-inline-code: var(--color-tag);
 
   --color-success: #46bf72;
   --color-success-surface: rgba(70, 191, 114, 0.16);
@@ -163,6 +167,7 @@
   --color-tab: var(--color-tab);
   --color-tab-active: var(--color-tab-active);
   --color-tag: var(--color-tag);
+  --color-markdown-inline-code: var(--color-markdown-inline-code);
 
   --color-foreground: var(--color-foreground);
   --color-foreground-subtle: var(--color-foreground-subtle);
@@ -179,6 +184,7 @@
   --color-primary-foreground: var(--color-primary-foreground);
   --color-secondary: var(--color-secondary);
   --color-brand-blue: var(--color-brand-blue);
+  --color-icon-blue: var(--color-icon-blue);
 
   --color-success: var(--color-success);
   --color-success-surface: var(--color-success-surface);
@@ -201,6 +207,9 @@ body,
   font-family: var(--nex-font-sans);
   background-color: var(--color-background-shell);
   color: var(--color-foreground);
+}
+
+.dark {
   -webkit-font-smoothing: antialiased;
 }
 

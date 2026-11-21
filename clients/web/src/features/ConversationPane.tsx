@@ -120,7 +120,7 @@ function ToolIndeterminateBar({ active }: { active: boolean }) {
   );
 }
 
-function ToolSummaryRow({ tc, dense = true }: { tc: ToolCallCard; dense?: boolean }) {
+function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boolean }) {
   const locale = useNexStore((s) => s.locale);
   const openFileInPreviewTab = useNexStore((s) => s.openFileInPreviewTab);
   const [open, setOpen] = useState(false);
@@ -135,9 +135,9 @@ function ToolSummaryRow({ tc, dense = true }: { tc: ToolCallCard; dense?: boolea
 
   const label = (key: MessageKey) =>
     running ? (
-      <span className="shrink-0 font-medium animated-gradient-text">{formatMsg(locale, key)}</span>
+      <span className="shrink-0 font-normal animated-gradient-text">{formatMsg(locale, key)}</span>
     ) : (
-      <span className={`shrink-0 font-medium ${tc.status === 'error' ? 'text-destructive' : 'text-foreground-subtle'}`}>
+      <span className={`shrink-0 font-normal ${tc.status === 'error' ? 'text-destructive' : 'text-foreground'}`}>
         {formatMsg(locale, key)}
       </span>
     );
@@ -660,7 +660,7 @@ function UserBubble({
         </div>
       )}
       {displayText && (
-        <div className="max-w-xl whitespace-pre-wrap break-words rounded-2xl bg-black/[0.045] px-4 py-2.5 text-ui-base text-foreground dark:bg-white/[0.08]">
+        <div className="max-w-full whitespace-pre-wrap break-words rounded-xl rounded-tr-xs border border-border bg-surface px-4 py-3 text-ui-base leading-[1.5] text-foreground @min-[624px]/conversation:max-w-xl">
           {renderRichUserText(displayText)}
         </div>
       )}
@@ -751,10 +751,10 @@ function WorkGroup({
       <button
         type="button"
         onClick={onToggle}
-        className="inline-flex items-center gap-1.5 py-0.5 text-ui-sm text-foreground-subtle transition-colors hover:text-foreground"
+        className="inline-flex items-center gap-2 py-0.5 text-ui-base text-foreground-subtle transition-colors hover:text-foreground"
       >
         {hasThinking && !activeTool && (
-          <Sparkles className="size-3.5 shrink-0 text-foreground-subtlest" />
+          <Sparkles className="size-4 shrink-0 text-foreground-subtlest" />
         )}
         {item.streaming ? (
           <span className="animated-gradient-text">{shimmerText}</span>
@@ -766,7 +766,7 @@ function WorkGroup({
 
       <div className="zcode-collapsible" data-open={open}>
         <div className="zcode-collapsible-inner">
-          <div className="ml-1 mb-3 mt-2 space-y-2 border-l border-border pl-3.5">
+          <div className="ml-1.5 mb-3 mt-2 space-y-2 border-l border-border pl-3.5">
             {hasThinking && (
               <div className="space-y-1">
                 {hasTools && (
@@ -774,7 +774,7 @@ function WorkGroup({
                     {formatMsg(locale, 'chat.thinking2')}
                   </div>
                 )}
-                <div className="max-h-72 overflow-auto whitespace-pre-wrap py-0.5 text-ui-sm leading-relaxed text-foreground-subtle">
+                <div className="max-h-72 overflow-auto whitespace-pre-wrap py-0.5 text-ui-base leading-[1.65] tracking-wide text-foreground-subtle">
                   {item.thinking}
                 </div>
               </div>
@@ -2428,7 +2428,7 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
       {item.role === 'user' ? (
         <UserBubble text={item.text} images={item.images} seq={item.seq} />
       ) : (
-        <div className={`group/assistant min-w-0 w-full space-y-2.5 ${item.streaming ? 'zcode-stream-in' : ''}`}>
+        <div className={`group/assistant min-w-0 w-full space-y-4 ${item.streaming ? 'zcode-stream-in' : ''}`}>
           {(item.thinking || item.toolCalls.length > 0) && (
             <WorkGroup
               item={item}

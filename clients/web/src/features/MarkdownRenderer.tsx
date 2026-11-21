@@ -1,5 +1,5 @@
 import { formatMsg } from '../i18n/messages';
-import { Check, Copy, SquareTerminal, WrapText } from 'lucide-react';
+import { Check, Copy, FileText, SquareTerminal, WrapText } from 'lucide-react';
 import { type CSSProperties, memo, type ReactNode, useRef, useState } from 'react';
 import { useNexStore } from '../core/store';
 
@@ -421,11 +421,11 @@ function CodeBlock({ lang, code, streaming = false }: { lang: string; code: stri
   const language = lang || 'code';
 
   return (
-    <div className="my-3 overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex items-center justify-between gap-2 px-3.5 pb-1 pt-2.5">
+    <div className="my-4 overflow-hidden rounded-xl border border-border bg-card">
+      <div className="flex items-center justify-between gap-2 pl-3 pr-2 pt-2 pb-1 text-ui-base text-foreground-subtle">
         <span className="flex min-w-0 items-center gap-2">
           <SquareTerminal className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <span className="truncate font-mono text-ui-sm font-semibold lowercase text-foreground">{language}</span>
+          <span className="truncate font-mono text-ui-sm lowercase text-foreground-subtle">{language}</span>
         </span>
         <span className="flex shrink-0 items-center gap-0.5">
           <button
@@ -454,7 +454,7 @@ function CodeBlock({ lang, code, streaming = false }: { lang: string; code: stri
       </div>
       <div className={`px-3.5 pb-3 pt-1 ${wrap ? '' : 'overflow-x-auto'}`}>
         <pre
-          className={`font-mono text-[13px] leading-6 text-foreground ${
+          className={`font-mono text-[13px] leading-6 tracking-normal text-foreground ${
             wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
           }`}
         >
@@ -470,39 +470,60 @@ function CodeBlock({ lang, code, streaming = false }: { lang: string; code: stri
 const FILE_LINE_REF_RE =
   /^((?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,10}):L?(\d+)(?:[-–]L?(\d+))?$/;
 
-function parseFileLineRef(raw: string): { path: string; line: number } | null {
+// Matches workspace-ish file paths like `pkg/ai/models.go` or `clients/web/src/index.css`
+const FILE_PATH_REF_RE =
+  /^(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,10}$/;
+
+function parseFileLineRef(raw: string): { path: string; line?: number } | null {
   const trimmed = raw.trim();
   if (!trimmed || trimmed.includes('://') || trimmed.startsWith('http')) return null;
   const m = FILE_LINE_REF_RE.exec(trimmed);
-  if (!m) return null;
-  const line = Number(m[2]);
-  if (!Number.isFinite(line) || line <= 0) return null;
-  return { path: m[1], line };
+  if (m) {
+    const line = Number(m[2]);
+    if (!Number.isFinite(line) || line <= 0) return null;
+    return { path: m[1], line };
+  }
+  if (FILE_PATH_REF_RE.test(trimmed)) {
+    return { path: trimmed };
+  }
+  return null;
 }
+
+function isHorizontalRule(trimmed: string): boolean {
+  return /^(?:-\s*){3,}$|^(?:\*\s*){3,}$|^(?:_\s*){3,}$/.test(trimmed);
+}
+
+const LIST_LINE_RE = /^(\s*)([-*+]|\d+\.)\s+(.*)$/;
 
 function renderInline(text: string, depth = 0): ReactNode[] {
   if (!text) return [];
-  const tokens = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g);
+  const tokens = text.split(/(`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~|\*(?!\s)[^*\n]+(?<!\s)\*|\[[^\]]+\]\([^)]+\))/g);
   return tokens.map((tok, i) => {
+    if (!tok) return null;
     if (tok.startsWith('`') && tok.endsWith('`') && tok.length >= 2) {
       const inner = tok.slice(1, -1);
       const fileRef = parseFileLineRef(inner);
       if (fileRef) {
+        const refAttr = fileRef.line ? `${fileRef.path}:${fileRef.line}` : fileRef.path;
         return (
           <button
             key={i}
             type="button"
-            data-file-ref={`${fileRef.path}:${fileRef.line}`}
-            title={`Open ${fileRef.path} at line ${fileRef.line}`}
+            data-file-ref={refAttr}
+            title={fileRef.line ? `Open ${fileRef.path} at line ${fileRef.line}` : `Open ${fileRef.path}`}
             onClick={() => void useNexStore.getState().openFileInPreviewTab(fileRef.path, fileRef.line)}
-            className="mx-0.5 inline-flex items-center rounded-md border border-brand-blue/25 bg-brand-blue/10 px-1.5 py-0.5 font-mono text-ui-xs text-brand-blue transition-colors hover:bg-brand-blue/20"
+            className="mx-0.5 inline-flex max-w-full cursor-pointer items-baseline gap-1 align-baseline text-ui-base text-icon-blue no-underline decoration-dotted underline-offset-4 hover:underline"
           >
-            {inner}
+            <FileText className="ml-0.5 size-3.5 shrink-0 self-center" />
+            <span className="min-w-0 truncate self-baseline font-mono text-ui-sm">{inner}</span>
           </button>
         );
       }
       return (
-        <code key={i} className="rounded-md bg-tag px-1.5 py-0.5 font-mono text-ui-sm text-foreground">
+        <code
+          key={i}
+          className="mx-0.5 rounded-md bg-markdown-inline-code/50 px-1.5 py-0.5 font-mono text-ui-sm text-foreground"
+        >
           {inner}
         </code>
       );
@@ -510,22 +531,57 @@ function renderInline(text: string, depth = 0): ReactNode[] {
     if (tok.startsWith('**') && tok.endsWith('**') && tok.length >= 4) {
       const inner = tok.slice(2, -2);
       return (
-        <strong key={i} className="font-semibold text-foreground">
+        <strong key={i} className="font-medium text-foreground">
           {depth < 2 ? renderInline(inner, depth + 1) : inner}
         </strong>
       );
     }
+    if (tok.startsWith('~~') && tok.endsWith('~~') && tok.length >= 4) {
+      const inner = tok.slice(2, -2);
+      return (
+        <del key={i} className="text-foreground-subtle line-through">
+          {depth < 2 ? renderInline(inner, depth + 1) : inner}
+        </del>
+      );
+    }
+    if (tok.startsWith('*') && tok.endsWith('*') && tok.length >= 3) {
+      const inner = tok.slice(1, -1);
+      return (
+        <em key={i} className="italic">
+          {depth < 2 ? renderInline(inner, depth + 1) : inner}
+        </em>
+      );
+    }
     const linkMatch = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(tok);
     if (linkMatch) {
+      const label = linkMatch[1];
+      const href = linkMatch[2];
+      const localFile = parseFileLineRef(href);
+      if (localFile) {
+        const refAttr = localFile.line ? `${localFile.path}:${localFile.line}` : localFile.path;
+        return (
+          <button
+            key={i}
+            type="button"
+            data-file-ref={refAttr}
+            title={href}
+            onClick={() => void useNexStore.getState().openFileInPreviewTab(localFile.path, localFile.line)}
+            className="inline-flex max-w-full cursor-pointer items-baseline gap-1 align-baseline text-ui-base text-icon-blue no-underline decoration-dotted underline-offset-4 hover:underline"
+          >
+            <FileText className="ml-0.5 size-3.5 shrink-0 self-center" />
+            <span className="min-w-0 truncate self-baseline">{label}</span>
+          </button>
+        );
+      }
       return (
         <a
           key={i}
-          href={linkMatch[2]}
+          href={href}
           target="_blank"
           rel="noreferrer"
-          className="text-brand-blue underline underline-offset-4 hover:opacity-85"
+          className="wrap-anywhere text-ui-base font-medium text-icon-blue no-underline decoration-dotted underline-offset-4 hover:underline"
         >
-          {linkMatch[1]}
+          {label}
         </a>
       );
     }
@@ -546,6 +602,90 @@ function splitTableCells(line: string): string[] {
   return t.split('|').map((c) => c.trim());
 }
 
+interface ParsedListItem {
+  text: string;
+  children: ReactNode[];
+}
+
+function parseNestedList(
+  lines: string[],
+  startIdx: number,
+  nextKey: () => number,
+): { node: ReactNode; nextIdx: number } {
+  const firstMatch = LIST_LINE_RE.exec(lines[startIdx]);
+  if (!firstMatch) {
+    return { node: null, nextIdx: startIdx + 1 };
+  }
+  const baseIndent = firstMatch[1].replace(/\t/g, '  ').length;
+  const ordered = /^\d+\./.test(firstMatch[2]);
+  const items: ParsedListItem[] = [];
+  let i = startIdx;
+
+  while (i < lines.length) {
+    const rawLine = lines[i];
+    if (!rawLine.trim()) {
+      // Peek ahead: if next non-empty line continues the list at >= baseIndent, skip blank line
+      let peek = i + 1;
+      while (peek < lines.length && !lines[peek].trim()) peek++;
+      const peekMatch = peek < lines.length ? LIST_LINE_RE.exec(lines[peek]) : null;
+      if (peekMatch && peekMatch[1].replace(/\t/g, '  ').length >= baseIndent) {
+        i = peek;
+        continue;
+      }
+      break;
+    }
+
+    const m = LIST_LINE_RE.exec(rawLine);
+    if (!m) {
+      const lineIndent = /^(\s*)/.exec(rawLine)?.[1].replace(/\t/g, '  ').length ?? 0;
+      if (items.length > 0 && lineIndent > baseIndent && !isHorizontalRule(rawLine.trim()) && !/^#{1,6}\s+/.test(rawLine.trim())) {
+        items[items.length - 1].text += `\n${rawLine.trim()}`;
+        i++;
+        continue;
+      }
+      break;
+    }
+
+    const indent = m[1].replace(/\t/g, '  ').length;
+    if (indent < baseIndent) {
+      break;
+    }
+    if (indent > baseIndent) {
+      const sub = parseNestedList(lines, i, nextKey);
+      if (items.length > 0 && sub.node) {
+        items[items.length - 1].children.push(sub.node);
+      }
+      i = sub.nextIdx;
+      continue;
+    }
+
+    const isItemOrdered = /^\d+\./.test(m[2]);
+    if (isItemOrdered !== ordered && items.length > 0) {
+      break;
+    }
+    items.push({ text: m[3], children: [] });
+    i++;
+  }
+
+  const ListTag = ordered ? 'ol' : 'ul';
+  const listClass = ordered
+    ? 'my-3 list-inside list-decimal space-y-1.5 pl-0 marker:text-foreground-subtlest [&_ul]:my-1.5 [&_ol]:my-1.5'
+    : 'my-3 list-outside list-disc space-y-1.5 pl-5 marker:text-foreground-subtlest [&_ul]:my-1.5 [&_ol]:my-1.5';
+
+  const node = (
+    <ListTag key={nextKey()} className={listClass}>
+      {items.map((it, idx) => (
+        <li key={idx} className="pl-1">
+          <span>{renderInline(it.text)}</span>
+          {it.children}
+        </li>
+      ))}
+    </ListTag>
+  );
+
+  return { node, nextIdx: i };
+}
+
 export const MarkdownRenderer = memo(function MarkdownRendererImpl({
   content,
   streaming = false,
@@ -560,6 +700,7 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let keySeq = 0;
+  const nextKey = () => keySeq++;
 
   const renderProseSegment = (segment: string) => {
     const lines = segment.replace(/\r\n/g, '\n').split('\n');
@@ -572,7 +713,13 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
         continue;
       }
 
-      // GFM Table block (`| col1 | col2 |` followed by `|---|---|`)
+      if (isHorizontalRule(trimmed)) {
+        blocks.push(<hr key={nextKey()} className="my-6 border-0 border-t border-border" />);
+        i++;
+        continue;
+      }
+
+      // GFM Table block (`| col1 | col2 |` followed by `|---|---|`) — borderless ZCode/nex-m4 style
       if (trimmed.includes('|') && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
         const headers = splitTableCells(trimmed);
         i += 2;
@@ -582,22 +729,28 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
           i++;
         }
         blocks.push(
-          <div key={keySeq++} className="my-3 overflow-x-auto rounded-xl border border-border">
-            <table className="w-full border-collapse text-left text-ui-base">
-              <thead className="bg-black/[0.02] text-ui-sm font-normal text-foreground-subtle dark:bg-white/[0.03]">
+          <div key={nextKey()} className="my-4 w-full overflow-x-auto">
+            <table className="w-max min-w-full border-separate border-spacing-0 text-ui-base">
+              <thead>
                 <tr>
                   {headers.map((h, hi) => (
-                    <th key={hi} className="px-4 py-2.5 font-normal">
+                    <th
+                      key={hi}
+                      className="min-w-16 max-w-md border-b border-border px-3 py-2 text-left font-normal whitespace-normal break-words text-foreground-subtlest"
+                    >
                       {renderInline(h)}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody>
                 {rows.map((row, ri) => (
-                  <tr key={ri}>
+                  <tr key={ri} className="transition-colors last:[&>td]:border-b-0 hover:bg-hover/40">
                     {headers.map((_, ci) => (
-                      <td key={ci} className="px-4 py-2.5 align-top text-ui-base text-foreground">
+                      <td
+                        key={ci}
+                        className="min-w-16 max-w-md border-b border-border px-3 py-2 align-top whitespace-normal break-words text-foreground"
+                      >
                         {renderInline(row[ci] || '')}
                       </td>
                     ))}
@@ -610,11 +763,19 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
         continue;
       }
 
-      if (trimmed.startsWith('###### ') || trimmed.startsWith('##### ')) {
-        const text = trimmed.replace(/^#{5,6}\s+/, '');
+      if (trimmed.startsWith('###### ')) {
         blocks.push(
-          <h5 key={keySeq++} className="mt-2.5 mb-1 text-ui-sm font-semibold text-foreground">
-            {renderInline(text)}
+          <h6 key={nextKey()} className="mt-6 mb-4 text-ui-base font-normal text-foreground">
+            {renderInline(trimmed.slice(7))}
+          </h6>,
+        );
+        i++;
+        continue;
+      }
+      if (trimmed.startsWith('##### ')) {
+        blocks.push(
+          <h5 key={nextKey()} className="mt-6 mb-4 text-ui-base font-medium text-foreground">
+            {renderInline(trimmed.slice(6))}
           </h5>,
         );
         i++;
@@ -622,7 +783,7 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
       }
       if (trimmed.startsWith('#### ')) {
         blocks.push(
-          <h4 key={keySeq++} className="mt-3 mb-1 text-ui-base font-semibold text-foreground">
+          <h4 key={nextKey()} className="mt-6 mb-4 text-ui-base font-semibold text-foreground">
             {renderInline(trimmed.slice(5))}
           </h4>,
         );
@@ -631,7 +792,7 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
       }
       if (trimmed.startsWith('### ')) {
         blocks.push(
-          <h3 key={keySeq++} className="mt-3.5 mb-1.5 text-ui-base font-semibold text-foreground">
+          <h3 key={nextKey()} className="mt-6 mb-4 text-ui-base font-semibold text-foreground">
             {renderInline(trimmed.slice(4))}
           </h3>,
         );
@@ -640,7 +801,7 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
       }
       if (trimmed.startsWith('## ')) {
         blocks.push(
-          <h2 key={keySeq++} className="mt-4 mb-1.5 text-ui-lg font-semibold text-foreground">
+          <h2 key={nextKey()} className="mt-6 mb-4 text-ui-lg font-semibold text-foreground">
             {renderInline(trimmed.slice(3))}
           </h2>,
         );
@@ -649,7 +810,7 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
       }
       if (trimmed.startsWith('# ')) {
         blocks.push(
-          <h1 key={keySeq++} className="mt-4 mb-2 text-ui-xl font-semibold text-foreground">
+          <h1 key={nextKey()} className="mt-6 mb-4 text-ui-xl font-semibold text-foreground">
             {renderInline(trimmed.slice(2))}
           </h1>,
         );
@@ -657,60 +818,60 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
         continue;
       }
 
-      if (trimmed.startsWith('> ')) {
+      if (trimmed.startsWith('>')) {
+        const quoteParas: string[][] = [[]];
+        while (i < lines.length && lines[i].trim().startsWith('>')) {
+          const stripped = lines[i].trim().replace(/^>\s?/, '');
+          if (stripped === '') {
+            if (quoteParas[quoteParas.length - 1].length > 0) quoteParas.push([]);
+          } else {
+            quoteParas[quoteParas.length - 1].push(stripped);
+          }
+          i++;
+        }
+        const nonEmptyParas = quoteParas.filter((p) => p.length > 0);
         blocks.push(
           <blockquote
-            key={keySeq++}
-            className="my-2 border-l-2 border-border-hover pl-3 text-ui-base text-foreground-subtle"
+            key={nextKey()}
+            className="my-4 border-l-2 border-border pl-3 text-foreground-subtle [&_p]:my-0 [&_p+p]:mt-2"
           >
-            {renderInline(trimmed.slice(2))}
+            {nonEmptyParas.map((p, pi) => (
+              <p key={pi} className="whitespace-pre-wrap">
+                {renderInline(p.join('\n'))}
+              </p>
+            ))}
           </blockquote>,
         );
-        i++;
         continue;
       }
 
-      if (/^[-*]\s+/.test(trimmed) || /^\d+\.\s+/.test(trimmed)) {
-        const items: string[] = [];
-        const ordered = /^\d+\.\s+/.test(trimmed);
-        while (i < lines.length && (/^[-*]\s+/.test(lines[i].trim()) || /^\d+\.\s+/.test(lines[i].trim()))) {
-          items.push(lines[i].trim().replace(/^([-*]|\d+\.)\s+/, ''));
-          i++;
-        }
-        const ListTag = ordered ? 'ol' : 'ul';
-        blocks.push(
-          <ListTag
-            key={keySeq++}
-            className={`my-2 space-y-1 pl-5 text-ui-base leading-relaxed text-foreground ${
-              ordered ? 'list-decimal' : 'list-disc'
-            }`}
-          >
-            {items.map((it, idx) => (
-              <li key={idx}>{renderInline(it)}</li>
-            ))}
-          </ListTag>,
-        );
+      if (LIST_LINE_RE.test(line)) {
+        const parsed = parseNestedList(lines, i, nextKey);
+        if (parsed.node) blocks.push(parsed.node);
+        i = parsed.nextIdx;
         continue;
       }
 
       const paraLines: string[] = [];
       while (i < lines.length) {
-        const curTrim = lines[i].trim();
+        const curLine = lines[i];
+        const curTrim = curLine.trim();
         if (
           paraLines.length > 0 &&
           (curTrim === '' ||
+            isHorizontalRule(curTrim) ||
             /^#{1,6}\s+/.test(curTrim) ||
-            curTrim.startsWith('> ') ||
+            curTrim.startsWith('>') ||
             (curTrim.includes('|') && i + 1 < lines.length && isTableSeparator(lines[i + 1])) ||
-            /^([-*]|\d+\.)\s+/.test(curTrim))
+            LIST_LINE_RE.test(curLine))
         ) {
           break;
         }
-        paraLines.push(lines[i]);
+        paraLines.push(curLine);
         i++;
       }
       blocks.push(
-        <p key={keySeq++} className="my-1.5 text-ui-base leading-relaxed whitespace-pre-wrap text-foreground">
+        <p key={nextKey()} className="whitespace-pre-wrap break-words text-foreground">
           {renderInline(paraLines.join('\n'))}
         </p>,
       );
@@ -722,7 +883,7 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
       renderProseSegment(content.slice(lastIndex, match.index));
     }
     blocks.push(
-      <CodeBlock key={keySeq++} lang={match[1]} code={match[2].replace(/\n$/, '')} streaming={streaming} />,
+      <CodeBlock key={nextKey()} lang={match[1]} code={match[2].replace(/\n$/, '')} streaming={streaming} />,
     );
     lastIndex = match.index + match[0].length;
   }
@@ -733,11 +894,15 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
     const unclosedFence = /^([\s\S]*?)```([a-zA-Z0-9_-]*)\n([\s\S]*)$/.exec(tail);
     if (unclosedFence) {
       if (unclosedFence[1]) renderProseSegment(unclosedFence[1]);
-      blocks.push(<CodeBlock key={keySeq++} lang={unclosedFence[2]} code={unclosedFence[3]} streaming={true} />);
+      blocks.push(<CodeBlock key={nextKey()} lang={unclosedFence[2]} code={unclosedFence[3]} streaming={true} />);
     } else {
       renderProseSegment(tail);
     }
   }
 
-  return <div className="min-w-0 space-y-1">{blocks}</div>;
+  return (
+    <div className="min-w-0 size-full space-y-4 text-ui-base leading-[1.75] tracking-wide [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+      {blocks}
+    </div>
+  );
 });
