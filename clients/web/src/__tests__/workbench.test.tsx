@@ -941,8 +941,47 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
 
     useNexStore.setState({ settingsSection: 'skills' });
     rerender(<App />);
-    expect(screen.getByTestId('skill-md-editor')).toBeTruthy();
-    expect(document.querySelector('[data-highlighted-lang="markdown"]')).toBeTruthy();
+    // Skills page is now a ZCode-style discovery & workspace-visibility manager (no inline skill creation editor)
+    expect(screen.getByTestId('skills-manager-section')).toBeTruthy();
+    expect(screen.getByTestId('skills-workspace-select')).toBeTruthy();
+    expect(screen.queryByTestId('skill-md-editor')).toBeNull();
+
+    // 5. MCP section exposes ZCode/Pi install modal (Presets/Form/JSON), exposure policy, and workspace visibility
+    useNexStore.setState({
+      settingsSection: 'mcp',
+      mcpServers: [
+        {
+          name: 'github',
+          description: 'GitHub repos and PRs',
+          host_mode: 'server_hosted',
+          transport: 'http',
+          command: '',
+          args: [],
+          env: {},
+          url: 'https://api.githubcopilot.com/mcp/',
+          exposure: 'deferred',
+          scope: 'global',
+          target_runners: [],
+          idle_ttl_sec: 300,
+          enabled: true,
+          last_status: 'connected',
+          catalog_cache: [
+            { namespace: 'github', name: 'search_code', full_name: 'github.search_code', read_only: true },
+          ],
+        },
+      ],
+    });
+    rerender(<App />);
+    expect(screen.getByTestId('mcp-manager-section')).toBeTruthy();
+    expect(screen.getByTestId('mcp-row-github')).toBeTruthy();
+    expect((screen.getByTestId('mcp-exposure-github') as HTMLSelectElement).value).toBe('deferred');
+    fireEvent.click(screen.getByTestId('mcp-install-btn'));
+    expect(screen.getByTestId('mcp-install-modal')).toBeTruthy();
+    expect(screen.getByTestId('mcp-preset-playwright')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('mcp-preset-playwright'));
+    expect((screen.getByTestId('mcp-form-name') as HTMLInputElement).value).toBe('playwright');
+    fireEvent.click(screen.getByTestId('mcp-tab-json'));
+    expect(screen.getByTestId('mcp-json-textarea')).toBeTruthy();
   });
 
   it('supports clickable file_path:line_number links and follow-up message queueing while running', () => {

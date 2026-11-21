@@ -1,12 +1,15 @@
 package codemode
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +17,163 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nex-harness/nex/pkg/store"
 )
+
+// MCPProbeResult reports the live handshake & tool discovery result for an MCP server.
+type MCPProbeResult struct {
+	Name       string      `json:"name"`
+	Status     string      `json:"status"` // "connected" | "error" | "disabled"
+	ToolCount  int         `json:"tool_count"`
+	Tools      []ToolEntry `json:"tools,omitempty"`
+	Error      string      `json:"error,omitempty"`
+	StderrTail string      `json:"stderr_tail,omitempty"`
+	LatencyMs  int64       `json:"latency_ms"`
+	CheckedAt  int64       `json:"checked_at"`
+}
+
+// expandEnvPlaceholders expands ${VAR} references using os.Getenv (Pi mcp.md convention).
+func expandEnvPlaceholders(s string) string {
+	return os.Expand(s, func(key string) string {
+		if v, ok := os.LookupEnv(key); ok {
+			return v
+		}
+		return "${" + key + "}"
+	})
+}
+
+type headerRoundTripper struct {
+	base    http.RoundTripper
+	headers map[string]string
+}
+
+func (rt *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	for k, v := range rt.headers {
+		if strings.TrimSpace(k) != "" {
+			clone.Header.Set(k, expandEnvPlaceholders(v))
+		}
+	}
+	base := rt.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(clone)
+}
+
+func connectMCPServer(ctx context.Context, rec store.MCPServerRecord) (*mcp.ClientSession, *bytes.Buffer, error) {
+	client := mcp.NewClient(&mcp.Implementation{Name: "nex-runner", Version: "0.3.0"}, nil)
+	transportKind := strings.ToLower(strings.TrimSpace(rec.Transport))
+	if transportKind == "http" || transportKind == "streamable-http" || (transportKind == "" && strings.TrimSpace(rec.URL) != "") {
+		endpoint := strings.TrimSpace(rec.URL)
+		if endpoint == "" {
+			return nil, nil, fmt.Errorf("HTTP MCP server %q has empty url", rec.Name)
+		}
+		hc := &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: &headerRoundTripper{base: http.DefaultTransport, headers: rec.Headers},
+		}
+		tr := &mcp.StreamableClientTransport{
+			Endpoint:             endpoint,
+			HTTPClient:           hc,
+			DisableStandaloneSSE: true,
+		}
+		sess, err := client.Connect(ctx, tr, nil)
+		if err != nil {
+			return nil, nil, fmt.Errorf("connect HTTP MCP %q failed: %w", rec.Name, err)
+		}
+		return sess, nil, nil
+	}
+
+	if strings.TrimSpace(rec.Command) == "" {
+		return nil, nil, fmt.Errorf("local MCP server %q has empty command", rec.Name)
+	}
+	args := make([]string, len(rec.Args))
+	for i, a := range rec.Args {
+		args[i] = expandEnvPlaceholders(a)
+	}
+	cmd := exec.Command(expandEnvPlaceholders(rec.Command), args...)
+	envList := os.Environ()
+	for k, v := range rec.Env {
+		envList = append(envList, k+"="+expandEnvPlaceholders(v))
+	}
+	cmd.Env = envList
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
+	tr := &mcp.CommandTransport{Command: cmd}
+	sess, err := client.Connect(ctx, tr, nil)
+	if err != nil {
+		errMsg := err.Error()
+		if tail := trimTail(stderrBuf.String(), 600); tail != "" {
+			errMsg += " | stderr: " + tail
+		}
+		return nil, &stderrBuf, fmt.Errorf("spawn local MCP %q failed: %s", rec.Name, errMsg)
+	}
+	return sess, &stderrBuf, nil
+}
+
+func trimTail(s string, maxChars int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= maxChars {
+		return s
+	}
+	return "…" + s[len(s)-maxChars:]
+}
+
+// ProbeServer tests connectivity to an MCP server (stdio or streamable HTTP), lists its tools,
+// and cleanly closes the ephemeral probe session.
+func ProbeServer(ctx context.Context, rec store.MCPServerRecord) MCPProbeResult {
+	started := time.Now()
+	res := MCPProbeResult{
+		Name:      rec.Name,
+		CheckedAt: started.UnixMilli(),
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	sess, stderrBuf, err := connectMCPServer(probeCtx, rec)
+	if err != nil {
+		res.Status = "error"
+		res.Error = err.Error()
+		if stderrBuf != nil {
+			res.StderrTail = trimTail(stderrBuf.String(), 1200)
+		}
+		res.LatencyMs = time.Since(started).Milliseconds()
+		return res
+	}
+	defer func() { _ = sess.Close() }()
+
+	toolsRes, lErr := sess.ListTools(probeCtx, nil)
+	if lErr != nil {
+		res.Status = "error"
+		res.Error = fmt.Sprintf("tools/list failed: %v", lErr)
+		if stderrBuf != nil {
+			res.StderrTail = trimTail(stderrBuf.String(), 1200)
+		}
+		res.LatencyMs = time.Since(started).Milliseconds()
+		return res
+	}
+	if toolsRes != nil {
+		entries := make([]ToolEntry, 0, len(toolsRes.Tools))
+		for _, mt := range toolsRes.Tools {
+			schemaBytes, _ := json.Marshal(mt.InputSchema)
+			ro := mt.Annotations != nil && mt.Annotations.ReadOnlyHint
+			entries = append(entries, ToolEntry{
+				Namespace:   rec.Name,
+				Name:        mt.Name,
+				FullName:    rec.Name + "." + mt.Name,
+				Description: mt.Description,
+				InputSchema: schemaBytes,
+				ReadOnly:    ro,
+				HostMode:    rec.HostMode,
+			})
+		}
+		res.Tools = entries
+		res.ToolCount = len(entries)
+	}
+	res.Status = "connected"
+	res.LatencyMs = time.Since(started).Milliseconds()
+	return res
+}
 
 // ToolEntry represents a cached MCP tool descriptor stored in the lazy catalog index.
 type ToolEntry struct {
@@ -109,7 +269,8 @@ func (p *Pool) SyncServers(records []store.MCPServerRecord) {
 	}
 
 	for _, rec := range records {
-		if !rec.Enabled {
+		// Keep all configured servers in the pool map so per-workspace overrides can enable/disable them dynamically.
+		if !rec.Enabled && len(rec.WorkspaceOverrides) == 0 {
 			continue
 		}
 		nextMap[rec.Name] = rec
@@ -140,28 +301,92 @@ func (p *Pool) SyncServers(records []store.MCPServerRecord) {
 	p.catalog = rebuilt
 }
 
+// IsNamespaceVisibleInWorkspace returns true when a namespace is enabled for workspacePath and not hidden.
+func (p *Pool) IsNamespaceVisibleInWorkspace(namespace, workspacePath string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if _, inProc := p.customLocal[namespace]; inProc {
+		return true
+	}
+	srv, ok := p.servers[namespace]
+	if !ok {
+		return false
+	}
+	if store.NormalizeMCPExposure(srv.Exposure) == "hidden" {
+		return false
+	}
+	vis, _ := store.IsMCPVisibleInWorkspace(srv, workspacePath)
+	return vis
+}
+
 // NamespaceSummaryPrompt builds the ultra-compact MCP namespace summary (~few dozen tokens) for the System Prompt.
 func (p *Pool) NamespaceSummaryPrompt() string {
+	return p.NamespaceSummaryPromptForWorkspace("")
+}
+
+// NamespaceSummaryPromptForWorkspace builds the MCP namespace summary filtered by per-workspace visibility & exposure.
+func (p *Pool) NamespaceSummaryPromptForWorkspace(workspacePath string) string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if len(p.catalog) == 0 && len(p.servers) == 0 {
 		return ""
 	}
 	counts := make(map[string]int)
-	modes := make(map[string]string)
-	for name, srv := range p.servers {
-		modes[name] = srv.HostMode
-	}
 	for _, t := range p.catalog {
 		counts[t.Namespace]++
-		if modes[t.Namespace] == "" {
-			modes[t.Namespace] = t.HostMode
-		}
 	}
+
+	type summaryRow struct {
+		name     string
+		mode     string
+		exposure string
+		desc     string
+		count    int
+	}
+	var rows []summaryRow
+	seen := map[string]bool{}
+
+	for name, srv := range p.servers {
+		exp := store.NormalizeMCPExposure(srv.Exposure)
+		if exp == "hidden" {
+			continue
+		}
+		if vis, _ := store.IsMCPVisibleInWorkspace(srv, workspacePath); !vis {
+			continue
+		}
+		seen[name] = true
+		rows = append(rows, summaryRow{
+			name:     name,
+			mode:     srv.HostMode,
+			exposure: exp,
+			desc:     strings.TrimSpace(srv.Description),
+			count:    counts[name],
+		})
+	}
+	for ns := range p.customLocal {
+		if seen[ns] {
+			continue
+		}
+		rows = append(rows, summaryRow{
+			name:     ns,
+			mode:     "runner_local",
+			exposure: "codemode",
+			count:    counts[ns],
+		})
+	}
+	if len(rows) == 0 {
+		return ""
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].name < rows[j].name })
+
 	var sb strings.Builder
 	sb.WriteString("Enabled MCP Namespaces (accessible lazily via `codemode` tool -> searchTools / describeTool / tools.<ns>.<tool>):\n")
-	for ns, mode := range modes {
-		fmt.Fprintf(&sb, "- %s (%s, %d tools)\n", ns, mode, counts[ns])
+	for _, row := range rows {
+		if row.desc != "" {
+			fmt.Fprintf(&sb, "- %s (%s, %s, %d tools): %s\n", row.name, row.mode, row.exposure, row.count, row.desc)
+		} else {
+			fmt.Fprintf(&sb, "- %s (%s, %s, %d tools)\n", row.name, row.mode, row.exposure, row.count)
+		}
 	}
 	return strings.TrimRight(sb.String(), "\n")
 }
@@ -326,22 +551,9 @@ func (p *Pool) getOrSpawnLocalSession(ctx context.Context, rec store.MCPServerRe
 	}
 	p.mu.Unlock()
 
-	if strings.TrimSpace(rec.Command) == "" {
-		return nil, fmt.Errorf("local MCP server %q has empty command", rec.Name)
-	}
-
-	cmd := exec.Command(rec.Command, rec.Args...)
-	envList := os.Environ()
-	for k, v := range rec.Env {
-		envList = append(envList, k+"="+v)
-	}
-	cmd.Env = envList
-
-	client := mcp.NewClient(&mcp.Implementation{Name: "nex-runner", Version: "0.3.0"}, nil)
-	transport := &mcp.CommandTransport{Command: cmd}
-	sess, err := client.Connect(ctx, transport, nil)
+	sess, _, err := connectMCPServer(ctx, rec)
 	if err != nil {
-		return nil, fmt.Errorf("spawn local MCP %q failed: %w", rec.Name, err)
+		return nil, err
 	}
 
 	// Opportunistically refresh catalog cache on first spawn

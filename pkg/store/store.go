@@ -58,6 +58,15 @@ func Open(dataDir string) (*Store, error) {
 	// Idempotent migrations for custom per-model reasoning levels and wire effort maps
 	_, _ = mainDB.Exec(`ALTER TABLE models ADD COLUMN reasoning_levels_json TEXT NOT NULL DEFAULT ''`)
 	_, _ = mainDB.Exec(`ALTER TABLE models ADD COLUMN reasoning_map_json TEXT NOT NULL DEFAULT ''`)
+	// Idempotent migrations for MCP exposure, headers, workspace scope/overrides, and probe diagnostics
+	_, _ = mainDB.Exec(`ALTER TABLE mcp_servers ADD COLUMN description TEXT NOT NULL DEFAULT ''`)
+	_, _ = mainDB.Exec(`ALTER TABLE mcp_servers ADD COLUMN headers_json TEXT NOT NULL DEFAULT '{}'`)
+	_, _ = mainDB.Exec(`ALTER TABLE mcp_servers ADD COLUMN exposure TEXT NOT NULL DEFAULT 'codemode'`)
+	_, _ = mainDB.Exec(`ALTER TABLE mcp_servers ADD COLUMN workspace_path TEXT NOT NULL DEFAULT ''`)
+	_, _ = mainDB.Exec(`ALTER TABLE mcp_servers ADD COLUMN workspace_overrides_json TEXT NOT NULL DEFAULT '{}'`)
+	_, _ = mainDB.Exec(`ALTER TABLE mcp_servers ADD COLUMN last_status TEXT NOT NULL DEFAULT ''`)
+	_, _ = mainDB.Exec(`ALTER TABLE mcp_servers ADD COLUMN last_error TEXT NOT NULL DEFAULT ''`)
+	_, _ = mainDB.Exec(`ALTER TABLE mcp_servers ADD COLUMN last_checked_at INTEGER NOT NULL DEFAULT 0`)
 
 	return &Store{
 		dataDir:     dataDir,

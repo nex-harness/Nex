@@ -29,6 +29,7 @@ jobs:
       - name: Build Web UI (embedded into pkg/webui/dist)
         run: |
           npm --prefix clients/web ci
+          npm --prefix clients/web test
           npm --prefix clients/web run build
 
       - name: Run Go Unit Tests (CGO_ENABLED=0)
@@ -87,5 +88,7 @@ jobs:
           set -euo pipefail
           sleep 2
           curl -fsSI https://nex.tylinux.cn | head -n 5
-          curl -fsS https://nex.tylinux.cn/api/v1/runners
+          curl -fsS https://nex.tylinux.cn/api/v1/health
+          echo ""
+          curl -fsS https://nex.tylinux.cn/api/v1/auth/status
           echo ""

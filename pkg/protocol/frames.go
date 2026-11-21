@@ -41,6 +41,8 @@ const (
 	TypeBlobData        = "blob.data"
 	TypeMCPRemoteCall   = "mcp.remote_call"
 	TypeMCPRemoteResult = "mcp.remote_result"
+	TypeSkillsDiscover  = "skills.discover"
+	TypeMCPProbe        = "mcp.probe"
 
 	// Remote Workspace (Files Tree, Preview, Git Diff) & Remote PTY Control
 	TypeWorkspaceReq  = "workspace.req"
@@ -119,18 +121,19 @@ type MemorySyncPayload struct {
 
 // ConfigSnapshot carries centralized configuration down to an autonomous Runner.
 type ConfigSnapshot struct {
-	ConfigRev      int64                   `json:"config_rev"`
-	ServerBaseURL  string                  `json:"server_base_url,omitempty"`
-	Providers      []store.ProviderRecord  `json:"providers,omitempty"`
-	Models         []ai.ModelMeta          `json:"models,omitempty"`
-	AgentProfiles  []store.AgentProfile    `json:"agent_profiles,omitempty"`
-	Skills         []store.SkillRecord     `json:"skills,omitempty"`
-	Plugins        []store.PluginRecord    `json:"plugins,omitempty"`
-	MCPServers     []store.MCPServerRecord `json:"mcp_servers,omitempty"`
-	CronJobs       []store.CronJobRecord   `json:"cron_jobs,omitempty"`
-	Memories       []store.MemoryRecord    `json:"memories,omitempty"`
-	MemoriesSynced bool                    `json:"memories_synced,omitempty"`
-	MemorySettings *MemoryConfigSync       `json:"memory_settings,omitempty"`
+	ConfigRev            int64                                `json:"config_rev"`
+	ServerBaseURL        string                               `json:"server_base_url,omitempty"`
+	Providers            []store.ProviderRecord               `json:"providers,omitempty"`
+	Models               []ai.ModelMeta                       `json:"models,omitempty"`
+	AgentProfiles        []store.AgentProfile                 `json:"agent_profiles,omitempty"`
+	Skills               []store.SkillRecord                  `json:"skills,omitempty"`
+	SkillVisibilityRules map[string]store.SkillVisibilityRule `json:"skill_visibility_rules,omitempty"`
+	Plugins              []store.PluginRecord                 `json:"plugins,omitempty"`
+	MCPServers           []store.MCPServerRecord              `json:"mcp_servers,omitempty"`
+	CronJobs             []store.CronJobRecord                `json:"cron_jobs,omitempty"`
+	Memories             []store.MemoryRecord                 `json:"memories,omitempty"`
+	MemoriesSynced       bool                                 `json:"memories_synced,omitempty"`
+	MemorySettings       *MemoryConfigSync                    `json:"memory_settings,omitempty"`
 }
 
 // RunnerWelcomePayload acknowledges Runner registration and optionally pushes updated config.
@@ -216,6 +219,16 @@ type MCPRemoteCallPayload struct {
 type MCPRemoteResultPayload struct {
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  string          `json:"error,omitempty"`
+}
+
+// SkillsDiscoverPayload asks a Runner to scan its user & workspace skill directories.
+type SkillsDiscoverPayload struct {
+	WorkspacePath string `json:"workspace_path,omitempty"`
+}
+
+// MCPProbePayload asks a Runner to test-connect a runner_local MCP server and return discovered tools.
+type MCPProbePayload struct {
+	Server store.MCPServerRecord `json:"server"`
 }
 
 // OutboxAckPayload confirms persistence of Runner outbox event IDs / sequences on Server.

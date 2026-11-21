@@ -3,7 +3,9 @@ import { ChevronRight, LoaderCircle, Pencil, Search, Sparkles, Trash2 } from 'lu
 import { type ReactNode, useState } from 'react';
 import { apiFetch } from '../core/protocol';
 import { useNexStore } from '../core/store';
-import { CodeEditorWithHighlight, HighlightedCode, MarkdownRenderer } from './MarkdownRenderer';
+import { CodeEditorWithHighlight, HighlightedCode } from './MarkdownRenderer';
+import { MCPManagerSection } from './SettingsMCP';
+import { SkillsManagerSection } from './SettingsSkills';
 import {
   SectionHeading,
   SettingsGroupCard,
@@ -237,159 +239,15 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
 }
 
 /* -------------------------------------------------------------------------- */
-/* MCP servers                                                                */
+/* MCP servers (ZCode + Pi style install, exposure & workspace visibility)    */
 /* -------------------------------------------------------------------------- */
 
 export function MCPSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {
-  const { locale, mcpServers, refreshRegistries } = useNexStore();
-
-  const [name, setName] = useState('playwright');
-  const [hostMode, setHostMode] = useState<'runner_local' | 'server_hosted'>('runner_local');
-  const [command, setCommand] = useState('npx');
-  const [argsCsv, setArgsCsv] = useState('@playwright/mcp@latest');
-  const [idleTTL, setIdleTTL] = useState(300);
-
-  const saveMCP = async () => {
-    await apiFetch('/api/v1/mcp', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: name.trim(),
-        host_mode: hostMode,
-        transport: hostMode === 'server_hosted' ? 'http' : 'stdio',
-        command: hostMode === 'runner_local' ? command.trim() : '',
-        args: argsCsv.split(/\s+/).filter(Boolean),
-        idle_ttl_sec: idleTTL,
-        scope: 'global',
-        enabled: true,
-      }),
-    });
-    await refreshRegistries();
-    onFlash(
-      formatMsg(locale, 'capabilities.mcpServerSaved', { name }),
-    );
-  };
-
-  const removeMCP = async (mcpName: string) => {
-    await apiFetch(`/api/v1/mcp/${encodeURIComponent(mcpName)}`, { method: 'DELETE' });
-    await refreshRegistries();
-  };
-
-  return (
-    <div className="space-y-6">
-      <SettingsGroupCard>
-        <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-3">
-          <Field label={formatMsg(locale, 'capabilities.namespace')}>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="github / playwright"
-              className={settingsMonoInputClass}
-            />
-          </Field>
-          <Field label={formatMsg(locale, 'capabilities.hostMode')}>
-            <select
-              value={hostMode}
-              onChange={(e) => setHostMode(e.target.value as 'runner_local' | 'server_hosted')}
-              className={settingsSelectClass}
-            >
-              <option value="runner_local">
-                {formatMsg(locale, 'capabilities.runnerLocalStdio')}
-              </option>
-              <option value="server_hosted">{formatMsg(locale, 'capabilities.serverHosted')}</option>
-            </select>
-          </Field>
-          <Field
-            label={formatMsg(locale, 'capabilities.idleTtlS')}
-            description={formatMsg(locale, 'capabilities.reclaimTheProcessAfterIdling')}
-          >
-            <input
-              type="number"
-              value={idleTTL}
-              onChange={(e) => setIdleTTL(Number(e.target.value))}
-              className={settingsMonoInputClass}
-            />
-          </Field>
-        </div>
-
-        {hostMode === 'runner_local' ? (
-          <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-3">
-            <Field label={formatMsg(locale, 'capabilities.command')}>
-              <input
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                placeholder="npx / uvx"
-                className={settingsMonoInputClass}
-              />
-            </Field>
-            <div className="sm:col-span-2">
-              <Field
-                label={formatMsg(locale, 'capabilities.arguments')}
-                description={formatMsg(locale, 'capabilities.whitespaceSeparated')}
-              >
-                <input
-                  value={argsCsv}
-                  onChange={(e) => setArgsCsv(e.target.value)}
-                  className={settingsMonoInputClass}
-                />
-              </Field>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="flex justify-end px-5 py-4">
-          <SaveButton
-            label={formatMsg(locale, 'capabilities.saveMcpServer')}
-            onClick={() => void saveMCP()}
-          />
-        </div>
-      </SettingsGroupCard>
-
-      <SectionHeading
-        title={formatMsg(locale, 'capabilities.mcpServers', { length: mcpServers.length })}
-      />
-
-      <SettingsGroupCard>
-        {mcpServers.length === 0 ? (
-          <EmptyRow>
-            {formatMsg(locale, 'capabilities.noExternalMcpServersRegistered')}
-          </EmptyRow>
-        ) : (
-          mcpServers.map((m) => (
-            <div key={m.name} className="flex items-center justify-between gap-3 px-5 py-3.5">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-mono text-ui-base font-medium text-foreground">
-                    {m.name}
-                  </span>
-                  <MetaBadge mono>{m.host_mode}</MetaBadge>
-                  <span className="text-ui-xs text-foreground-subtlest">
-                    Idle TTL {m.idle_ttl_sec}s
-                  </span>
-                </div>
-                {m.command ? (
-                  <p className="mt-0.5 truncate font-mono text-ui-xs text-foreground-subtle">
-                    {m.command} {(m.args || []).join(' ')}
-                  </p>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                onClick={() => void removeMCP(m.name)}
-                aria-label={formatMsg(locale, 'capabilities.deleteMcpServer')}
-                className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
-              >
-                <Trash2 className="size-4" />
-              </button>
-            </div>
-          ))
-        )}
-      </SettingsGroupCard>
-    </div>
-  );
+  return <MCPManagerSection onFlash={onFlash} />;
 }
 
 /* -------------------------------------------------------------------------- */
-/* Skills & plugins                                                           */
+/* Skills (discovery + visibility manager) & Plugins                          */
 /* -------------------------------------------------------------------------- */
 
 export function SkillsAndPluginsSection({
@@ -399,15 +257,7 @@ export function SkillsAndPluginsSection({
   mode: 'skills' | 'plugins';
   onFlash: (msg: string) => void;
 }) {
-  const { locale, skills, plugins, refreshRegistries } = useNexStore();
-
-  const [skName, setSkName] = useState('code-audit');
-  const [skDesc, setSkDesc] = useState('Security & concurrency review checklist');
-  const [skBody, setSkBody] = useState(
-    '# Code Audit Skill\n\n1. Check goroutine leaks\n2. Verify SQL parameterization',
-  );
-  const [skPreview, setSkPreview] = useState(false);
-  const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
+  const { locale, plugins, refreshRegistries } = useNexStore();
 
   const [plName, setPlName] = useState('safety-guard');
   const [plTS, setPlTS] = useState(
@@ -416,154 +266,7 @@ export function SkillsAndPluginsSection({
   const [expandedPlugin, setExpandedPlugin] = useState<string | null>(null);
 
   if (mode === 'skills') {
-    const saveSkill = async () => {
-      await apiFetch('/api/v1/skills', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: skName.trim(),
-          description: skDesc.trim(),
-          content_md: skBody,
-          scope: 'global',
-          enabled: true,
-        }),
-      });
-      await refreshRegistries();
-      onFlash(
-        formatMsg(locale, 'capabilities.skillSyncedToRunners', { skName }),
-      );
-    };
-
-    return (
-      <div className="space-y-6">
-        <SettingsGroupCard>
-          <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-2">
-            <Field
-              label={formatMsg(locale, 'capabilities.skillName')}
-              description={formatMsg(locale, 'capabilities.invokedAsSkillName')}
-            >
-              <input
-                value={skName}
-                onChange={(e) => setSkName(e.target.value)}
-                placeholder="code-audit"
-                className={settingsMonoInputClass}
-              />
-            </Field>
-            <Field
-              label={formatMsg(locale, 'common.description2')}
-              description={
-                formatMsg(locale, 'capabilities.oneLineInjectedIntoThe')
-              }
-            >
-              <input
-                value={skDesc}
-                onChange={(e) => setSkDesc(e.target.value)}
-                className={settingsInputClass}
-              />
-            </Field>
-          </div>
-          <div className="space-y-3 px-5 py-4">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-ui-xs text-foreground-subtle">
-                {formatMsg(locale, 'capabilities.markdownBody')}
-              </span>
-              <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-ui-xs">
-                <button
-                  type="button"
-                  onClick={() => setSkPreview(false)}
-                  className={`rounded-md px-2 py-0.5 font-medium transition-colors ${
-                    !skPreview ? 'bg-popover text-foreground shadow-xs' : 'text-foreground-subtle hover:text-foreground'
-                  }`}
-                >
-                  {formatMsg(locale, 'common.edit')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSkPreview(true)}
-                  className={`rounded-md px-2 py-0.5 font-medium transition-colors ${
-                    skPreview ? 'bg-popover text-foreground shadow-xs' : 'text-foreground-subtle hover:text-foreground'
-                  }`}
-                >
-                  {formatMsg(locale, 'capabilities.preview')}
-                </button>
-              </div>
-            </div>
-            {skPreview ? (
-              <div className="min-h-[150px] rounded-lg border border-border bg-surface/60 px-4 py-3">
-                <MarkdownRenderer content={skBody} streaming={false} />
-              </div>
-            ) : (
-              <CodeEditorWithHighlight
-                testId="skill-md-editor"
-                rows={6}
-                language="markdown"
-                value={skBody}
-                onChange={setSkBody}
-                placeholder="# Skill title..."
-              />
-            )}
-            <div className="flex justify-end">
-              <SaveButton
-                label={formatMsg(locale, 'capabilities.saveSkill')}
-                onClick={() => void saveSkill()}
-              />
-            </div>
-          </div>
-        </SettingsGroupCard>
-
-        <SectionHeading title={formatMsg(locale, 'capabilities.skills', { length: skills.length })} />
-
-        <SettingsGroupCard>
-          {skills.length === 0 ? (
-            <EmptyRow>{formatMsg(locale, 'capabilities.noCustomSkillsYet')}</EmptyRow>
-          ) : (
-            skills.map((s) => {
-              const isOpen = expandedSkill === s.name;
-              return (
-                <div key={s.name} className="px-5 py-3.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedSkill(isOpen ? null : s.name)}
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                    >
-                      <ChevronRight
-                        className={`size-3.5 shrink-0 text-foreground-subtlest transition-transform ${
-                          isOpen ? 'rotate-90' : ''
-                        }`}
-                      />
-                      <div className="min-w-0">
-                        <span className="font-mono text-ui-base font-medium text-foreground">
-                          ${s.name}
-                        </span>
-                        <p className="truncate text-ui-sm text-foreground-subtle">{s.description}</p>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await apiFetch(`/api/v1/skills/${encodeURIComponent(s.name)}`, {
-                          method: 'DELETE',
-                        });
-                        await refreshRegistries();
-                      }}
-                      aria-label={formatMsg(locale, 'capabilities.deleteSkill')}
-                      className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </div>
-                  {isOpen && s.content_md && (
-                    <div className="mt-3 pl-5">
-                      <HighlightedCode code={s.content_md} language="markdown" className="max-h-72 text-ui-xs" />
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </SettingsGroupCard>
-      </div>
-    );
+    return <SkillsManagerSection onFlash={onFlash} />;
   }
 
   const savePlugin = async () => {

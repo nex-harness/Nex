@@ -104,20 +104,28 @@ CREATE TABLE IF NOT EXISTS plugins_registry (
 );
 
 CREATE TABLE IF NOT EXISTS mcp_servers (
-    id                  TEXT PRIMARY KEY,
-    name                TEXT UNIQUE NOT NULL,
-    host_mode           TEXT NOT NULL DEFAULT 'runner_local',
-    transport           TEXT NOT NULL DEFAULT 'stdio',
-    command             TEXT NOT NULL DEFAULT '',
-    args_json           TEXT NOT NULL DEFAULT '[]',
-    env_json            TEXT NOT NULL DEFAULT '{}',
-    url                 TEXT NOT NULL DEFAULT '',
-    scope               TEXT NOT NULL DEFAULT 'global',
-    target_runners_json TEXT NOT NULL DEFAULT '[]',
-    idle_ttl_sec        INTEGER NOT NULL DEFAULT 300,
-    enabled             INTEGER NOT NULL DEFAULT 1,
-    catalog_cache_json  TEXT NOT NULL DEFAULT '[]',
-    updated_at          INTEGER NOT NULL
+    id                       TEXT PRIMARY KEY,
+    name                     TEXT UNIQUE NOT NULL,
+    description              TEXT NOT NULL DEFAULT '',
+    host_mode                TEXT NOT NULL DEFAULT 'runner_local',
+    transport                TEXT NOT NULL DEFAULT 'stdio',
+    command                  TEXT NOT NULL DEFAULT '',
+    args_json                TEXT NOT NULL DEFAULT '[]',
+    env_json                 TEXT NOT NULL DEFAULT '{}',
+    url                      TEXT NOT NULL DEFAULT '',
+    headers_json             TEXT NOT NULL DEFAULT '{}',
+    exposure                 TEXT NOT NULL DEFAULT 'codemode',
+    scope                    TEXT NOT NULL DEFAULT 'global',
+    workspace_path           TEXT NOT NULL DEFAULT '',
+    workspace_overrides_json TEXT NOT NULL DEFAULT '{}',
+    target_runners_json      TEXT NOT NULL DEFAULT '[]',
+    idle_ttl_sec             INTEGER NOT NULL DEFAULT 300,
+    enabled                  INTEGER NOT NULL DEFAULT 1,
+    catalog_cache_json       TEXT NOT NULL DEFAULT '[]',
+    last_status              TEXT NOT NULL DEFAULT '',
+    last_error               TEXT NOT NULL DEFAULT '',
+    last_checked_at          INTEGER NOT NULL DEFAULT 0,
+    updated_at               INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS cron_jobs (

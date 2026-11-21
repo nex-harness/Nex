@@ -237,33 +237,36 @@ func (s *Server) buildConfigSnapshot(ctx context.Context, runnerID string) (*pro
 	}
 	var mcps []store.MCPServerRecord
 	for _, m := range allMCP {
-		if m.Enabled && matchesRunner(m.Scope, m.TargetRunners) {
+		if (m.Enabled || len(m.WorkspaceOverrides) > 0) && matchesRunner(m.Scope, m.TargetRunners) {
 			cp := m
 			if cp.HostMode == "server_hosted" {
 				// Never expose SaaS MCP credentials/env to remote runners
 				cp.Command = ""
 				cp.Args = nil
 				cp.Env = nil
+				cp.Headers = nil
 				cp.URL = ""
 			}
 			mcps = append(mcps, cp)
 		}
 	}
 
+	skillVisRules, _ := s.store.GetSkillVisibilityRules(ctx)
 	memories, _ := s.store.ListMemories(ctx, "")
 	prefs, _ := s.store.GetUserPreferences(ctx)
 	return &protocol.ConfigSnapshot{
-		ConfigRev:      rev,
-		ServerBaseURL:  s.cfg.PublicBaseURL,
-		Providers:      sanitizedProviders,
-		Models:         models,
-		AgentProfiles:  profiles,
-		Skills:         skills,
-		Plugins:        plugins,
-		MCPServers:     mcps,
-		CronJobs:       crons,
-		Memories:       memories,
-		MemoriesSynced: true,
+		ConfigRev:            rev,
+		ServerBaseURL:        s.cfg.PublicBaseURL,
+		Providers:            sanitizedProviders,
+		Models:               models,
+		AgentProfiles:        profiles,
+		Skills:               skills,
+		SkillVisibilityRules: skillVisRules,
+		Plugins:              plugins,
+		MCPServers:           mcps,
+		CronJobs:             crons,
+		Memories:             memories,
+		MemoriesSynced:       true,
 		MemorySettings: &protocol.MemoryConfigSync{
 			AutoExtract: prefs.MemoryAutoExtract,
 			ProviderID:  prefs.MemoryProviderID,

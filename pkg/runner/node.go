@@ -17,8 +17,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/nex-harness/nex/pkg/agent"
 	"github.com/nex-harness/nex/pkg/ai"
+	"github.com/nex-harness/nex/pkg/harness/codemode"
 	"github.com/nex-harness/nex/pkg/harness/tools"
 	"github.com/nex-harness/nex/pkg/protocol"
+	"github.com/nex-harness/nex/pkg/skills"
 	"github.com/nex-harness/nex/pkg/store"
 )
 
@@ -369,6 +371,9 @@ func (n *Node) ApplyConfigSnapshot(ctx context.Context, snap *protocol.ConfigSna
 		_ = os.MkdirAll(dir, 0o700)
 		_ = os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(sk.ContentMD), 0o600)
 	}
+	if snap.SkillVisibilityRules != nil {
+		_ = n.store.SaveSkillVisibilityRules(ctx, snap.SkillVisibilityRules)
+	}
 	pluginsDir := filepath.Join(n.cfg.DataDir, "plugins")
 	for _, pl := range snap.Plugins {
 		_ = n.store.UpsertPlugin(ctx, pl)
@@ -573,6 +578,42 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 				respPayload.Mime = mime
 			}
 			reply, _ := protocol.NewEnvelope(protocol.TypeBlobData, respPayload)
+			reply.ReplyTo = env.ID
+			_ = n.sendEnvelope(ctx, reply)
+		}()
+
+	case protocol.TypeSkillsDiscover:
+		go func() {
+			var req protocol.SkillsDiscoverPayload
+			_ = json.Unmarshal(env.Payload, &req)
+			ws := strings.TrimSpace(req.WorkspacePath)
+			if ws == "" {
+				ws = n.cfg.WorkspaceDefault
+			}
+			regSkills, _ := n.store.ListSkills(ctx)
+			rules, _ := n.store.GetSkillVisibilityRules(ctx)
+			found := skills.Discover(skills.DiscoverOptions{
+				WorkspacePath:  ws,
+				DataDir:        n.cfg.DataDir,
+				RegistrySkills: regSkills,
+				Rules:          rules,
+				IncludeContent: true,
+			})
+			reply, _ := protocol.NewEnvelope(protocol.TypeSkillsDiscover, found)
+			reply.ReplyTo = env.ID
+			_ = n.sendEnvelope(ctx, reply)
+		}()
+
+	case protocol.TypeMCPProbe:
+		go func() {
+			var req protocol.MCPProbePayload
+			var reply protocol.Envelope
+			if err := json.Unmarshal(env.Payload, &req); err != nil {
+				reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": err.Error()})
+			} else {
+				res := codemode.ProbeServer(ctx, req.Server)
+				reply, _ = protocol.NewEnvelope(protocol.TypeMCPProbe, res)
+			}
 			reply.ReplyTo = env.ID
 			_ = n.sendEnvelope(ctx, reply)
 		}()

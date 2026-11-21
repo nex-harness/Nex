@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/nex-harness/nex/pkg/harness/prompts"
 	"github.com/nex-harness/nex/pkg/harness/tools"
 	"github.com/nex-harness/nex/pkg/protocol"
+	"github.com/nex-harness/nex/pkg/skills"
 	"github.com/nex-harness/nex/pkg/store"
 )
 
@@ -706,9 +706,9 @@ func buildPromptSections(ctx context.Context, n *Node, sessRec *store.SessionRec
 	}
 	opts.CustomPrompt = agentProfilePrompt(ctx, n, sessRec.AgentProfileSlug)
 
-	opts.Skills = loadSkillInfos(ctx, n)
+	opts.Skills = loadSkillInfos(ctx, n, workDir)
 	opts.Memories = loadMemoryLines(ctx, n, workDir)
-	opts.MCPNamespaces = loadMCPNamespaceSummary(ctx, n)
+	opts.MCPNamespaces = loadMCPNamespaceSummary(ctx, n, workDir)
 
 	return prompts.BuildSessionSections(opts)
 }
@@ -739,23 +739,15 @@ func agentProfilePrompt(ctx context.Context, n *Node, slug string) string {
 	return ""
 }
 
-func loadSkillInfos(ctx context.Context, n *Node) []prompts.SkillInfo {
-	skills, err := n.store.ListSkills(ctx)
-	if err != nil {
-		return nil
-	}
-	out := make([]prompts.SkillInfo, 0, len(skills))
-	for _, sk := range skills {
-		if !sk.Enabled {
-			continue
-		}
-		out = append(out, prompts.SkillInfo{
-			Name:        sk.Name,
-			Description: sk.Description,
-			Path:        filepath.Join(n.cfg.DataDir, "skills", sk.Name, "SKILL.md"),
-		})
-	}
-	return out
+func loadSkillInfos(ctx context.Context, n *Node, workDir string) []prompts.SkillInfo {
+	regSkills, _ := n.store.ListSkills(ctx)
+	rules, _ := n.store.GetSkillVisibilityRules(ctx)
+	return skills.VisiblePromptSkills(skills.DiscoverOptions{
+		WorkspacePath:  workDir,
+		DataDir:        n.cfg.DataDir,
+		RegistrySkills: regSkills,
+		Rules:          rules,
+	})
 }
 
 func loadMemoryLines(ctx context.Context, n *Node, workDir string) []string {
@@ -857,7 +849,7 @@ func (l *runnerSessionLookup) ListSessionEventsAfter(ctx context.Context, sessio
 	return evs, nil
 }
 
-func loadMCPNamespaceSummary(ctx context.Context, n *Node) string {
+func loadMCPNamespaceSummary(ctx context.Context, n *Node, workDir string) string {
 	type namespaceSummarizer interface {
 		MCPNamespaceSummary() string
 	}
@@ -873,16 +865,27 @@ func loadMCPNamespaceSummary(ctx context.Context, n *Node) string {
 		return ""
 	}
 	var sb strings.Builder
-	sb.WriteString("Enabled MCP namespaces are reachable lazily through the `codemode` tool via `searchTools`, `describeTool`, and `tools.<namespace>.<tool>`:\n")
+	count := 0
 	for _, srv := range servers {
-		if !srv.Enabled {
+		if store.NormalizeMCPExposure(srv.Exposure) == "hidden" {
 			continue
 		}
+		if vis, _ := store.IsMCPVisibleInWorkspace(srv, workDir); !vis {
+			continue
+		}
+		if count == 0 {
+			sb.WriteString("Enabled MCP namespaces are reachable lazily through the `codemode` tool via `searchTools`, `describeTool`, and `tools.<namespace>.<tool>`:\n")
+		}
+		count++
 		mode := srv.HostMode
 		if mode == "" {
 			mode = "local"
 		}
-		fmt.Fprintf(&sb, "- %s (%s)\n", srv.Name, mode)
+		if srv.Description != "" {
+			fmt.Fprintf(&sb, "- %s (%s, %s): %s\n", srv.Name, mode, store.NormalizeMCPExposure(srv.Exposure), srv.Description)
+		} else {
+			fmt.Fprintf(&sb, "- %s (%s, %s)\n", srv.Name, mode, store.NormalizeMCPExposure(srv.Exposure))
+		}
 	}
 	return strings.TrimSpace(sb.String())
 }

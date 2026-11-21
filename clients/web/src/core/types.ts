@@ -84,6 +84,28 @@ export interface SkillRecord {
   enabled: boolean;
 }
 
+export interface DiscoveredSkill {
+  name: string;
+  description: string;
+  scope: 'workspace' | 'user' | 'registry' | string;
+  source_kind: string;
+  source_dir: string;
+  file_path: string;
+  workspace_path?: string;
+  content_md?: string;
+  license?: string;
+  compatibility?: string;
+  disable_model_invocation?: boolean;
+  has_scripts?: boolean;
+  has_references?: boolean;
+  has_assets?: boolean;
+  shadowed_by?: string;
+  global_enabled: boolean;
+  workspace_enabled: boolean;
+  workspace_overridden: boolean;
+  workspace_overrides?: Record<string, boolean>;
+}
+
 export interface PluginRecord {
   id?: string;
   name: string;
@@ -95,19 +117,50 @@ export interface PluginRecord {
   enabled: boolean;
 }
 
+export type MCPExposure = 'codemode' | 'deferred' | 'direct' | 'hidden';
+
+export interface MCPToolEntry {
+  namespace: string;
+  name: string;
+  full_name: string;
+  description?: string;
+  read_only?: boolean;
+  host_mode?: string;
+}
+
+export interface MCPProbeResult {
+  name: string;
+  status: 'connected' | 'error' | 'disabled' | string;
+  tool_count: number;
+  tools?: MCPToolEntry[];
+  error?: string;
+  stderr_tail?: string;
+  latency_ms: number;
+  checked_at: number;
+}
+
 export interface MCPServerRecord {
   id?: string;
   name: string;
+  description?: string;
   host_mode: 'runner_local' | 'server_hosted';
   transport: 'stdio' | 'http';
   command: string;
   args: string[];
   env: Record<string, string>;
   url: string;
-  scope: string;
+  headers?: Record<string, string>;
+  exposure?: MCPExposure;
+  scope: 'global' | 'workspace' | 'runner' | string;
+  workspace_path?: string;
+  workspace_overrides?: Record<string, boolean>;
   target_runners: string[];
   idle_ttl_sec: number;
   enabled: boolean;
+  catalog_cache?: MCPToolEntry[];
+  last_status?: 'connected' | 'disconnected' | 'error' | 'disabled' | string;
+  last_error?: string;
+  last_checked_at?: number;
 }
 
 export interface CronJobRecord {

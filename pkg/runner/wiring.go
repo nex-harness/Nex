@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -223,6 +224,11 @@ func (w *DefaultRuntimeWiring) PrepareSession(
 	// 1. Mount MCP `codemode` sandbox tool (enforcing plugin hooks + interactive approvals on every inner call!)
 	approver := &runnerApprover{node: node, sessionID: sess.ID, hasUI: hasUI}
 	cmTool := codemode.NewTool(w.mcpPool, codemode.NewSessionKV(), func(callCtx context.Context, fullName string, readOnly bool, args json.RawMessage) error {
+		if ns, _, ok := strings.Cut(fullName, "."); ok && ns != "" {
+			if !w.mcpPool.IsNamespaceVisibleInWorkspace(ns, sess.WorkspacePath) {
+				return fmt.Errorf("MCP server %q is hidden or disabled in workspace %s", ns, sess.WorkspacePath)
+			}
+		}
 		dec, err := reg.OnToolCall(callCtx, fullName, args)
 		if err != nil {
 			return err
@@ -253,7 +259,7 @@ func (w *DefaultRuntimeWiring) PrepareSession(
 	})
 	extraTools = append(extraTools, cmTool)
 
-	if mcpSummary := w.mcpPool.NamespaceSummaryPrompt(); mcpSummary != "" {
+	if mcpSummary := w.mcpPool.NamespaceSummaryPromptForWorkspace(sess.WorkspacePath); mcpSummary != "" {
 		extraSections = append(extraSections, ai.SystemSection{
 			Category: agent.CatMCPTools,
 			Content:  mcpSummary,
