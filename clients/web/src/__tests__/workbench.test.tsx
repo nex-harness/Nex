@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import { MarkdownRenderer } from '../features/MarkdownRenderer';
 import { decodePTYBinaryFrame, encodePTYBinaryFrame, PTY_BINARY_STDOUT } from '../core/protocol';
@@ -8,8 +8,24 @@ import { persistActiveSessionId, readPersistedSessionId, useNexStore } from '../
 import { wsClient } from '../core/wsClient';
 import { parsePastedSSHTarget } from '../features/SettingsRunners';
 
+let originalBootstrap: (() => Promise<void>) | null = null;
+
+beforeAll(() => {
+  originalBootstrap = useNexStore.getState().bootstrap;
+});
+
+beforeEach(() => {
+  useNexStore.setState({ bootstrap: vi.fn().mockResolvedValue(undefined) });
+});
+
 afterEach(() => {
   cleanup();
+});
+
+afterAll(() => {
+  if (originalBootstrap) {
+    useNexStore.setState({ bootstrap: originalBootstrap });
+  }
 });
 
 describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () => {
@@ -565,68 +581,97 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
   });
 
   it('supports / slash command autocomplete, @ file mention autocomplete, and image attachment strip', async () => {
-    useNexStore.setState({
-      mainView: 'workspace',
-      activeSessionId: '',
-      locale: 'zh-CN',
-      selectedRunnerId: 'run_1',
-      selectedWorkspacePath: '/repo',
-      composerText: '',
-      composerAttachments: [],
-      plugins: [
-        {
-          id: 'pl_1',
-          name: 'deploy-helper',
-          source_ts: 'export default function(nex){ nex.registerCommand("deploy-check", { description: "Run preflight" }); }',
-          scope: 'global',
-          target_runners: [],
-          enabled: true,
-        },
-      ],
-      searchWorkspaceFiles: vi.fn(async (q: string) =>
-        ['pkg/agent/loop.go', 'pkg/ai/openai_chat.go', 'README.md'].filter((f) =>
-          f.toLowerCase().includes(q.toLowerCase()),
+    const origBootstrap = useNexStore.getState().bootstrap;
+    try {
+      useNexStore.setState({
+        bootstrap: vi.fn().mockResolvedValue(undefined),
+        authEnabled: false,
+        authenticated: true,
+        hiddenModelKeys: {},
+        mainView: 'workspace',
+        activeSessionId: '',
+        locale: 'zh-CN',
+        selectedRunnerId: 'run_1',
+        selectedProviderId: 'p1',
+        selectedModelId: 'm1',
+        draftProviderId: 'p1',
+        draftModelId: 'm1',
+        models: [
+          {
+            id: 'm1',
+            provider_id: 'p1',
+            display_name: 'Model One',
+            source: 'custom',
+            context_window: 128000,
+            max_output_tokens: 4096,
+            supports_vision: true,
+            supports_pdf: false,
+            supports_tools: true,
+            supports_reasoning: false,
+            supports_caching: false,
+            pricing: { input_per_1m: 0, output_per_1m: 0, cache_read_per_1m: 0, cache_write_per_1m: 0 },
+          },
+        ],
+        selectedWorkspacePath: '/repo',
+        composerText: '',
+        composerAttachments: [],
+        plugins: [
+          {
+            id: 'pl_1',
+            name: 'deploy-helper',
+            source_ts: 'export default function(nex){ nex.registerCommand("deploy-check", { description: "Run preflight" }); }',
+            scope: 'global',
+            target_runners: [],
+            enabled: true,
+          },
+        ],
+        searchWorkspaceFiles: vi.fn(async (q: string) =>
+          ['pkg/agent/loop.go', 'pkg/ai/openai_chat.go', 'README.md'].filter((f) =>
+            f.toLowerCase().includes(q.toLowerCase()),
+          ),
         ),
-      ),
-    });
-
-    render(<App />);
-    const input = screen.getByTestId('composer-input') as HTMLTextAreaElement;
-
-    // 1. Typing `/` opens slash command autocomplete with built-ins + plugin commands
-    fireEvent.change(input, { target: { value: '/', selectionStart: 1 } });
-    expect(screen.getByTestId('composer-slash-menu')).toBeTruthy();
-    expect(screen.getByTestId('slash-option-goal')).toBeTruthy();
-    expect(screen.getByTestId('slash-option-compact')).toBeTruthy();
-    expect(screen.getByTestId('slash-option-deploy-check')).toBeTruthy();
-
-    // Selecting `/compact` via mouseDown replaces text cleanly
-    fireEvent.mouseDown(screen.getByTestId('slash-option-compact'));
-    expect(useNexStore.getState().composerText).toBe('/compact ');
-
-    // 2. Typing `@loop` opens workspace file mention autocomplete and inserts `@pkg/agent/loop.go `
-    fireEvent.change(input, { target: { value: 'inspect @loop', selectionStart: 13 } });
-    await waitFor(() => {
-      expect(screen.getByTestId('composer-mention-menu')).toBeTruthy();
-      expect(screen.getByTestId('mention-option-0')).toBeTruthy();
-    });
-    fireEvent.keyDown(input, { key: 'Enter' });
-    expect(useNexStore.getState().composerText).toBe('inspect @pkg/agent/loop.go ');
-
-    // 3. Adding an image attachment renders thumbnail strip and enables send even with empty text
-    act(() => {
-      useNexStore.getState().setComposerText('');
-      useNexStore.getState().addComposerAttachment({
-        id: 'img_1',
-        name: 'screenshot.png',
-        mimeType: 'image/png',
-        dataB64: 'iVBORw0KGgo=',
-        previewUrl: 'data:image/png;base64,iVBORw0KGgo=',
-        size: 2048,
       });
-    });
-    expect(screen.getByTestId('composer-attachments')).toBeTruthy();
-    expect((screen.getByTestId('send-btn') as HTMLButtonElement).disabled).toBe(false);
+
+      render(<App />);
+      const input = screen.getByTestId('composer-input') as HTMLTextAreaElement;
+
+      // 1. Typing `/` opens slash command autocomplete with built-ins + plugin commands
+      fireEvent.change(input, { target: { value: '/', selectionStart: 1 } });
+      expect(screen.getByTestId('composer-slash-menu')).toBeTruthy();
+      expect(screen.getByTestId('slash-option-goal')).toBeTruthy();
+      expect(screen.getByTestId('slash-option-compact')).toBeTruthy();
+      expect(screen.getByTestId('slash-option-deploy-check')).toBeTruthy();
+
+      // Selecting `/compact` via mouseDown replaces text cleanly
+      fireEvent.mouseDown(screen.getByTestId('slash-option-compact'));
+      expect(useNexStore.getState().composerText).toBe('/compact ');
+
+      // 2. Typing `@loop` opens workspace file mention autocomplete and inserts `@pkg/agent/loop.go `
+      fireEvent.change(input, { target: { value: 'inspect @loop', selectionStart: 13 } });
+      await waitFor(() => {
+        expect(screen.getByTestId('composer-mention-menu')).toBeTruthy();
+        expect(screen.getByTestId('mention-option-0')).toBeTruthy();
+      });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(useNexStore.getState().composerText).toBe('inspect @pkg/agent/loop.go ');
+
+      // 3. Adding an image attachment renders thumbnail strip and enables send even with empty text
+      act(() => {
+        useNexStore.getState().setComposerText('');
+        useNexStore.getState().addComposerAttachment({
+          id: 'img_1',
+          name: 'screenshot.png',
+          mimeType: 'image/png',
+          dataB64: 'iVBORw0KGgo=',
+          previewUrl: 'data:image/png;base64,iVBORw0KGgo=',
+          size: 2048,
+        });
+      });
+      expect(screen.getByTestId('composer-attachments')).toBeTruthy();
+      expect((screen.getByTestId('send-btn') as HTMLButtonElement).disabled).toBe(false);
+    } finally {
+      useNexStore.setState({ bootstrap: origBootstrap });
+    }
   });
 
   it('exposes Branch & Edit / Fork actions on turns and Stage / Commit controls in Review tab', async () => {
@@ -992,6 +1037,24 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       mainView: 'workspace',
       activeSessionId: 'sess_b1',
       selectedRunnerId: 'run_1',
+      selectedProviderId: 'openai',
+      selectedModelId: 'group/grok-4.7',
+      models: [
+        {
+          id: 'group/grok-4.7',
+          provider_id: 'openai',
+          display_name: 'Grok 4.7',
+          source: 'custom',
+          context_window: 128000,
+          max_output_tokens: 4096,
+          supports_vision: false,
+          supports_pdf: false,
+          supports_tools: true,
+          supports_reasoning: false,
+          supports_caching: false,
+          pricing: { input_per_1m: 0, output_per_1m: 0, cache_read_per_1m: 0, cache_write_per_1m: 0 },
+        },
+      ],
       openFileInPreviewTab: openFileSpy,
       followUpQueues: {},
       sessions: [
@@ -1608,6 +1671,522 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       expect(screen.queryByTestId('chat-loading')).toBeNull();
     } finally {
       sendSpy.mockRestore();
+    }
+  });
+
+  it('previews conversation and markdown images in a translucent overlay modal', () => {
+    const origBootstrap = useNexStore.getState().bootstrap;
+    try {
+      useNexStore.setState({
+        bootstrap: vi.fn().mockResolvedValue(undefined),
+        authEnabled: false,
+        authenticated: true,
+        locale: 'zh-CN',
+        mainView: 'workspace',
+        activeSessionId: 'sess_img_1',
+        selectedRunnerId: 'run_1',
+        selectedProviderId: 'p1',
+        selectedModelId: 'm1',
+        models: [
+          {
+            id: 'm1',
+            provider_id: 'p1',
+            display_name: 'Model One',
+            source: 'custom',
+            context_window: 128000,
+            max_output_tokens: 4096,
+            supports_vision: true,
+            supports_pdf: false,
+            supports_tools: true,
+            supports_reasoning: false,
+            supports_caching: false,
+            pricing: { input_per_1m: 0, output_per_1m: 0, cache_read_per_1m: 0, cache_write_per_1m: 0 },
+          },
+        ],
+        sessions: [
+          {
+            id: 'sess_img_1',
+            runner_id: 'run_1',
+            depth: 0,
+            title: 'Image Preview Test',
+            workspace_path: '/tmp/ws',
+            agent_profile_slug: 'main',
+            model_id: 'm1',
+            provider_id: 'p1',
+            permission_mode: 'full_access',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: 1000,
+            updated_at: 2000,
+            last_active_at: 2000,
+          },
+        ],
+        streams: {
+          sess_img_1: {
+            lastSeq: 2,
+            running: false,
+            items: [
+              {
+                id: 'usr_1',
+                seq: 1,
+                role: 'user',
+                text: 'Check this mockup',
+                thinking: '',
+                images: [{ data_b64: 'iVBORw0KGgo=', mime_type: 'image/png' }],
+                toolCalls: [],
+              },
+              {
+                id: 'ast_2',
+                seq: 2,
+                role: 'assistant',
+                text: 'Rendered preview:\n\n![architecture diagram](https://example.com/diagram.png)',
+                thinking: '',
+                toolCalls: [],
+              },
+            ],
+            latestTelemetry: null,
+            turnTelemetries: [],
+            uiBadges: {},
+            pendingApproval: null,
+            pendingUIPrompt: null,
+            todos: [],
+            goals: [],
+          },
+        },
+        previewImage: null,
+      });
+
+      render(<App />);
+      expect(screen.queryByTestId('image-preview-modal')).toBeNull();
+
+      // Clicking user uploaded image opens translucent preview overlay
+      fireEvent.click(screen.getByTestId('user-image-0'));
+      expect(screen.getByTestId('image-preview-modal')).toBeTruthy();
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(screen.queryByTestId('image-preview-modal')).toBeNull();
+
+      // Clicking markdown image opens preview overlay and close button dismisses it
+      fireEvent.click(screen.getByTestId('markdown-image-btn'));
+      expect(screen.getByTestId('image-preview-modal')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('image-preview-close'));
+      expect(screen.queryByTestId('image-preview-modal')).toBeNull();
+    } finally {
+      useNexStore.setState({ bootstrap: origBootstrap });
+    }
+  });
+
+  it('opens only one concrete tab for file/review when closed, auto-collapses when closing last tab, and shows launcher on manual toggle', async () => {
+    const origBootstrap = useNexStore.getState().bootstrap;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () => new Response(JSON.stringify({ file: { content: 'package main\n', size: 13 } }), { status: 200 }),
+    );
+    const rpcSpy = vi.spyOn(wsClient, 'requestRPC').mockImplementation(async (method) => ({
+      v: 1,
+      id: 'rpc_1',
+      type: method,
+      ts: Date.now(),
+      payload:
+        method === 'runner.git_diff'
+          ? { branch: 'main', dirty: false, additions: 0, deletions: 0, files: [], untracked: [] }
+          : { content: 'package main\n' },
+    }));
+
+    try {
+      useNexStore.setState({
+        bootstrap: vi.fn().mockResolvedValue(undefined),
+        authEnabled: false,
+        authenticated: true,
+        locale: 'zh-CN',
+        mainView: 'workspace',
+        activeSessionId: 'sess_tab_1',
+        selectedRunnerId: 'run_1',
+        sidePaneVisible: false,
+        rightTabs: [],
+        activeRightTabId: '',
+        sessions: [
+          {
+            id: 'sess_tab_1',
+            runner_id: 'run_1',
+            depth: 0,
+            title: 'Single Tab Test',
+            workspace_path: '/tmp/ws',
+            agent_profile_slug: 'main',
+            model_id: 'm1',
+            provider_id: 'p1',
+            permission_mode: 'full_access',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: 1000,
+            updated_at: 2000,
+            last_active_at: 2000,
+          },
+        ],
+      });
+
+      render(<App />);
+      expect(useNexStore.getState().sidePaneVisible).toBe(false);
+
+      // Opening Review while closed shows ONLY the review tab (no New tab)
+      act(() => {
+        void useNexStore.getState().openRightTab('review');
+      });
+      await waitFor(() => {
+        const tabs = useNexStore.getState().rightTabs;
+        expect(tabs.length).toBe(1);
+        expect(tabs[0].kind).toBe('review');
+        expect(useNexStore.getState().sidePaneVisible).toBe(true);
+      });
+      expect(screen.queryByTestId('workbench-tab-new_tab')).toBeNull();
+      expect(screen.getByTestId('workbench-tab-review')).toBeTruthy();
+
+      // Closing the last tab auto-collapses side pane
+      fireEvent.click(screen.getByTestId('workbench-tab-close-review'));
+      expect(useNexStore.getState().rightTabs).toHaveLength(0);
+      expect(useNexStore.getState().sidePaneVisible).toBe(false);
+
+      // Manual toggle when empty creates and activates 'new_tab' launcher
+      fireEvent.click(screen.getByTestId('side-pane-toggle'));
+      expect(useNexStore.getState().sidePaneVisible).toBe(true);
+      expect(useNexStore.getState().rightTabs.map((t) => t.kind)).toEqual(['new_tab']);
+    } finally {
+      useNexStore.setState({ bootstrap: origBootstrap });
+      rpcSpy.mockRestore();
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('keeps ConversationStatusPanel rounded-2xl without foreground bash clutter and clears stale sidebar running dot', () => {
+    const origBootstrap = useNexStore.getState().bootstrap;
+    try {
+      useNexStore.setState({
+        bootstrap: vi.fn().mockResolvedValue(undefined),
+        authEnabled: false,
+        authenticated: true,
+        locale: 'zh-CN',
+        mainView: 'workspace',
+        sidebarVisible: true,
+        activeSessionId: 'sess_st_1',
+        selectedRunnerId: 'run_1',
+        gitSummary: null,
+        rightTabs: [],
+        bottomTerminals: [],
+        sessions: [
+          {
+            id: 'sess_st_1',
+            runner_id: 'run_1',
+            depth: 0,
+            title: 'Active Stale Status',
+            workspace_path: '/tmp/ws',
+            agent_profile_slug: 'main',
+            model_id: 'm1',
+            provider_id: 'p1',
+            permission_mode: 'full_access',
+            status: 'running', // stale DB status while stream already stopped
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: 1000,
+            updated_at: 2000,
+            last_active_at: 2000,
+          },
+        ],
+        streams: {
+          sess_st_1: {
+            lastSeq: 2,
+            running: false,
+            items: [
+              {
+                id: 'ast_1',
+                seq: 1,
+                role: 'assistant',
+                text: '',
+                thinking: '',
+                toolCalls: [
+                  {
+                    id: 'tc_fg',
+                    name: 'bash',
+                    argsText: JSON.stringify({ command: 'ls -la' }),
+                    streamOutput: '',
+                    finalOutput: '',
+                    status: 'running',
+                  },
+                ],
+              },
+            ],
+            latestTelemetry: null,
+            turnTelemetries: [],
+            uiBadges: {},
+            pendingApproval: null,
+            pendingUIPrompt: null,
+            todos: [],
+            goals: [],
+          },
+        },
+      });
+
+      render(<App />);
+      // Stale running status in DB does NOT show pulsing blue dot once stream finished
+      expect(document.querySelector('.bg-brand-blue.animate-pulse')).toBeNull();
+      // Ordinary foreground bash does NOT open status panel
+      expect(screen.queryByTestId('conversation-status-panel')).toBeNull();
+
+      // Background bash DOES show status panel with uniform rounded-2xl (never rounded-full)
+      act(() => {
+        const cur = useNexStore.getState().streams.sess_st_1;
+        useNexStore.setState({
+          streams: {
+            sess_st_1: {
+              ...cur,
+              running: true,
+              items: [
+                {
+                  id: 'ast_1',
+                  seq: 2,
+                  role: 'assistant',
+                  text: '',
+                  thinking: '',
+                  toolCalls: [
+                    {
+                      id: 'tc_bg',
+                      name: 'bash',
+                      argsText: JSON.stringify({ command: 'npm run dev', run_in_background: true }),
+                      streamOutput: '',
+                      finalOutput: '',
+                      status: 'running',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        });
+      });
+
+      const panel = screen.getByTestId('conversation-status-panel');
+      expect(panel.className).toContain('rounded-2xl');
+      expect(panel.className).not.toContain('rounded-full');
+
+      // Expanding to panel mode preserves rounded-2xl and never switches to rounded-full
+      fireEvent.click(screen.getByTestId('status-panel-mini'));
+      expect(panel.getAttribute('data-display-mode')).toBe('panel');
+      expect(panel.className).toContain('rounded-2xl');
+      expect(panel.className).not.toContain('rounded-full');
+    } finally {
+      useNexStore.setState({ bootstrap: origBootstrap });
+    }
+  });
+
+  it('binds models per conversation, keeps draft changes isolated, and blocks sending when saved model is missing', () => {
+    const origBootstrap = useNexStore.getState().bootstrap;
+    const sendSpy = vi.spyOn(wsClient, 'sendEnvelope').mockImplementation(() => 'env_1');
+    try {
+      useNexStore.setState({
+        bootstrap: vi.fn().mockResolvedValue(undefined),
+        authEnabled: false,
+        authenticated: true,
+        locale: 'zh-CN',
+        mainView: 'workspace',
+        activeSessionId: 'sess_m1',
+        selectedRunnerId: 'run_1',
+        selectedProviderId: 'p1',
+        selectedModelId: 'model-a',
+        draftProviderId: 'p1',
+        draftModelId: 'model-a',
+        sessionModels: {},
+        models: [
+          {
+            id: 'model-a',
+            provider_id: 'p1',
+            display_name: 'Model Alpha',
+            source: 'custom',
+            context_window: 128000,
+            max_output_tokens: 4096,
+            supports_vision: false,
+            supports_pdf: false,
+            supports_tools: true,
+            supports_reasoning: false,
+            supports_caching: false,
+            pricing: { input_per_1m: 0, output_per_1m: 0, cache_read_per_1m: 0, cache_write_per_1m: 0 },
+          },
+          {
+            id: 'model-b',
+            provider_id: 'p1',
+            display_name: 'Model Beta',
+            source: 'custom',
+            context_window: 128000,
+            max_output_tokens: 4096,
+            supports_vision: false,
+            supports_pdf: false,
+            supports_tools: true,
+            supports_reasoning: false,
+            supports_caching: false,
+            pricing: { input_per_1m: 0, output_per_1m: 0, cache_read_per_1m: 0, cache_write_per_1m: 0 },
+          },
+        ],
+        sessions: [
+          {
+            id: 'sess_m1',
+            runner_id: 'run_1',
+            depth: 0,
+            title: 'Session Alpha',
+            workspace_path: '/tmp/ws',
+            agent_profile_slug: 'main',
+            model_id: 'model-a',
+            provider_id: 'p1',
+            permission_mode: 'full_access',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: 1000,
+            updated_at: 2000,
+            last_active_at: 2000,
+          },
+          {
+            id: 'sess_missing',
+            runner_id: 'run_1',
+            depth: 0,
+            title: 'Session Missing Model',
+            workspace_path: '/tmp/ws',
+            agent_profile_slug: 'main',
+            model_id: 'deleted-model',
+            provider_id: 'p_gone',
+            permission_mode: 'full_access',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: 1000,
+            updated_at: 1500,
+            last_active_at: 1500,
+          },
+        ],
+        composerText: 'hello',
+      });
+
+      render(<App />);
+      expect(screen.getByTestId('model-effort-btn').textContent).toContain('Model Alpha');
+
+      // New conversation draft selection does NOT mutate sess_m1
+      act(() => {
+        useNexStore.getState().startNewSession();
+        useNexStore.getState().setSelectedModel('p1', 'model-b');
+      });
+      expect(useNexStore.getState().draftModelId).toBe('model-b');
+
+      // Switching back to sess_m1 restores Model Alpha
+      act(() => {
+        void useNexStore.getState().selectSession('sess_m1');
+      });
+      expect(useNexStore.getState().selectedModelId).toBe('model-a');
+      expect(screen.getByTestId('model-effort-btn').textContent).toContain('Model Alpha');
+
+      // Switching to sess_missing leaves model empty and blocks sending
+      act(() => {
+        void useNexStore.getState().selectSession('sess_missing');
+      });
+      expect(useNexStore.getState().selectedModelId).toBe('');
+      expect(screen.getByTestId('model-effort-btn').textContent).toContain('选择模型');
+      expect((screen.getByTestId('send-btn') as HTMLButtonElement).disabled).toBe(true);
+
+      sendSpy.mockClear();
+      act(() => {
+        void useNexStore.getState().sendPromptOrSteer('should not send');
+      });
+      expect(sendSpy).not.toHaveBeenCalled();
+    } finally {
+      useNexStore.setState({ bootstrap: origBootstrap });
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('preserves Ctrl+K for Emacs line editing and opens Command Palette only with Cmd+K', () => {
+    const origBootstrap = useNexStore.getState().bootstrap;
+    try {
+      useNexStore.setState({
+        bootstrap: vi.fn().mockResolvedValue(undefined),
+        authEnabled: false,
+        authenticated: true,
+        locale: 'zh-CN',
+        mainView: 'workspace',
+        quickSearchOpen: false,
+      });
+      render(<App />);
+
+      // Ctrl+K (no Meta) must NOT hijack into Command Palette
+      fireEvent.keyDown(window, { key: 'k', ctrlKey: true, metaKey: false });
+      expect(useNexStore.getState().quickSearchOpen).toBe(false);
+      expect(screen.queryByTestId('command-palette-modal')).toBeNull();
+
+      // Cmd+K (Meta without Ctrl) opens Command Palette
+      fireEvent.keyDown(window, { key: 'k', metaKey: true, ctrlKey: false });
+      expect(useNexStore.getState().quickSearchOpen).toBe(true);
+      expect(screen.getByTestId('command-palette-modal')).toBeTruthy();
+    } finally {
+      useNexStore.setState({ bootstrap: origBootstrap, quickSearchOpen: false });
+    }
+  });
+
+  it('renders built-in explore/worker subagent model overrides defaulting to main model and saves changes', async () => {
+    const origBootstrap = useNexStore.getState().bootstrap;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () => new Response(JSON.stringify({ slug: 'explore' }), { status: 200 }),
+    );
+    const refreshSpy = vi.fn().mockResolvedValue(undefined);
+    try {
+      useNexStore.setState({
+        bootstrap: vi.fn().mockResolvedValue(undefined),
+        authEnabled: false,
+        authenticated: true,
+        locale: 'zh-CN',
+        mainView: 'settings',
+        settingsSection: 'agents',
+        providers: [
+          { id: 'prov_1', name: 'OpenAI', driver: 'openai_chat', base_url: '', api_key: '', proxy_mode: 'direct', enabled: true },
+        ],
+        models: [
+          {
+            id: 'gpt-4o-mini',
+            provider_id: 'prov_1',
+            display_name: 'GPT-4o Mini',
+            source: 'custom',
+            context_window: 128000,
+            max_output_tokens: 4096,
+            supports_vision: false,
+            supports_pdf: false,
+            supports_tools: true,
+            supports_reasoning: true,
+            reasoning_levels: ['low', 'medium', 'high'],
+            supports_caching: false,
+            pricing: { input_per_1m: 0, output_per_1m: 0, cache_read_per_1m: 0, cache_write_per_1m: 0 },
+          },
+        ],
+        agentProfiles: [],
+        refreshRegistries: refreshSpy,
+      });
+
+      render(<App />);
+      expect(screen.getByTestId('builtin-subagents-section')).toBeTruthy();
+      const exploreSelect = screen.getByTestId('builtin-subagent-explore-model-select') as HTMLSelectElement;
+      const workerSelect = screen.getByTestId('builtin-subagent-worker-model-select') as HTMLSelectElement;
+      expect(exploreSelect.value).toBe('');
+      expect(workerSelect.value).toBe('');
+      expect(exploreSelect.options[0].textContent).toContain('默认（与主模型一致）');
+
+      fireEvent.change(exploreSelect, { target: { value: 'prov_1::gpt-4o-mini' } });
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          expect.stringContaining('/api/v1/agents'),
+          expect.objectContaining({ method: 'POST' }),
+        );
+      });
+      const postCall = fetchMock.mock.calls.find(([u]) => String(u).includes('/api/v1/agents'));
+      expect(postCall).toBeTruthy();
+      const sentBody = JSON.parse(String(postCall?.[1]?.body || '{}'));
+      expect(sentBody.slug).toBe('explore');
+      expect(sentBody.model_ref).toBe('prov_1::gpt-4o-mini');
+    } finally {
+      useNexStore.setState({ bootstrap: origBootstrap });
+      fetchMock.mockRestore();
     }
   });
 });

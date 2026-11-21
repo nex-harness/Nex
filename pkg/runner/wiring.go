@@ -98,6 +98,95 @@ func (w *DefaultRuntimeWiring) ExecuteCronPrompt(ctx context.Context, job store.
 	return err
 }
 
+func parseModelRef(ref string) (providerID, modelID string) {
+	trimmed := strings.TrimSpace(ref)
+	if trimmed == "" || strings.EqualFold(trimmed, "inherit") || strings.EqualFold(trimmed, "default") {
+		return "", ""
+	}
+	if prov, mod, ok := strings.Cut(trimmed, "::"); ok {
+		return strings.TrimSpace(prov), strings.TrimSpace(mod)
+	}
+	return "", trimmed
+}
+
+func (w *DefaultRuntimeWiring) resolveSubagentModel(
+	ctx context.Context,
+	parentSess *store.SessionRecord,
+	agentType string,
+	reqModelRef string,
+) (providerID, modelID, thinkingEffort string) {
+	if parentSess != nil {
+		providerID = parentSess.ProviderID
+		modelID = parentSess.ModelID
+	}
+	if w == nil || w.node == nil || w.node.store == nil {
+		return providerID, modelID, ""
+	}
+
+	var matchedProfile *store.AgentProfile
+	if profiles, err := w.node.store.ListAgentProfiles(ctx); err == nil {
+		for i := range profiles {
+			if strings.EqualFold(strings.TrimSpace(profiles[i].Slug), strings.TrimSpace(agentType)) {
+				matchedProfile = &profiles[i]
+				break
+			}
+		}
+	}
+
+	rawRef := strings.TrimSpace(reqModelRef)
+	if rawRef == "" && matchedProfile != nil {
+		rawRef = strings.TrimSpace(matchedProfile.ModelRef)
+	}
+	effort := ""
+	if matchedProfile != nil {
+		effort = strings.TrimSpace(matchedProfile.ThinkingEffort)
+	}
+
+	pID, mID := parseModelRef(rawRef)
+	if pID == "" && mID == "" {
+		// Default: inherit main conversation's provider and model identically.
+		return providerID, modelID, effort
+	}
+
+	providers, _ := w.node.store.ListProviders(ctx)
+	enabledProv := map[string]bool{}
+	for _, pr := range providers {
+		if pr.Enabled {
+			enabledProv[pr.ID] = true
+		}
+	}
+	models, _ := w.node.store.ListModels(ctx, "")
+	if len(models) > 0 {
+		for _, m := range models {
+			if len(providers) > 0 && !enabledProv[m.ProviderID] {
+				continue
+			}
+			if pID != "" && m.ProviderID == pID && m.ID == mID {
+				return m.ProviderID, m.ID, effort
+			}
+			if pID == "" && m.ID == mID {
+				return m.ProviderID, m.ID, effort
+			}
+		}
+		if pID == "" && strings.Contains(mID, "/") {
+			if slashProv, slashMod, ok := strings.Cut(mID, "/"); ok {
+				for _, m := range models {
+					if (len(providers) == 0 || enabledProv[m.ProviderID]) && m.ProviderID == slashProv && m.ID == slashMod {
+						return m.ProviderID, m.ID, effort
+					}
+				}
+			}
+		}
+		// Override model no longer exists or provider disabled: safely fall back to main session model.
+		return providerID, modelID, ""
+	}
+
+	if pID != "" {
+		return pID, mID, effort
+	}
+	return providerID, mID, effort
+}
+
 // --- subagent.LocalExecutor ---
 
 func (w *DefaultRuntimeWiring) RunChildSession(
@@ -107,12 +196,19 @@ func (w *DefaultRuntimeWiring) RunChildSession(
 	readOnly bool,
 	effectiveWorkDir string,
 ) (string, func(string), error) {
+	parentSess, parentErr := w.node.store.GetSession(ctx, req.ParentSessionID)
 	permMode := agent.PermissionFullAccess
 	if readOnly {
 		permMode = agent.PermissionReadOnly
-	} else if parentSess, err := w.node.store.GetSession(ctx, req.ParentSessionID); err == nil && parentSess.PermissionMode != "" {
+	} else if parentErr == nil && parentSess.PermissionMode != "" {
 		permMode = agent.PermissionMode(parentSess.PermissionMode)
 	}
+
+	var parentPtr *store.SessionRecord
+	if parentErr == nil {
+		parentPtr = parentSess
+	}
+	childProvID, childModelID, childEffort := w.resolveSubagentModel(ctx, parentPtr, req.AgentType, req.Model)
 
 	// Persist child session with depth = ParentDepth + 1
 	_, _ = w.node.store.CreateOrUpdateSession(ctx, store.SessionRecord{
@@ -124,6 +220,8 @@ func (w *DefaultRuntimeWiring) RunChildSession(
 		Title:            fmt.Sprintf("[%s] %s", req.AgentType, truncateStr(req.Prompt, 40)),
 		WorkspacePath:    effectiveWorkDir,
 		AgentProfileSlug: req.AgentType,
+		ProviderID:       childProvID,
+		ModelID:          childModelID,
 		PermissionMode:   string(permMode),
 		Status:           "running",
 	})
@@ -133,6 +231,9 @@ func (w *DefaultRuntimeWiring) RunChildSession(
 		RunnerID:         w.node.cfg.RunnerID,
 		WorkspacePath:    effectiveWorkDir,
 		AgentProfileSlug: req.AgentType,
+		ProviderID:       childProvID,
+		ModelID:          childModelID,
+		ThinkingEffort:   ai.ThinkingEffort(childEffort),
 		PermissionMode:   string(permMode),
 		Text:             req.Prompt,
 	}, "subagent", w.node.IsOnline())

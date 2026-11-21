@@ -21,7 +21,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatMsg } from '../i18n/messages';
 import { useNexStore } from '../core/store';
-import { GitSummary, GoalEntry, ToolCallCard, TodoItem } from '../core/types';
+import { ChatTurnItem, GitSummary, GoalEntry, ToolCallCard, TodoItem } from '../core/types';
 
 export type StatusPanelMode = 'auto' | 'panel' | 'mini';
 
@@ -30,6 +30,53 @@ function hasGitChanges(gitSummary: GitSummary | null | undefined): boolean {
     gitSummary?.is_git_repo &&
       (gitSummary.changed_files > 0 || gitSummary.additions + gitSummary.deletions > 0),
   );
+}
+
+interface BackgroundBashEntry {
+  tc: ToolCallCard;
+  command: string;
+  description: string;
+}
+
+function extractBackgroundBashEntries(items: ChatTurnItem[], sessionRunning: boolean): BackgroundBashEntry[] {
+  const stoppedTaskIds = new Set<string>();
+  for (const item of items) {
+    for (const tc of item.toolCalls) {
+      if (tc.name !== 'task_stop' || tc.status !== 'completed') continue;
+      const args = parseToolArgs(tc);
+      const tid = String(args.task_id || '').trim();
+      if (tid) stoppedTaskIds.add(tid);
+    }
+  }
+
+  const list: BackgroundBashEntry[] = [];
+  for (const item of items) {
+    for (const tc of item.toolCalls) {
+      if (tc.name !== 'bash') continue;
+      const args = parseToolArgs(tc);
+      if (!args.run_in_background) continue;
+      if (tc.status === 'running') {
+        list.push({
+          tc,
+          command: String(args.command || ''),
+          description: String(args.description || '').trim(),
+        });
+        continue;
+      }
+      if (tc.status === 'completed' && sessionRunning) {
+        const m = /Started background task ([A-Za-z0-9_-]+)/.exec(tc.finalOutput || tc.streamOutput || '');
+        const tid = m?.[1] || '';
+        if (tid && !stoppedTaskIds.has(tid)) {
+          list.push({
+            tc,
+            command: String(args.command || ''),
+            description: String(args.description || '').trim(),
+          });
+        }
+      }
+    }
+  }
+  return list;
 }
 
 /** Shared visibility selector so ConversationPane layout spacing and StatusPanel agree 1:1. */
@@ -45,10 +92,10 @@ export function useConversationStatusPanelHasContent(): boolean {
   if ((stream?.goals || []).length > 0) return true;
   if ((stream?.todos || []).length > 0) return true;
   if (bottomTerminals.length > 0 || rightTabs.some((t) => t.kind === 'terminal')) return true;
+  if (extractBackgroundBashEntries(stream?.items || [], Boolean(stream?.running)).length > 0) return true;
   for (const item of stream?.items || []) {
     for (const tc of item.toolCalls) {
       if (tc.name === 'subagent') return true;
-      if (tc.name === 'bash' && tc.status === 'running') return true;
     }
   }
   return false;
@@ -156,21 +203,10 @@ export function ConversationStatusPanel({
   const runningSubagents = subagents.filter((a) => a.tc.status === 'running');
   const endedSubagents = subagents.filter((a) => a.tc.status !== 'running');
 
-  const runningBash = useMemo(() => {
-    const list: Array<{ tc: ToolCallCard; command: string; description: string }> = [];
-    for (const item of items) {
-      for (const tc of item.toolCalls) {
-        if (tc.name !== 'bash' || tc.status !== 'running') continue;
-        const args = parseToolArgs(tc);
-        list.push({
-          tc,
-          command: String(args.command || ''),
-          description: String(args.description || '').trim(),
-        });
-      }
-    }
-    return list;
-  }, [items]);
+  const runningBash = useMemo(
+    () => extractBackgroundBashEntries(items, Boolean(stream?.running)),
+    [items, stream?.running],
+  );
 
   // Track first-seen timestamps for right-pane terminal tabs (WorkbenchTab has no createdAt).
   const rightTerminalTabs = rightTabs.filter((t) => t.kind === 'terminal');
@@ -305,12 +341,12 @@ export function ConversationStatusPanel({
         data-testid="conversation-status-panel"
         data-display-mode={mode}
         data-state={mode === 'mini' ? 'collapsed' : 'expanded'}
-        className={`pointer-events-auto relative flex flex-col overflow-hidden border border-border bg-popover text-foreground shadow-md transition-[border-radius,padding,background-color,box-shadow] duration-200 ease-out ${
+        className={`pointer-events-auto relative flex-col overflow-hidden rounded-2xl border border-border bg-popover text-foreground shadow-md transition-[background-color,box-shadow] duration-200 ease-out ${
           mode === 'mini'
-            ? 'inline-flex max-h-8.5 w-max max-w-[min(20rem,calc(100cqw-2rem))] rounded-full'
+            ? 'inline-flex max-h-8.5 w-max max-w-[min(20rem,calc(100cqw-2rem))]'
             : mode === 'panel'
-              ? 'zcode-popover-down max-h-[min(74dvh,38rem)] w-80 max-w-[calc(100cqw-2rem)] rounded-2xl'
-              : 'inline-flex max-h-8.5 w-max max-w-[min(20rem,calc(100cqw-2rem))] rounded-full @min-[1280px]/conversation:max-h-[min(74dvh,38rem)] @min-[1280px]/conversation:w-80 @min-[1280px]/conversation:rounded-2xl'
+              ? 'zcode-popover-down flex max-h-[min(74dvh,38rem)] w-80 max-w-[calc(100cqw-2rem)]'
+              : 'inline-flex max-h-8.5 w-max max-w-[min(20rem,calc(100cqw-2rem))] @min-[1280px]/conversation:flex @min-[1280px]/conversation:max-h-[min(74dvh,38rem)] @min-[1280px]/conversation:w-80'
         }`}
       >
         {/* Mini capsule trigger: shown in 'mini' mode or below 1280px in 'auto' mode */}

@@ -1,8 +1,11 @@
-import { formatMsg } from '../i18n/messages';
+import { formatEffortLabel, resolveEffortLevels } from '../core/effort';
+import { formatMsg, type LocaleCode } from '../i18n/messages';
+import type { MessageKey } from '../i18n/locales/en-US';
 import { ChevronRight, LoaderCircle, Pencil, Search, Sparkles, Trash2 } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { apiFetch } from '../core/protocol';
 import { useNexStore } from '../core/store';
+import type { AgentProfile, ModelMeta, ProviderRecord, ThinkingEffort } from '../core/types';
 import { CodeEditorWithHighlight, HighlightedCode } from './MarkdownRenderer';
 import { MCPManagerSection } from './SettingsMCP';
 import { SkillsManagerSection } from './SettingsSkills';
@@ -78,8 +81,154 @@ function MetaBadge({ children, mono = false }: { children: ReactNode; mono?: boo
 /* Subagents                                                                  */
 /* -------------------------------------------------------------------------- */
 
+interface BuiltInSubagentMeta {
+  slug: 'explore' | 'worker';
+  nameKey: MessageKey;
+  descKey: MessageKey;
+  defaultTools: string[];
+  isolation: 'shared' | 'worktree';
+}
+
+const BUILT_IN_SUBAGENTS: BuiltInSubagentMeta[] = [
+  {
+    slug: 'explore',
+    nameKey: 'capabilities.builtIn.explore.name',
+    descKey: 'capabilities.builtIn.explore.desc',
+    defaultTools: ['read', 'grep', 'glob', 'find_files'],
+    isolation: 'shared',
+  },
+  {
+    slug: 'worker',
+    nameKey: 'capabilities.builtIn.worker.name',
+    descKey: 'capabilities.builtIn.worker.desc',
+    defaultTools: [],
+    isolation: 'shared',
+  },
+];
+
+function matchSubagentModel(models: ModelMeta[], modelRef: string): ModelMeta | undefined {
+  const trimmed = (modelRef || '').trim();
+  if (!trimmed) return undefined;
+  const sepIdx = trimmed.indexOf('::');
+  if (sepIdx >= 0) {
+    const prov = trimmed.slice(0, sepIdx).trim();
+    const mod = trimmed.slice(sepIdx + 2).trim();
+    return models.find((m) => m.provider_id === prov && m.id === mod);
+  }
+  return models.find((m) => m.id === trimmed);
+}
+
+function SubagentModelControl({
+  locale,
+  providers,
+  models,
+  modelRef,
+  thinkingEffort,
+  onChange,
+  testIdPrefix,
+  disabled = false,
+}: {
+  locale: LocaleCode;
+  providers: ProviderRecord[];
+  models: ModelMeta[];
+  modelRef: string;
+  thinkingEffort: ThinkingEffort | '';
+  onChange: (nextModelRef: string, nextEffort: ThinkingEffort | '') => void;
+  testIdPrefix: string;
+  disabled?: boolean;
+}) {
+  const providerNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of providers) map.set(p.id, p.name || p.id);
+    return map;
+  }, [providers]);
+
+  const groupedModels = useMemo(() => {
+    const enabledProviderIds = new Set(providers.filter((p) => p.enabled).map((p) => p.id));
+    const groups = new Map<string, ModelMeta[]>();
+    for (const m of models) {
+      if (providers.length > 0 && !enabledProviderIds.has(m.provider_id)) continue;
+      const list = groups.get(m.provider_id) ?? [];
+      list.push(m);
+      groups.set(m.provider_id, list);
+    }
+    return Array.from(groups.entries());
+  }, [providers, models]);
+
+  const matchedModel = useMemo(() => matchSubagentModel(models, modelRef), [models, modelRef]);
+  const isMissingModel = Boolean((modelRef || '').trim()) && !matchedModel;
+  const normalizedValue = matchedModel
+    ? `${matchedModel.provider_id}::${matchedModel.id}`
+    : (modelRef || '').trim();
+  const effortOptions = useMemo(() => resolveEffortLevels(matchedModel), [matchedModel]);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        data-testid={`${testIdPrefix}-model-select`}
+        value={normalizedValue}
+        disabled={disabled}
+        onChange={(e) => {
+          const nextRef = e.target.value;
+          const nextModel = matchSubagentModel(models, nextRef);
+          const nextEfforts = resolveEffortLevels(nextModel);
+          const keepEffort =
+            nextRef &&
+            nextModel &&
+            thinkingEffort &&
+            nextEfforts.some((opt) => opt.value === thinkingEffort)
+              ? thinkingEffort
+              : '';
+          onChange(nextRef, keepEffort);
+        }}
+        className={`h-8 min-w-48 max-w-full rounded-lg border px-2.5 text-ui-xs outline-none transition-colors ${
+          isMissingModel
+            ? 'border-amber-500/60 bg-amber-500/5 text-amber-700 dark:text-amber-300'
+            : 'border-border bg-input text-foreground'
+        }`}
+      >
+        <option value="">{formatMsg(locale, 'capabilities.subagentModelDefaultMain')}</option>
+        {isMissingModel ? (
+          <option value={normalizedValue}>
+            {`${normalizedValue} — ${formatMsg(locale, 'capabilities.subagentModelUnavailable')}`}
+          </option>
+        ) : null}
+        {groupedModels.map(([providerId, items]) => (
+          <optgroup key={providerId} label={providerNameMap.get(providerId) || providerId}>
+            {items.map((m) => {
+              const refValue = `${m.provider_id}::${m.id}`;
+              return (
+                <option key={refValue} value={refValue}>
+                  {m.display_name || m.id}
+                </option>
+              );
+            })}
+          </optgroup>
+        ))}
+      </select>
+
+      {matchedModel && effortOptions.length > 0 ? (
+        <select
+          data-testid={`${testIdPrefix}-effort-select`}
+          value={thinkingEffort || ''}
+          disabled={disabled}
+          onChange={(e) => onChange(normalizedValue, e.target.value as ThinkingEffort | '')}
+          className="h-8 rounded-lg border border-border bg-input px-2.5 text-ui-xs text-foreground outline-none"
+        >
+          <option value="">{formatMsg(locale, 'capabilities.subagentEffortDefault')}</option>
+          {effortOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {formatEffortLabel(opt, locale)}
+            </option>
+          ))}
+        </select>
+      ) : null}
+    </div>
+  );
+}
+
 export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {
-  const { locale, agentProfiles, refreshRegistries } = useNexStore();
+  const { locale, agentProfiles, providers, models, refreshRegistries } = useNexStore();
 
   const [slug, setSlug] = useState('code-reviewer');
   const [name, setName] = useState('Code Reviewer');
@@ -88,6 +237,74 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
   );
   const [isolation, setIsolation] = useState<'shared' | 'worktree'>('shared');
   const [toolsCsv, setToolsCsv] = useState('read,grep,glob,codemode');
+  const [newModelRef, setNewModelRef] = useState('');
+  const [newEffort, setNewEffort] = useState<ThinkingEffort | ''>('');
+  const [savingSlug, setSavingSlug] = useState<string | null>(null);
+
+  const profileBySlug = useMemo(() => {
+    const map = new Map<string, AgentProfile>();
+    for (const ap of agentProfiles) {
+      map.set(ap.slug.toLowerCase(), ap);
+    }
+    return map;
+  }, [agentProfiles]);
+
+  const builtInSlugs = useMemo(() => new Set(BUILT_IN_SUBAGENTS.map((b) => b.slug)), []);
+  const customProfiles = useMemo(
+    () => agentProfiles.filter((ap) => !builtInSlugs.has(ap.slug.toLowerCase() as 'explore' | 'worker')),
+    [agentProfiles, builtInSlugs],
+  );
+
+  const saveBuiltInOverride = async (
+    meta: BuiltInSubagentMeta,
+    nextModelRef: string,
+    nextEffort: ThinkingEffort | '',
+  ) => {
+    const existing = profileBySlug.get(meta.slug);
+    setSavingSlug(meta.slug);
+    try {
+      await apiFetch('/api/v1/agents', {
+        method: 'POST',
+        body: JSON.stringify({
+          slug: meta.slug,
+          display_name: existing?.display_name || formatMsg(locale, meta.nameKey),
+          description: existing?.description || formatMsg(locale, meta.descKey),
+          system_prompt: existing?.system_prompt || '',
+          model_ref: nextModelRef,
+          thinking_effort: nextEffort,
+          tools_allow: existing?.tools_allow ?? meta.defaultTools,
+          max_turns: existing?.max_turns ?? 25,
+          isolation_mode: existing?.isolation_mode || meta.isolation,
+        }),
+      });
+      await refreshRegistries();
+      onFlash(formatMsg(locale, 'capabilities.subagentProfileSaved', { slug: meta.slug }));
+    } finally {
+      setSavingSlug(null);
+    }
+  };
+
+  const saveCustomModelOverride = async (
+    ap: AgentProfile,
+    nextModelRef: string,
+    nextEffort: ThinkingEffort | '',
+  ) => {
+    setSavingSlug(ap.slug);
+    try {
+      await apiFetch('/api/v1/agents', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...ap,
+          model_ref: nextModelRef,
+          thinking_effort: nextEffort,
+        }),
+      });
+      await refreshRegistries();
+      onFlash(formatMsg(locale, 'capabilities.subagentProfileSaved', { slug: ap.slug }));
+    } finally {
+      setSavingSlug(null);
+    }
+  };
 
   const saveAgent = async () => {
     await apiFetch('/api/v1/agents', {
@@ -97,6 +314,8 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
         display_name: name.trim() || slug.trim(),
         description: name.trim(),
         system_prompt: prompt,
+        model_ref: newModelRef,
+        thinking_effort: newEffort,
         tools_allow: toolsCsv
           .split(',')
           .map((s) => s.trim())
@@ -116,6 +335,58 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
 
   return (
     <div className="space-y-6">
+      <SectionHeading
+        title={formatMsg(locale, 'capabilities.builtInSubagents')}
+        description={formatMsg(locale, 'capabilities.builtInSubagentsDesc')}
+      />
+
+      <SettingsGroupCard>
+        <div data-testid="builtin-subagents-section" className="divide-y divide-border">
+          {BUILT_IN_SUBAGENTS.map((b) => {
+            const override = profileBySlug.get(b.slug);
+            const currentModelRef = override?.model_ref || '';
+            const currentEffort = (override?.thinking_effort as ThinkingEffort | undefined) || '';
+            const matched = matchSubagentModel(models, currentModelRef);
+            return (
+              <div
+                key={b.slug}
+                data-testid={`builtin-subagent-${b.slug}`}
+                className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-ui-base font-medium text-foreground">
+                      {formatMsg(locale, b.nameKey)}
+                    </span>
+                    <MetaBadge mono>{b.slug}</MetaBadge>
+                    {currentModelRef && !matched ? (
+                      <MetaBadge>{formatMsg(locale, 'capabilities.subagentModelUnavailable')}</MetaBadge>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-ui-xs text-foreground-subtle">
+                    {formatMsg(locale, b.descKey)}
+                  </p>
+                </div>
+                <div className="shrink-0">
+                  <SubagentModelControl
+                    locale={locale}
+                    providers={providers}
+                    models={models}
+                    modelRef={currentModelRef}
+                    thinkingEffort={currentEffort}
+                    disabled={savingSlug === b.slug}
+                    testIdPrefix={`builtin-subagent-${b.slug}`}
+                    onChange={(nextRef, nextEffort) =>
+                      void saveBuiltInOverride(b, nextRef, nextEffort)
+                    }
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </SettingsGroupCard>
+
       <SectionHeading
         title={formatMsg(locale, 'capabilities.newSubagentProfile')}
         description={
@@ -171,6 +442,23 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
           </Field>
         </div>
 
+        <div className="px-5 py-4">
+          <Field label={formatMsg(locale, 'capabilities.subagentModel')}>
+            <SubagentModelControl
+              locale={locale}
+              providers={providers}
+              models={models}
+              modelRef={newModelRef}
+              thinkingEffort={newEffort}
+              testIdPrefix="new-subagent"
+              onChange={(nextRef, nextEffort) => {
+                setNewModelRef(nextRef);
+                setNewEffort(nextEffort);
+              }}
+            />
+          </Field>
+        </div>
+
         <div className="space-y-3 px-5 py-4">
           <Field
             label={formatMsg(locale, 'chat.contextUsage.systemPrompt')}
@@ -197,41 +485,66 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
 
       <SectionHeading
         title={
-          formatMsg(locale, 'capabilities.configuredProfiles', { length: agentProfiles.length })
+          formatMsg(locale, 'capabilities.configuredProfiles', { length: customProfiles.length })
         }
       />
 
       <SettingsGroupCard>
-        {agentProfiles.length === 0 ? (
+        {customProfiles.length === 0 ? (
           <EmptyRow>
             {formatMsg(locale, 'capabilities.usingTheBuiltInExplore')}
           </EmptyRow>
         ) : (
-          agentProfiles.map((ap) => (
-            <div
-              key={ap.slug}
-              className="flex items-center justify-between gap-3 px-5 py-3.5"
-            >
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-ui-base font-medium text-foreground">
-                    {ap.display_name}
-                  </span>
-                  <MetaBadge mono>{ap.slug}</MetaBadge>
-                  <MetaBadge mono>{ap.isolation_mode}</MetaBadge>
-                </div>
-                <p className="mt-1 truncate text-ui-sm text-foreground-subtle">{ap.system_prompt}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void removeAgent(ap.slug)}
-                aria-label={formatMsg(locale, 'capabilities.deleteSubagent')}
-                className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
+          customProfiles.map((ap) => {
+            const matched = matchSubagentModel(models, ap.model_ref || '');
+            return (
+              <div
+                key={ap.slug}
+                data-testid={`custom-subagent-${ap.slug}`}
+                className="flex flex-col gap-3 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
               >
-                <Trash2 className="size-4" />
-              </button>
-            </div>
-          ))
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-ui-base font-medium text-foreground">
+                      {ap.display_name}
+                    </span>
+                    <MetaBadge mono>{ap.slug}</MetaBadge>
+                    <MetaBadge mono>{ap.isolation_mode}</MetaBadge>
+                    <MetaBadge>
+                      {matched
+                        ? matched.display_name || matched.id
+                        : ap.model_ref
+                          ? `${ap.model_ref} — ${formatMsg(locale, 'capabilities.subagentModelUnavailable')}`
+                          : formatMsg(locale, 'capabilities.subagentModelDefaultMain')}
+                    </MetaBadge>
+                  </div>
+                  <p className="mt-1 truncate text-ui-sm text-foreground-subtle">{ap.system_prompt}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <SubagentModelControl
+                    locale={locale}
+                    providers={providers}
+                    models={models}
+                    modelRef={ap.model_ref || ''}
+                    thinkingEffort={(ap.thinking_effort as ThinkingEffort | undefined) || ''}
+                    disabled={savingSlug === ap.slug}
+                    testIdPrefix={`custom-subagent-${ap.slug}`}
+                    onChange={(nextRef, nextEffort) =>
+                      void saveCustomModelOverride(ap, nextRef, nextEffort)
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void removeAgent(ap.slug)}
+                    aria-label={formatMsg(locale, 'capabilities.deleteSubagent')}
+                    className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })
         )}
       </SettingsGroupCard>
     </div>

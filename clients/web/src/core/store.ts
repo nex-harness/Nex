@@ -109,6 +109,42 @@ function appendOptimisticUserPrompt(
   };
 }
 
+function resolveCatalogModel(
+  models: ModelMeta[],
+  providerId?: string,
+  modelId?: string,
+): { providerId: string; modelId: string } {
+  const p = (providerId || '').trim();
+  const m = (modelId || '').trim();
+  if (!p || !m) return { providerId: '', modelId: '' };
+  if (models.some((it) => it.provider_id === p && it.id === m)) {
+    return { providerId: p, modelId: m };
+  }
+  return { providerId: '', modelId: '' };
+}
+
+function insertConcreteRightTab(
+  tabs: WorkbenchTab[],
+  activeId: string,
+  sidePaneWasOpen: boolean,
+  newTab: WorkbenchTab,
+): { rightTabs: WorkbenchTab[]; activeRightTabId: string } {
+  if (!sidePaneWasOpen) {
+    const clean = tabs.filter((t) => t.kind !== 'new_tab');
+    return { rightTabs: [...clean, newTab], activeRightTabId: newTab.id };
+  }
+  const activeIdx = tabs.findIndex((t) => t.id === activeId);
+  if (activeIdx >= 0 && tabs[activeIdx].kind === 'new_tab') {
+    const nextTabs = [...tabs];
+    nextTabs[activeIdx] = newTab;
+    return { rightTabs: nextTabs, activeRightTabId: newTab.id };
+  }
+  return { rightTabs: [...tabs, newTab], activeRightTabId: newTab.id };
+}
+
+let gitSummaryInFlight: Promise<GitSummary | null> | null = null;
+let gitSummaryInFlightDiffs = false;
+
 export interface AppState {
   wsConnected: boolean;
   authChecked: boolean;
@@ -121,6 +157,7 @@ export interface AppState {
   sidePaneVisible: boolean;
   showBottomPanel: boolean;
   quickSearchOpen: boolean;
+  previewImage: { src: string; alt?: string } | null;
   pinnedSessionIds: Record<string, boolean>;
 
   runners: RunnerRecord[];
@@ -143,6 +180,9 @@ export interface AppState {
   recentWorkspaces: Array<{ runnerId: string; path: string }>;
   selectedProviderId: string;
   selectedModelId: string;
+  draftProviderId: string;
+  draftModelId: string;
+  sessionModels: Record<string, { providerId: string; modelId: string }>;
   hiddenModelKeys: Record<string, boolean>;
   modelOrder: Record<string, string[]>;
   thinkingEffort: ThinkingEffort;
@@ -154,6 +194,7 @@ export interface AppState {
   streams: Record<string, SessionStreamState>;
   followUpQueues: Record<string, QueuedFollowUp[]>;
   gitSummary: GitSummary | null;
+  gitDiffLoading: boolean;
 
   rightTabs: WorkbenchTab[];
   activeRightTabId: string;
@@ -168,6 +209,8 @@ export interface AppState {
   toggleSidePane: () => void;
   toggleBottomPanel: () => void;
   setQuickSearchOpen: (open: boolean) => void;
+  openImagePreview: (img: { src: string; alt?: string }) => void;
+  closeImagePreview: () => void;
 
   setComposerText: (text: string) => void;
   addComposerAttachment: (att: ComposerAttachment) => void;
@@ -260,6 +303,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   sidePaneVisible: false,
   showBottomPanel: false,
   quickSearchOpen: false,
+  previewImage: null,
   pinnedSessionIds: (() => {
     try {
       return JSON.parse(safeStorageGet('nex.pinned.sessions') || '{}');
@@ -296,6 +340,9 @@ export const useNexStore = create<AppState>((set, get) => ({
   })(),
   selectedProviderId: '',
   selectedModelId: '',
+  draftProviderId: '',
+  draftModelId: '',
+  sessionModels: {},
   hiddenModelKeys: (() => {
     try {
       const raw = safeStorageGet('nex.hiddenModels');
@@ -327,9 +374,10 @@ export const useNexStore = create<AppState>((set, get) => ({
   streams: {},
   followUpQueues: {},
   gitSummary: null,
+  gitDiffLoading: false,
 
-  rightTabs: [{ id: 'tab_launcher', kind: 'new_tab', title: formatMsg(INITIAL_LOCALE, 'sidePane.newTab'), closable: true }],
-  activeRightTabId: 'tab_launcher',
+  rightTabs: [],
+  activeRightTabId: '',
   bottomTerminals: [],
   activeBottomTermId: '',
 
@@ -365,6 +413,9 @@ export const useNexStore = create<AppState>((set, get) => ({
         };
         return { sidePaneVisible: true, rightTabs: [launcherTab], activeRightTabId: launcherTab.id };
       }
+      if (!nextOpen && s.rightTabs.length === 1 && s.rightTabs[0].kind === 'new_tab') {
+        return { sidePaneVisible: false, rightTabs: [], activeRightTabId: '' };
+      }
       return { sidePaneVisible: nextOpen };
     }),
   toggleBottomPanel: () => {
@@ -375,6 +426,8 @@ export const useNexStore = create<AppState>((set, get) => ({
     }
   },
   setQuickSearchOpen: (open) => set({ quickSearchOpen: open }),
+  openImagePreview: (img) => set({ previewImage: img }),
+  closeImagePreview: () => set({ previewImage: null }),
 
   setComposerText: (text) => set({ composerText: text }),
   addComposerAttachment: (att) =>
@@ -417,12 +470,56 @@ export const useNexStore = create<AppState>((set, get) => ({
       const nextModelId = keepCurrent
         ? s.selectedModelId
         : providerModels[0]?.id || fallbackAll[0]?.id || '';
+      if (!s.activeSessionId) {
+        return {
+          selectedProviderId: providerId,
+          selectedModelId: nextModelId,
+          draftProviderId: providerId,
+          draftModelId: nextModelId,
+        };
+      }
       return {
         selectedProviderId: providerId,
         selectedModelId: nextModelId,
+        sessionModels: {
+          ...s.sessionModels,
+          [s.activeSessionId]: { providerId, modelId: nextModelId },
+        },
+        sessions: s.sessions.some((sess) => sess.id === s.activeSessionId)
+          ? s.sessions.map((sess) =>
+              sess.id === s.activeSessionId
+                ? { ...sess, provider_id: providerId, model_id: nextModelId }
+                : sess,
+            )
+          : s.sessions,
       };
     }),
-  setSelectedModel: (providerId, modelId) => set({ selectedProviderId: providerId, selectedModelId: modelId }),
+  setSelectedModel: (providerId, modelId) =>
+    set((s) => {
+      if (!s.activeSessionId) {
+        return {
+          selectedProviderId: providerId,
+          selectedModelId: modelId,
+          draftProviderId: providerId,
+          draftModelId: modelId,
+        };
+      }
+      return {
+        selectedProviderId: providerId,
+        selectedModelId: modelId,
+        sessionModels: {
+          ...s.sessionModels,
+          [s.activeSessionId]: { providerId, modelId },
+        },
+        sessions: s.sessions.some((sess) => sess.id === s.activeSessionId)
+          ? s.sessions.map((sess) =>
+              sess.id === s.activeSessionId
+                ? { ...sess, provider_id: providerId, model_id: modelId }
+                : sess,
+            )
+          : s.sessions,
+      };
+    }),
   toggleModelVisibility: (providerId, modelId) =>
     set((s) => {
       const key = `${providerId}::${modelId}`;
@@ -566,11 +663,17 @@ export const useNexStore = create<AppState>((set, get) => ({
                 continue;
               }
               cur = applySessionEvent(cur, group.runnerId, raw);
+              if (raw.event_type === 'agent_start' && nextSessions.some((s) => s.id === sid && s.status !== 'running')) {
+                nextSessions = nextSessions.map((s) => (s.id === sid ? { ...s, status: 'running' } : s));
+              }
               if (raw.event_type === 'tool_execution_end') shouldRefreshGit = true;
               if (raw.event_type === 'agent_end') {
                 shouldRefreshGit = true;
                 shouldRefreshData = true;
                 endedSessions.push(sid);
+                if (nextSessions.some((s) => s.id === sid && s.status !== 'idle')) {
+                  nextSessions = nextSessions.map((s) => (s.id === sid ? { ...s, status: 'idle' } : s));
+                }
               }
             }
             if (cur.pendingApproval && cur.pendingApproval !== prevApproval) {
@@ -745,19 +848,43 @@ export const useNexStore = create<AppState>((set, get) => ({
       const onlineRunner = (runners || []).find((r) => r.status === 'online') || (runners || [])[0];
       const nextRunner = state.selectedRunnerId || onlineRunner?.id || '';
       const chosenRunnerObj = (runners || []).find((r) => r.id === nextRunner);
-      const customModel = (models || []).find((m) => m.source === 'custom') || (models || [])[0];
+      const loadedModels = models || [];
+      const customModel = loadedModels.find((m) => m.source === 'custom') || loadedModels[0];
+
+      // Resolve draft-mode default model without clobbering active session bindings.
+      const hadDraftChoice = Boolean(state.draftProviderId || state.draftModelId);
+      const resolvedDraft = hadDraftChoice
+        ? resolveCatalogModel(loadedModels, state.draftProviderId, state.draftModelId)
+        : customModel
+          ? { providerId: customModel.provider_id, modelId: customModel.id }
+          : { providerId: '', modelId: '' };
+
+      let nextProviderId = resolvedDraft.providerId;
+      let nextModelId = resolvedDraft.modelId;
+      if (state.activeSessionId) {
+        const bound = state.sessionModels[state.activeSessionId];
+        const sessMeta = (sessions || []).find((s) => s.id === state.activeSessionId);
+        const rawProv = bound?.providerId ?? sessMeta?.provider_id ?? state.selectedProviderId;
+        const rawMod = bound?.modelId ?? sessMeta?.model_id ?? state.selectedModelId;
+        const resolvedSess = resolveCatalogModel(loadedModels, rawProv, rawMod);
+        nextProviderId = resolvedSess.providerId;
+        nextModelId = resolvedSess.modelId;
+      }
+
       return {
         runners: runners || [],
         providers: providers || [],
-        models: models || [],
+        models: loadedModels,
         preferences: prefs || DEFAULT_PREFS,
         sessions: sessions || [],
         archivedSessions: archives || [],
         todaySummary,
         selectedRunnerId: nextRunner,
         selectedWorkspacePath: state.selectedWorkspacePath || chosenRunnerObj?.workspace_default || '',
-        selectedProviderId: state.selectedProviderId || customModel?.provider_id || '',
-        selectedModelId: state.selectedModelId || customModel?.id || '',
+        draftProviderId: resolvedDraft.providerId,
+        draftModelId: resolvedDraft.modelId,
+        selectedProviderId: nextProviderId,
+        selectedModelId: nextModelId,
       };
     });
   },
@@ -785,7 +912,19 @@ export const useNexStore = create<AppState>((set, get) => ({
 
   selectSession: async (sessionId) => {
     persistActiveSessionId(sessionId);
-    set({ mainView: 'workspace', activeSessionId: sessionId });
+    const metaBefore = get().sessions.find((s) => s.id === sessionId);
+    const boundBefore = get().sessionModels[sessionId];
+    const resolvedBefore = resolveCatalogModel(
+      get().models,
+      boundBefore?.providerId ?? metaBefore?.provider_id,
+      boundBefore?.modelId ?? metaBefore?.model_id,
+    );
+    set({
+      mainView: 'workspace',
+      activeSessionId: sessionId,
+      selectedProviderId: resolvedBefore.providerId,
+      selectedModelId: resolvedBefore.modelId,
+    });
     const [evs, tels] = await Promise.all([
       apiFetch<RawSessionEventRow[]>(`/api/v1/sessions/${sessionId}/events`).catch(() => []),
       apiFetch<TurnTelemetry[]>(`/api/v1/sessions/${sessionId}/telemetry`).catch(() => []),
@@ -811,23 +950,50 @@ export const useNexStore = create<AppState>((set, get) => ({
     if (tels && tels.length > 0) {
       st.latestTelemetry = tels[tels.length - 1];
     }
-    set((s) => ({
-      selectedRunnerId: runnerId || s.selectedRunnerId,
-      selectedWorkspacePath: meta?.workspace_path || s.selectedWorkspacePath,
-      streams: { ...s.streams, [sessionId]: st },
-    }));
+    set((s) => {
+      const bound = s.sessionModels[sessionId];
+      const latestMeta = s.sessions.find((it) => it.id === sessionId);
+      const resolvedModel = resolveCatalogModel(
+        s.models,
+        bound?.providerId ?? latestMeta?.provider_id,
+        bound?.modelId ?? latestMeta?.model_id,
+      );
+      return {
+        selectedRunnerId: runnerId || s.selectedRunnerId,
+        selectedWorkspacePath: latestMeta?.workspace_path || s.selectedWorkspacePath,
+        ...(s.activeSessionId === sessionId
+          ? {
+              selectedProviderId: resolvedModel.providerId,
+              selectedModelId: resolvedModel.modelId,
+            }
+          : {}),
+        ...(latestMeta?.status === 'running' && !st.running && (evs || []).length > 0
+          ? {
+              sessions: s.sessions.map((it) => (it.id === sessionId ? { ...it, status: 'idle' } : it)),
+            }
+          : {}),
+        streams: { ...s.streams, [sessionId]: st },
+      };
+    });
     wsClient.sendEnvelope('client.subscribe', { session_id: sessionId, last_seen_seq: st.lastSeq });
     void get().refreshGitSummary(false);
   },
 
   startNewSession: (runnerId, workspacePath) => {
     persistActiveSessionId('');
-    set((s) => ({
-      mainView: 'workspace',
-      activeSessionId: '',
-      selectedRunnerId: runnerId || s.selectedRunnerId,
-      selectedWorkspacePath: workspacePath !== undefined ? workspacePath : s.selectedWorkspacePath,
-    }));
+    set((s) => {
+      const resolvedDraft = resolveCatalogModel(s.models, s.draftProviderId, s.draftModelId);
+      return {
+        mainView: 'workspace',
+        activeSessionId: '',
+        selectedRunnerId: runnerId || s.selectedRunnerId,
+        selectedWorkspacePath: workspacePath !== undefined ? workspacePath : s.selectedWorkspacePath,
+        draftProviderId: resolvedDraft.providerId,
+        draftModelId: resolvedDraft.modelId,
+        selectedProviderId: resolvedDraft.providerId,
+        selectedModelId: resolvedDraft.modelId,
+      };
+    });
   },
 
   renameSession: async (sessionId, newTitle) => {
@@ -873,7 +1039,10 @@ export const useNexStore = create<AppState>((set, get) => ({
     const s = get();
     const text = (overrideText ?? s.composerText).trim();
     const attachments = overrideText === undefined ? s.composerAttachments : [];
-    if ((!text && attachments.length === 0) || !s.selectedRunnerId) return;
+    const activeModel = s.models.find(
+      (m) => m.provider_id === s.selectedProviderId && m.id === s.selectedModelId,
+    );
+    if ((!text && attachments.length === 0) || !s.selectedRunnerId || !activeModel) return;
 
     let sessionId = s.activeSessionId;
     const currentStream = sessionId ? s.streams[sessionId] : undefined;
@@ -904,7 +1073,18 @@ export const useNexStore = create<AppState>((set, get) => ({
       set((prev) => ({
         mainView: 'workspace',
         activeSessionId: sessionId,
+        sessionModels: {
+          ...prev.sessionModels,
+          [sessionId]: { providerId: activeModel.provider_id, modelId: activeModel.id },
+        },
         streams: { ...prev.streams, [sessionId]: emptyStreamState() },
+      }));
+    } else {
+      set((prev) => ({
+        sessionModels: {
+          ...prev.sessionModels,
+          [sessionId]: { providerId: activeModel.provider_id, modelId: activeModel.id },
+        },
       }));
     }
 
@@ -917,9 +1097,6 @@ export const useNexStore = create<AppState>((set, get) => ({
           }))
         : undefined;
 
-    const activeModel = s.models.find(
-      (m) => m.provider_id === s.selectedProviderId && m.id === s.selectedModelId,
-    );
     const effectiveThinkingEffort = resolveEffectiveEffort(activeModel, s.thinkingEffort);
 
     let effectivePermMode = s.permissionMode;
@@ -1042,38 +1219,60 @@ export const useNexStore = create<AppState>((set, get) => ({
   openSubagentTab: (data) => {
     const id = `subagent:${data.toolCallId}`;
     set((s) => {
+      const wasOpen = s.sidePaneVisible;
       const existing = s.rightTabs.find((t) => t.id === id);
       if (existing) {
         return {
-          rightTabs: s.rightTabs.map((t) =>
-            t.id === id ? { ...t, title: data.title, subagent: data } : t,
-          ),
+          rightTabs: s.rightTabs
+            .filter((t) => wasOpen || t.kind !== 'new_tab')
+            .map((t) => (t.id === id ? { ...t, title: data.title, subagent: data } : t)),
           activeRightTabId: id,
           sidePaneVisible: true,
         };
       }
-      return {
-        rightTabs: [
-          ...s.rightTabs,
-          { id, kind: 'subagent', title: data.title, subagent: data, closable: true },
-        ],
-        activeRightTabId: id,
-        sidePaneVisible: true,
-      };
+      const next = insertConcreteRightTab(s.rightTabs, s.activeRightTabId, wasOpen, {
+        id,
+        kind: 'subagent',
+        title: data.title,
+        subagent: data,
+        closable: true,
+      });
+      return { ...next, sidePaneVisible: true };
     });
   },
 
   openRightTab: async (kind, title) => {
-    set({ sidePaneVisible: true });
+    const wasOpen = get().sidePaneVisible;
     const existing = get().rightTabs.find((t) => t.kind === kind && (kind === 'files' || kind === 'review'));
     if (existing) {
-      set({ activeRightTabId: existing.id });
-      if (kind === 'review') await get().refreshGitSummary(true);
+      set((s) => ({
+        sidePaneVisible: true,
+        activeRightTabId: existing.id,
+        rightTabs: wasOpen ? s.rightTabs : s.rightTabs.filter((t) => t.kind !== 'new_tab'),
+      }));
+      if (kind === 'review') void get().refreshGitSummary(true);
       return;
     }
 
     const id = `tab_${crypto.randomUUID().slice(0, 8)}`;
+    const defaultTitles: Record<WorkbenchTabKind, string> = {
+      new_tab: formatMsg(get().locale, 'sidePane.newTab'),
+      files: formatMsg(get().locale, 'fileManager.title'),
+      file_preview: 'Preview',
+      review: formatMsg(get().locale, 'sidePane.review'),
+      terminal: formatMsg(get().locale, 'terminal.title'),
+      side_chat: formatMsg(get().locale, 'sidePane.selectionChat'),
+      subagent: 'Subagent',
+    };
+
+    if (kind === 'new_tab') {
+      const tab: WorkbenchTab = { id, kind: 'new_tab', title: title || defaultTitles.new_tab, closable: true };
+      set((s) => ({ sidePaneVisible: true, rightTabs: [...s.rightTabs, tab], activeRightTabId: id }));
+      return;
+    }
+
     if (kind === 'terminal') {
+      set({ sidePaneVisible: true });
       const rid = get().selectedRunnerId;
       let ptyId = '';
       try {
@@ -1086,24 +1285,11 @@ export const useNexStore = create<AppState>((set, get) => ({
       } catch {
         // ignore
       }
-      const tab: WorkbenchTab = { id, kind: 'terminal', title: title || 'Terminal', ptyId, closable: true };
-      set((s) => ({ rightTabs: [...s.rightTabs, tab], activeRightTabId: id }));
+      const tab: WorkbenchTab = { id, kind: 'terminal', title: title || defaultTitles.terminal, ptyId, closable: true };
+      set((s) => insertConcreteRightTab(s.rightTabs, s.activeRightTabId, wasOpen, tab));
       return;
     }
 
-    if (kind === 'review') {
-      await get().refreshGitSummary(true);
-    }
-
-    const defaultTitles: Record<WorkbenchTabKind, string> = {
-      new_tab: formatMsg(get().locale, 'sidePane.newTab'),
-      files: formatMsg(get().locale, 'fileManager.title'),
-      file_preview: 'Preview',
-      review: formatMsg(get().locale, 'sidePane.review'),
-      terminal: formatMsg(get().locale, 'terminal.title'),
-      side_chat: formatMsg(get().locale, 'sidePane.selectionChat'),
-      subagent: 'Subagent',
-    };
     const tab: WorkbenchTab = {
       id,
       kind,
@@ -1111,16 +1297,14 @@ export const useNexStore = create<AppState>((set, get) => ({
       sideSessionId: kind === 'side_chat' ? `sess_side_${crypto.randomUUID().slice(0, 8)}` : undefined,
       closable: true,
     };
-    // If active tab is a blank 'new_tab' launcher and user picked a concrete app, replace the launcher tab cleanly!
-    set((s) => {
-      const activeIdx = s.rightTabs.findIndex((t) => t.id === s.activeRightTabId);
-      if (kind !== 'new_tab' && activeIdx >= 0 && s.rightTabs[activeIdx].kind === 'new_tab') {
-        const nextTabs = [...s.rightTabs];
-        nextTabs[activeIdx] = tab;
-        return { rightTabs: nextTabs, activeRightTabId: id };
-      }
-      return { rightTabs: [...s.rightTabs, tab], activeRightTabId: id };
-    });
+    // Mount/activate tab immediately so UI transitions smoothly without waiting for git diff RPC!
+    set((s) => ({
+      sidePaneVisible: true,
+      ...insertConcreteRightTab(s.rightTabs, s.activeRightTabId, wasOpen, tab),
+    }));
+    if (kind === 'review') {
+      void get().refreshGitSummary(true);
+    }
   },
 
   closeRightTab: (tabId) => {
@@ -1130,6 +1314,9 @@ export const useNexStore = create<AppState>((set, get) => ({
     }
     set((s) => {
       const filtered = s.rightTabs.filter((t) => t.id !== tabId);
+      if (filtered.length === 0) {
+        return { rightTabs: [], activeRightTabId: '', sidePaneVisible: false };
+      }
       const nextActive = s.activeRightTabId === tabId ? filtered[filtered.length - 1]?.id || '' : s.activeRightTabId;
       return { rightTabs: filtered, activeRightTabId: nextActive };
     });
@@ -1138,19 +1325,20 @@ export const useNexStore = create<AppState>((set, get) => ({
   setActiveRightTab: (tabId) => set({ activeRightTabId: tabId }),
 
   openFileInPreviewTab: async (relPath, line) => {
-    set({ sidePaneVisible: true });
+    const wasOpen = get().sidePaneVisible;
     const cleanRel = relPath.replace(/^\.\//, '');
     const existing = get().rightTabs.find((t) => t.kind === 'file_preview' && t.relPath === cleanRel);
     if (existing) {
       set((s) => ({
+        sidePaneVisible: true,
         activeRightTabId: existing.id,
-        rightTabs:
-          typeof line === 'number'
-            ? s.rightTabs.map((t) => (t.id === existing.id ? { ...t, highlightLine: line } : t))
-            : s.rightTabs,
+        rightTabs: (wasOpen ? s.rightTabs : s.rightTabs.filter((t) => t.kind !== 'new_tab')).map((t) =>
+          typeof line === 'number' && t.id === existing.id ? { ...t, highlightLine: line } : t,
+        ),
       }));
       return;
     }
+    set({ sidePaneVisible: true });
     const resp = await wsClient.requestRPC<
       { action: string; rel_path: string; workspace_path?: string },
       FilePreview
@@ -1175,7 +1363,7 @@ export const useNexStore = create<AppState>((set, get) => ({
       preview,
       closable: true,
     };
-    set((s) => ({ rightTabs: [...s.rightTabs, tab], activeRightTabId: id }));
+    set((s) => insertConcreteRightTab(s.rightTabs, s.activeRightTabId, wasOpen, tab));
   },
 
   listWorkspaceDir: async (relPath) => {
@@ -1244,23 +1432,39 @@ export const useNexStore = create<AppState>((set, get) => ({
   refreshGitSummary: async (includeDiffs = false) => {
     const rid = get().selectedRunnerId;
     if (!rid || !wsClient.connected) return null;
-    try {
-      const resp = await wsClient.requestRPC<{ action: string; workspace_path?: string }, GitSummary>(
-        'workspace.req',
-        {
-          action: includeDiffs ? 'git_diff' : 'git_summary',
-          workspace_path: get().selectedWorkspacePath || undefined,
-        },
-        { runner_id: rid },
-      );
-      if (resp.payload) {
-        set({ gitSummary: resp.payload });
-        return resp.payload;
-      }
-    } catch {
-      // ignore
+    if (gitSummaryInFlight && (gitSummaryInFlightDiffs || !includeDiffs)) {
+      return gitSummaryInFlight;
     }
-    return null;
+    if (includeDiffs) set({ gitDiffLoading: true });
+    gitSummaryInFlightDiffs = includeDiffs;
+    let req: Promise<GitSummary | null> | null = null;
+    req = (async () => {
+      try {
+        const resp = await wsClient.requestRPC<{ action: string; workspace_path?: string }, GitSummary>(
+          'workspace.req',
+          {
+            action: includeDiffs ? 'git_diff' : 'git_summary',
+            workspace_path: get().selectedWorkspacePath || undefined,
+          },
+          { runner_id: rid },
+        );
+        if (resp.payload) {
+          set({ gitSummary: resp.payload });
+          return resp.payload;
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (includeDiffs) set({ gitDiffLoading: false });
+        if (gitSummaryInFlight === req) {
+          gitSummaryInFlight = null;
+          gitSummaryInFlightDiffs = false;
+        }
+      }
+      return null;
+    })();
+    gitSummaryInFlight = req;
+    return req;
   },
 
   gitStage: async (relPath = '') => {

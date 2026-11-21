@@ -28,6 +28,7 @@ type SpawnRequest struct {
 	ParentToolCallID string `json:"parent_tool_call_id,omitempty"`
 	TargetRunnerID   string `json:"target_runner_id,omitempty"` // Phase 1: empty / local Runner; reserved for RemoteSpawner
 	AgentType        string `json:"agent_type"`                 // "explore" (read-only) | "worker" (read-write) | custom slug
+	Model            string `json:"model,omitempty"`            // Optional model override ("provider::model" or model_id); empty inherits main session model
 	Prompt           string `json:"prompt"`
 	Isolation        string `json:"isolation,omitempty"` // "shared" (default) | "worktree"
 	RunInBackground  bool   `json:"run_in_background,omitempty"`

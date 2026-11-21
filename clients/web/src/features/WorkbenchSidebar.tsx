@@ -19,9 +19,9 @@ import {
   SquareTerminal,
   X,
 } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { memo, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useNexStore } from '../core/store';
-import { DirEntry, FilePreview, WorkbenchTab, WorkbenchTabKind } from '../core/types';
+import { DirEntry, FilePreview, GitFileChange, WorkbenchTab, WorkbenchTabKind } from '../core/types';
 import { wsClient } from '../core/wsClient';
 import { formatMsg, type LocaleCode } from '../i18n/messages';
 import { GhosttyTerminal } from './GhosttyTerminal';
@@ -38,23 +38,32 @@ const TAB_ICON: Record<WorkbenchTabKind, ReactNode> = {
 };
 
 export function WorkbenchSidebar() {
-  const {
-    rightTabs,
-    activeRightTabId,
-    selectedRunnerId,
-    wsConnected,
-    gitSummary,
-    locale,
-    openRightTab,
-    closeRightTab,
-    setActiveRightTab,
-    openFileInPreviewTab,
-    listWorkspaceDir,
-    searchWorkspaceFiles,
-    refreshGitSummary,
-    appendComposerRef,
-    toggleSidePane,
-  } = useNexStore();
+  const rightTabs = useNexStore((s) => s.rightTabs);
+  const activeRightTabId = useNexStore((s) => s.activeRightTabId);
+  const selectedRunnerId = useNexStore((s) => s.selectedRunnerId);
+  const wsConnected = useNexStore((s) => s.wsConnected);
+  const gitSummary = useNexStore((s) => s.gitSummary);
+  const gitDiffLoading = useNexStore((s) => s.gitDiffLoading);
+  const locale = useNexStore((s) => s.locale);
+  const openRightTab = useNexStore((s) => s.openRightTab);
+  const closeRightTab = useNexStore((s) => s.closeRightTab);
+  const setActiveRightTab = useNexStore((s) => s.setActiveRightTab);
+  const openFileInPreviewTab = useNexStore((s) => s.openFileInPreviewTab);
+  const listWorkspaceDir = useNexStore((s) => s.listWorkspaceDir);
+  const searchWorkspaceFiles = useNexStore((s) => s.searchWorkspaceFiles);
+  const refreshGitSummary = useNexStore((s) => s.refreshGitSummary);
+  const appendComposerRef = useNexStore((s) => s.appendComposerRef);
+  const toggleSidePane = useNexStore((s) => s.toggleSidePane);
+
+  const handleReviewRefresh = useCallback(() => {
+    void refreshGitSummary(true);
+  }, [refreshGitSummary]);
+  const handleOpenPreviewFile = useCallback(
+    (rel: string) => {
+      void openFileInPreviewTab(rel);
+    },
+    [openFileInPreviewTab],
+  );
 
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const activeTab = rightTabs.find((t) => t.id === activeRightTabId) || rightTabs[0];
@@ -87,7 +96,7 @@ export function WorkbenchSidebar() {
                 key={tab.id}
                 tab={tab}
                 active={tab.id === activeTab?.id}
-                canClose={tab.closable && rightTabs.length > 1}
+                canClose={tab.closable}
                 onSelect={() => setActiveRightTab(tab.id)}
                 onClose={() => closeRightTab(tab.id)}
               />
@@ -173,8 +182,9 @@ export function WorkbenchSidebar() {
         {activeTab?.kind === 'review' && (
           <GitReviewPanel
             summary={gitSummary}
-            onRefresh={() => void refreshGitSummary(true)}
-            onOpenFile={(rel) => void openFileInPreviewTab(rel)}
+            loading={gitDiffLoading}
+            onRefresh={handleReviewRefresh}
+            onOpenFile={handleOpenPreviewFile}
           />
         )}
 
@@ -242,6 +252,7 @@ function TabChip({
   return (
     <div
       onClick={onSelect}
+      data-testid={`workbench-tab-${tab.kind}`}
       className={`group flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-ui-sm transition-colors ${
         active
           ? 'bg-selected font-medium text-foreground'
@@ -253,6 +264,7 @@ function TabChip({
       {canClose && (
         <button
           type="button"
+          data-testid={`workbench-tab-close-${tab.kind}`}
           onClick={(e) => {
             e.stopPropagation();
             onClose();
@@ -496,13 +508,20 @@ function FilePreviewPanel({
   }
 
   if (preview.preview_as === 'image') {
+    const imgSrc = `data:${preview.mime_type || 'image/png'};base64,${preview.content || ''}`;
     return (
       <div className="flex flex-col items-center p-4">
-        <img
-          src={`data:${preview.mime_type || 'image/png'};base64,${preview.content || ''}`}
-          alt={preview.name}
-          className="max-h-[70vh] max-w-full rounded-lg border border-border object-contain"
-        />
+        <button
+          type="button"
+          onClick={() => useNexStore.getState().openImagePreview({ src: imgSrc, alt: preview.name })}
+          className="cursor-zoom-in overflow-hidden rounded-lg border border-border transition-shadow hover:shadow-md"
+        >
+          <img
+            src={imgSrc}
+            alt={preview.name}
+            className="max-h-[70vh] max-w-full object-contain"
+          />
+        </button>
         <span className="mt-2 font-mono text-ui-xs text-foreground-subtle">
           {preview.rel_path} ({preview.total_size} bytes)
         </span>
@@ -576,12 +595,146 @@ function FilePreviewPanel({
   );
 }
 
-function GitReviewPanel({
+const INITIAL_DIFF_LINES = 200;
+
+const DiffFileCard = memo(function DiffFileCard({
+  file,
+  viewMode,
+  staged,
+  unstaged,
+  expanded,
+  onToggleExpand,
+  onOpenFile,
+  onStage,
+  onUnstage,
+  onDiscard,
+  locale,
+}: {
+  file: GitFileChange;
+  viewMode: 'unified' | 'split';
+  staged: boolean;
+  unstaged: boolean;
+  expanded: boolean;
+  onToggleExpand: (relPath: string) => void;
+  onOpenFile: (rel: string) => void;
+  onStage: (rel: string) => void;
+  onUnstage: (rel: string) => void;
+  onDiscard: (rel: string) => void;
+  locale: LocaleCode;
+}) {
+  const [showAllLines, setShowAllLines] = useState(false);
+  const diffLines = expanded && file.diff ? file.diff.split('\n') : [];
+  const unifiedLines = expanded
+    ? viewMode === 'unified'
+      ? diffLines
+      : splitDiffLines(diffLines)
+    : [];
+  const truncated = !showAllLines && unifiedLines.length > INITIAL_DIFF_LINES;
+  const visibleLines = truncated ? unifiedLines.slice(0, INITIAL_DIFF_LINES) : unifiedLines;
+
+  return (
+    <div style={{ contain: 'layout style' }} className="p-2.5">
+      <div className="flex items-center justify-between gap-2 text-ui-sm">
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onToggleExpand(file.rel_path)}
+            aria-expanded={expanded}
+            className="flex size-5 shrink-0 items-center justify-center rounded text-foreground-subtlest hover:bg-hover hover:text-foreground"
+          >
+            <ChevronRight className={`size-3.5 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenFile(file.rel_path)}
+            className="min-w-0 truncate text-left font-mono font-medium text-foreground hover:text-brand-blue"
+          >
+            [{file.status}] {file.rel_path}
+          </button>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="font-mono text-ui-xs tabular-nums">
+            <span className="text-success">+{file.additions}</span>{' '}
+            <span className="text-destructive">-{file.deletions}</span>
+          </span>
+          {unstaged && (
+            <button
+              type="button"
+              onClick={() => onStage(file.rel_path)}
+              title={formatMsg(locale, 'workbench.stageFile')}
+              className="flex size-5 items-center justify-center rounded border border-border text-foreground-subtle hover:bg-hover hover:text-success"
+            >
+              <Plus className="size-3" />
+            </button>
+          )}
+          {staged && (
+            <button
+              type="button"
+              onClick={() => onUnstage(file.rel_path)}
+              title={formatMsg(locale, 'workbench.unstageFile')}
+              className="flex size-5 items-center justify-center rounded border border-border text-foreground-subtle hover:bg-hover hover:text-warning"
+            >
+              <Minus className="size-3" />
+            </button>
+          )}
+          {unstaged && (
+            <button
+              type="button"
+              onClick={() => onDiscard(file.rel_path)}
+              title={formatMsg(locale, 'workbench.discardUnstagedChanges')}
+              className="flex size-5 items-center justify-center rounded border border-border text-foreground-subtle hover:bg-hover hover:text-destructive"
+            >
+              <RotateCcw className="size-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {expanded && file.folded && !file.diff && (
+        <div className="mt-2 rounded-lg border border-border/60 bg-surface px-2 py-1.5 text-ui-xs text-foreground-subtlest">
+          大文件差异已折叠（{file.additions} 行新增 / {file.deletions} 行删除）
+        </div>
+      )}
+
+      {expanded && file.diff && (
+        <div className="mt-2 overflow-hidden rounded-lg border border-border/60 bg-surface">
+          <pre className="overflow-x-auto p-2 font-mono text-[11.5px] leading-5">
+            {visibleLines.map((dl, i) => {
+              const style = dl.startsWith('+')
+                ? { backgroundColor: 'var(--color-diff-added-bg)', color: 'var(--color-diff-added-fg)' }
+                : dl.startsWith('-')
+                  ? { backgroundColor: 'var(--color-diff-removed-bg)', color: 'var(--color-diff-removed-fg)' }
+                  : undefined;
+              return (
+                <div key={i} style={style} className="px-1.5 text-foreground-subtle">
+                  {dl || ' '}
+                </div>
+              );
+            })}
+          </pre>
+          {truncated && (
+            <button
+              type="button"
+              onClick={() => setShowAllLines(true)}
+              className="flex w-full items-center justify-center border-t border-border/60 bg-card/60 py-1.5 text-ui-xs font-medium text-brand-blue hover:bg-hover"
+            >
+              {formatMsg(locale, 'workbench.showAllLines', { count: unifiedLines.length })}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
+const GitReviewPanel = memo(function GitReviewPanelImpl({
   summary,
+  loading,
   onRefresh,
   onOpenFile,
 }: {
   summary: ReturnType<typeof useNexStore.getState>['gitSummary'];
+  loading: boolean;
   onRefresh: () => void;
   onOpenFile: (rel: string) => void;
 }) {
@@ -601,10 +754,27 @@ function GitReviewPanel({
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [branches, setBranches] = useState<string[]>([]);
   const [newBranchName, setNewBranchName] = useState('');
+  const [toggledFiles, setToggledFiles] = useState<Record<string, boolean>>({});
+  const [bulkExpand, setBulkExpand] = useState<boolean | null>(null);
+  const didMountFetchRef = useRef(false);
 
   useEffect(() => {
-    onRefresh();
-  }, [onRefresh]);
+    if (didMountFetchRef.current) return;
+    didMountFetchRef.current = true;
+    if (!summary?.files) {
+      onRefresh();
+    }
+  }, [summary?.files, onRefresh]);
+
+  const handleStage = useCallback((rel: string) => {
+    void gitStage(rel);
+  }, [gitStage]);
+  const handleUnstage = useCallback((rel: string) => {
+    void gitUnstage(rel);
+  }, [gitUnstage]);
+  const handleDiscard = useCallback((rel: string) => {
+    void gitDiscard(rel);
+  }, [gitDiscard]);
 
   if (!summary || !summary.is_git_repo) {
     return (
@@ -823,114 +993,87 @@ function GitReviewPanel({
           ))}
         </div>
 
-        <div className="flex items-center rounded-md border border-border bg-surface p-0.5">
-          {(
-            [
-              { id: 'unified', label: 'Unified' },
-              { id: 'split', label: 'Split' },
-            ] as const
-          ).map((m) => (
+        <div className="flex items-center gap-1.5">
+          {filteredFiles.length > 0 && (
             <button
-              key={m.id}
               type="button"
-              onClick={() => setViewMode(m.id)}
-              className={`h-5 rounded px-1.5 text-ui-xs transition-colors ${
-                viewMode === m.id ? 'bg-card text-foreground shadow-2xs' : 'text-foreground-subtlest hover:text-foreground'
-              }`}
+              onClick={() => {
+                const next = bulkExpand === false || (bulkExpand === null && filteredFiles.length > 3);
+                setBulkExpand(next);
+                setToggledFiles({});
+              }}
+              className="h-6 rounded-md border border-border px-2 text-ui-xs text-foreground-subtle hover:bg-hover hover:text-foreground"
             >
-              {m.label}
+              {bulkExpand === false || (bulkExpand === null && filteredFiles.length > 3)
+                ? formatMsg(locale, 'workbench.expandAll')
+                : formatMsg(locale, 'workbench.collapseAll')}
             </button>
-          ))}
+          )}
+          <div className="flex items-center rounded-md border border-border bg-surface p-0.5">
+            {(
+              [
+                { id: 'unified', label: 'Unified' },
+                { id: 'split', label: 'Split' },
+              ] as const
+            ).map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setViewMode(m.id)}
+                className={`h-5 rounded px-1.5 text-ui-xs transition-colors ${
+                  viewMode === m.id ? 'bg-card text-foreground shadow-2xs' : 'text-foreground-subtlest hover:text-foreground'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {filteredFiles.length === 0 && (
+      {loading && filteredFiles.length === 0 && (
+        <div className="p-8 text-center text-ui-sm text-foreground-subtlest">
+          {formatMsg(locale, 'workbench.loadingDiff')}
+        </div>
+      )}
+
+      {!loading && filteredFiles.length === 0 && (
         <div className="p-8 text-center text-ui-sm text-foreground-subtlest">
           {formatMsg(locale, 'workbench.workingTreeClean')}
         </div>
       )}
 
       <div className="divide-y divide-border">
-        {filteredFiles.map((f) => {
-          const staged = isStaged(f);
-          const unstaged = isUnstaged(f);
-          const diffLines = (f.diff || '').split('\n');
-          const unifiedLines = viewMode === 'unified' ? diffLines : splitDiffLines(diffLines);
+        {filteredFiles.map((f, idx) => {
+          const defaultExpanded =
+            bulkExpand !== null ? bulkExpand : filteredFiles.length <= 3 || idx === 0;
+          const isExpanded = toggledFiles[f.rel_path] ?? defaultExpanded;
           return (
-            <div key={f.rel_path} className="p-2.5">
-              <div className="flex items-center justify-between gap-2 text-ui-sm">
-                <button
-                  type="button"
-                  onClick={() => onOpenFile(f.rel_path)}
-                  className="min-w-0 truncate font-mono font-medium text-foreground hover:text-brand-blue"
-                >
-                  [{f.status}] {f.rel_path}
-                </button>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <span className="font-mono text-ui-xs tabular-nums">
-                    <span className="text-success">+{f.additions}</span>{' '}
-                    <span className="text-destructive">-{f.deletions}</span>
-                  </span>
-                  {unstaged && (
-                    <button
-                      type="button"
-                      onClick={() => void gitStage(f.rel_path)}
-                      title={formatMsg(locale, 'workbench.stageFile')}
-                      className="flex size-5 items-center justify-center rounded border border-border text-foreground-subtle hover:bg-hover hover:text-success"
-                    >
-                      <Plus className="size-3" />
-                    </button>
-                  )}
-                  {staged && (
-                    <button
-                      type="button"
-                      onClick={() => void gitUnstage(f.rel_path)}
-                      title={formatMsg(locale, 'workbench.unstageFile')}
-                      className="flex size-5 items-center justify-center rounded border border-border text-foreground-subtle hover:bg-hover hover:text-warning"
-                    >
-                      <Minus className="size-3" />
-                    </button>
-                  )}
-                  {unstaged && (
-                    <button
-                      type="button"
-                      onClick={() => void gitDiscard(f.rel_path)}
-                      title={formatMsg(locale, 'workbench.discardUnstagedChanges')}
-                      className="flex size-5 items-center justify-center rounded border border-border text-foreground-subtle hover:bg-hover hover:text-destructive"
-                    >
-                      <RotateCcw className="size-3" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              {f.folded && !f.diff && (
-                <div className="mt-2 rounded-lg border border-border/60 bg-surface px-2 py-1.5 text-ui-xs text-foreground-subtlest">
-                  大文件差异已折叠（{f.additions} 行新增 / {f.deletions} 行删除）
-                </div>
-              )}
-              {f.diff && (
-                <pre className="mt-2 overflow-x-auto rounded-lg border border-border/60 bg-surface p-2 font-mono text-[11.5px] leading-5">
-                  {unifiedLines.map((dl, i) => {
-                    const style = dl.startsWith('+')
-                      ? { backgroundColor: 'var(--color-diff-added-bg)', color: 'var(--color-diff-added-fg)' }
-                      : dl.startsWith('-')
-                        ? { backgroundColor: 'var(--color-diff-removed-bg)', color: 'var(--color-diff-removed-fg)' }
-                        : undefined;
-                    return (
-                      <div key={i} style={style} className="px-1.5 text-foreground-subtle">
-                        {dl || ' '}
-                      </div>
-                    );
-                  })}
-                </pre>
-              )}
-            </div>
+            <DiffFileCard
+              key={f.rel_path}
+              file={f}
+              viewMode={viewMode}
+              staged={isStaged(f)}
+              unstaged={isUnstaged(f)}
+              expanded={isExpanded}
+              onToggleExpand={(rel) =>
+                setToggledFiles((prev) => ({
+                  ...prev,
+                  [rel]: !(prev[rel] ?? defaultExpanded),
+                }))
+              }
+              onOpenFile={onOpenFile}
+              onStage={handleStage}
+              onUnstage={handleUnstage}
+              onDiscard={handleDiscard}
+              locale={locale}
+            />
           );
         })}
       </div>
     </div>
   );
-}
+});
 
 function splitDiffLines(lines: string[]): string[] {
   const out: string[] = [];

@@ -8,6 +8,7 @@ import { ApprovalModal, UIPromptModal } from './features/ControlModals';
 import { ConversationPane } from './features/ConversationPane';
 import { DesktopTopOverlay } from './features/DesktopTopOverlay';
 import { GhosttyTerminal } from './features/GhosttyTerminal';
+import { ImagePreviewModal } from './features/ImagePreviewModal';
 import { ProjectSidebar } from './features/ProjectSidebar';
 import { SettingsPage } from './features/SettingsPage';
 import { WorkbenchSidebar } from './features/WorkbenchSidebar';
@@ -54,7 +55,7 @@ export function App() {
     if (typeof window === 'undefined') return;
     const onResize = () => setViewportWidth(window.innerWidth);
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if (e.metaKey && !e.ctrlKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         const st = useNexStore.getState();
         st.setQuickSearchOpen(!st.quickSearchOpen);
@@ -148,6 +149,7 @@ export function App() {
       <div className="zcode-view-enter h-dvh w-screen overflow-hidden">
         <SettingsPage />
         <CommandPaletteModal />
+        <ImagePreviewModal />
         {pendingApproval && <ApprovalModal approval={pendingApproval} />}
         {pendingUIPrompt && <UIPromptModal prompt={pendingUIPrompt} />}
       </div>
@@ -284,8 +286,9 @@ export function App() {
         </div>
       )}
 
-      {/* Command Palette & Blocking Interaction Dialogs */}
+      {/* Command Palette, Image Preview & Blocking Interaction Dialogs */}
       <CommandPaletteModal />
+      <ImagePreviewModal />
       {pendingApproval && <ApprovalModal approval={pendingApproval} />}
       {pendingUIPrompt && <UIPromptModal prompt={pendingUIPrompt} />}
     </div>

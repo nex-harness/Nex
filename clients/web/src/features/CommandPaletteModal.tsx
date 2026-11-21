@@ -316,10 +316,10 @@ export function CommandPaletteModal() {
               if (e.key === 'Escape') {
                 e.preventDefault();
                 setOpen(false);
-              } else if (e.key === 'ArrowDown') {
+              } else if (e.key === 'ArrowDown' || (e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'n')) {
                 e.preventDefault();
                 if (flatItems.length > 0) setActiveIdx((i) => (i + 1) % flatItems.length);
-              } else if (e.key === 'ArrowUp') {
+              } else if (e.key === 'ArrowUp' || (e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'p')) {
                 e.preventDefault();
                 if (flatItems.length > 0) setActiveIdx((i) => (i - 1 + flatItems.length) % flatItems.length);
               } else if (e.key === 'Enter') {

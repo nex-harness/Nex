@@ -42,7 +42,10 @@ interface ProjectGroup {
 }
 
 function SessionRunningDot({ sessionId, status }: { sessionId: string; status: string }) {
-  const running = useNexStore((s) => Boolean(s.streams[sessionId]?.running) || status === 'running');
+  const running = useNexStore((s) => {
+    const st = s.streams[sessionId];
+    return st ? st.running : status === 'running';
+  });
   if (!running) return null;
   return <span className="size-1.5 animate-pulse rounded-full bg-brand-blue" />;
 }

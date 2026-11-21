@@ -497,7 +497,7 @@ const LIST_LINE_RE = /^(\s*)([-*+]|\d+\.)\s+(.*)$/;
 
 function renderInline(text: string, depth = 0): ReactNode[] {
   if (!text) return [];
-  const tokens = text.split(/(`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~|\*(?!\s)[^*\n]+(?<!\s)\*|\[[^\]]+\]\([^)]+\))/g);
+  const tokens = text.split(/(`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~|\*(?!\s)[^*\n]+(?<!\s)\*|!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\))/g);
   return tokens.map((tok, i) => {
     if (!tok) return null;
     if (tok.startsWith('`') && tok.endsWith('`') && tok.length >= 2) {
@@ -551,6 +551,25 @@ function renderInline(text: string, depth = 0): ReactNode[] {
           {depth < 2 ? renderInline(inner, depth + 1) : inner}
         </em>
       );
+    }
+    const imgMatch = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(tok);
+    if (imgMatch) {
+      const alt = imgMatch[1] || 'image';
+      const rawUrl = imgMatch[2].trim();
+      const src = rawUrl.split(/\s+/)[0] || '';
+      if (src) {
+        return (
+          <button
+            key={i}
+            type="button"
+            data-testid="markdown-image-btn"
+            onClick={() => useNexStore.getState().openImagePreview({ src, alt })}
+            className="my-2 block max-w-full cursor-zoom-in overflow-hidden rounded-xl border border-border bg-surface/40 transition-shadow hover:shadow-md"
+          >
+            <img src={src} alt={alt} loading="lazy" className="max-h-80 max-w-full object-contain" />
+          </button>
+        );
+      }
     }
     const linkMatch = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(tok);
     if (linkMatch) {

@@ -602,6 +602,7 @@ function UserBubble({
   const selectSession = useNexStore((s) => s.selectSession);
   const setComposerText = useNexStore((s) => s.setComposerText);
   const forkSession = useNexStore((s) => s.forkSession);
+  const openImagePreview = useNexStore((s) => s.openImagePreview);
   const [copied, setCopied] = useState(false);
   const displayText = cleanUserDisplayText(text);
 
@@ -649,12 +650,19 @@ function UserBubble({
             const src = img.image_url || (img.data_b64 ? `data:${img.mime_type || 'image/png'};base64,${img.data_b64}` : '');
             if (!src) return null;
             return (
-              <img
+              <button
                 key={idx}
-                src={src}
-                alt={`attachment-${idx + 1}`}
-                className="max-h-36 max-w-48 rounded-xl border border-border object-cover shadow-xs"
-              />
+                type="button"
+                data-testid={`user-image-${idx}`}
+                onClick={() => openImagePreview({ src, alt: `attachment-${idx + 1}` })}
+                className="group/img relative cursor-zoom-in overflow-hidden rounded-xl border border-border shadow-xs transition-shadow hover:shadow-md"
+              >
+                <img
+                  src={src}
+                  alt={`attachment-${idx + 1}`}
+                  className="max-h-36 max-w-48 object-cover transition-transform duration-150 group-hover/img:scale-[1.02]"
+                />
+              </button>
             );
           })}
         </div>
@@ -1025,6 +1033,7 @@ function Composer({
   const composerAttachments = useNexStore((s) => s.composerAttachments);
   const addComposerAttachment = useNexStore((s) => s.addComposerAttachment);
   const removeComposerAttachment = useNexStore((s) => s.removeComposerAttachment);
+  const openImagePreview = useNexStore((s) => s.openImagePreview);
   const searchWorkspaceFiles = useNexStore((s) => s.searchWorkspaceFiles);
   const followUpQueues = useNexStore((s) => s.followUpQueues);
   const removeFollowUp = useNexStore((s) => s.removeFollowUp);
@@ -1062,11 +1071,15 @@ function Composer({
   const permissionMeta = PERMISSION_OPTIONS.find((o) => o.value === permissionMode) || PERMISSION_OPTIONS[0];
   const PermissionIcon = permissionMode === 'full_access' ? ShieldAlert : permissionMeta.icon;
 
-  const activeProvider = providers.find((p) => p.id === selectedProviderId) || providers[0];
+  const activeProvider = (selectedProviderId ? providers.find((p) => p.id === selectedProviderId) : undefined) || providers[0];
   const effectiveProviderId = selectedProviderId || activeProvider?.id || '';
   const activeProviderName = activeProvider?.name || effectiveProviderId || formatMsg(locale, 'chat.model.providers');
 
-  const activeModel = models.find((m) => m.provider_id === effectiveProviderId && m.id === selectedModelId);
+  const activeModel =
+    selectedProviderId && selectedModelId
+      ? models.find((m) => m.provider_id === selectedProviderId && m.id === selectedModelId)
+      : undefined;
+  const hasValidModel = Boolean(activeModel);
   const effortLevels = useMemo(() => resolveEffortLevels(activeModel), [activeModel]);
   const effortSupported = effortLevels.length >= 2;
   const currentEffortIdx = useMemo(
@@ -1115,8 +1128,9 @@ function Composer({
     });
   }, [allVisibleModels, effectiveProviderId, modelOrder]);
 
-  const modelLabel =
-    activeModel?.display_name || activeModel?.id || selectedModelId || formatMsg(locale, 'chat.model.selectModel');
+  const modelLabel = activeModel
+    ? activeModel.display_name || activeModel.id
+    : formatMsg(locale, 'chat.model.selectModel');
 
   // Deduplicated known workspaces (runner defaults + recent chosen folders + session folders)
   const knownProjects = useMemo(() => {
@@ -1172,7 +1186,10 @@ function Composer({
 
   const templates = useMemo(() => PROMPT_TEMPLATE_KEYS.map((k) => formatMsg(locale, k)), [locale]);
   const isRunning = stream.running;
-  const canSend = (Boolean(composerText.trim()) || composerAttachments.length > 0) && Boolean(selectedRunnerId);
+  const canSend =
+    (Boolean(composerText.trim()) || composerAttachments.length > 0) &&
+    Boolean(selectedRunnerId) &&
+    hasValidModel;
 
   // Detect active `@` file mention or `/` slash command autocomplete trigger
   const acTrigger = useMemo(() => {
@@ -1556,11 +1573,17 @@ function Composer({
           key={att.id}
           className="group relative flex items-center gap-1.5 rounded-xl border border-border bg-surface/80 p-1 pr-2"
         >
-          <img
-            src={att.previewUrl}
-            alt={att.name}
-            className="size-10 rounded-lg object-cover"
-          />
+          <button
+            type="button"
+            onClick={() => openImagePreview({ src: att.previewUrl, alt: att.name })}
+            className="cursor-zoom-in overflow-hidden rounded-lg"
+          >
+            <img
+              src={att.previewUrl}
+              alt={att.name}
+              className="size-10 rounded-lg object-cover"
+            />
+          </button>
           <div className="min-w-0 max-w-[120px]">
             <div className="truncate text-ui-xs font-medium text-foreground">{att.name}</div>
             <div className="text-[10px] text-foreground-subtlest">{Math.max(1, Math.round(att.size / 1024))} KB</div>
@@ -1625,12 +1648,12 @@ function Composer({
         }}
         onKeyDown={(e) => {
           if (showAcPopover && acTrigger && acItemCount > 0) {
-            if (e.key === 'ArrowDown') {
+            if (e.key === 'ArrowDown' || (e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'n')) {
               e.preventDefault();
               setActiveAcIdx((i) => (i + 1) % acItemCount);
               return;
             }
-            if (e.key === 'ArrowUp') {
+            if (e.key === 'ArrowUp' || (e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'p')) {
               e.preventDefault();
               setActiveAcIdx((i) => (i - 1 + acItemCount) % acItemCount);
               return;
@@ -1657,7 +1680,9 @@ function Composer({
           }
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
-            sendPromptOrSteer(undefined, e.altKey ? 'steer' : 'follow_up');
+            if (canSend) {
+              sendPromptOrSteer(undefined, e.altKey ? 'steer' : 'follow_up');
+            }
           }
         }}
         placeholder={
@@ -1819,7 +1844,9 @@ function Composer({
               setOpenMenu((m) => (m === 'model' ? null : 'model'));
             }}
             title={effortSupported ? `${modelLabel} · ${effortDisplayLabel}` : modelLabel}
-            className="flex h-7 w-full max-w-[240px] min-w-0 items-center gap-1.5 rounded-lg px-2 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+            className={`flex h-7 w-full max-w-[240px] min-w-0 items-center gap-1.5 rounded-lg px-2 text-ui-sm transition-colors hover:bg-hover hover:text-foreground ${
+              !hasValidModel ? 'text-amber-600 dark:text-amber-400' : 'text-foreground-subtle'
+            }`}
           >
             <span className="min-w-0 truncate">{modelLabel}</span>
             {effortSupported && (
@@ -2136,9 +2163,11 @@ function Composer({
               disabled={!canSend}
               onClick={() => sendPromptOrSteer(undefined, 'follow_up')}
               title={
-                isRunning
-                  ? formatMsg(locale, 'chat.queueFollowUpRunsAfter')
-                  : formatMsg(locale, 'chat.send')
+                !hasValidModel
+                  ? formatMsg(locale, 'chat.model.missingTooltip')
+                  : isRunning
+                    ? formatMsg(locale, 'chat.queueFollowUpRunsAfter')
+                    : formatMsg(locale, 'chat.send')
               }
               className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-all hover:bg-foreground/90 active:scale-95 disabled:bg-foreground/20 disabled:text-background/70"
             >
