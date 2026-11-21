@@ -937,6 +937,8 @@ func sshTargetRunnerID(name string) string {
 	return "run_" + s
 }
 
+const darwinRunnerBundleID = "com.nex.runner"
+
 func darwinLaunchAgentLabel(runnerID string) string {
 	return "com.nex.runner." + runnerID
 }
@@ -950,6 +952,34 @@ func xmlEscape(s string) string {
 		"'", "&apos;",
 	)
 	return r.Replace(s)
+}
+
+func buildDarwinAppInfoPlist() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>` + darwinRunnerBundleID + `</string>
+  <key>CFBundleName</key>
+  <string>NexRunner</string>
+  <key>CFBundleDisplayName</key>
+  <string>NexRunner</string>
+  <key>CFBundleExecutable</key>
+  <string>nex-runner</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>CFBundleShortVersionString</key>
+  <string>1.0</string>
+  <key>LSUIElement</key>
+  <true/>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>NexRunner connects to your Nex server on the local network.</string>
+</dict>
+</plist>
+`
 }
 
 func buildDarwinLaunchAgentPlist(label, binPath, runnerID, name, wsURL, workspace, dataDir, pairingToken, homeDir, logFile string) string {
@@ -973,6 +1003,9 @@ func buildDarwinLaunchAgentPlist(label, binPath, runnerID, name, wsURL, workspac
 	for _, a := range args {
 		sb.WriteString("    <string>" + xmlEscape(a) + "</string>\n")
 	}
+	sb.WriteString("  </array>\n")
+	sb.WriteString("  <key>AssociatedBundleIdentifiers</key>\n  <array>\n")
+	sb.WriteString("    <string>" + darwinRunnerBundleID + "</string>\n")
 	sb.WriteString("  </array>\n")
 	sb.WriteString("  <key>WorkingDirectory</key>\n  <string>" + xmlEscape(workspace) + "</string>\n")
 	sb.WriteString("  <key>EnvironmentVariables</key>\n  <dict>\n")
@@ -1256,22 +1289,33 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 		if remoteHome == "" {
 			remoteHome = inferRemoteHomeDir("darwin", target.Username)
 		}
+		appBundleDir := joinRemotePath(installDir, "NexRunner.app", "darwin")
+		appContentsDir := joinRemotePath(appBundleDir, "Contents", "darwin")
+		appMacOSDir := joinRemotePath(appContentsDir, "MacOS", "darwin")
+		appInfoPlist := joinRemotePath(appContentsDir, "Info.plist", "darwin")
+		appBin := joinRemotePath(appMacOSDir, "nex-runner", "darwin")
+		infoPlistB64 := base64.StdEncoding.EncodeToString([]byte(buildDarwinAppInfoPlist()))
+
 		label := darwinLaunchAgentLabel(runnerID)
 		launchAgentsDir := joinRemotePath(remoteHome, "Library/LaunchAgents", "darwin")
 		plistPath := joinRemotePath(launchAgentsDir, label+".plist", "darwin")
 		plistContent := buildDarwinLaunchAgentPlist(
-			label, remoteBin, runnerID, target.Name, wsURL, workspace, remoteDataDir, s.cfg.PairingSecret, remoteHome, logFile,
+			label, appBin, runnerID, target.Name, wsURL, workspace, remoteDataDir, s.cfg.PairingSecret, remoteHome, logFile,
 		)
 		plistB64 := base64.StdEncoding.EncodeToString([]byte(plistContent))
 		tokenFlag := ""
 		if s.cfg.PairingSecret != "" {
 			tokenFlag = " -token " + shellQuote(s.cfg.PairingSecret)
 		}
-		logf("Installing macOS LaunchAgent %s (%s)...", label, plistPath)
+		logf("Installing macOS NexRunner.app (%s) & LaunchAgent %s (%s)...", appBundleDir, label, plistPath)
 		startCmd = fmt.Sprintf(
 			"if [ -f %s ]; then oldpid=$(cat %s 2>/dev/null || true); [ -n \"$oldpid\" ] && kill \"$oldpid\" 2>/dev/null || true; rm -f %s; fi; "+
 				"pkill -f -- %s 2>/dev/null || true; "+
-				"mkdir -p %s && printf '%%s' %s | base64 -d > %s && : > %s; "+
+				"mkdir -p %s %s && printf '%%s' %s | base64 -d > %s && cp -f %s %s && chmod +x %s && "+
+				"xattr -dr com.apple.quarantine %s 2>/dev/null || true; "+
+				"if command -v codesign >/dev/null 2>&1; then codesign --force --deep --sign - %s 2>/dev/null || true; fi; "+
+				"/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f %s 2>/dev/null || true; "+
+				"printf '%%s' %s | base64 -d > %s && : > %s; "+
 				"uid=$(id -u); domain=''; "+
 				"launchctl bootout \"gui/$uid/%s\" 2>/dev/null || true; "+
 				"launchctl bootout \"user/$uid/%s\" 2>/dev/null || true; "+
@@ -1293,11 +1337,15 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 				"else echo 'Runner failed to start:' >&2; tail -n 20 %s 2>/dev/null >&2 || true; exit 1; fi",
 			shellQuote(pidFile), shellQuote(pidFile), shellQuote(pidFile),
 			shellQuote("-id "+runnerID),
-			shellQuote(launchAgentsDir), shellQuote(plistB64), shellQuote(plistPath), shellQuote(logFile),
+			shellQuote(appMacOSDir), shellQuote(launchAgentsDir), shellQuote(infoPlistB64), shellQuote(appInfoPlist), shellQuote(remoteBin), shellQuote(appBin), shellQuote(appBin),
+			shellQuote(appBundleDir),
+			shellQuote(appBundleDir),
+			shellQuote(appBundleDir),
+			shellQuote(plistB64), shellQuote(plistPath), shellQuote(logFile),
 			label, label,
 			shellQuote(plistPath), label,
 			shellQuote(plistPath), label,
-			shellQuote(remoteBin), shellQuote(runnerID), shellQuote(target.Name), shellQuote(wsURL), shellQuote(workspace), shellQuote(remoteDataDir), tokenFlag, shellQuote(logFile),
+			shellQuote(appBin), shellQuote(runnerID), shellQuote(target.Name), shellQuote(wsURL), shellQuote(workspace), shellQuote(remoteDataDir), tokenFlag, shellQuote(logFile),
 			shellQuote(pidFile),
 			label,
 			shellQuote("-id "+runnerID),
@@ -1364,7 +1412,7 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 		}
 		errMsg := fmt.Sprintf("Runner started remotely, but did not connect to %s within 6s.", wsURL)
 		if info.OS == "darwin" && strings.Contains(remoteTail, "no route to host") {
-			errMsg += " macOS Local Network privacy blocked outgoing LAN access; grant Local Network permission to nex-runner (or run inside user GUI LaunchAgent)."
+			errMsg += ` macOS Local Network privacy blocked outgoing LAN access to this server. Click Allow on the macOS prompt for "NexRunner" or enable NexRunner in System Settings -> Privacy & Security -> Local Network (nex-runner will auto-reconnect every 5s once allowed).`
 		}
 		logf("Verification failed: %s", errMsg)
 		_ = s.store.UpdateSSHTargetStatus(r.Context(), id, "error", errMsg, logBuf.String(), 0)

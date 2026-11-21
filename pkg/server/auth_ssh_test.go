@@ -282,16 +282,28 @@ func TestRemoteOSArchResolutionAndBundledRunners(t *testing.T) {
 		t.Fatalf("auto-detect binary upload failed: %d %s", rec.Code, rec.Body.String())
 	}
 
-	// 4. Deterministic runner ID, macOS LaunchAgent plist generation & runner delete endpoint
+	// 4. Deterministic runner ID, macOS .app Info.plist, LaunchAgent plist generation & runner delete endpoint
 	if got := sshTargetRunnerID("macM4"); got != "run_macm4" {
 		t.Fatalf("sshTargetRunnerID(macM4) = %q, want run_macm4", got)
 	}
 	if got := sshTargetRunnerID("Build Server"); got != "run_build_server" {
 		t.Fatalf("sshTargetRunnerID(Build Server) = %q, want run_build_server", got)
 	}
+	infoPlist := buildDarwinAppInfoPlist()
+	for _, want := range []string{
+		"com.nex.runner",
+		"NexRunner",
+		"nex-runner",
+		"LSUIElement",
+		"NSLocalNetworkUsageDescription",
+	} {
+		if !strings.Contains(infoPlist, want) {
+			t.Fatalf("app Info.plist missing %q:\n%s", want, infoPlist)
+		}
+	}
 	plist := buildDarwinLaunchAgentPlist(
 		darwinLaunchAgentLabel("run_macm4"),
-		"/Users/tylinux/.nex-runner/bin/nex-runner",
+		"/Users/tylinux/.nex-runner/NexRunner.app/Contents/MacOS/nex-runner",
 		"run_macm4",
 		"mac & M4",
 		"wss://nex.tylinux.cn/ws/runner",
@@ -303,6 +315,9 @@ func TestRemoteOSArchResolutionAndBundledRunners(t *testing.T) {
 	)
 	for _, want := range []string{
 		"<string>com.nex.runner.run_macm4</string>",
+		"<key>AssociatedBundleIdentifiers</key>",
+		"<string>com.nex.runner</string>",
+		"NexRunner.app/Contents/MacOS/nex-runner",
 		"<string>-data-dir</string>",
 		"<string>-token</string>",
 		"<string>tok123</string>",
