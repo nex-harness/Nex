@@ -52,10 +52,12 @@ func DefaultReasoningLevels(m ModelMeta) []string {
 	switch {
 	case strings.Contains(idLower, "deepseek"):
 		return []string{"low", "high", "max"}
-	case strings.Contains(idLower, "claude") && (strings.Contains(idLower, "opus") || strings.Contains(idLower, "sonnet") || strings.Contains(idLower, "4")):
+	case strings.Contains(idLower, "claude") && (strings.Contains(idLower, "opus") || strings.Contains(idLower, "sonnet") || strings.Contains(idLower, "4") || strings.Contains(idLower, "5")):
 		return []string{"off", "low", "medium", "high", "max"}
-	case strings.Contains(idLower, "gpt-5") || strings.Contains(idLower, "codex") || strings.Contains(idLower, "o3") || strings.Contains(idLower, "o4"):
+	case strings.Contains(idLower, "gpt-5") || strings.Contains(idLower, "gpt-6") || strings.Contains(idLower, "codex") || strings.Contains(idLower, "o3") || strings.Contains(idLower, "o4"):
 		return []string{"off", "low", "medium", "high", "xhigh"}
+	case strings.Contains(idLower, "gemini-4") || (strings.Contains(idLower, "gemini-3") && strings.Contains(idLower, "pro")):
+		return []string{"low", "medium", "high"}
 	case strings.Contains(idLower, "gemini"):
 		return []string{"off", "minimal", "low", "medium", "high"}
 	case strings.Contains(idLower, "qwq") || strings.Contains(idLower, "glm-4.5") || strings.Contains(idLower, "glm-z1"):
@@ -218,13 +220,21 @@ type modelsDevProvider struct {
 	Models map[string]modelsDevEntry `json:"models"`
 }
 
+type modelsDevReasoningOption struct {
+	Type   string   `json:"type"`
+	Values []string `json:"values"`
+	Min    int      `json:"min"`
+	Max    int      `json:"max"`
+}
+
 type modelsDevEntry struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Attachment bool   `json:"attachment"`
-	Reasoning  bool   `json:"reasoning"`
-	ToolCall   bool   `json:"tool_call"`
-	Modalities struct {
+	ID               string                     `json:"id"`
+	Name             string                     `json:"name"`
+	Attachment       bool                       `json:"attachment"`
+	Reasoning        bool                       `json:"reasoning"`
+	ReasoningOptions []modelsDevReasoningOption `json:"reasoning_options"`
+	ToolCall         bool                       `json:"tool_call"`
+	Modalities       struct {
 		Input []string `json:"input"`
 	} `json:"modalities"`
 	Cost struct {
@@ -237,6 +247,81 @@ type modelsDevEntry struct {
 		Context int `json:"context"`
 		Output  int `json:"output"`
 	} `json:"limit"`
+}
+
+func parseModelsDevReasoningLevels(opts []modelsDevReasoningOption) []string {
+	var effortVals []string
+	var hasToggle bool
+	var hasBudget bool
+	var budgetMin int
+
+	for _, opt := range opts {
+		switch strings.ToLower(strings.TrimSpace(opt.Type)) {
+		case "effort":
+			if len(effortVals) == 0 && len(opt.Values) > 0 {
+				effortVals = opt.Values
+			}
+		case "toggle":
+			hasToggle = true
+		case "budget_tokens":
+			hasBudget = true
+			budgetMin = opt.Min
+		}
+	}
+
+	if len(effortVals) > 0 {
+		seen := make(map[string]bool, len(effortVals)+1)
+		out := make([]string, 0, len(effortVals)+1)
+		add := func(v string) {
+			clean := strings.ToLower(strings.TrimSpace(v))
+			if clean == "" {
+				return
+			}
+			if clean == "none" || clean == "disabled" {
+				clean = "off"
+			}
+			if !seen[clean] {
+				seen[clean] = true
+				out = append(out, clean)
+			}
+		}
+		if hasToggle || (hasBudget && budgetMin == 0) {
+			add("off")
+		}
+		for _, v := range effortVals {
+			add(v)
+		}
+		return out
+	}
+
+	if hasToggle && !hasBudget {
+		return []string{"off", "on"}
+	}
+	return nil
+}
+
+// FetchModelsDevRaw downloads the upstream models.dev JSON payload bytes.
+func FetchModelsDevRaw(ctx context.Context, client *http.Client, endpoint string) ([]byte, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if endpoint == "" {
+		endpoint = DefaultModelsDevURL
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", DefaultUserAgent)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("ai: fetch models.dev HTTP %d", resp.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 32*1024*1024))
 }
 
 // ParseModelsDevJSON parses the upstream https://models.dev/api.json registry payload.
@@ -275,6 +360,7 @@ func ParseModelsDevJSON(raw []byte) ([]ModelMeta, error) {
 				maxOut = 16384
 			}
 
+			parsedLevels := parseModelsDevReasoningLevels(m.ReasoningOptions)
 			meta := ModelMeta{
 				ID:                mID,
 				ProviderID:        provID,
@@ -287,8 +373,9 @@ func ParseModelsDevJSON(raw []byte) ([]ModelMeta, error) {
 				SupportsAudio:     hasAudio,
 				SupportsVideo:     hasVideo,
 				SupportsTools:     m.ToolCall,
-				SupportsReasoning: m.Reasoning,
+				SupportsReasoning: m.Reasoning || len(parsedLevels) > 0,
 				SupportsCaching:   m.Cost.CacheRead > 0 || m.Cost.CacheWrite > 0,
+				ReasoningLevels:   parsedLevels,
 				Pricing: ModelPricing{
 					InputPer1M:      m.Cost.Input,
 					OutputPer1M:     m.Cost.Output,
@@ -296,7 +383,9 @@ func ParseModelsDevJSON(raw []byte) ([]ModelMeta, error) {
 					CacheWritePer1M: m.Cost.CacheWrite,
 				},
 			}
-			meta.ReasoningLevels = DefaultReasoningLevels(meta)
+			if len(meta.ReasoningLevels) == 0 {
+				meta.ReasoningLevels = DefaultReasoningLevels(meta)
+			}
 			result = append(result, meta)
 		}
 	}
@@ -312,35 +401,41 @@ func ParseModelsDevJSON(raw []byte) ([]ModelMeta, error) {
 
 // FetchModelsDevCatalog downloads and parses the live models.dev catalog.
 func FetchModelsDevCatalog(ctx context.Context, client *http.Client, endpoint string) ([]ModelMeta, error) {
-	if client == nil {
-		client = http.DefaultClient
-	}
-	if endpoint == "" {
-		endpoint = DefaultModelsDevURL
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", DefaultUserAgent)
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("ai: fetch models.dev HTTP %d", resp.StatusCode)
-	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 32*1024*1024))
+	raw, err := FetchModelsDevRaw(ctx, client, endpoint)
 	if err != nil {
 		return nil, err
 	}
 	return ParseModelsDevJSON(raw)
 }
 
+func providerMatchPriority(providerID, preferredProviderID string) int {
+	p := strings.ToLower(strings.TrimSpace(providerID))
+	pref := strings.ToLower(strings.TrimSpace(preferredProviderID))
+	if pref != "" && p == pref {
+		return 0
+	}
+	switch p {
+	case "openai", "anthropic", "google", "deepseek", "zai", "xai", "mistral", "qwen", "moonshotai", "minimax", "cohere", "meta":
+		return 1
+	case "google-vertex", "google-vertex-anthropic", "amazon-bedrock", "azure", "openrouter":
+		return 2
+	case "github-copilot", "cloudflare-ai-gateway", "vercel", "fireworks-ai", "togetherai", "groq":
+		return 3
+	default:
+		return 10
+	}
+}
+
 // LookupModelMeta finds a model in catalog using exact match first, then
 // progressive slash-prefix backoff (e.g. "xxx/xx/xx/glm-5.3" -> "glm-5.3").
+// Official upstream providers are prioritized over third-party gateways.
 func LookupModelMeta(catalog []ModelMeta, modelID string) (ModelMeta, bool) {
+	return LookupModelMetaForProvider(catalog, modelID, "")
+}
+
+// LookupModelMetaForProvider finds a model in catalog, preferring preferredProviderID
+// first, then official upstream providers, then third-party gateways.
+func LookupModelMetaForProvider(catalog []ModelMeta, modelID, preferredProviderID string) (ModelMeta, bool) {
 	target := strings.TrimSpace(modelID)
 	if target == "" {
 		return ModelMeta{}, false
@@ -359,10 +454,22 @@ func LookupModelMeta(catalog []ModelMeta, modelID string) (ModelMeta, bool) {
 
 	for _, cand := range candidates {
 		candLower := strings.ToLower(cand)
+		var best ModelMeta
+		bestRank := 999
+		found := false
 		for _, m := range catalog {
 			if strings.ToLower(m.ID) == candLower {
-				return m, true
+				rank := providerMatchPriority(m.ProviderID, preferredProviderID)
+				// Prefer entries that actually carry reasoning_levels when both are at the same tier
+				if !found || rank < bestRank || (rank == bestRank && len(best.ReasoningLevels) == 0 && len(m.ReasoningLevels) > 0) {
+					best = m
+					bestRank = rank
+					found = true
+				}
 			}
+		}
+		if found {
+			return best, true
 		}
 	}
 	return ModelMeta{}, false

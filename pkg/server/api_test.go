@@ -364,3 +364,97 @@ type roundTripErr struct{}
 func (roundTripErr) RoundTrip(*http.Request) (*http.Response, error) {
 	return nil, fmt.Errorf("offline test transport")
 }
+
+type rewriteModelsDevTransport struct {
+	modelsDevURL string
+	base         http.RoundTripper
+}
+
+func (rt rewriteModelsDevTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.String() == ai.DefaultModelsDevURL {
+		cloned := req.Clone(req.Context())
+		rewritten, err := http.NewRequestWithContext(req.Context(), req.Method, rt.modelsDevURL, req.Body)
+		if err != nil {
+			return nil, err
+		}
+		rewritten.Header = cloned.Header
+		return rt.base.RoundTrip(rewritten)
+	}
+	return rt.base.RoundTrip(req)
+}
+
+func TestModelsDevCatalogCacheSharedAcrossLookupAndFetchRemote(t *testing.T) {
+	var modelsDevHits int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/models-dev.json":
+			modelsDevHits++
+			_, _ = w.Write([]byte(`{
+				"google": {
+					"id": "google",
+					"models": {
+						"gemini-4-carbon": {
+							"id": "gemini-4-carbon",
+							"name": "Gemini 4 Carbon",
+							"reasoning": true,
+							"reasoning_options": [{"type": "effort", "values": ["low", "medium", "high"]}],
+							"limit": {"context": 1048576, "output": 943718}
+						}
+					}
+				}
+			}`))
+		case "/v1/models":
+			_, _ = w.Write([]byte(`{"data":[{"id":"google/gemini-4-carbon"}]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer upstream.Close()
+
+	client := &http.Client{
+		Transport: rewriteModelsDevTransport{
+			modelsDevURL: upstream.URL + "/models-dev.json",
+			base:         upstream.Client().Transport,
+		},
+	}
+
+	_, ts, st := newTestServer(t, client)
+
+	// 1. First lookup fetches from models.dev and caches in memory + disk
+	r1 := postJSON(t, ts.URL+"/api/v1/models/lookup", map[string]string{"model_id": "gemini-4-carbon"})
+	if !strings.Contains(string(r1), `"low","medium","high"`) {
+		t.Fatalf("expected gemini-4-carbon reasoning_levels from models.dev, got %s", string(r1))
+	}
+	if modelsDevHits != 1 {
+		t.Fatalf("expected 1 models.dev fetch, got %d", modelsDevHits)
+	}
+
+	// 2. Subsequent lookup + batch lookup + /v1/models fetch-remote all reuse the cache (0 new hits!)
+	_ = postJSON(t, ts.URL+"/api/v1/models/lookup", map[string]any{"model_ids": []string{"google/gemini-4-carbon"}})
+	frRaw := postJSON(t, ts.URL+"/api/v1/models/fetch-remote", map[string]string{"base_url": upstream.URL + "/v1"})
+	if !strings.Contains(string(frRaw), `"matched_meta"`) || !strings.Contains(string(frRaw), `"gemini-4-carbon"`) {
+		t.Fatalf("expected fetch-remote to include matched_meta from cache, got %s", string(frRaw))
+	}
+	if modelsDevHits != 1 {
+		t.Fatalf("expected cache reuse (still 1 hit), got %d", modelsDevHits)
+	}
+
+	// 3. Verify disk cache file was persisted and works on a brand-new Server instance offline
+	if _, err := os.Stat(filepath.Join(st.DataDir(), modelsDevCacheFileName)); err != nil {
+		t.Fatalf("expected disk cache file persisted: %v", err)
+	}
+	srvReloaded, err := New(Config{
+		Store:      st,
+		HTTPClient: &http.Client{Transport: roundTripErr{}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tsReloaded := httptest.NewServer(srvReloaded.Handler())
+	defer tsReloaded.Close()
+
+	rReload := postJSON(t, tsReloaded.URL+"/api/v1/models/lookup", map[string]string{"model_id": "gemini-4-carbon"})
+	if !strings.Contains(string(rReload), `"Gemini 4 Carbon"`) {
+		t.Fatalf("expected reloaded server to serve disk cache offline, got %s", string(rReload))
+	}
+}

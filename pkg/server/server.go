@@ -105,6 +105,7 @@ type Server struct {
 	clients     map[string]*clientConn
 	ptyToRunner map[string]string
 	pendingRPC  map[string]chan protocol.Envelope
+	modelsCache modelsDevCache
 }
 
 // New constructs and wires a Control Plane Server.

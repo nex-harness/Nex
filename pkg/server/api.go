@@ -180,20 +180,41 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, list)
 	case http.MethodPost, http.MethodPut:
-		var m ai.ModelMeta
-		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+		var body json.RawMessage
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeErr(w, http.StatusBadRequest, err)
 			return
 		}
-		if m.Source == "" {
-			m.Source = "custom"
+		trimmed := strings.TrimSpace(string(body))
+		var batch []ai.ModelMeta
+		if strings.HasPrefix(trimmed, "[") {
+			if err := json.Unmarshal(body, &batch); err != nil {
+				writeErr(w, http.StatusBadRequest, err)
+				return
+			}
+		} else {
+			var m ai.ModelMeta
+			if err := json.Unmarshal(body, &m); err != nil {
+				writeErr(w, http.StatusBadRequest, err)
+				return
+			}
+			batch = []ai.ModelMeta{m}
 		}
-		if err := s.store.UpsertModelsBatch(r.Context(), []ai.ModelMeta{m}, true); err != nil {
+		for i := range batch {
+			if batch[i].Source == "" {
+				batch[i].Source = "custom"
+			}
+		}
+		if err := s.store.UpsertModelsBatch(r.Context(), batch, true); err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
 		}
 		s.BroadcastConfigSync(r.Context())
-		writeJSON(w, http.StatusOK, m)
+		if len(batch) == 1 && !strings.HasPrefix(trimmed, "[") {
+			writeJSON(w, http.StatusOK, batch[0])
+		} else {
+			writeJSON(w, http.StatusOK, map[string]any{"saved": len(batch)})
+		}
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -208,7 +229,7 @@ func (s *Server) handleModelsSync(w http.ResponseWriter, r *http.Request) {
 		URL string `json:"url"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
-	catalog, err := ai.FetchModelsDevCatalog(r.Context(), s.client, body.URL)
+	catalog, err := s.refreshModelsCatalog(r.Context(), strings.TrimSpace(body.URL), strings.TrimSpace(body.URL) == "")
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err)
 		return
@@ -230,7 +251,11 @@ func (s *Server) handleModelsSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.BroadcastConfigSync(r.Context())
-	writeJSON(w, http.StatusOK, map[string]any{"synced": len(filtered), "total_catalog": len(catalog)})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"synced":        len(filtered),
+		"synced_count":  len(filtered),
+		"total_catalog": len(catalog),
+	})
 }
 
 func (s *Server) handleModelsFetchRemote(w http.ResponseWriter, r *http.Request) {
@@ -239,8 +264,9 @@ func (s *Server) handleModelsFetchRemote(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var body struct {
-		BaseURL string `json:"base_url"`
-		APIKey  string `json:"api_key"`
+		BaseURL    string `json:"base_url"`
+		APIKey     string `json:"api_key"`
+		ProviderID string `json:"provider_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
@@ -289,7 +315,18 @@ func (s *Server) handleModelsFetchRemote(w http.ResponseWriter, r *http.Request)
 			ids = append(ids, item.ID)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"models": ids})
+	// Resolve metadata from the cached models.dev catalog in one pass so batch-add needs zero extra lookups.
+	catalog := s.getModelsDevCatalog(r.Context())
+	matchedMeta := make(map[string]ai.ModelMeta, len(ids))
+	for _, id := range ids {
+		if meta, ok := ai.LookupModelMetaForProvider(catalog, id, body.ProviderID); ok {
+			matchedMeta[id] = meta
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"models":       ids,
+		"matched_meta": matchedMeta,
+	})
 }
 
 func (s *Server) handleModelLookup(w http.ResponseWriter, r *http.Request) {
@@ -298,23 +335,46 @@ func (s *Server) handleModelLookup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	modelID := strings.TrimSpace(r.URL.Query().Get("model_id"))
-	if modelID == "" && r.Method == http.MethodPost {
+	providerID := strings.TrimSpace(r.URL.Query().Get("provider_id"))
+	var modelIDs []string
+	if r.Method == http.MethodPost {
 		var body struct {
-			ModelID string `json:"model_id"`
+			ModelID    string   `json:"model_id"`
+			ModelIDs   []string `json:"model_ids"`
+			ProviderID string   `json:"provider_id"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		modelID = strings.TrimSpace(body.ModelID)
+		if modelID == "" {
+			modelID = strings.TrimSpace(body.ModelID)
+		}
+		if providerID == "" {
+			providerID = strings.TrimSpace(body.ProviderID)
+		}
+		modelIDs = body.ModelIDs
 	}
+
+	catalog := s.getModelsDevCatalog(r.Context())
+
+	if len(modelIDs) > 0 {
+		results := make(map[string]ai.ModelMeta, len(modelIDs))
+		for _, rawID := range modelIDs {
+			clean := strings.TrimSpace(rawID)
+			if clean == "" {
+				continue
+			}
+			if meta, ok := ai.LookupModelMetaForProvider(catalog, clean, providerID); ok {
+				results[clean] = meta
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"results": results})
+		return
+	}
+
 	if modelID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "model_id is required"})
 		return
 	}
-	// Try live models.dev first with short timeout, fallback to embedded seed.
-	catalog, err := ai.FetchModelsDevCatalog(r.Context(), s.client, "")
-	if err != nil || len(catalog) == 0 {
-		catalog, _ = ai.EmbeddedModelsCatalog()
-	}
-	if meta, ok := ai.LookupModelMeta(catalog, modelID); ok {
+	if meta, ok := ai.LookupModelMetaForProvider(catalog, modelID, providerID); ok {
 		writeJSON(w, http.StatusOK, map[string]any{"found": true, "meta": meta})
 		return
 	}

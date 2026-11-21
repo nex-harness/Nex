@@ -45,7 +45,7 @@ export function resolveEffortLevels(model?: ModelMeta): EffortLevelOption[] {
   if (model && !model.supports_reasoning && (!raw || raw.length === 0)) {
     return [];
   }
-  if (!raw || raw.length < 2) return DEFAULT_EFFORT_LEVELS;
+  if (!raw || raw.length === 0) return DEFAULT_EFFORT_LEVELS;
   const seen = new Set<string>();
   const resolved: EffortLevelOption[] = [];
   for (let i = 0; i < raw.length; i++) {
@@ -65,7 +65,7 @@ export function resolveEffortLevels(model?: ModelMeta): EffortLevelOption[] {
     seen.add(entry.value);
     resolved.push(entry);
   }
-  return resolved.length >= 2 ? resolved : DEFAULT_EFFORT_LEVELS;
+  return resolved.length >= 1 ? resolved : DEFAULT_EFFORT_LEVELS;
 }
 
 export function clampEffortIndex(levels: EffortLevelOption[], requested: ThinkingEffort): number {
@@ -104,7 +104,8 @@ export function clampEffortIndex(levels: EffortLevelOption[], requested: Thinkin
  */
 export function resolveEffectiveEffort(model: ModelMeta | undefined, requested: ThinkingEffort): ThinkingEffort {
   const levels = resolveEffortLevels(model);
-  if (levels.length < 2) return '';
+  if (levels.length === 0) return '';
+  if (levels.length === 1) return levels[0]?.value ?? '';
   const idx = clampEffortIndex(levels, requested);
   return levels[idx]?.value ?? '';
 }

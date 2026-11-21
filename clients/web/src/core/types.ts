@@ -41,6 +41,8 @@ export interface ModelMeta {
   max_output_tokens: number;
   supports_vision: boolean;
   supports_pdf: boolean;
+  supports_audio?: boolean;
+  supports_video?: boolean;
   supports_tools: boolean;
   supports_reasoning: boolean;
   supports_caching: boolean;

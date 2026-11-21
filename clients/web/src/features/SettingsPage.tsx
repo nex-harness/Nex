@@ -929,9 +929,11 @@ function ProvidersAndModelsSection({
   const [newReasoningLevels, setNewReasoningLevels] = useState('');
   const [newReasoningMap, setNewReasoningMap] = useState('');
   const [editingModel, setEditingModel] = useState<ModelMeta | null>(null);
+  const [lookedUpMeta, setLookedUpMeta] = useState<ModelMeta | null>(null);
   const [fetchingInfo, setFetchingInfo] = useState(false);
   const [fetchRemoteOpen, setFetchRemoteOpen] = useState(false);
   const [remoteModels, setRemoteModels] = useState<string[]>([]);
+  const [remoteMatchedMeta, setRemoteMatchedMeta] = useState<Record<string, ModelMeta>>({});
   const [remoteFilter, setRemoteFilter] = useState('');
   const [remoteSelected, setRemoteSelected] = useState<Record<string, boolean>>({});
   const [fetchingRemote, setFetchingRemote] = useState(false);
@@ -1010,13 +1012,14 @@ function ProvidersAndModelsSection({
   const syncModelsDev = async () => {
     setSyncing(true);
     try {
-      const res = await apiFetch<{ synced_count: number }>('/api/v1/models/sync', {
+      const res = await apiFetch<{ synced?: number; synced_count?: number }>('/api/v1/models/sync', {
         method: 'POST',
         body: JSON.stringify({}),
       });
       await refreshInitialData();
+      const syncedCount = res.synced_count ?? res.synced ?? 0;
       onFlash(
-        formatMsg(locale, 'settings.syncedModelsFromModelsDev', { synced_count: res.synced_count }),
+        formatMsg(locale, 'settings.syncedModelsFromModelsDev', { synced_count: syncedCount }),
       );
     } catch (e) {
       onFlash(
@@ -1034,14 +1037,16 @@ function ProvidersAndModelsSection({
     try {
       const res = await apiFetch<{ found: boolean; meta?: ModelMeta }>('/api/v1/models/lookup', {
         method: 'POST',
-        body: JSON.stringify({ model_id: id }),
+        body: JSON.stringify({ model_id: id, provider_id: draft?.id || '' }),
       });
       if (res.found && res.meta) {
+        setLookedUpMeta(res.meta);
         if (!newModelName.trim()) setNewModelName(res.meta.display_name || id);
         if (res.meta.context_window > 0) setNewCtxWin(res.meta.context_window);
         if (res.meta.max_output_tokens > 0) setNewMaxOut(res.meta.max_output_tokens);
         setNewSupportsVision(Boolean(res.meta.supports_vision));
         setNewSupportsReasoning(Boolean(res.meta.supports_reasoning));
+        setNewReasoningLevels((res.meta.reasoning_levels || []).join(', '));
         onFlash(formatMsg(locale, 'settings.loadedMetadataFor', { id: res.meta.id }));
       } else {
         onFlash(formatMsg(locale, 'settings.noMatchingModelFoundIn'));
@@ -1058,17 +1063,26 @@ function ProvidersAndModelsSection({
     setFetchingRemote(true);
     setFetchRemoteOpen(true);
     setRemoteModels([]);
+    setRemoteMatchedMeta({});
     setRemoteSelected({});
     setRemoteFilter('');
     try {
-      const res = await apiFetch<{ models: string[] }>('/api/v1/models/fetch-remote', {
-        method: 'POST',
-        body: JSON.stringify({ base_url: draft.baseUrl.trim(), api_key: draft.apiKey }),
-      });
+      const res = await apiFetch<{ models: string[]; matched_meta?: Record<string, ModelMeta> }>(
+        '/api/v1/models/fetch-remote',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            base_url: draft.baseUrl.trim(),
+            api_key: draft.apiKey,
+            provider_id: draft.id,
+          }),
+        },
+      );
       const existingIds = new Set(
         models.filter((m) => m.provider_id === draft?.id).map((m) => m.id),
       );
       setRemoteModels((res.models || []).filter((id) => !existingIds.has(id)));
+      setRemoteMatchedMeta(res.matched_meta || {});
     } catch (e) {
       onFlash(formatMsg(locale, 'settings.fetchV1ModelsFailed', { message: (e as Error).message }));
       setFetchRemoteOpen(false);
@@ -1088,34 +1102,45 @@ function ProvidersAndModelsSection({
     if (chosen.length === 0) return;
     setAddingRemote(true);
     try {
-      for (const id of chosen) {
-        let meta: Partial<ModelMeta> = {};
+      let metaById: Record<string, ModelMeta> = { ...remoteMatchedMeta };
+      const missingIds = chosen.filter((id) => !metaById[id]);
+      if (missingIds.length > 0) {
         try {
-          const lookup = await apiFetch<{ found: boolean; meta?: ModelMeta }>('/api/v1/models/lookup', {
+          const lookup = await apiFetch<{ results?: Record<string, ModelMeta> }>('/api/v1/models/lookup', {
             method: 'POST',
-            body: JSON.stringify({ model_id: id }),
+            body: JSON.stringify({ model_ids: missingIds, provider_id: draft.id }),
           });
-          if (lookup.found && lookup.meta) meta = lookup.meta;
+          if (lookup.results) {
+            metaById = { ...metaById, ...lookup.results };
+          }
         } catch {
           // fallback to defaults
         }
-        await apiFetch('/api/v1/models', {
-          method: 'POST',
-          body: JSON.stringify({
-            id,
-            provider_id: draft.id,
-            display_name: meta.display_name || id,
-            source: meta.source || 'custom',
-            context_window: meta.context_window || 128000,
-            max_output_tokens: meta.max_output_tokens || 16384,
-            supports_vision: meta.supports_vision ?? false,
-            supports_tools: meta.supports_tools ?? true,
-            supports_reasoning: meta.supports_reasoning ?? false,
-            supports_caching: meta.supports_caching ?? false,
-            pricing: meta.pricing,
-          }),
-        });
       }
+      const batchPayload = chosen.map((id) => {
+        const meta: Partial<ModelMeta> = metaById[id] || {};
+        return {
+          id,
+          provider_id: draft.id,
+          display_name: meta.display_name || id,
+          source: meta.source || 'models.dev',
+          context_window: meta.context_window || 128000,
+          max_output_tokens: meta.max_output_tokens || 16384,
+          supports_vision: meta.supports_vision ?? false,
+          supports_pdf: meta.supports_pdf ?? false,
+          supports_audio: meta.supports_audio ?? false,
+          supports_video: meta.supports_video ?? false,
+          supports_tools: meta.supports_tools ?? true,
+          supports_reasoning: meta.supports_reasoning ?? false,
+          supports_caching: meta.supports_caching ?? false,
+          reasoning_levels: meta.reasoning_levels,
+          pricing: meta.pricing,
+        };
+      });
+      await apiFetch('/api/v1/models', {
+        method: 'POST',
+        body: JSON.stringify(batchPayload),
+      });
       setFetchRemoteOpen(false);
       await refreshInitialData();
       onFlash(formatMsg(locale, 'settings.addedModels', { length: chosen.length }));
@@ -1184,6 +1209,7 @@ function ProvidersAndModelsSection({
 
   const openAddModelDialog = () => {
     setEditingModel(null);
+    setLookedUpMeta(null);
     setNewModelId('');
     setNewModelName('');
     setNewCtxWin(128_000);
@@ -1197,6 +1223,7 @@ function ProvidersAndModelsSection({
 
   const openEditModelDialog = (m: ModelMeta) => {
     setEditingModel(m);
+    setLookedUpMeta(null);
     setNewModelId(m.id);
     setNewModelName(m.display_name || '');
     setNewCtxWin(m.context_window || 128_000);
@@ -1217,25 +1244,27 @@ function ProvidersAndModelsSection({
     const modelId = newModelId.trim();
     const parsedLevels = parseReasoningLevelsInput(newReasoningLevels);
     const parsedMap = parseReasoningMapInput(newReasoningMap);
+    const baseMeta = lookedUpMeta || editingModel;
     await apiFetch('/api/v1/models', {
       method: 'POST',
       body: JSON.stringify({
-        ...(editingModel || {}),
+        ...(baseMeta || {}),
         id: modelId,
         provider_id: draft.id,
         display_name: newModelName.trim() || modelId,
-        source: editingModel?.source || 'custom',
+        source: 'custom',
         context_window: newCtxWin,
         max_output_tokens: newMaxOut,
         supports_vision: newSupportsVision,
-        supports_tools: editingModel?.supports_tools ?? true,
+        supports_tools: baseMeta?.supports_tools ?? true,
         supports_reasoning: newSupportsReasoning || Boolean(parsedLevels && parsedLevels.length >= 2),
-        supports_caching: editingModel?.supports_caching ?? true,
+        supports_caching: baseMeta?.supports_caching ?? true,
         reasoning_levels: parsedLevels,
         reasoning_map: parsedMap,
       }),
     }).catch(() => {});
     setEditingModel(null);
+    setLookedUpMeta(null);
     setNewModelId('');
     setNewModelName('');
     setNewReasoningLevels('');

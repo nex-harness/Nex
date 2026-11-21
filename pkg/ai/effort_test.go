@@ -27,9 +27,14 @@ func TestDefaultReasoningLevelsByModelFamily(t *testing.T) {
 			want: []string{"off", "low", "medium", "high", "xhigh"},
 		},
 		{
-			name: "gemini includes minimal",
+			name: "gemini 2.5 includes minimal",
 			meta: ModelMeta{ID: "gemini-2.5-pro", SupportsReasoning: true},
 			want: []string{"off", "minimal", "low", "medium", "high"},
+		},
+		{
+			name: "gemini 4 defaults to low/medium/high without off/minimal",
+			meta: ModelMeta{ID: "gemini-4-carbon", SupportsReasoning: true},
+			want: []string{"low", "medium", "high"},
 		},
 		{
 			name: "deepseek uses low/high/max",
@@ -103,5 +108,103 @@ func TestResolveWireEffortMappingAndClamping(t *testing.T) {
 	})
 	if budget != 12345 {
 		t.Fatalf("expected custom numeric budget 12345, got %d", budget)
+	}
+}
+
+func TestParseModelsDevReasoningOptionsAndProviderPriority(t *testing.T) {
+	raw := []byte(`{
+		"aaa-gateway": {
+			"id": "aaa-gateway",
+			"models": {
+				"gemini-4-carbon": {
+					"id": "gemini-4-carbon",
+					"reasoning": true,
+					"reasoning_options": [{"type": "effort", "values": ["medium", "high"]}]
+				}
+			}
+		},
+		"google": {
+			"id": "google",
+			"models": {
+				"gemini-4-carbon": {
+					"id": "gemini-4-carbon",
+					"reasoning": true,
+					"reasoning_options": [{"type": "effort", "values": ["low", "medium", "high"]}]
+				},
+				"gemini-4-hydrogen": {
+					"id": "gemini-4-hydrogen",
+					"reasoning": true,
+					"reasoning_options": [{"type": "effort", "values": ["low", "medium", "high", "xhigh"]}]
+				}
+			}
+		},
+		"openai": {
+			"id": "openai",
+			"models": {
+				"gpt-5.4": {
+					"id": "gpt-5.4",
+					"reasoning": true,
+					"reasoning_options": [{"type": "effort", "values": ["none", "low", "medium", "high", "xhigh"]}]
+				}
+			}
+		},
+		"deepseek": {
+			"id": "deepseek",
+			"models": {
+				"deepseek-v4-pro": {
+					"id": "deepseek-v4-pro",
+					"reasoning": true,
+					"reasoning_options": [{"type": "toggle"}, {"type": "effort", "values": ["low", "high", "max"]}]
+				}
+			}
+		},
+		"zai": {
+			"id": "zai",
+			"models": {
+				"glm-5": {
+					"id": "glm-5",
+					"reasoning": true,
+					"reasoning_options": [{"type": "toggle"}]
+				}
+			}
+		}
+	}`)
+
+	catalog, err := ParseModelsDevJSON(raw)
+	if err != nil {
+		t.Fatalf("ParseModelsDevJSON failed: %v", err)
+	}
+
+	// Official provider "google" should win over alphabetically earlier "aaa-gateway"
+	carbon, ok := LookupModelMeta(catalog, "my-gateway/google/gemini-4-carbon")
+	if !ok || carbon.ProviderID != "google" {
+		t.Fatalf("expected google provider priority, got %+v ok=%v", carbon, ok)
+	}
+	if !reflect.DeepEqual(carbon.ReasoningLevels, []string{"low", "medium", "high"}) {
+		t.Fatalf("unexpected gemini-4-carbon levels: %v", carbon.ReasoningLevels)
+	}
+
+	// Preferred provider explicitly requested wins first
+	gwCarbon, ok := LookupModelMetaForProvider(catalog, "gemini-4-carbon", "aaa-gateway")
+	if !ok || gwCarbon.ProviderID != "aaa-gateway" || !reflect.DeepEqual(gwCarbon.ReasoningLevels, []string{"medium", "high"}) {
+		t.Fatalf("expected preferred provider aaa-gateway, got %+v", gwCarbon)
+	}
+
+	// "none" normalizes to "off"
+	gpt54, ok := LookupModelMeta(catalog, "gpt-5.4")
+	if !ok || !reflect.DeepEqual(gpt54.ReasoningLevels, []string{"off", "low", "medium", "high", "xhigh"}) {
+		t.Fatalf("unexpected gpt-5.4 levels: %+v", gpt54)
+	}
+
+	// toggle + effort prepends "off"
+	ds, ok := LookupModelMeta(catalog, "deepseek-v4-pro")
+	if !ok || !reflect.DeepEqual(ds.ReasoningLevels, []string{"off", "low", "high", "max"}) {
+		t.Fatalf("unexpected deepseek-v4-pro levels: %+v", ds)
+	}
+
+	// pure toggle maps to ["off", "on"]
+	glm, ok := LookupModelMeta(catalog, "glm-5")
+	if !ok || !reflect.DeepEqual(glm.ReasoningLevels, []string{"off", "on"}) {
+		t.Fatalf("unexpected glm-5 levels: %+v", glm)
 	}
 }
