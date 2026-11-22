@@ -51,8 +51,8 @@ func TestSubagentModelResolution(t *testing.T) {
 
 	w := &DefaultRuntimeWiring{node: &Node{store: st}}
 
-	// 1. Built-in explore & worker inherit parent session model when no override exists.
-	for _, agentType := range []string{"explore", "worker"} {
+	// 1. Built-in explore, worker & browser inherit parent session model when no override exists.
+	for _, agentType := range []string{"explore", "worker", "browser"} {
 		prov, mod, effort := w.resolveSubagentModel(ctx, &parentSess, agentType, "")
 		if prov != "prov_main" || mod != "main-pro" || effort != "" {
 			t.Fatalf("%s default mismatch: got (%q, %q, %q), want (prov_main, main-pro, \"\")", agentType, prov, mod, effort)

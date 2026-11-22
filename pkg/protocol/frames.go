@@ -55,6 +55,15 @@ const (
 	TypePTYList       = "pty.list"
 	TypePTYListResp   = "pty.list_resp"
 
+	// Remote Browser Use Control, Screencast & Provisioning
+	TypeBrowserState     = "browser.state"
+	TypeBrowserControl   = "browser.control"
+	TypeBrowserInput     = "browser.input"
+	TypeBrowserHandoff   = "browser.handoff"
+	TypeBrowserProbe     = "browser.probe"
+	TypeBrowserInstall   = "browser.install"
+	TypeBrowserClearData = "browser.clear_data"
+
 	TypeError = "error"
 )
 
@@ -112,6 +121,17 @@ type MemoryConfigSync struct {
 	ModelID     string `json:"model_id,omitempty"`
 }
 
+// BrowserConfigSync distributes Browser Use preferences from Server to Runners.
+type BrowserConfigSync struct {
+	Enabled        bool   `json:"enabled"`
+	Mode           string `json:"mode,omitempty"` // "managed_cdp" | "attach_cdp"
+	Headless       bool   `json:"headless"`
+	ProfileMode    string `json:"profile_mode,omitempty"` // "persistent" | "ephemeral"
+	AttachURL      string `json:"attach_url,omitempty"`
+	ExecutablePath string `json:"executable_path,omitempty"`
+	DownloadMirror string `json:"download_mirror,omitempty"`
+}
+
 // MemorySyncPayload synchronizes a Runner-created/deleted memory back to Server (and live Web clients).
 type MemorySyncPayload struct {
 	Action   string              `json:"action"` // "upsert" | "delete" | "refresh"
@@ -134,6 +154,7 @@ type ConfigSnapshot struct {
 	Memories             []store.MemoryRecord                 `json:"memories,omitempty"`
 	MemoriesSynced       bool                                 `json:"memories_synced,omitempty"`
 	MemorySettings       *MemoryConfigSync                    `json:"memory_settings,omitempty"`
+	BrowserSettings      *BrowserConfigSync                   `json:"browser_settings,omitempty"`
 }
 
 // RunnerWelcomePayload acknowledges Runner registration and optionally pushes updated config.
@@ -248,9 +269,10 @@ type SessionRewindPayload struct {
 // Wire format: [1 byte OpCode][16 bytes ASCII/UUID Prefix or padded PTY ID (36 bytes fixed)][Raw Terminal Bytes]
 
 const (
-	PTYBinaryStdin  byte = 0x01
-	PTYBinaryStdout byte = 0x02
-	PTYIDHeaderLen       = 36
+	PTYBinaryStdin          byte = 0x01
+	PTYBinaryStdout         byte = 0x02
+	BrowserBinaryScreencast byte = 0x10
+	PTYIDHeaderLen               = 36
 )
 
 // EncodePTYBinaryFrame packs a zero-base64 binary WebSocket frame for low-latency terminal I/O.
@@ -260,6 +282,11 @@ func EncodePTYBinaryFrame(op byte, ptyID string, data []byte) []byte {
 	copy(buf[1:1+PTYIDHeaderLen], ptyID)
 	copy(buf[1+PTYIDHeaderLen:], data)
 	return buf
+}
+
+// EncodeBrowserBinaryFrame packs a zero-base64 binary Screencast JPEG frame using the shared fast-path framing.
+func EncodeBrowserBinaryFrame(tabID string, frameData []byte) []byte {
+	return EncodePTYBinaryFrame(BrowserBinaryScreencast, tabID, frameData)
 }
 
 // DecodePTYBinaryFrame unpacks op, ptyID, and raw terminal bytes from a binary WebSocket frame.

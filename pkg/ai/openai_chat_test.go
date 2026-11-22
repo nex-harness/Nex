@@ -104,3 +104,57 @@ func TestOpenAIChatProviderStreamTextThinkingToolsAndUsage(t *testing.T) {
 		t.Fatalf("expected reasoning_effort=high, got %v", capturedBody["reasoning_effort"])
 	}
 }
+
+func TestOpenAIChatToolResultImageSerialization(t *testing.T) {
+	var captured map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&captured)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+
+	p := NewOpenAIChatProvider(OpenAIChatConfig{BaseURL: srv.URL + "/v1", APIKey: "k", HTTPClient: srv.Client()})
+	req := &StreamRequest{
+		Model: "gpt-4o",
+		Messages: []Message{
+			NewUserTextMessage("inspect page"),
+			{
+				Role: RoleAssistant,
+				Content: []ContentBlock{
+					ToolCallBlock("c1", "browser", json.RawMessage(`{"action":"screenshot"}`)),
+					ToolCallBlock("c2", "read", json.RawMessage(`{"file_path":"a.go"}`)),
+				},
+			},
+			NewToolResultMessage("c1", "browser", "captured viewport", false, ImageBase64Block("image/png", "BBB=")),
+			NewToolResultMessage("c2", "read", "package main", false),
+		},
+	}
+	ch, err := p.Stream(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for range ch {
+	}
+	msgs, _ := captured["messages"].([]any)
+	if len(msgs) != 5 {
+		t.Fatalf("expected 5 messages with trailing synthetic image attachment, got %d: %#v", len(msgs), msgs)
+	}
+	m2, _ := msgs[2].(map[string]any)
+	m3, _ := msgs[3].(map[string]any)
+	if m2["role"] != "tool" || m3["role"] != "tool" {
+		t.Fatalf("consecutive tool messages must stay adjacent to assistant tool_calls")
+	}
+	attachMsg, _ := msgs[4].(map[string]any)
+	if attachMsg["role"] != "user" {
+		t.Fatalf("expected synthetic user attachment role, got %v", attachMsg["role"])
+	}
+	parts, _ := attachMsg["content"].([]any)
+	if len(parts) != 2 {
+		t.Fatalf("unexpected attachment parts: %#v", attachMsg["content"])
+	}
+	p1, _ := parts[1].(map[string]any)
+	if p1["type"] != "image_url" {
+		t.Fatalf("expected image_url attachment part, got %#v", p1)
+	}
+}

@@ -65,12 +65,13 @@ func (rc *runnerConn) sendBinary(ctx context.Context, frame []byte) error {
 }
 
 type clientConn struct {
-	id          string
-	ws          *websocket.Conn
-	sendMu      sync.Mutex
-	subMu       sync.RWMutex
-	subscribed  map[string]bool // session_id -> true; "*" means all root updates
-	ptyAttached map[string]bool // pty_id -> true
+	id              string
+	ws              *websocket.Conn
+	sendMu          sync.Mutex
+	subMu           sync.RWMutex
+	subscribed      map[string]bool // session_id -> true; "*" means all root updates
+	ptyAttached     map[string]bool // pty_id -> true
+	browserAttached map[string]bool // browser tab_id -> true
 }
 
 func (cc *clientConn) sendJSON(ctx context.Context, env protocol.Envelope) error {
@@ -100,12 +101,13 @@ type Server struct {
 	mux    *http.ServeMux
 	client *http.Client
 
-	mu          sync.RWMutex
-	runners     map[string]*runnerConn
-	clients     map[string]*clientConn
-	ptyToRunner map[string]string
-	pendingRPC  map[string]chan protocol.Envelope
-	modelsCache modelsDevCache
+	mu              sync.RWMutex
+	runners         map[string]*runnerConn
+	clients         map[string]*clientConn
+	ptyToRunner     map[string]string
+	browserToRunner map[string]string
+	pendingRPC      map[string]chan protocol.Envelope
+	modelsCache     modelsDevCache
 }
 
 // New constructs and wires a Control Plane Server.
@@ -119,14 +121,15 @@ func New(cfg Config) (*Server, error) {
 	}
 
 	s := &Server{
-		cfg:         cfg,
-		store:       cfg.Store,
-		mux:         http.NewServeMux(),
-		client:      hc,
-		runners:     make(map[string]*runnerConn),
-		clients:     make(map[string]*clientConn),
-		ptyToRunner: make(map[string]string),
-		pendingRPC:  make(map[string]chan protocol.Envelope),
+		cfg:             cfg,
+		store:           cfg.Store,
+		mux:             http.NewServeMux(),
+		client:          hc,
+		runners:         make(map[string]*runnerConn),
+		clients:         make(map[string]*clientConn),
+		ptyToRunner:     make(map[string]string),
+		browserToRunner: make(map[string]string),
+		pendingRPC:      make(map[string]chan protocol.Envelope),
 	}
 
 	// Seed default embedded models if models table is currently empty
@@ -273,6 +276,15 @@ func (s *Server) buildConfigSnapshot(ctx context.Context, runnerID string) (*pro
 			AutoExtract: prefs.MemoryAutoExtract,
 			ProviderID:  prefs.MemoryProviderID,
 			ModelID:     prefs.MemoryModelID,
+		},
+		BrowserSettings: &protocol.BrowserConfigSync{
+			Enabled:        prefs.BrowserEnabled,
+			Mode:           prefs.BrowserMode,
+			Headless:       prefs.BrowserHeadless,
+			ProfileMode:    prefs.BrowserProfileMode,
+			AttachURL:      prefs.BrowserAttachURL,
+			ExecutablePath: prefs.BrowserExecutablePath,
+			DownloadMirror: prefs.BrowserDownloadMirror,
 		},
 	}, nil
 }

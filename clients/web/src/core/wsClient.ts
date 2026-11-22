@@ -1,4 +1,5 @@
 import {
+  BROWSER_BINARY_SCREENCAST,
   decodePTYBinaryFrame,
   encodePTYBinaryFrame,
   Envelope,
@@ -8,13 +9,14 @@ import {
 } from './protocol';
 
 type FrameListener = (env: Envelope) => void;
-type PTYDataListener = (data: Uint8Array) => void;
+type BinaryDataListener = (data: Uint8Array) => void;
 
 class NexWSClient {
   private ws: WebSocket | null = null;
   private rpcPending = new Map<string, { resolve: (env: Envelope) => void; reject: (err: Error) => void }>();
   private frameListeners = new Set<FrameListener>();
-  private ptyListeners = new Map<string, Set<PTYDataListener>>();
+  private ptyListeners = new Map<string, Set<BinaryDataListener>>();
+  private browserListeners = new Map<string, Set<BinaryDataListener>>();
   private statusListeners = new Set<(connected: boolean) => void>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldReconnect = false;
@@ -51,8 +53,12 @@ class NexWSClient {
     ws.onmessage = (ev) => {
       if (ev.data instanceof ArrayBuffer || ev.data instanceof Uint8Array) {
         const parsed = decodePTYBinaryFrame(ev.data);
-        if (parsed && parsed.op === PTY_BINARY_STDOUT) {
+        if (!parsed) return;
+        if (parsed.op === PTY_BINARY_STDOUT) {
           const subs = this.ptyListeners.get(parsed.ptyId);
+          subs?.forEach((cb) => cb(parsed.data));
+        } else if (parsed.op === BROWSER_BINARY_SCREENCAST) {
+          const subs = this.browserListeners.get(parsed.ptyId);
           subs?.forEach((cb) => cb(parsed.data));
         }
         return;
@@ -97,11 +103,23 @@ class NexWSClient {
     return () => this.frameListeners.delete(fn);
   }
 
-  onPTYOutput(ptyId: string, fn: PTYDataListener): () => void {
+  onPTYOutput(ptyId: string, fn: BinaryDataListener): () => void {
     let set = this.ptyListeners.get(ptyId);
     if (!set) {
       set = new Set();
       this.ptyListeners.set(ptyId, set);
+    }
+    set.add(fn);
+    return () => {
+      set?.delete(fn);
+    };
+  }
+
+  onBrowserFrame(tabId: string, fn: BinaryDataListener): () => void {
+    let set = this.browserListeners.get(tabId);
+    if (!set) {
+      set = new Set();
+      this.browserListeners.set(tabId, set);
     }
     set.add(fn);
     return () => {

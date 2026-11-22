@@ -82,7 +82,7 @@ function MetaBadge({ children, mono = false }: { children: ReactNode; mono?: boo
 /* -------------------------------------------------------------------------- */
 
 interface BuiltInSubagentMeta {
-  slug: 'explore' | 'worker';
+  slug: 'explore' | 'worker' | 'browser';
   nameKey: MessageKey;
   descKey: MessageKey;
   defaultTools: string[];
@@ -102,6 +102,13 @@ const BUILT_IN_SUBAGENTS: BuiltInSubagentMeta[] = [
     nameKey: 'capabilities.builtIn.worker.name',
     descKey: 'capabilities.builtIn.worker.desc',
     defaultTools: [],
+    isolation: 'shared',
+  },
+  {
+    slug: 'browser',
+    nameKey: 'capabilities.builtIn.browser.name',
+    descKey: 'capabilities.builtIn.browser.desc',
+    defaultTools: ['browser'],
     isolation: 'shared',
   },
 ];
@@ -251,7 +258,7 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
 
   const builtInSlugs = useMemo(() => new Set(BUILT_IN_SUBAGENTS.map((b) => b.slug)), []);
   const customProfiles = useMemo(
-    () => agentProfiles.filter((ap) => !builtInSlugs.has(ap.slug.toLowerCase() as 'explore' | 'worker')),
+    () => agentProfiles.filter((ap) => !builtInSlugs.has(ap.slug.toLowerCase() as BuiltInSubagentMeta['slug'])),
     [agentProfiles, builtInSlugs],
   );
 

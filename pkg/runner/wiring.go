@@ -11,6 +11,7 @@ import (
 	"github.com/nex-harness/nex/pkg/agent"
 	"github.com/nex-harness/nex/pkg/ai"
 	"github.com/nex-harness/nex/pkg/extension"
+	"github.com/nex-harness/nex/pkg/harness/browser"
 	"github.com/nex-harness/nex/pkg/harness/codemode"
 	"github.com/nex-harness/nex/pkg/harness/pty"
 	"github.com/nex-harness/nex/pkg/harness/scheduler"
@@ -21,30 +22,56 @@ import (
 	"github.com/nex-harness/nex/pkg/store"
 )
 
-// DefaultRuntimeWiring connects WorkspaceRPC, PTY, CodeMode MCP, TS/Go Extensions, Subagents, and Autonomous Cron onto a Node.
+// DefaultRuntimeWiring connects WorkspaceRPC, PTY, Browser, CodeMode MCP, TS/Go Extensions, Subagents, and Autonomous Cron onto a Node.
 type DefaultRuntimeWiring struct {
-	node    *Node
-	mcpPool *codemode.Pool
-	subMgr  *subagent.Manager
-	cronEng *scheduler.Engine
+	node       *Node
+	mcpPool    *codemode.Pool
+	subMgr     *subagent.Manager
+	cronEng    *scheduler.Engine
+	browserMgr *browser.Manager
 }
 
-// AttachDefaultSubsystems wires all M3, M4, and M5 subsystems onto n.
+// AttachDefaultSubsystems wires all M3, M4, M5, and Browser Use subsystems onto n.
 func AttachDefaultSubsystems(n *Node) *DefaultRuntimeWiring {
+	ctx := context.Background()
 	if n.cfg.WorkspaceRPC == nil {
 		n.cfg.WorkspaceRPC = workspace.NewService()
 	}
 	if n.cfg.PTY == nil {
 		n.cfg.PTY = pty.NewManager(n.cfg.WorkspaceDefault)
 	}
+	var browserMgr *browser.Manager
+	if n.cfg.Browser == nil {
+		browserMgr = browser.NewManager(
+			n.cfg.DataDir,
+			n.cfg.RunnerID,
+			n.hc,
+			func(st browser.SessionStatePayload) {
+				env, _ := protocol.NewEnvelope(protocol.TypeBrowserState, st)
+				env.SessionID = st.SessionID
+				env.RunnerID = n.cfg.RunnerID
+				_ = n.sendEnvelope(context.Background(), env)
+			},
+			func(hst browser.HandoffState) {
+				env, _ := protocol.NewEnvelope(protocol.TypeBrowserHandoff, hst)
+				env.SessionID = hst.SessionID
+				env.RunnerID = n.cfg.RunnerID
+				_ = n.sendEnvelope(context.Background(), env)
+			},
+			n.sendBinaryFrame,
+		)
+		if prefs, err := n.store.GetUserPreferences(ctx); err == nil {
+			browserMgr.UpdateConfig(browserConfigFromPrefs(prefs))
+		}
+		n.cfg.Browser = browserMgr
+	}
 
-	w := &DefaultRuntimeWiring{node: n}
+	w := &DefaultRuntimeWiring{node: n, browserMgr: browserMgr}
 	w.mcpPool = codemode.NewPool(w)
 	w.subMgr = subagent.NewManager(w, subagent.DefaultMaxDepth, subagent.DefaultMaxConcurrent)
 	w.cronEng = scheduler.NewEngine(n.store, w)
 
 	// Load initial MCP servers & Cron schedules from local SQLite snapshot (for immediate offline readiness!)
-	ctx := context.Background()
 	if mcps, err := n.store.ListMCPServers(ctx); err == nil {
 		w.mcpPool.SyncServers(mcps)
 	}
@@ -54,13 +81,32 @@ func AttachDefaultSubsystems(n *Node) *DefaultRuntimeWiring {
 	return w
 }
 
-// Close releases background MCP subprocesses and Cron timers.
+func browserConfigFromPrefs(p store.UserPreferences) browser.Config {
+	cfg := browser.DefaultConfig()
+	cfg.Enabled = p.BrowserEnabled
+	if p.BrowserMode != "" {
+		cfg.Mode = browser.Mode(p.BrowserMode)
+	}
+	cfg.Headless = p.BrowserHeadless
+	if p.BrowserProfileMode != "" {
+		cfg.ProfileMode = browser.ProfileMode(p.BrowserProfileMode)
+	}
+	cfg.AttachURL = p.BrowserAttachURL
+	cfg.ExecutablePath = p.BrowserExecutablePath
+	cfg.DownloadMirror = p.BrowserDownloadMirror
+	return cfg
+}
+
+// Close releases background MCP subprocesses, managed browser runtime, and Cron timers.
 func (w *DefaultRuntimeWiring) Close() {
 	if w.cronEng != nil {
 		w.cronEng.Stop()
 	}
 	if w.mcpPool != nil {
 		w.mcpPool.Close()
+	}
+	if w.browserMgr != nil {
+		w.browserMgr.Close()
 	}
 }
 

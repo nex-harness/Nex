@@ -354,6 +354,14 @@ func (n *Node) ExecutePrompt(
 		tools.NewMemoryReadTool(memStore, workDir),
 		tools.NewMemoryDeleteTool(memStore),
 	)
+	if n.cfg.Browser != nil && n.cfg.Browser.Enabled() {
+		sessionTools = append(sessionTools, n.cfg.Browser.SessionTool(sessRec.ID, workDir))
+		sections = append(sections, ai.SystemSection{
+			Category: agent.CatSkills,
+			Name:     "control_browser",
+			Content:  prompts.BrowserSystemGuidance,
+		})
+	}
 
 	var hooks agent.Hooks
 	var extCleanup func()

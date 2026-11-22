@@ -9,6 +9,7 @@ import {
   FolderOpen,
   GitBranch,
   GitCommitHorizontal,
+  Globe,
   MessageSquare,
   MessageSquareText,
   Minus,
@@ -25,6 +26,7 @@ import { DirEntry, FilePreview, GitFileChange, WorkbenchTab, WorkbenchTabKind } 
 import { wsClient } from '../core/wsClient';
 import { formatMsg, type LocaleCode } from '../i18n/messages';
 import { GhosttyTerminal } from './GhosttyTerminal';
+import { BrowserTabPanel } from './BrowserTabPanel';
 import { highlightSourceLine, MarkdownRenderer } from './MarkdownRenderer';
 
 const TAB_ICON: Record<WorkbenchTabKind, ReactNode> = {
@@ -35,6 +37,7 @@ const TAB_ICON: Record<WorkbenchTabKind, ReactNode> = {
   terminal: <SquareTerminal className="size-3.5" />,
   side_chat: <MessageSquareText className="size-3.5" />,
   subagent: <Bot className="size-3.5" />,
+  browser: <Globe className="size-3.5" />,
 };
 
 export function WorkbenchSidebar() {
@@ -83,6 +86,7 @@ export function WorkbenchSidebar() {
     { kind: 'review', label: formatMsg(locale, 'sidePane.review'), icon: <FileDiff className="size-3.5" /> },
     { kind: 'files', label: formatMsg(locale, 'fileManager.title'), icon: <Folder className="size-3.5" /> },
     { kind: 'terminal', label: formatMsg(locale, 'terminal.title'), icon: <SquareTerminal className="size-3.5" /> },
+    { kind: 'browser', label: formatMsg(locale, 'sidePane.browser'), icon: <Globe className="size-3.5" /> },
   ];
 
   return (
@@ -195,6 +199,8 @@ export function WorkbenchSidebar() {
         {activeTab?.kind === 'side_chat' && (
           <SideConversationPanel runnerId={selectedRunnerId} sideSessionId={activeTab.sideSessionId || ''} />
         )}
+
+        {activeTab?.kind === 'browser' && <BrowserTabPanel />}
 
         {activeTab?.kind === 'subagent' && activeTab.subagent && (
           <div className="zcode-view-enter flex h-full flex-col overflow-y-auto p-4 text-ui-base">
@@ -318,6 +324,12 @@ function TabLauncher({
           title={formatMsg(locale, 'terminal.title')}
           description={formatMsg(locale, 'sidePane.launcher.terminal')}
           onClick={() => onOpen('terminal')}
+        />
+        <LauncherRow
+          icon={<Globe className="size-5" />}
+          title={formatMsg(locale, 'sidePane.browser')}
+          description={formatMsg(locale, 'sidePane.launcher.browser')}
+          onClick={() => onOpen('browser')}
         />
         <LauncherRow
           icon={<MessageSquareText className="size-5" />}

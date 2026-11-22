@@ -146,7 +146,28 @@ func buildChatCompletionsPayload(req *StreamRequest) (map[string]any, error) {
 		})
 	}
 
+	var pendingToolImageParts []map[string]any
+	flushToolImages := func() {
+		if len(pendingToolImageParts) == 0 {
+			return
+		}
+		parts := make([]map[string]any, 0, len(pendingToolImageParts)+1)
+		parts = append(parts, map[string]any{
+			"type": "text",
+			"text": "[Tool screenshot attachment]",
+		})
+		parts = append(parts, pendingToolImageParts...)
+		msgs = append(msgs, map[string]any{
+			"role":    "user",
+			"content": parts,
+		})
+		pendingToolImageParts = nil
+	}
+
 	for _, m := range req.Messages {
+		if m.Role != RoleToolResult {
+			flushToolImages()
+		}
 		switch m.Role {
 		case RoleUser:
 			hasImage := false
@@ -239,8 +260,28 @@ func buildChatCompletionsPayload(req *StreamRequest) (map[string]any, error) {
 				"tool_call_id": m.ToolCallID,
 				"content":      m.PlainText(),
 			})
+			for _, b := range m.Content {
+				if b.Type != BlockImage {
+					continue
+				}
+				imgURL := b.ImageURL
+				if imgURL == "" && b.DataB64 != "" {
+					mime := b.MimeType
+					if mime == "" {
+						mime = "image/png"
+					}
+					imgURL = fmt.Sprintf("data:%s;base64,%s", mime, b.DataB64)
+				}
+				if imgURL != "" {
+					pendingToolImageParts = append(pendingToolImageParts, map[string]any{
+						"type":      "image_url",
+						"image_url": map[string]string{"url": imgURL},
+					})
+				}
+			}
 		}
 	}
+	flushToolImages()
 
 	out["messages"] = msgs
 	return out, nil

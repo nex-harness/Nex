@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import { MarkdownRenderer } from '../features/MarkdownRenderer';
-import { decodePTYBinaryFrame, encodePTYBinaryFrame, PTY_BINARY_STDOUT } from '../core/protocol';
+import { BROWSER_BINARY_SCREENCAST, decodePTYBinaryFrame, encodePTYBinaryFrame, PTY_BINARY_STDOUT } from '../core/protocol';
 import { applySessionEvent, emptyStreamState } from '../core/reducer';
 import { persistActiveSessionId, readPersistedSessionId, useNexStore } from '../core/store';
 import { wsClient } from '../core/wsClient';
@@ -2188,5 +2188,243 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       useNexStore.setState({ bootstrap: origBootstrap });
       fetchMock.mockRestore();
     }
+  });
+
+  it('encodes and decodes binary 0x10 browser screencast frames', () => {
+    const tabId = 'b9777673-535b-4d67-a726-b390c39ed46d';
+    const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x01, 0x02]);
+    const frame = encodePTYBinaryFrame(BROWSER_BINARY_SCREENCAST, tabId, jpegBytes);
+    const decoded = decodePTYBinaryFrame(frame);
+    expect(decoded).not.toBeNull();
+    expect(decoded?.op).toBe(BROWSER_BINARY_SCREENCAST);
+    expect(decoded?.op).toBe(0x10);
+    expect(decoded?.ptyId).toBe(tabId);
+    expect(Array.from(decoded!.data)).toEqual(Array.from(jpegBytes));
+  });
+
+  it('renders browser tool screenshot thumbnail and opens image preview modal on click', () => {
+    let st = emptyStreamState();
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's_browser_img',
+      seq: 1,
+      turn_idx: 1,
+      event_type: 'message_end',
+      payload: {
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_call',
+              tool_call_id: 'call_browser_1',
+              tool_name: 'browser',
+              arguments: { action: 'screenshot', url: 'http://127.0.0.1:3000' },
+            },
+          ],
+        },
+      },
+    });
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's_browser_img',
+      seq: 2,
+      turn_idx: 1,
+      event_type: 'tool_execution_start',
+      payload: {
+        tool_call_id: 'call_browser_1',
+        tool_name: 'browser',
+        args: { action: 'screenshot', url: 'http://127.0.0.1:3000' },
+      },
+    });
+    st = applySessionEvent(st, 'run_1', {
+      session_id: 's_browser_img',
+      seq: 3,
+      turn_idx: 1,
+      event_type: 'tool_execution_end',
+      payload: {
+        tool_call_id: 'call_browser_1',
+        tool_name: 'browser',
+        tool_result: {
+          output: '{"ok":true}',
+          extra_blocks: [{ type: 'image', mime_type: 'image/png', data_b64: 'iVBORw0KGgo=' }],
+        },
+      },
+    });
+
+    useNexStore.setState({
+      authEnabled: false,
+      authenticated: true,
+      mainView: 'workspace',
+      locale: 'en-US',
+      activeSessionId: 's_browser_img',
+      selectedRunnerId: 'run_1',
+      sidePaneVisible: false,
+      rightTabs: [],
+      previewImage: null,
+      streams: { s_browser_img: st },
+    });
+
+    render(<App />);
+    const thumbBtn = screen.getByTestId('tool-image-0');
+    const img = thumbBtn.querySelector('img') as HTMLImageElement;
+    expect(img).toBeTruthy();
+    expect(img.src).toContain('data:image/png;base64,iVBORw0KGgo=');
+
+    fireEvent.click(thumbBtn);
+    expect(screen.getByTestId('image-preview-modal')).toBeTruthy();
+  });
+
+  it('opens singleton browser tab, renders handoff banner, dispatches URL navigate & handoff actions, and auto-collapses on close', async () => {
+    const origConnected = wsClient.connected;
+    wsClient.connected = true;
+    const rpcSpy = vi.spyOn(wsClient, 'requestRPC').mockResolvedValue({
+      v: 1,
+      type: 'rpc.response',
+      payload: {
+        session_id: 's_browser_tab',
+        active_tab_id: 'tab_uuid_1',
+        tabs: [
+          {
+            tab_id: 'tab_uuid_1',
+            url: 'https://example.com',
+            title: 'Example',
+            viewport: { width: 1280, height: 720 },
+            active: true,
+            can_go_back: false,
+            can_go_forward: false,
+          },
+        ],
+        handoff: {
+          session_id: 's_browser_tab',
+          tab_id: 'tab_uuid_1',
+          state: 'awaiting_human',
+          reason: 'Login required',
+        },
+      },
+    } as never);
+    const sendSpy = vi.spyOn(wsClient, 'sendEnvelope').mockReturnValue('req_1');
+
+    try {
+      useNexStore.setState({
+        authEnabled: false,
+        authenticated: true,
+        mainView: 'workspace',
+        locale: 'en-US',
+        activeSessionId: 's_browser_tab',
+        selectedRunnerId: 'run_1',
+        sidePaneVisible: false,
+        rightTabs: [],
+        activeRightTabId: '',
+        browserStates: {
+          s_browser_tab: {
+            session_id: 's_browser_tab',
+            active_tab_id: 'tab_uuid_1',
+            tabs: [
+              {
+                tab_id: 'tab_uuid_1',
+                url: 'http://localhost:3000',
+                title: 'Local App',
+                viewport: { width: 1280, height: 720 },
+                active: true,
+                can_go_back: false,
+                can_go_forward: false,
+              },
+            ],
+            handoff: {
+              session_id: 's_browser_tab',
+              tab_id: 'tab_uuid_1',
+              state: 'awaiting_human',
+              reason: 'Login required',
+            },
+          },
+        },
+      });
+
+      await act(async () => {
+        await useNexStore.getState().openRightTab('browser');
+      });
+
+      expect(useNexStore.getState().sidePaneVisible).toBe(true);
+      expect(useNexStore.getState().rightTabs.filter((t) => t.kind === 'browser')).toHaveLength(1);
+
+      render(<App />);
+      expect(screen.getByTestId('browser-tab-panel')).toBeTruthy();
+      expect(screen.getByTestId('browser-handoff-banner')).toBeTruthy();
+
+      const urlInput = screen.getByTestId('browser-url-input') as HTMLInputElement;
+      fireEvent.change(urlInput, { target: { value: 'https://example.com' } });
+      fireEvent.submit(urlInput.closest('form')!);
+
+      await waitFor(() => {
+        expect(rpcSpy).toHaveBeenCalledWith(
+          'browser.control',
+          expect.objectContaining({
+            session_id: 's_browser_tab',
+            tab_id: 'tab_uuid_1',
+            action: 'navigate',
+            url: 'https://example.com',
+          }),
+          expect.objectContaining({ runner_id: 'run_1', session_id: 's_browser_tab' }),
+        );
+      });
+
+      fireEvent.click(screen.getByTestId('browser-handoff-resume'));
+      expect(sendSpy).toHaveBeenCalledWith(
+        'browser.handoff',
+        expect.objectContaining({
+          session_id: 's_browser_tab',
+          tab_id: 'tab_uuid_1',
+          state: 'resumed',
+          resumed: true,
+        }),
+        expect.objectContaining({ runner_id: 'run_1', session_id: 's_browser_tab' }),
+      );
+
+      const browserTabId = useNexStore.getState().rightTabs.find((t) => t.kind === 'browser')?.id || '';
+      act(() => {
+        useNexStore.getState().closeRightTab(browserTabId);
+      });
+      expect(useNexStore.getState().rightTabs).toHaveLength(0);
+      expect(useNexStore.getState().sidePaneVisible).toBe(false);
+    } finally {
+      wsClient.connected = origConnected;
+      rpcSpy.mockRestore();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('renders Browser settings section with runner probe/install and built-in Browser subagent model selector', () => {
+    useNexStore.setState({
+      authEnabled: false,
+      authenticated: true,
+      locale: 'zh-CN',
+      mainView: 'settings',
+      settingsSection: 'browser',
+      runners: [
+        {
+          id: 'runner_1',
+          name: 'Local Runner',
+          status: 'online',
+          hostname: 'macbook.local',
+          os: 'darwin',
+          arch: 'arm64',
+          workspace_root: '/tmp/ws',
+        } as never,
+      ],
+      browserProbes: {},
+    });
+
+    const { rerender } = render(<App />);
+    expect(screen.getByTestId('settings-browser-section')).toBeTruthy();
+    expect(screen.getByTestId('browser-mode-select')).toBeTruthy();
+    expect(screen.getByTestId('browser-runner-probe-runner_1')).toBeTruthy();
+    expect(screen.getByTestId('browser-runner-install-runner_1')).toBeTruthy();
+
+    act(() => {
+      useNexStore.setState({ settingsSection: 'agents', agentProfiles: [] });
+    });
+    rerender(<App />);
+
+    const browserModelSelect = screen.getByTestId('builtin-subagent-browser-model-select') as HTMLSelectElement;
+    expect(browserModelSelect).toBeTruthy();
+    expect(browserModelSelect.value).toBe('');
   });
 });

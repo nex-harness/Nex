@@ -230,10 +230,42 @@ func buildResponsesPayload(req *StreamRequest) (map[string]any, error) {
 			}
 
 		case RoleToolResult:
+			var imgParts []map[string]any
+			for _, b := range m.Content {
+				if b.Type != BlockImage {
+					continue
+				}
+				imgURL := b.ImageURL
+				if imgURL == "" && b.DataB64 != "" {
+					mime := b.MimeType
+					if mime == "" {
+						mime = "image/png"
+					}
+					imgURL = fmt.Sprintf("data:%s;base64,%s", mime, b.DataB64)
+				}
+				if imgURL != "" {
+					imgParts = append(imgParts, map[string]any{
+						"type":      "input_image",
+						"image_url": imgURL,
+					})
+				}
+			}
+			var outputVal any = m.PlainText()
+			if len(imgParts) > 0 {
+				items := make([]map[string]any, 0, len(imgParts)+1)
+				if txt := m.PlainText(); txt != "" {
+					items = append(items, map[string]any{
+						"type": "input_text",
+						"text": txt,
+					})
+				}
+				items = append(items, imgParts...)
+				outputVal = items
+			}
 			inputItems = append(inputItems, map[string]any{
 				"type":    "function_call_output",
 				"call_id": m.ToolCallID,
-				"output":  m.PlainText(),
+				"output":  outputVal,
 			})
 		}
 	}

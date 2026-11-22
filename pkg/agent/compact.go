@@ -142,6 +142,50 @@ func MicrocompactMessages(msgs []ai.Message, keepRecent int) ([]ai.Message, int)
 	return out, pruned
 }
 
+// PruneOldToolImages preserves raw BlockImage payloads on only the latest keepLast
+// RoleToolResult messages that carry images, replacing older screenshots with compact
+// text placeholders so long browser sessions do not exhaust context windows.
+func PruneOldToolImages(msgs []ai.Message, keepLast int) ([]ai.Message, int) {
+	if keepLast <= 0 {
+		keepLast = 3
+	}
+	var imageMsgIndices []int
+	for i := range msgs {
+		if msgs[i].Role != ai.RoleToolResult {
+			continue
+		}
+		for _, b := range msgs[i].Content {
+			if b.Type == ai.BlockImage && (b.DataB64 != "" || b.ImageURL != "") {
+				imageMsgIndices = append(imageMsgIndices, i)
+				break
+			}
+		}
+	}
+	if len(imageMsgIndices) <= keepLast {
+		return msgs, 0
+	}
+
+	cutoff := len(imageMsgIndices) - keepLast
+	out := make([]ai.Message, len(msgs))
+	copy(out, msgs)
+	pruned := 0
+	for _, idx := range imageMsgIndices[:cutoff] {
+		orig := out[idx]
+		nextBlocks := make([]ai.ContentBlock, 0, len(orig.Content))
+		for _, b := range orig.Content {
+			if b.Type == ai.BlockImage {
+				nextBlocks = append(nextBlocks, ai.TextBlock("[Earlier screenshot omitted to save context]"))
+				pruned++
+			} else {
+				nextBlocks = append(nextBlocks, b)
+			}
+		}
+		orig.Content = nextBlocks
+		out[idx] = orig
+	}
+	return out, pruned
+}
+
 // findCompactionSplitIndex finds an index splitIdx such that msgs[:splitIdx] is summarized
 // and msgs[splitIdx:] is kept verbatim, WITHOUT ever splitting an assistant(tool_call)
 // message from its immediately following RoleToolResult messages.

@@ -383,3 +383,47 @@ func TestModelsCatalogAndPricing(t *testing.T) {
 		t.Fatalf("cost estimate mismatch: %+v", est)
 	}
 }
+
+func TestOpenAIResponsesToolResultImageSerialization(t *testing.T) {
+	var captured map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&captured)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n"))
+	}))
+	defer srv.Close()
+
+	p := NewOpenAIResponsesProvider(OpenAIResponsesConfig{BaseURL: srv.URL, APIKey: "k", HTTPClient: srv.Client()})
+	req := &StreamRequest{
+		Model: "gpt-5",
+		Messages: []Message{
+			NewUserTextMessage("take screenshot"),
+			NewToolResultMessage("call_1", "browser", "screenshot taken", false, ImageBase64Block("image/jpeg", "AAA=")),
+			NewToolResultMessage("call_2", "read", "plain file text", false),
+		},
+	}
+	ch, err := p.Stream(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for range ch {
+	}
+	items, _ := captured["input"].([]any)
+	if len(items) != 3 {
+		t.Fatalf("expected 3 input items, got %d", len(items))
+	}
+	firstOut, _ := items[1].(map[string]any)
+	parts, ok := firstOut["output"].([]any)
+	if !ok || len(parts) != 2 {
+		t.Fatalf("expected structured [input_text, input_image] output, got %#v", firstOut["output"])
+	}
+	p0, _ := parts[0].(map[string]any)
+	p1, _ := parts[1].(map[string]any)
+	if p0["type"] != "input_text" || p1["type"] != "input_image" || p1["image_url"] != "data:image/jpeg;base64,AAA=" {
+		t.Fatalf("unexpected image tool output parts: %+v", parts)
+	}
+	secondOut, _ := items[2].(map[string]any)
+	if secondOut["output"] != "plain file text" {
+		t.Fatalf("expected plain string output when no images, got %#v", secondOut["output"])
+	}
+}

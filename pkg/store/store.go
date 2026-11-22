@@ -110,28 +110,42 @@ func (s *Store) DataDir() string { return s.dataDir }
 // --- Preferences & Config Revision ---
 
 type UserPreferences struct {
-	Theme                string `json:"theme"`                   // "dark" | "light" | "system"
-	CodeTheme            string `json:"code_theme"`              // e.g. "github-dark"
-	FontFamily           string `json:"font_family"`             // UI body font
-	MonoFontFamily       string `json:"mono_font_family"`        // Code & terminal font
-	ExpandThinking       bool   `json:"expand_thinking"`         // Auto-expand thinking blocks
-	AutoArchiveAfterDays int    `json:"auto_archive_after_days"` // 0 = disabled
-	MemoryAutoExtract    bool   `json:"memory_auto_extract"`     // Background auto-extract after turns
-	MemoryProviderID     string `json:"memory_provider_id"`      // Optional dedicated provider for extract/dream
-	MemoryModelID        string `json:"memory_model_id"`         // Optional dedicated fast model for extract/dream
+	Theme                 string `json:"theme"`                    // "dark" | "light" | "system"
+	CodeTheme             string `json:"code_theme"`               // e.g. "github-dark"
+	FontFamily            string `json:"font_family"`              // UI body font
+	MonoFontFamily        string `json:"mono_font_family"`         // Code & terminal font
+	ExpandThinking        bool   `json:"expand_thinking"`          // Auto-expand thinking blocks
+	AutoArchiveAfterDays  int    `json:"auto_archive_after_days"`  // 0 = disabled
+	MemoryAutoExtract     bool   `json:"memory_auto_extract"`      // Background auto-extract after turns
+	MemoryProviderID      string `json:"memory_provider_id"`       // Optional dedicated provider for extract/dream
+	MemoryModelID         string `json:"memory_model_id"`          // Optional dedicated fast model for extract/dream
+	BrowserEnabled        bool   `json:"browser_enabled"`          // Enable Browser Use capability
+	BrowserMode           string `json:"browser_mode"`             // "managed_cdp" | "attach_cdp"
+	BrowserHeadless       bool   `json:"browser_headless"`         // Launch Chromium headless (default true)
+	BrowserProfileMode    string `json:"browser_profile_mode"`     // "persistent" | "ephemeral"
+	BrowserAttachURL      string `json:"browser_attach_url"`       // Optional CDP HTTP/WS endpoint for attach_cdp
+	BrowserExecutablePath string `json:"browser_executable_path"`  // Optional override Chrome/Chromium path
+	BrowserDownloadMirror string `json:"browser_download_mirror"`  // Optional Chrome for Testing mirror URL
 }
 
 func DefaultUserPreferences() UserPreferences {
 	return UserPreferences{
-		Theme:                "dark",
-		CodeTheme:            "github-dark",
-		FontFamily:           "Inter, system-ui, sans-serif",
-		MonoFontFamily:       "JetBrains Mono, Menlo, monospace",
-		ExpandThinking:       false,
-		AutoArchiveAfterDays: 30,
-		MemoryAutoExtract:    false,
-		MemoryProviderID:     "",
-		MemoryModelID:        "",
+		Theme:                 "dark",
+		CodeTheme:             "github-dark",
+		FontFamily:            "Inter, system-ui, sans-serif",
+		MonoFontFamily:        "JetBrains Mono, Menlo, monospace",
+		ExpandThinking:        false,
+		AutoArchiveAfterDays:  30,
+		MemoryAutoExtract:     false,
+		MemoryProviderID:      "",
+		MemoryModelID:         "",
+		BrowserEnabled:        true,
+		BrowserMode:           "managed_cdp",
+		BrowserHeadless:       true,
+		BrowserProfileMode:    "persistent",
+		BrowserAttachURL:      "",
+		BrowserExecutablePath: "",
+		BrowserDownloadMirror: "",
 	}
 }
 

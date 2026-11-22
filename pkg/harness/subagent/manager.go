@@ -266,11 +266,11 @@ func (t *subagentTool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
 		Name:        "subagent",
 		Category:    "system",
-		Description: "Delegate a self-contained task to a concurrent subagent running in its own session.\n\n- Use `subagent` for broad, multi-file exploration or for parallel independent tasks; it is usually not worth it for a single file or a quick lookup you could do directly.\n- `agent_type: \"explore\"` is read-only and optimized for fast search. `agent_type: \"worker\"` can edit code; add `isolation: \"worktree\"` for parallel edits that must not conflict.\n- Give the subagent a self-contained prompt: it cannot see this conversation, so include the goal, relevant paths, and constraints.\n- The subagent's report is NOT shown to the user directly. Relay the key findings in your own final answer.\n- Use `send_message` to steer a running subagent or continue a finished one.\n- Never fabricate a subagent's background result; if it has not reported yet, say so.",
+		Description: "Delegate a self-contained task to a concurrent subagent running in its own session.\n\n- Use `subagent` for broad, multi-file exploration, isolated browser automation (`agent_type: \"browser\"`), or parallel independent tasks; it is usually not worth it for a single file or a quick lookup you could do directly.\n- `agent_type: \"explore\"` is read-only and optimized for fast search. `agent_type: \"worker\"` can edit code; add `isolation: \"worktree\"` for parallel edits that must not conflict. `agent_type: \"browser\"` isolates multi-step browser tasks and visual inspection.\n- Give the subagent a self-contained prompt: it cannot see this conversation, so include the goal, relevant paths, and constraints.\n- The subagent's report is NOT shown to the user directly. Relay the key findings in your own final answer.\n- Use `send_message` to steer a running subagent or continue a finished one.\n- Never fabricate a subagent's background result; if it has not reported yet, say so.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
-				"agent_type": {"type": "string", "description": "'explore' (read-only) or 'worker' (read-write)"},
+				"agent_type": {"type": "string", "description": "'explore' (read-only), 'worker' (read-write), or 'browser' (web UI & visual inspection)"},
 				"prompt": {"type": "string", "description": "Self-contained task instructions for the subagent"},
 				"isolation": {"type": "string", "enum": ["shared", "worktree"], "description": "Use 'worktree' for parallel code edits without file conflicts"},
 				"run_in_background": {"type": "boolean", "description": "Run asynchronously in background and return agent_id immediately"},

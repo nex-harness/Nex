@@ -231,3 +231,38 @@ func TestLoopSteerInterruptFollowUpTelemetryAndApproval(t *testing.T) {
 		t.Fatalf("system prompt trace blob mismatch: %q err=%v", string(sysBytes), err)
 	}
 }
+
+func TestPruneOldToolImages(t *testing.T) {
+	msgs := []ai.Message{
+		ai.NewUserTextMessage("start"),
+		ai.NewToolResultMessage("t1", "browser", "shot 1", false, ai.ImageBase64Block("image/png", "111")),
+		ai.NewToolResultMessage("t2", "browser", "shot 2", false, ai.ImageBase64Block("image/png", "222")),
+		ai.NewToolResultMessage("t3", "browser", "shot 3", false, ai.ImageBase64Block("image/png", "333")),
+		ai.NewToolResultMessage("t4", "browser", "shot 4", false, ai.ImageBase64Block("image/png", "444")),
+		ai.NewToolResultMessage("t5", "browser", "shot 5", false, ai.ImageBase64Block("image/png", "555")),
+	}
+	pruned, count := PruneOldToolImages(msgs, 3)
+	if count != 2 {
+		t.Fatalf("expected 2 older images pruned, got %d", count)
+	}
+	// First 2 tool results (t1, t2) should have no BlockImage left
+	for _, idx := range []int{1, 2} {
+		for _, b := range pruned[idx].Content {
+			if b.Type == ai.BlockImage {
+				t.Fatalf("expected image pruned at msg index %d", idx)
+			}
+		}
+	}
+	// Latest 3 tool results (t3, t4, t5) must retain raw BlockImage
+	for _, idx := range []int{3, 4, 5} {
+		hasImg := false
+		for _, b := range pruned[idx].Content {
+			if b.Type == ai.BlockImage && b.DataB64 != "" {
+				hasImg = true
+			}
+		}
+		if !hasImg {
+			t.Fatalf("expected latest screenshot preserved at msg index %d", idx)
+		}
+	}
+}

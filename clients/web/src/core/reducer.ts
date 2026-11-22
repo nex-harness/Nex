@@ -414,16 +414,30 @@ export function applySessionEvent(
       const tr = (p.tool_result || {}) as {
         output?: string;
         is_error?: boolean;
+        extra_blocks?: Array<{
+          type?: string;
+          mime_type?: string;
+          data_b64?: string;
+          image_url?: string;
+        }>;
         diff?: string;
         additions?: number;
         deletions?: number;
         metadata?: Record<string, unknown>;
       };
+      const resultImages = (tr.extra_blocks || [])
+        .filter((b) => b.type === 'image' && (b.data_b64 || b.image_url))
+        .map((b) => ({
+          mime_type: b.mime_type || 'image/jpeg',
+          data_b64: b.data_b64,
+          image_url: b.image_url,
+        }));
       const endedToolName = String(p.tool_name || '') || findToolName(callId);
       updateToolCallFromTail(callId, (tc) => ({
         ...tc,
         status: tr.is_error ? 'error' : 'completed',
         finalOutput: tr.output || tc.streamOutput,
+        images: resultImages.length > 0 ? resultImages : tc.images,
         diff: tr.diff,
         additions: tr.additions,
         deletions: tr.deletions,

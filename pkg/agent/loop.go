@@ -237,6 +237,8 @@ func (l *Loop) Run(ctx context.Context, promptMsg *ai.Message) (*ai.Message, err
 			copy(reqMsgs, l.messages)
 			l.mu.Unlock()
 
+			reqMsgs, _ = PruneOldToolImages(reqMsgs, 3)
+
 			if l.cfg.Hooks != nil {
 				modified, err := l.cfg.Hooks.OnContextBuild(ctx, reqMsgs)
 				if err != nil {

@@ -7,6 +7,9 @@ import { applySessionEvent, emptyStreamState, RawSessionEventRow, SessionStreamS
 import {
   AgentProfile,
   BrowseDirsResult,
+  BrowserHandoffState,
+  BrowserProbeResult,
+  BrowserSessionState,
   ChatImageBlock,
   ComposerAttachment,
   CronJobRecord,
@@ -195,6 +198,9 @@ export interface AppState {
   followUpQueues: Record<string, QueuedFollowUp[]>;
   gitSummary: GitSummary | null;
   gitDiffLoading: boolean;
+  browserStates: Record<string, BrowserSessionState>;
+  browserProbes: Record<string, BrowserProbeResult>;
+  browserInstalling: Record<string, boolean>;
 
   rightTabs: WorkbenchTab[];
   activeRightTabId: string;
@@ -277,6 +283,39 @@ export interface AppState {
   gitCheckout: (branch: string, createBranch?: boolean) => Promise<{ ok: boolean; error?: string }>;
   spawnBottomTerminal: () => Promise<void>;
   closeBottomTerminal: (id: string) => void;
+
+  openBrowserTab: () => void;
+  sendBrowserControl: (req: {
+    session_id?: string;
+    tab_id?: string;
+    action: string;
+    url?: string;
+    width?: number;
+    height?: number;
+    quality?: number;
+    max_width?: number;
+    max_height?: number;
+  }) => Promise<BrowserSessionState | null>;
+  sendBrowserInput: (ev: {
+    session_id?: string;
+    tab_id?: string;
+    kind: 'mouse' | 'wheel' | 'key';
+    type?: string;
+    x?: number;
+    y?: number;
+    button?: string;
+    click_count?: number;
+    delta_x?: number;
+    delta_y?: number;
+    key?: string;
+    code?: string;
+    text?: string;
+    modifiers?: number;
+  }) => void;
+  resolveBrowserHandoff: (sessionId: string, tabId: string, resumed: boolean) => void;
+  probeRunnerBrowser: (runnerId: string) => Promise<BrowserProbeResult | null>;
+  installRunnerBrowser: (runnerId: string, mirror?: string) => Promise<BrowserProbeResult | null>;
+  clearRunnerBrowserData: (runnerId: string, mode: 'cache' | 'all') => Promise<boolean>;
 }
 
 const DEFAULT_PREFS: UserPreferences = {
@@ -380,6 +419,9 @@ export const useNexStore = create<AppState>((set, get) => ({
   activeRightTabId: '',
   bottomTerminals: [],
   activeBottomTermId: '',
+  browserStates: {},
+  browserProbes: {},
+  browserInstalling: {},
 
   openSettings: (section) => {
     set((s) => ({ mainView: 'settings', settingsSection: section || s.settingsSection }));
@@ -752,6 +794,39 @@ export const useNexStore = create<AppState>((set, get) => ({
         }
         if (env.type === 'memory.sync') {
           void get().refreshRegistries();
+          return;
+        }
+        if (env.type === 'browser.state' && env.payload) {
+          const st = env.payload as BrowserSessionState;
+          const sid = st.session_id || env.session_id || '';
+          if (!sid) return;
+          set((state) => ({
+            browserStates: { ...state.browserStates, [sid]: st },
+          }));
+          if (sid === get().activeSessionId && (st.tabs || []).length > 0) {
+            get().openBrowserTab();
+          }
+          return;
+        }
+        if (env.type === 'browser.handoff' && env.payload) {
+          const hst = env.payload as BrowserHandoffState;
+          const sid = hst.session_id || env.session_id || '';
+          if (!sid) return;
+          set((state) => {
+            const prev = state.browserStates[sid] || { session_id: sid, tabs: [] };
+            return {
+              browserStates: {
+                ...state.browserStates,
+                [sid]: {
+                  ...prev,
+                  handoff: hst.state === 'awaiting_human' ? hst : null,
+                },
+              },
+            };
+          });
+          if (sid === get().activeSessionId && hst.state === 'awaiting_human') {
+            get().openBrowserTab();
+          }
           return;
         }
         if (env.type === 'session.event' && env.payload) {
@@ -1243,7 +1318,9 @@ export const useNexStore = create<AppState>((set, get) => ({
 
   openRightTab: async (kind, title) => {
     const wasOpen = get().sidePaneVisible;
-    const existing = get().rightTabs.find((t) => t.kind === kind && (kind === 'files' || kind === 'review'));
+    const existing = get().rightTabs.find(
+      (t) => t.kind === kind && (kind === 'files' || kind === 'review' || kind === 'browser'),
+    );
     if (existing) {
       set((s) => ({
         sidePaneVisible: true,
@@ -1263,6 +1340,7 @@ export const useNexStore = create<AppState>((set, get) => ({
       terminal: formatMsg(get().locale, 'terminal.title'),
       side_chat: formatMsg(get().locale, 'sidePane.selectionChat'),
       subagent: 'Subagent',
+      browser: formatMsg(get().locale, 'sidePane.browser'),
     };
 
     if (kind === 'new_tab') {
@@ -1748,5 +1826,134 @@ export const useNexStore = create<AppState>((set, get) => ({
       await get().refreshRegistries();
     }
     return res;
+  },
+
+  openBrowserTab: () => {
+    set((s) => {
+      const wasOpen = s.sidePaneVisible;
+      const existing = s.rightTabs.find((t) => t.kind === 'browser');
+      if (existing) {
+        return {
+          sidePaneVisible: true,
+          activeRightTabId: existing.id,
+          rightTabs: wasOpen ? s.rightTabs : s.rightTabs.filter((t) => t.kind !== 'new_tab'),
+        };
+      }
+      const tab: WorkbenchTab = {
+        id: 'tab_browser',
+        kind: 'browser',
+        title: formatMsg(s.locale, 'sidePane.browser'),
+        closable: true,
+      };
+      return {
+        sidePaneVisible: true,
+        ...insertConcreteRightTab(s.rightTabs, s.activeRightTabId, wasOpen, tab),
+      };
+    });
+  },
+
+  sendBrowserControl: async (req) => {
+    const rid = get().selectedRunnerId;
+    const sid = req.session_id || get().activeSessionId || 'default';
+    if (!rid || !wsClient.connected) return null;
+    try {
+      const resp = await wsClient.requestRPC<typeof req & { session_id: string }, BrowserSessionState>(
+        'browser.control',
+        { ...req, session_id: sid },
+        { runner_id: rid, session_id: sid },
+      );
+      if (resp.payload) {
+        const st = resp.payload;
+        const targetSid = st.session_id || sid;
+        set((s) => ({
+          browserStates: { ...s.browserStates, [targetSid]: st },
+        }));
+        return st;
+      }
+    } catch {
+      // ignore transient RPC errors
+    }
+    return null;
+  },
+
+  sendBrowserInput: (ev) => {
+    const rid = get().selectedRunnerId;
+    const sid = ev.session_id || get().activeSessionId || 'default';
+    if (!rid || !wsClient.connected) return;
+    wsClient.sendEnvelope('browser.input', { ...ev, session_id: sid }, { runner_id: rid, session_id: sid });
+  },
+
+  resolveBrowserHandoff: (sessionId, tabId, resumed) => {
+    const rid = get().selectedRunnerId;
+    if (!rid || !wsClient.connected) return;
+    wsClient.sendEnvelope(
+      'browser.handoff',
+      { session_id: sessionId, tab_id: tabId, state: resumed ? 'resumed' : 'cancelled', resumed },
+      { runner_id: rid, session_id: sessionId },
+    );
+    set((s) => {
+      const prev = s.browserStates[sessionId];
+      if (!prev) return {};
+      return {
+        browserStates: {
+          ...s.browserStates,
+          [sessionId]: { ...prev, handoff: null, human_control: false },
+        },
+      };
+    });
+  },
+
+  probeRunnerBrowser: async (runnerId) => {
+    if (!runnerId) return null;
+    try {
+      const resp = await wsClient.requestRPC<Record<string, never>, BrowserProbeResult>(
+        'browser.probe',
+        {},
+        { runner_id: runnerId },
+      );
+      if (resp.payload) {
+        set((s) => ({ browserProbes: { ...s.browserProbes, [runnerId]: resp.payload! } }));
+        return resp.payload;
+      }
+    } catch (err) {
+      const errRes: BrowserProbeResult = { status: 'error', error: String(err) };
+      set((s) => ({ browserProbes: { ...s.browserProbes, [runnerId]: errRes } }));
+      return errRes;
+    }
+    return null;
+  },
+
+  installRunnerBrowser: async (runnerId, mirror) => {
+    if (!runnerId) return null;
+    set((s) => ({ browserInstalling: { ...s.browserInstalling, [runnerId]: true } }));
+    try {
+      const resp = await wsClient.requestRPC<{ mirror?: string }, BrowserProbeResult>(
+        'browser.install',
+        { mirror: mirror || undefined },
+        { runner_id: runnerId },
+        300000,
+      );
+      if (resp.payload) {
+        set((s) => ({ browserProbes: { ...s.browserProbes, [runnerId]: resp.payload! } }));
+        return resp.payload;
+      }
+    } catch (err) {
+      const errRes: BrowserProbeResult = { status: 'error', error: String(err) };
+      set((s) => ({ browserProbes: { ...s.browserProbes, [runnerId]: errRes } }));
+      return errRes;
+    } finally {
+      set((s) => ({ browserInstalling: { ...s.browserInstalling, [runnerId]: false } }));
+    }
+    return null;
+  },
+
+  clearRunnerBrowserData: async (runnerId, mode) => {
+    if (!runnerId) return false;
+    try {
+      await wsClient.requestRPC('browser.clear_data', { mode }, { runner_id: runnerId });
+      return true;
+    } catch {
+      return false;
+    }
   },
 }));

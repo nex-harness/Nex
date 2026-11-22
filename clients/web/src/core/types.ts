@@ -61,6 +61,13 @@ export interface UserPreferences {
   memory_auto_extract?: boolean;
   memory_provider_id?: string;
   memory_model_id?: string;
+  browser_enabled?: boolean;
+  browser_mode?: 'managed_cdp' | 'attach_cdp' | string;
+  browser_headless?: boolean;
+  browser_profile_mode?: 'persistent' | 'ephemeral' | string;
+  browser_attach_url?: string;
+  browser_executable_path?: string;
+  browser_download_mirror?: string;
 }
 
 export interface AgentProfile {
@@ -260,6 +267,7 @@ export interface ToolCallCard {
   status: 'running' | 'completed' | 'error';
   streamOutput: string;
   finalOutput?: string;
+  images?: ChatImageBlock[];
   diff?: string;
   additions?: number;
   deletions?: number;
@@ -369,7 +377,48 @@ export interface GitSummary {
   files?: GitFileChange[];
 }
 
-export type WorkbenchTabKind = 'new_tab' | 'files' | 'file_preview' | 'review' | 'terminal' | 'side_chat' | 'subagent';
+export type WorkbenchTabKind = 'new_tab' | 'files' | 'file_preview' | 'review' | 'terminal' | 'side_chat' | 'subagent' | 'browser';
+
+export interface BrowserTabInfo {
+  tab_id: string;
+  url: string;
+  title: string;
+  viewport: { width: number; height: number };
+  active: boolean;
+  can_go_back: boolean;
+  can_go_forward: boolean;
+  human_control?: boolean;
+}
+
+export interface BrowserHandoffState {
+  session_id: string;
+  tab_id: string;
+  state: 'idle' | 'awaiting_human' | 'resumed' | 'cancelled' | string;
+  reason?: string;
+  message?: string;
+}
+
+export interface BrowserSessionState {
+  session_id: string;
+  runner_id?: string;
+  tabs: BrowserTabInfo[];
+  active_tab_id?: string;
+  human_control?: boolean;
+  handoff?: BrowserHandoffState | null;
+}
+
+export interface BrowserProbeResult {
+  status: 'ready' | 'missing_binary' | 'missing_deps' | 'unsupported_arch' | 'error' | 'backend_unavailable' | string;
+  browser_name?: string;
+  version?: string;
+  executable_path?: string;
+  mode?: string;
+  os?: string;
+  arch?: string;
+  missing_deps?: string[];
+  suggested_command?: string;
+  error?: string;
+}
 
 export interface SubagentInspectorData {
   toolCallId: string;
@@ -493,6 +542,7 @@ export type SettingsSectionId =
   | 'appearance'
   | 'providers'
   | 'runners'
+  | 'browser'
   | 'agents'
   | 'memories'
   | 'plugins'

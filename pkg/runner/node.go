@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nex-harness/nex/pkg/agent"
 	"github.com/nex-harness/nex/pkg/ai"
+	"github.com/nex-harness/nex/pkg/harness/browser"
 	"github.com/nex-harness/nex/pkg/harness/codemode"
 	"github.com/nex-harness/nex/pkg/harness/tools"
 	"github.com/nex-harness/nex/pkg/protocol"
@@ -35,6 +36,20 @@ type PTYHandler interface {
 	HandleControl(ctx context.Context, env protocol.Envelope, sendBinary func(frame []byte), sendClosed func(ptyID string)) (protocol.Envelope, error)
 	WriteStdin(ptyID string, data []byte) error
 	CloseAll()
+}
+
+// BrowserHandler handles headless Chromium CDP automation, streaming, and provisioning.
+type BrowserHandler interface {
+	Enabled() bool
+	UpdateConfig(cfg browser.Config)
+	SessionTool(sessionID, workDir string) tools.Tool
+	HandleControl(ctx context.Context, req browser.ControlRequest) (browser.SessionStatePayload, error)
+	HandleInput(ctx context.Context, ev browser.InputEvent) error
+	HandleHandoffResolution(sessionID string, resumed bool) bool
+	Probe(ctx context.Context) browser.ProbeResult
+	Install(ctx context.Context, mirrorOverride string) (browser.ProbeResult, error)
+	ClearData(mode string) error
+	Close()
 }
 
 // SessionExtensionBuilder builds extra session tools, system sections, and hooks (wired in M4 for Plugins, CodeMode MCP, Skills, Subagents).
@@ -59,6 +74,7 @@ type Config struct {
 	ProviderOverride ai.Provider // Optional override for deterministic unit/e2e tests
 	WorkspaceRPC     WorkspaceRPCHandler
 	PTY              PTYHandler
+	Browser          BrowserHandler
 	Extensions       SessionExtensionBuilder
 }
 
@@ -167,6 +183,9 @@ func (n *Node) Close() error {
 	n.mu.Unlock()
 	if n.cfg.PTY != nil {
 		n.cfg.PTY.CloseAll()
+	}
+	if n.cfg.Browser != nil {
+		n.cfg.Browser.Close()
 	}
 	return n.store.Close()
 }
@@ -415,6 +434,21 @@ func (n *Node) ApplyConfigSnapshot(ctx context.Context, snap *protocol.ConfigSna
 		n.mu.Lock()
 		n.memoryCfg = *snap.MemorySettings
 		n.mu.Unlock()
+	}
+	if snap.BrowserSettings != nil && n.cfg.Browser != nil {
+		cfg := browser.DefaultConfig()
+		cfg.Enabled = snap.BrowserSettings.Enabled
+		if snap.BrowserSettings.Mode != "" {
+			cfg.Mode = browser.Mode(snap.BrowserSettings.Mode)
+		}
+		cfg.Headless = snap.BrowserSettings.Headless
+		if snap.BrowserSettings.ProfileMode != "" {
+			cfg.ProfileMode = browser.ProfileMode(snap.BrowserSettings.ProfileMode)
+		}
+		cfg.AttachURL = snap.BrowserSettings.AttachURL
+		cfg.ExecutablePath = snap.BrowserSettings.ExecutablePath
+		cfg.DownloadMirror = snap.BrowserSettings.DownloadMirror
+		n.cfg.Browser.UpdateConfig(cfg)
 	}
 	if n.cfg.Extensions != nil {
 		n.cfg.Extensions.OnSnapshotApplied(ctx, snap)
@@ -671,6 +705,116 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 				errEnv.ReplyTo = env.ID
 				_ = n.sendEnvelope(ctx, errEnv)
 				return
+			}
+			reply.ReplyTo = env.ID
+			_ = n.sendEnvelope(ctx, reply)
+		}()
+
+	case protocol.TypeBrowserControl:
+		go func() {
+			var req browser.ControlRequest
+			var reply protocol.Envelope
+			if n.cfg.Browser == nil {
+				reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": "browser subsystem not initialized"})
+			} else if err := json.Unmarshal(env.Payload, &req); err != nil {
+				reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": err.Error()})
+			} else {
+				if req.SessionID == "" {
+					req.SessionID = env.SessionID
+				}
+				st, err := n.cfg.Browser.HandleControl(ctx, req)
+				if err != nil {
+					reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": err.Error()})
+				} else {
+					reply, _ = protocol.NewEnvelope(protocol.TypeBrowserState, st)
+					reply.SessionID = st.SessionID
+				}
+			}
+			reply.ReplyTo = env.ID
+			_ = n.sendEnvelope(ctx, reply)
+		}()
+
+	case protocol.TypeBrowserInput:
+		if n.cfg.Browser != nil {
+			var ev browser.InputEvent
+			if json.Unmarshal(env.Payload, &ev) == nil {
+				if ev.SessionID == "" {
+					ev.SessionID = env.SessionID
+				}
+				go func() { _ = n.cfg.Browser.HandleInput(ctx, ev) }()
+			}
+		}
+
+	case protocol.TypeBrowserHandoff:
+		if n.cfg.Browser != nil {
+			var p struct {
+				SessionID string `json:"session_id"`
+				State     string `json:"state"`
+				Resumed   *bool  `json:"resumed"`
+			}
+			if json.Unmarshal(env.Payload, &p) == nil {
+				sid := p.SessionID
+				if sid == "" {
+					sid = env.SessionID
+				}
+				resumed := p.State == "resumed"
+				if p.Resumed != nil {
+					resumed = *p.Resumed
+				}
+				n.cfg.Browser.HandleHandoffResolution(sid, resumed)
+			}
+		}
+
+	case protocol.TypeBrowserProbe:
+		go func() {
+			var reply protocol.Envelope
+			if n.cfg.Browser == nil {
+				reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": "browser subsystem not initialized"})
+			} else {
+				res := n.cfg.Browser.Probe(ctx)
+				reply, _ = protocol.NewEnvelope(protocol.TypeBrowserProbe, res)
+			}
+			reply.ReplyTo = env.ID
+			_ = n.sendEnvelope(ctx, reply)
+		}()
+
+	case protocol.TypeBrowserInstall:
+		go func() {
+			var req struct {
+				Mirror string `json:"mirror,omitempty"`
+			}
+			_ = json.Unmarshal(env.Payload, &req)
+			var reply protocol.Envelope
+			if n.cfg.Browser == nil {
+				reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": "browser subsystem not initialized"})
+			} else {
+				res, err := n.cfg.Browser.Install(ctx, req.Mirror)
+				if err != nil {
+					reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": err.Error()})
+				} else {
+					reply, _ = protocol.NewEnvelope(protocol.TypeBrowserInstall, res)
+				}
+			}
+			reply.ReplyTo = env.ID
+			_ = n.sendEnvelope(ctx, reply)
+		}()
+
+	case protocol.TypeBrowserClearData:
+		go func() {
+			var req struct {
+				Mode string `json:"mode"`
+			}
+			_ = json.Unmarshal(env.Payload, &req)
+			if req.Mode == "" {
+				req.Mode = "cache"
+			}
+			var reply protocol.Envelope
+			if n.cfg.Browser == nil {
+				reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": "browser subsystem not initialized"})
+			} else if err := n.cfg.Browser.ClearData(req.Mode); err != nil {
+				reply, _ = protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": err.Error()})
+			} else {
+				reply, _ = protocol.NewEnvelope(protocol.TypeBrowserClearData, map[string]any{"ok": true, "mode": req.Mode})
 			}
 			reply.ReplyTo = env.ID
 			_ = n.sendEnvelope(ctx, reply)

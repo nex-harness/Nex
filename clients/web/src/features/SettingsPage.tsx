@@ -46,6 +46,7 @@ import {
   MemoriesSettingsSection,
   SkillsAndPluginsSection,
 } from './SettingsCapabilities';
+import { SettingsBrowserSection } from './SettingsBrowser';
 import { RunnersSettingsSection } from './SettingsRunners';
 
 /* -------------------------------------------------------------------------- */
@@ -154,6 +155,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'providers', icon: Package, titleKey: 'settings.modelProvider.title', descKey: 'settings.modelProvider.desc', groupKey: 'settings.group.basics' },
   { id: 'runners', icon: HardDrive, titleKey: 'settings.remoteDevices.title', descKey: 'settings.remoteDevices.desc', groupKey: 'settings.group.basics' },
 
+  { id: 'browser', icon: Globe, titleKey: 'settings.browser.title', descKey: 'settings.browser.desc', groupKey: 'settings.group.agentCapabilities' },
   { id: 'agents', icon: Bot, titleKey: 'settings.subagents.title', descKey: 'settings.subagents.desc', groupKey: 'settings.group.agentCapabilities' },
   { id: 'memories', icon: Brain, titleKey: 'settings.memories.title', descKey: 'settings.memories.desc', groupKey: 'settings.group.agentCapabilities' },
   { id: 'plugins', icon: Blocks, titleKey: 'settings.plugins.title', descKey: 'settings.plugins.desc', groupKey: 'settings.group.agentCapabilities' },
@@ -287,6 +289,7 @@ export function SettingsPage() {
             />
           )}
           {activeMeta.id === 'runners' && <RunnersSettingsSection onFlash={showFlash} />}
+          {activeMeta.id === 'browser' && <SettingsBrowserSection onFlash={showFlash} />}
           {activeMeta.id === 'agents' && <AgentsSettingsSection onFlash={showFlash} />}
           {activeMeta.id === 'memories' && <MemoriesSettingsSection onFlash={showFlash} />}
           {activeMeta.id === 'plugins' && (

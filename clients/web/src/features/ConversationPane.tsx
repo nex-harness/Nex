@@ -286,6 +286,74 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
     );
   }
 
+  if (tc.name === 'browser') {
+    const action = String(args.action || '');
+    const targetDetail = String(
+      args.url || args.ref || args.selector || args.text || args.reason || args.tab_id || '',
+    );
+    const images = tc.images || [];
+    return (
+      <div className="flex max-w-full flex-col">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={`group/tool inline-flex max-w-full items-center gap-2 py-0.5 text-left ${rowClass}`}
+        >
+          <Globe className="size-3.5 shrink-0 text-foreground-subtlest" />
+          <span className="shrink-0 font-medium text-foreground-subtle">
+            {formatMsg(locale, running ? 'tool.browsing' : 'tool.browser')}
+          </span>
+          {(action || targetDetail) && (
+            <span className="min-w-0 truncate font-mono text-ui-sm text-foreground-subtle">
+              {truncateText([action, targetDetail].filter(Boolean).join(' '), 72)}
+            </span>
+          )}
+          {chevron()}
+        </button>
+        <ToolIndeterminateBar active={running} />
+        {images.length > 0 && (
+          <div className="ml-5 mt-1.5 flex flex-wrap gap-2">
+            {images.map((img, idx) => {
+              const src =
+                img.image_url ||
+                (img.data_b64 ? `data:${img.mime_type || 'image/png'};base64,${img.data_b64}` : '');
+              if (!src) return null;
+              return (
+                <button
+                  key={`${tc.id}-img-${idx}`}
+                  type="button"
+                  data-testid={`tool-image-${idx}`}
+                  onClick={() =>
+                    useNexStore.getState().openImagePreview({
+                      src,
+                      alt: `browser-screenshot-${idx + 1}`,
+                    })
+                  }
+                  className="group/thumb overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-foreground-subtle"
+                >
+                  <img
+                    src={src}
+                    alt={`browser-screenshot-${idx + 1}`}
+                    className="max-h-28 w-auto object-cover"
+                  />
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
+          <div className="zcode-collapsible-inner">
+            {output && (
+              <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 font-mono text-ui-sm whitespace-pre-wrap text-foreground-subtle">
+                {output}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (tc.name === 'webfetch') {
     const url = String(args.url || '');
     return (

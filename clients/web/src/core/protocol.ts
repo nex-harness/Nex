@@ -1,5 +1,6 @@
 export const PTY_BINARY_STDIN = 0x01;
 export const PTY_BINARY_STDOUT = 0x02;
+export const BROWSER_BINARY_SCREENCAST = 0x10;
 export const PTY_ID_HEADER_LEN = 36;
 
 export interface Envelope<T = unknown> {

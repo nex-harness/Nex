@@ -144,6 +144,26 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 
 		case protocol.TypePTYClosed:
 			s.broadcastToAllClients(ctx, env)
+
+		case protocol.TypeBrowserState:
+			var st struct {
+				Tabs []struct {
+					TabID string `json:"tab_id"`
+				} `json:"tabs"`
+			}
+			if json.Unmarshal(env.Payload, &st) == nil {
+				s.mu.Lock()
+				for _, tab := range st.Tabs {
+					if tab.TabID != "" {
+						s.browserToRunner[tab.TabID] = hello.RunnerID
+					}
+				}
+				s.mu.Unlock()
+			}
+			s.broadcastToAllClients(ctx, env)
+
+		case protocol.TypeBrowserHandoff:
+			s.broadcastToAllClients(ctx, env)
 		}
 	}
 }
@@ -306,19 +326,59 @@ func (s *Server) handleClientWS(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	cc := &clientConn{
-		id:          "cli_" + uuid.NewString(),
-		ws:          ws,
-		subscribed:  map[string]bool{"*": true},
-		ptyAttached: make(map[string]bool),
+		id:              "cli_" + uuid.NewString(),
+		ws:              ws,
+		subscribed:      map[string]bool{"*": true},
+		ptyAttached:     make(map[string]bool),
+		browserAttached: make(map[string]bool),
 	}
 
 	s.mu.Lock()
 	s.clients[cc.id] = cc
 	s.mu.Unlock()
 	defer func() {
+		cc.subMu.RLock()
+		watchedTabs := make([]string, 0, len(cc.browserAttached))
+		for tid := range cc.browserAttached {
+			watchedTabs = append(watchedTabs, tid)
+		}
+		cc.subMu.RUnlock()
+
 		s.mu.Lock()
 		delete(s.clients, cc.id)
+		var remaining []*clientConn
+		for _, c := range s.clients {
+			remaining = append(remaining, c)
+		}
 		s.mu.Unlock()
+
+		// Stop runner screencasts when no remaining viewer watches those tabs.
+		for _, tid := range watchedTabs {
+			stillWatched := false
+			for _, other := range remaining {
+				other.subMu.RLock()
+				if other.browserAttached[tid] {
+					stillWatched = true
+				}
+				other.subMu.RUnlock()
+				if stillWatched {
+					break
+				}
+			}
+			if !stillWatched {
+				s.mu.RLock()
+				rid := s.browserToRunner[tid]
+				rc := s.runners[rid]
+				s.mu.RUnlock()
+				if rc != nil {
+					stopEnv, _ := protocol.NewEnvelope(protocol.TypeBrowserControl, map[string]any{
+						"action": "stream_stop",
+						"tab_id": tid,
+					})
+					_ = rc.sendJSON(context.Background(), stopEnv)
+				}
+			}
+		}
 	}()
 
 	for {
@@ -359,11 +419,15 @@ func (s *Server) handleClientWS(w http.ResponseWriter, r *http.Request) {
 			s.routeClientPrompt(ctx, cc, env)
 
 		case protocol.TypeSessionSteer, protocol.TypeSessionFollowUp, protocol.TypeSessionAbort,
-			protocol.TypeApprovalResolve, protocol.TypeUIResolve:
+			protocol.TypeApprovalResolve, protocol.TypeUIResolve, protocol.TypeBrowserInput, protocol.TypeBrowserHandoff:
 			s.forwardControlToRunner(ctx, cc, env)
 
-		case protocol.TypeWorkspaceReq, protocol.TypePTYOpen, protocol.TypePTYResize, protocol.TypePTYClose, protocol.TypePTYList:
+		case protocol.TypeWorkspaceReq, protocol.TypePTYOpen, protocol.TypePTYResize, protocol.TypePTYClose, protocol.TypePTYList,
+			protocol.TypeBrowserControl, protocol.TypeBrowserProbe, protocol.TypeBrowserClearData:
 			go s.proxyClientRPC(ctx, cc, env)
+
+		case protocol.TypeBrowserInstall:
+			go s.proxyClientRPCWithTimeout(ctx, cc, env, 5*time.Minute)
 		}
 	}
 }
@@ -450,13 +514,39 @@ func (s *Server) forwardControlToRunner(ctx context.Context, cc *clientConn, env
 }
 
 func (s *Server) proxyClientRPC(ctx context.Context, cc *clientConn, env protocol.Envelope) {
+	s.proxyClientRPCWithTimeout(ctx, cc, env, 15*time.Second)
+}
+
+func (s *Server) proxyClientRPCWithTimeout(ctx context.Context, cc *clientConn, env protocol.Envelope, timeout time.Duration) {
 	runnerID := env.RunnerID
 	if runnerID == "" && env.SessionID != "" {
 		if sess, err := s.store.GetSession(ctx, env.SessionID); err == nil {
 			runnerID = sess.RunnerID
 		}
 	}
-	resp, err := s.callRunnerRPC(ctx, runnerID, env, 15*time.Second)
+	if env.Type == protocol.TypeBrowserControl {
+		var bc struct {
+			Action string `json:"action"`
+			TabID  string `json:"tab_id"`
+		}
+		if json.Unmarshal(env.Payload, &bc) == nil && bc.TabID != "" {
+			if bc.Action == "stream_start" {
+				cc.subMu.Lock()
+				cc.browserAttached[bc.TabID] = true
+				cc.subMu.Unlock()
+				if runnerID != "" {
+					s.mu.Lock()
+					s.browserToRunner[bc.TabID] = runnerID
+					s.mu.Unlock()
+				}
+			} else if bc.Action == "stream_stop" || bc.Action == "close_tab" {
+				cc.subMu.Lock()
+				delete(cc.browserAttached, bc.TabID)
+				cc.subMu.Unlock()
+			}
+		}
+	}
+	resp, err := s.callRunnerRPC(ctx, runnerID, env, timeout)
 	if err != nil {
 		errEnv, _ := protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": err.Error()})
 		errEnv.ReplyTo = env.ID
@@ -472,6 +562,33 @@ func (s *Server) proxyClientRPC(ctx context.Context, cc *clientConn, env protoco
 			cc.subMu.Lock()
 			cc.ptyAttached[p.PTYID] = true
 			cc.subMu.Unlock()
+		}
+	}
+	if resp.Type == protocol.TypeBrowserState {
+		var st struct {
+			ActiveTabID string `json:"active_tab_id"`
+			Tabs        []struct {
+				TabID string `json:"tab_id"`
+			} `json:"tabs"`
+		}
+		if json.Unmarshal(resp.Payload, &st) == nil {
+			if runnerID != "" {
+				s.mu.Lock()
+				for _, tab := range st.Tabs {
+					if tab.TabID != "" {
+						s.browserToRunner[tab.TabID] = runnerID
+					}
+				}
+				s.mu.Unlock()
+			}
+			var bcReq struct {
+				Action string `json:"action"`
+			}
+			if env.Type == protocol.TypeBrowserControl && json.Unmarshal(env.Payload, &bcReq) == nil && bcReq.Action == "stream_start" && st.ActiveTabID != "" {
+				cc.subMu.Lock()
+				cc.browserAttached[st.ActiveTabID] = true
+				cc.subMu.Unlock()
+			}
 		}
 	}
 	resp.ReplyTo = env.ID
@@ -497,24 +614,45 @@ func (s *Server) forwardBinaryFromClient(ctx context.Context, cc *clientConn, fr
 }
 
 func (s *Server) forwardBinaryFromRunner(ctx context.Context, runnerID string, frame []byte) {
-	op, ptyID, _, err := protocol.DecodePTYBinaryFrame(frame)
-	if err != nil || op != protocol.PTYBinaryStdout {
+	op, streamID, _, err := protocol.DecodePTYBinaryFrame(frame)
+	if err != nil {
 		return
 	}
-	s.mu.Lock()
-	s.ptyToRunner[ptyID] = runnerID
-	clients := make([]*clientConn, 0, len(s.clients))
-	for _, c := range s.clients {
-		clients = append(clients, c)
-	}
-	s.mu.Unlock()
+	switch op {
+	case protocol.PTYBinaryStdout:
+		s.mu.Lock()
+		s.ptyToRunner[streamID] = runnerID
+		clients := make([]*clientConn, 0, len(s.clients))
+		for _, c := range s.clients {
+			clients = append(clients, c)
+		}
+		s.mu.Unlock()
 
-	for _, c := range clients {
-		c.subMu.RLock()
-		attached := c.ptyAttached[ptyID]
-		c.subMu.RUnlock()
-		if attached {
-			_ = c.sendBinary(ctx, frame)
+		for _, c := range clients {
+			c.subMu.RLock()
+			attached := c.ptyAttached[streamID]
+			c.subMu.RUnlock()
+			if attached {
+				_ = c.sendBinary(ctx, frame)
+			}
+		}
+
+	case protocol.BrowserBinaryScreencast:
+		s.mu.Lock()
+		s.browserToRunner[streamID] = runnerID
+		clients := make([]*clientConn, 0, len(s.clients))
+		for _, c := range s.clients {
+			clients = append(clients, c)
+		}
+		s.mu.Unlock()
+
+		for _, c := range clients {
+			c.subMu.RLock()
+			attached := c.browserAttached[streamID]
+			c.subMu.RUnlock()
+			if attached {
+				_ = c.sendBinary(ctx, frame)
+			}
 		}
 	}
 }
