@@ -215,12 +215,17 @@ export function SettingsPage() {
       data-testid="settings-page"
       className="fixed inset-0 z-40 flex h-dvh w-screen overflow-hidden bg-background text-foreground"
     >
+      <div
+        className="nex-drag-region fixed inset-x-0 top-0 z-10"
+        style={{ height: 'var(--mygo-titlebar-controls-bottom, 0px)' }}
+      />
+
       {/* Left settings sidebar */}
       <nav
         className={
           isCompact
-            ? `${mobileShowNav ? 'flex w-full' : 'hidden'} flex-col bg-sidebar px-3 py-3.5 select-none`
-            : 'flex w-[248px] shrink-0 flex-col border-r border-border bg-sidebar px-3 py-3.5 select-none'
+            ? `${mobileShowNav ? 'flex w-full' : 'hidden'} nex-titlebar-top flex-col bg-sidebar px-3 pb-3.5 select-none`
+            : 'nex-titlebar-top flex w-[248px] shrink-0 flex-col border-r border-border bg-sidebar px-3 pb-3.5 select-none'
         }
       >
         <button
@@ -284,7 +289,7 @@ export function SettingsPage() {
 
       {/* Right content viewport */}
       <div
-        className={`min-h-0 min-w-0 flex-1 overflow-y-auto bg-background px-4 py-6 sm:px-8 sm:py-10 ${
+        className={`nex-titlebar-top min-h-0 min-w-0 flex-1 overflow-y-auto bg-background px-4 pb-6 sm:px-8 sm:pb-10 ${
           isCompact && mobileShowNav ? 'hidden' : 'block'
         }`}
       >

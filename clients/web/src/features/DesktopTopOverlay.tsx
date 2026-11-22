@@ -1,6 +1,5 @@
 import { ArrowLeft, ArrowRight, CirclePlus, PanelLeft } from 'lucide-react';
 import { useNexStore } from '../core/store';
-import { hostBridge } from '../host/bridge';
 import { formatMsg } from '../i18n/messages';
 
 /**
@@ -17,13 +16,9 @@ export function DesktopTopOverlay() {
 
   if (sidebarVisible) return null;
 
-  const isMacMyGo = hostBridge.kind === 'mygo-desktop' && hostBridge.platform === 'darwin';
-
   return (
     <div
-      className={`zcode-view-enter nex-safe-top pointer-events-none absolute top-2.5 z-30 flex items-center ${
-        isMacMyGo ? 'left-[78px]' : 'left-3'
-      }`}
+      className="zcode-view-enter nex-safe-top nex-titlebar-overlay-left pointer-events-none absolute top-2.5 z-30 flex items-center"
     >
       <div className="nex-no-drag pointer-events-auto flex items-center gap-0.5">
         <button

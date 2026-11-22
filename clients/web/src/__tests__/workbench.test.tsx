@@ -2589,12 +2589,14 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       const { rerender } = render(<App />);
       expect(screen.getByTestId('mobile-sidebar-backdrop')).toBeTruthy();
       expect(screen.getByTestId('side-pane-container').className).toContain('fixed inset-0');
+      expect(screen.getByTestId('project-sidebar').innerHTML).toContain('nex-titlebar-inset-left');
 
       act(() => {
         useNexStore.setState({ mainView: 'settings', settingsSection: 'general' });
       });
       rerender(<App />);
       expect(screen.getByTestId('settings-mobile-nav-back')).toBeTruthy();
+      expect(screen.getByTestId('settings-page').querySelector('nav')?.className).toContain('nex-titlebar-top');
       expect(screen.getByTestId('settings-server-connection')).toBeTruthy();
       expect(screen.getByTestId('settings-switch-server-btn')).toBeTruthy();
     } finally {

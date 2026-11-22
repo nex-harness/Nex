@@ -51,7 +51,6 @@ import { clampEffortIndex, formatEffortLabel, resolveEffortLevels } from '../cor
 import { emptyStreamState } from '../core/reducer';
 import { useNexStore } from '../core/store';
 import { ChatTurnItem, ModelMeta, ThinkingEffort, ToolCallCard } from '../core/types';
-import { hostBridge } from '../host/bridge';
 import { formatMsg, type LocaleCode, type MessageKey } from '../i18n/messages';
 import { ChatLoading } from './ChatLoading';
 import { ContextWindowsButton } from './ContextPopover';
@@ -2893,8 +2892,7 @@ export function ConversationPane() {
           : 'pt-14 pb-5 @min-[960px]/conversation:pt-5'
       : 'py-5';
 
-  const isMacMyGo = hostBridge.kind === 'mygo-desktop' && hostBridge.platform === 'darwin';
-  const collapsedHeaderPad = isMacMyGo ? 'pl-[196px]' : 'pl-[132px]';
+  const collapsedHeaderPad = 'pl-[132px] nex-titlebar-collapsed-header';
 
   return (
     <section

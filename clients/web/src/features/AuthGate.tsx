@@ -32,6 +32,7 @@ export function AuthGate() {
       data-testid="auth-gate"
       className="flex h-dvh w-screen items-center justify-center bg-background px-4 text-foreground"
     >
+      <div className="nex-drag-region fixed inset-x-0 top-0 h-10" />
       <div className="w-full max-w-[380px] rounded-2xl border border-border bg-card p-6 shadow-xl">
         <div className="flex flex-col items-center text-center">
           <div className="flex size-11 items-center justify-center rounded-2xl border border-border bg-surface text-foreground shadow-xs">

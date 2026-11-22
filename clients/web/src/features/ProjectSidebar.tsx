@@ -20,7 +20,6 @@ import {
 import { useMemo, useState } from 'react';
 import { useNexStore } from '../core/store';
 import { SessionRecord } from '../core/types';
-import { hostBridge } from '../host/bridge';
 import { formatMsg, formatRelativeTimeShort } from '../i18n/messages';
 
 function projectLeaf(workspacePath: string, fallback: string): string {
@@ -86,7 +85,6 @@ export function ProjectSidebar() {
     openSettings(section);
     maybeCollapseOnMobile();
   };
-  const isMacMyGo = hostBridge.kind === 'mygo-desktop' && hostBridge.platform === 'darwin';
 
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -360,11 +358,7 @@ export function ProjectSidebar() {
       className="group/sidebar flex h-full w-full flex-col border-r border-border bg-sidebar text-foreground select-none"
     >
       {/* History Bar */}
-      <div
-        className={`nex-drag-region flex h-10 shrink-0 items-center justify-between pr-3 ${
-          isMacMyGo ? 'pl-[76px]' : 'pl-3'
-        }`}
-      >
+      <div className="nex-drag-region nex-titlebar-inset-left flex h-10 shrink-0 items-center justify-between pr-3">
         <div className="nex-no-drag flex items-center gap-1">
           <button
             type="button"

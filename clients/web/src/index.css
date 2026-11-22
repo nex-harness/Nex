@@ -767,3 +767,19 @@ pre,
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
 }
+
+.nex-titlebar-top {
+  padding-top: calc(var(--mygo-titlebar-controls-bottom, 0px) + 14px);
+}
+
+.nex-titlebar-inset-left {
+  padding-left: calc(var(--mygo-titlebar-inset-left, 0px) + 12px);
+}
+
+.nex-titlebar-overlay-left {
+  left: calc(var(--mygo-titlebar-inset-left, 0px) + 12px);
+}
+
+.nex-titlebar-collapsed-header {
+  padding-left: calc(var(--mygo-titlebar-inset-left, 0px) + 132px);
+}
