@@ -48,6 +48,12 @@ func TestParseDeepLink(t *testing.T) {
 	if act, ok := ParseDeepLink("nex://settings/browser"); !ok || act.Kind != "settings" || act.Section != "browser" {
 		t.Fatalf("unexpected settings deeplink result: (%+v, %v)", act, ok)
 	}
+	if act, ok := ParseDeepLink("nex://pair?v=1&node=nex_abc123&fp=" + strings.Repeat("a", 64) + "&token=tok1"); !ok || act.Kind != "pair" || !strings.HasPrefix(act.Value, "nex://pair?") {
+		t.Fatalf("unexpected pair deeplink result: (%+v, %v)", act, ok)
+	}
+	if _, ok := ParseDeepLink("nex://pair?v=1&node=nex_abc123"); ok {
+		t.Fatalf("expected incomplete pair URI to be rejected")
+	}
 	if _, ok := ParseDeepLink("https://nex.tylinux.cn"); ok {
 		t.Fatalf("expected non-nex scheme to be rejected")
 	}

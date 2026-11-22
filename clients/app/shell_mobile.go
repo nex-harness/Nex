@@ -3,6 +3,7 @@
 package app
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"time"
@@ -36,11 +37,13 @@ func RunMobile() error {
 	})
 
 	mygo.Power.OnResume(func() {
+		go func() { _, _ = svc.ReconnectRemote(context.Background()) }()
 		_ = EventAppResume.Broadcast(time.Now().UnixMilli())
 	})
 
 	mygo.App.OnDidBecomeActive(func() {
 		mygo.ClearNotifications()
+		go func() { _, _ = svc.ReconnectRemote(context.Background()) }()
 		_ = EventAppResume.Broadcast(time.Now().UnixMilli())
 	})
 
@@ -51,11 +54,13 @@ func RunMobile() error {
 	mygo.App.WhenReady(func() {
 		svc.setAppReady(true)
 		mygo.SystemBars.SetStyle(mygo.BarStyleAuto)
-		mygo.NewWindow(mygo.WindowOptions{
+		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:           "Nex",
 			BackgroundColor: "light-dark(#f8f8f8, #161616)",
 			URL:             "/",
 		})
+		configureWindowPermissions(win)
+		go svc.ensureStartupConnected(context.Background())
 	})
 
 	return mygo.App.Run()

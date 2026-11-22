@@ -15,28 +15,35 @@ import (
 	"sync"
 
 	"github.com/egoist/mygo"
+	"github.com/nex-harness/nex/pkg/remote"
 )
 
 // Typed events emitted from the native mygo host to the web frontend.
 var (
-	EventOpenSession  = mygo.NewEvent[string]("nex:open-session")
-	EventAppResume    = mygo.NewEvent[int64]("nex:app-resume")
-	EventOpenSettings = mygo.NewEvent[string]("nex:open-settings")
-	EventNewTask      = mygo.NewEvent[bool]("nex:new-task")
+	EventOpenSession   = mygo.NewEvent[string]("nex:open-session")
+	EventAppResume     = mygo.NewEvent[int64]("nex:app-resume")
+	EventOpenSettings  = mygo.NewEvent[string]("nex:open-settings")
+	EventNewTask       = mygo.NewEvent[bool]("nex:new-task")
 	EventServerChanged = mygo.NewEvent[HostInfo]("nex:server-changed")
+	EventRemoteStatus  = mygo.NewEvent[remote.TransportStatus]("nex:remote-status")
+	EventPairInvite    = mygo.NewEvent[string]("nex:pair-invite")
 )
 
 // HostInfo describes the active mygo runtime container and connection target.
 type HostInfo struct {
-	Platform               string   `json:"platform"`
-	FormFactor             string   `json:"form_factor"`
-	Version                string   `json:"version"`
-	ConnectionMode         string   `json:"connection_mode"`
-	ServerURL              string   `json:"server_url"`
-	LocalURL               string   `json:"local_url,omitempty"`
-	SupportsLocalMode      bool     `json:"supports_local_mode"`
-	NotificationsSupported bool     `json:"notifications_supported"`
-	RecentServers          []string `json:"recent_servers"`
+	Platform               string                     `json:"platform"`
+	FormFactor             string                     `json:"form_factor"`
+	Version                string                     `json:"version"`
+	ConnectionMode         string                     `json:"connection_mode"`
+	ServerURL              string                     `json:"server_url"`
+	LocalURL               string                     `json:"local_url,omitempty"`
+	ActiveNodeID           string                     `json:"active_node_id,omitempty"`
+	ActiveHostName         string                     `json:"active_host_name,omitempty"`
+	ActiveTransport        string                     `json:"active_transport,omitempty"`
+	PairedHosts            []remote.PairedHostProfile `json:"paired_hosts"`
+	SupportsLocalMode      bool                       `json:"supports_local_mode"`
+	NotificationsSupported bool                       `json:"notifications_supported"`
+	RecentServers          []string                   `json:"recent_servers"`
 }
 
 // SecretStore persists sensitive per-server tokens.
@@ -59,9 +66,11 @@ type HostServiceOptions struct {
 }
 
 type persistedHostConfig struct {
-	ConnectionMode string   `json:"connection_mode"`
-	ServerURL      string   `json:"server_url"`
-	RecentServers  []string `json:"recent_servers,omitempty"`
+	ConnectionMode string                     `json:"connection_mode"`
+	ServerURL      string                     `json:"server_url"`
+	ActiveNodeID   string                     `json:"active_node_id,omitempty"`
+	PairedHosts    []remote.PairedHostProfile `json:"paired_hosts,omitempty"`
+	RecentServers  []string                   `json:"recent_servers,omitempty"`
 }
 
 const maxRecentServers = 8
@@ -69,16 +78,17 @@ const maxRecentServers = 8
 // HostService exposes typed IPC methods bound as "NexHost" via mygo.BindAs
 // across Linux, macOS, Windows, iOS, and Android.
 type HostService struct {
-	mu             sync.Mutex
-	configDir      string
-	workspaceDir   string
-	localAddr      string
-	secrets        SecretStore
-	cfg            persistedHostConfig
-	localInst      localInstance
-	localURL       string
-	pushToken      string
-	appReady       bool
+	mu           sync.Mutex
+	configDir    string
+	workspaceDir string
+	localAddr    string
+	secrets      SecretStore
+	cfg          persistedHostConfig
+	localInst    localInstance
+	localURL     string
+	remoteProxy  *remote.LocalProxy
+	pushToken    string
+	appReady     bool
 }
 
 // NewHostService loads persisted host configuration and initializes secret storage.
@@ -138,8 +148,21 @@ func (h *HostService) loadConfigLocked() {
 				if parsed.ServerURL == "" {
 					parsed.ConnectionMode = "unconfigured"
 				}
+			case "paired":
+				if parsed.ActiveNodeID == "" || findPairedHost(parsed.PairedHosts, parsed.ActiveNodeID) == nil {
+					parsed.ActiveNodeID = ""
+					if parsed.ServerURL != "" {
+						parsed.ConnectionMode = "remote"
+					} else if supportsLocalMode {
+						parsed.ConnectionMode = "local"
+					} else {
+						parsed.ConnectionMode = "unconfigured"
+					}
+				}
 			default:
-				if parsed.ServerURL != "" {
+				if parsed.ActiveNodeID != "" && findPairedHost(parsed.PairedHosts, parsed.ActiveNodeID) != nil {
+					parsed.ConnectionMode = "paired"
+				} else if parsed.ServerURL != "" {
 					parsed.ConnectionMode = "remote"
 				} else if supportsLocalMode {
 					parsed.ConnectionMode = "local"
@@ -174,6 +197,24 @@ func (h *HostService) startupMode() string {
 	return h.cfg.ConnectionMode
 }
 
+// ensureStartupConnected boots the embedded local mode or auto-connects the active paired remote host.
+func (h *HostService) ensureStartupConnected(ctx context.Context) {
+	switch h.startupMode() {
+	case "local":
+		if _, err := h.ensureLocalStarted(ctx); err != nil {
+			// Logged by caller if needed; keep window responsive even if startup fails.
+			_ = err
+		}
+	case "paired":
+		h.mu.Lock()
+		nid := h.cfg.ActiveNodeID
+		h.mu.Unlock()
+		if nid != "" {
+			_, _ = h.ConnectPairedHost(ctx, nid)
+		}
+	}
+}
+
 // ensureLocalStarted boots the desktop All-in-One embedded server + runner if configured for local mode.
 func (h *HostService) ensureLocalStarted(ctx context.Context) (HostInfo, error) {
 	h.mu.Lock()
@@ -182,15 +223,19 @@ func (h *HostService) ensureLocalStarted(ctx context.Context) (HostInfo, error) 
 		h.mu.Unlock()
 		return info, errors.ErrUnsupported
 	}
+	oldProxy := h.detachRemoteProxyLocked()
 	if _, err := h.startLocalBackendLocked(ctx); err != nil {
 		info := h.infoLocked()
 		h.mu.Unlock()
+		closeRemoteProxy(oldProxy)
 		return info, err
 	}
 	h.cfg.ConnectionMode = "local"
+	h.cfg.ActiveNodeID = ""
 	_ = h.saveConfigLocked()
 	info := h.infoLocked()
 	h.mu.Unlock()
+	closeRemoteProxy(oldProxy)
 	_ = EventServerChanged.Broadcast(info)
 	return info, nil
 }
@@ -204,8 +249,22 @@ func (h *HostService) Info() HostInfo {
 
 func (h *HostService) infoLocked() HostInfo {
 	effectiveURL := h.cfg.ServerURL
-	if h.cfg.ConnectionMode == "local" {
+	activeHostName := ""
+	activeTransport := ""
+	switch h.cfg.ConnectionMode {
+	case "local":
 		effectiveURL = h.localURL
+	case "paired":
+		if prof := findPairedHost(h.cfg.PairedHosts, h.cfg.ActiveNodeID); prof != nil {
+			activeHostName = prof.HostName
+		}
+		if h.remoteProxy != nil {
+			effectiveURL = h.remoteProxy.LocalURL()
+			activeTransport = h.remoteProxy.Status().Transport
+		} else {
+			effectiveURL = ""
+			activeTransport = "disconnected"
+		}
 	}
 	ver := mygo.App.Version()
 	if ver == "" {
@@ -213,6 +272,8 @@ func (h *HostService) infoLocked() HostInfo {
 	}
 	recent := make([]string, len(h.cfg.RecentServers))
 	copy(recent, h.cfg.RecentServers)
+	paired := make([]remote.PairedHostProfile, len(h.cfg.PairedHosts))
+	copy(paired, h.cfg.PairedHosts)
 	notifSupported := false
 	if h.appReady {
 		notifSupported = mygo.NotificationsSupported()
@@ -224,6 +285,10 @@ func (h *HostService) infoLocked() HostInfo {
 		ConnectionMode:         h.cfg.ConnectionMode,
 		ServerURL:              effectiveURL,
 		LocalURL:               h.localURL,
+		ActiveNodeID:           h.cfg.ActiveNodeID,
+		ActiveHostName:         activeHostName,
+		ActiveTransport:        activeTransport,
+		PairedHosts:            paired,
 		SupportsLocalMode:      supportsLocalMode,
 		NotificationsSupported: notifSupported,
 		RecentServers:          recent,
@@ -243,12 +308,15 @@ func (h *HostService) SetServerURL(rawURL string) (HostInfo, error) {
 	}
 	h.mu.Lock()
 	h.stopLocalBackendLocked()
+	oldProxy := h.detachRemoteProxyLocked()
 	h.cfg.ConnectionMode = "remote"
 	h.cfg.ServerURL = norm
+	h.cfg.ActiveNodeID = ""
 	h.cfg.RecentServers = prependRecentServer(h.cfg.RecentServers, norm)
 	saveErr := h.saveConfigLocked()
 	info := h.infoLocked()
 	h.mu.Unlock()
+	closeRemoteProxy(oldProxy)
 	if saveErr != nil {
 		return HostInfo{}, saveErr
 	}
@@ -265,14 +333,18 @@ func (h *HostService) SwitchMode(ctx context.Context, mode string, serverURL str
 			return HostInfo{}, errors.ErrUnsupported
 		}
 		h.mu.Lock()
+		oldProxy := h.detachRemoteProxyLocked()
 		if _, err := h.startLocalBackendLocked(ctx); err != nil {
 			h.mu.Unlock()
+			closeRemoteProxy(oldProxy)
 			return HostInfo{}, err
 		}
 		h.cfg.ConnectionMode = "local"
+		h.cfg.ActiveNodeID = ""
 		err := h.saveConfigLocked()
 		info := h.infoLocked()
 		h.mu.Unlock()
+		closeRemoteProxy(oldProxy)
 		if err != nil {
 			return HostInfo{}, err
 		}
@@ -285,14 +357,17 @@ func (h *HostService) SwitchMode(ctx context.Context, mode string, serverURL str
 		}
 		h.mu.Lock()
 		h.stopLocalBackendLocked()
+		oldProxy := h.detachRemoteProxyLocked()
 		if h.cfg.ServerURL != "" {
 			h.cfg.ConnectionMode = "remote"
 		} else {
 			h.cfg.ConnectionMode = "unconfigured"
 		}
+		h.cfg.ActiveNodeID = ""
 		err := h.saveConfigLocked()
 		info := h.infoLocked()
 		h.mu.Unlock()
+		closeRemoteProxy(oldProxy)
 		if err != nil {
 			return HostInfo{}, err
 		}
@@ -468,11 +543,260 @@ func (h *HostService) setAppReady(ready bool) {
 	h.mu.Unlock()
 }
 
-// closeHost shuts down any embedded local backend cleanly.
+// closeHost shuts down any embedded local backend and active remote tunnel cleanly.
 func (h *HostService) closeHost() {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.stopLocalBackendLocked()
+	lp := h.detachRemoteProxyLocked()
+	h.mu.Unlock()
+	closeRemoteProxy(lp)
+}
+
+func (h *HostService) detachRemoteProxyLocked() *remote.LocalProxy {
+	lp := h.remoteProxy
+	h.remoteProxy = nil
+	return lp
+}
+
+func closeRemoteProxy(lp *remote.LocalProxy) {
+	if lp != nil {
+		_ = lp.Close()
+	}
+}
+
+func (h *HostService) ensureClientIdentity() (*remote.Identity, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	certRaw, err1 := h.secrets.Get("client_identity_cert")
+	keyRaw, err2 := h.secrets.Get("client_identity_key")
+	if err1 == nil && err2 == nil && len(certRaw) > 0 && len(keyRaw) > 0 {
+		if id, pErr := remote.ParseIdentityPEM(string(certRaw), string(keyRaw)); pErr == nil {
+			return id, nil
+		}
+	}
+
+	name, _ := os.Hostname()
+	if strings.TrimSpace(name) == "" {
+		name = "Nex Client"
+	}
+	id, err := remote.GenerateIdentity(name)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.secrets.Set("client_identity_cert", []byte(id.CertPEM)); err != nil {
+		return nil, err
+	}
+	if err := h.secrets.Set("client_identity_key", []byte(id.KeyPEM)); err != nil {
+		return nil, err
+	}
+	return id, nil
+}
+
+// PairWithURI parses a nex://pair?... invite, pairs with the intranet host over LAN/Direct/Relay,
+// saves the paired profile + device token in Keychain, and connects the local E2EE tunnel proxy.
+func (h *HostService) PairWithURI(ctx context.Context, rawURI string, deviceName string) (HostInfo, error) {
+	invite, err := remote.ParsePairingURI(rawURI)
+	if err != nil {
+		return HostInfo{}, err
+	}
+	if strings.TrimSpace(deviceName) == "" {
+		if hn, hErr := os.Hostname(); hErr == nil && strings.TrimSpace(hn) != "" {
+			deviceName = hn
+		} else {
+			deviceName = "Nex " + PlatformName()
+		}
+	}
+	clientID, err := h.ensureClientIdentity()
+	if err != nil {
+		return HostInfo{}, err
+	}
+	profile, deviceToken, _, err := remote.PairWithHost(ctx, clientID, invite, deviceName, PlatformName())
+	if err != nil {
+		return HostInfo{}, err
+	}
+	if err := h.secrets.Set(pairedDeviceSecretKey(profile.NodeID), []byte(deviceToken)); err != nil {
+		return HostInfo{}, err
+	}
+
+	h.mu.Lock()
+	h.cfg.PairedHosts = upsertPairedHost(h.cfg.PairedHosts, profile)
+	_ = h.saveConfigLocked()
+	h.mu.Unlock()
+
+	return h.ConnectPairedHost(ctx, profile.NodeID)
+}
+
+// ConnectPairedHost starts the loopback E2EE proxy for nodeID and switches connection mode to "paired".
+func (h *HostService) ConnectPairedHost(ctx context.Context, nodeID string) (HostInfo, error) {
+	nodeID = strings.TrimSpace(nodeID)
+	if nodeID == "" {
+		return HostInfo{}, errors.New("node_id is required")
+	}
+
+	h.mu.Lock()
+	prof := findPairedHost(h.cfg.PairedHosts, nodeID)
+	if prof == nil {
+		h.mu.Unlock()
+		return HostInfo{}, fmt.Errorf("paired host %q not found", nodeID)
+	}
+	profCopy := *prof
+	h.mu.Unlock()
+
+	clientID, err := h.ensureClientIdentity()
+	if err != nil {
+		return HostInfo{}, err
+	}
+	tokBytes, _ := h.secrets.Get(pairedDeviceSecretKey(nodeID))
+	devToken := string(tokBytes)
+
+	lp, err := remote.NewLocalProxy(clientID, profCopy, devToken, remote.LocalProxyOptions{
+		OnStatusChanged: func(st remote.TransportStatus) {
+			_ = EventRemoteStatus.Broadcast(st)
+		},
+	})
+	if err != nil {
+		return HostInfo{}, err
+	}
+	st, connErr := lp.Connect(ctx)
+	if st.Connected && st.Transport != "" && st.Transport != "disconnected" {
+		profCopy.LastTransport = st.Transport
+	}
+
+	h.mu.Lock()
+	h.stopLocalBackendLocked()
+	oldProxy := h.detachRemoteProxyLocked()
+	h.remoteProxy = lp
+	h.cfg.ConnectionMode = "paired"
+	h.cfg.ActiveNodeID = nodeID
+	h.cfg.PairedHosts = upsertPairedHost(h.cfg.PairedHosts, profCopy)
+	_ = h.saveConfigLocked()
+	info := h.infoLocked()
+	h.mu.Unlock()
+
+	closeRemoteProxy(oldProxy)
+	_ = EventRemoteStatus.Broadcast(st)
+	_ = EventServerChanged.Broadcast(info)
+	if connErr != nil {
+		return info, connErr
+	}
+	return info, nil
+}
+
+// RemovePairedHost disconnects (if active) and deletes nodeID from persisted paired hosts & secrets.
+func (h *HostService) RemovePairedHost(nodeID string) (HostInfo, error) {
+	nodeID = strings.TrimSpace(nodeID)
+	_ = h.secrets.Delete(pairedDeviceSecretKey(nodeID))
+
+	h.mu.Lock()
+	filtered := make([]remote.PairedHostProfile, 0, len(h.cfg.PairedHosts))
+	for _, p := range h.cfg.PairedHosts {
+		if p.NodeID != nodeID {
+			filtered = append(filtered, p)
+		}
+	}
+	h.cfg.PairedHosts = filtered
+
+	var oldProxy *remote.LocalProxy
+	if h.cfg.ConnectionMode == "paired" && h.cfg.ActiveNodeID == nodeID {
+		oldProxy = h.detachRemoteProxyLocked()
+		h.cfg.ActiveNodeID = ""
+		if h.cfg.ServerURL != "" {
+			h.cfg.ConnectionMode = "remote"
+		} else if supportsLocalMode {
+			h.cfg.ConnectionMode = "local"
+		} else {
+			h.cfg.ConnectionMode = "unconfigured"
+		}
+	}
+	err := h.saveConfigLocked()
+	info := h.infoLocked()
+	h.mu.Unlock()
+
+	closeRemoteProxy(oldProxy)
+	if err != nil {
+		return HostInfo{}, err
+	}
+	_ = EventServerChanged.Broadcast(info)
+	return info, nil
+}
+
+// ListPairedHosts returns all paired intranet host profiles saved on this client.
+func (h *HostService) ListPairedHosts() []remote.PairedHostProfile {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]remote.PairedHostProfile, len(h.cfg.PairedHosts))
+	copy(out, h.cfg.PairedHosts)
+	return out
+}
+
+// RemoteStatus returns the live transport status of the active paired-host LocalProxy.
+func (h *HostService) RemoteStatus() remote.TransportStatus {
+	h.mu.Lock()
+	lp := h.remoteProxy
+	nodeID := h.cfg.ActiveNodeID
+	h.mu.Unlock()
+	if lp != nil {
+		return lp.Status()
+	}
+	return remote.TransportStatus{
+		NodeID:    nodeID,
+		Transport: "disconnected",
+	}
+}
+
+// ReconnectRemote re-probes network paths (LAN -> Direct -> Relay) on the active paired tunnel.
+func (h *HostService) ReconnectRemote(ctx context.Context) (remote.TransportStatus, error) {
+	h.mu.Lock()
+	lp := h.remoteProxy
+	h.mu.Unlock()
+	if lp == nil {
+		return remote.TransportStatus{Transport: "disconnected"}, nil
+	}
+	st, err := lp.Reconnect(ctx)
+	info := h.Info()
+	_ = EventServerChanged.Broadcast(info)
+	return st, err
+}
+
+func pairedDeviceSecretKey(nodeID string) string {
+	return "remote_device_token:" + strings.TrimSpace(nodeID)
+}
+
+func findPairedHost(list []remote.PairedHostProfile, nodeID string) *remote.PairedHostProfile {
+	for i := range list {
+		if list[i].NodeID == nodeID {
+			return &list[i]
+		}
+	}
+	return nil
+}
+
+func upsertPairedHost(list []remote.PairedHostProfile, prof remote.PairedHostProfile) []remote.PairedHostProfile {
+	out := make([]remote.PairedHostProfile, 0, len(list)+1)
+	out = append(out, prof)
+	for _, existing := range list {
+		if existing.NodeID != prof.NodeID {
+			out = append(out, existing)
+		}
+	}
+	return out
+}
+
+func configureWindowPermissions(w *mygo.Window) {
+	if w == nil {
+		return
+	}
+	if p := w.Page(); p != nil {
+		p.SetPermissionHandler(func(req mygo.PermissionRequest) bool {
+			for _, perm := range req.Permissions {
+				if perm != mygo.PermissionCamera && perm != mygo.PermissionNotifications {
+					return false
+				}
+			}
+			return len(req.Permissions) > 0
+		})
+	}
 }
 
 // DeepLinkAction represents a parsed nex:// deep-link action.
@@ -515,6 +839,11 @@ func ParseDeepLink(rawURL string) (DeepLinkAction, bool) {
 			sec = "general"
 		}
 		return DeepLinkAction{Kind: "settings", Section: sec}, true
+	case "pair":
+		if _, pErr := remote.ParsePairingURI(rawURL); pErr != nil {
+			return DeepLinkAction{}, false
+		}
+		return DeepLinkAction{Kind: "pair", Value: strings.TrimSpace(rawURL)}, true
 	default:
 		return DeepLinkAction{}, false
 	}
@@ -535,6 +864,9 @@ func (h *HostService) handleDeepLink(rawURL string) bool {
 		return err == nil
 	case "settings":
 		_ = EventOpenSettings.Broadcast(act.Section)
+		return true
+	case "pair":
+		_ = EventPairInvite.Broadcast(act.Value)
 		return true
 	default:
 		return false

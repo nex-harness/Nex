@@ -12,9 +12,40 @@ export interface HostInfo {
   connection_mode: string;
   server_url: string;
   local_url?: string;
+  active_node_id?: string;
+  active_host_name?: string;
+  active_transport?: string;
+  paired_hosts: PairedHostProfile[];
   supports_local_mode: boolean;
   notifications_supported: boolean;
   recent_servers: string[];
+}
+
+/** PairedHostProfile persists a paired remote Nex host and its reachable endpoints. */
+export interface PairedHostProfile {
+  node_id: string;
+  host_name: string;
+  fingerprint: string;
+  device_id: string;
+  relay_url?: string;
+  relay_token?: string;
+  direct_urls?: string[];
+  lan_urls?: string[];
+  last_transport?: string;
+  paired_at: number;
+}
+
+/** TransportStatus describes the active connection path of a client's LocalProxy. */
+export interface TransportStatus {
+  node_id: string;
+  host_name: string;
+  connected: boolean;
+  /** "lan" | "direct" | "tsnet" | "relay" | "disconnected" */
+  transport: string;
+  target?: string;
+  local_proxy_url: string;
+  latency_ms?: number;
+  error?: string;
 }
 
 // ---- Services ----
@@ -26,6 +57,8 @@ export interface HostInfo {
 export const NexHost = {
   /** ClearAuthToken deletes any stored bearer token for serverURL. */
   clearAuthToken: bind<[string], void>("NexHost.ClearAuthToken", (serverURL: string) => [serverURL]),
+  /** ConnectPairedHost starts the loopback E2EE proxy for nodeID and switches connection mode to "paired". */
+  connectPairedHost: bind<[string], HostInfo>("NexHost.ConnectPairedHost", (nodeID: string) => [nodeID]),
   /** GetAuthToken retrieves the stored bearer token for serverURL (or default if empty). */
   getAuthToken: bind<[string], string>("NexHost.GetAuthToken", (serverURL: string) => [serverURL]),
   /** GetMobilePushToken returns the stored APNs/FCM device push token. */
@@ -36,12 +69,25 @@ export const NexHost = {
   haptic: bind<[string], void>("NexHost.Haptic", (style: string) => [style]),
   /** Info returns runtime host metadata and current connection state. */
   info: bind<[], HostInfo>("NexHost.Info", () => []),
+  /** ListPairedHosts returns all paired intranet host profiles saved on this client. */
+  listPairedHosts: bind<[], PairedHostProfile[]>("NexHost.ListPairedHosts", () => []),
   /** Notify displays a native desktop or mobile notification for approval alerts or task events. */
   notify: bind<[string, string, string], void>("NexHost.Notify", (title: string, body: string, sessionID: string) => [title, body, sessionID]),
   /** OpenExternal opens an http/https URL in the system default browser. */
   openExternal: bind<[string], void>("NexHost.OpenExternal", (rawURL: string) => [rawURL]),
+  /**
+   * PairWithURI parses a nex://pair?... invite, pairs with the intranet host over LAN/Direct/Relay,
+   * saves the paired profile + device token in Keychain, and connects the local E2EE tunnel proxy.
+   */
+  pairWithURI: bind<[string, string], HostInfo>("NexHost.PairWithURI", (rawURI: string, deviceName: string) => [rawURI, deviceName]),
   /** PickDirectory opens a native OS folder picker and returns the chosen path, or "" if canceled. */
   pickDirectory: bind<[], string>("NexHost.PickDirectory", () => []),
+  /** ReconnectRemote re-probes network paths (LAN -> Direct -> Relay) on the active paired tunnel. */
+  reconnectRemote: bind<[], TransportStatus>("NexHost.ReconnectRemote", () => []),
+  /** RemoteStatus returns the live transport status of the active paired-host LocalProxy. */
+  remoteStatus: bind<[], TransportStatus>("NexHost.RemoteStatus", () => []),
+  /** RemovePairedHost disconnects (if active) and deletes nodeID from persisted paired hosts & secrets. */
+  removePairedHost: bind<[string], HostInfo>("NexHost.RemovePairedHost", (nodeID: string) => [nodeID]),
   /** SetAuthToken persists the bearer token for serverURL. */
   setAuthToken: bind<[string, string], void>("NexHost.SetAuthToken", (serverURL: string, token: string) => [serverURL, token]),
   /** SetMobilePushToken records the APNs/FCM token reported by the mobile host. */
@@ -63,4 +109,6 @@ export const events = {
   nexOpenSettings: event<string>("nex:open-settings"),
   nexNewTask: event<boolean>("nex:new-task"),
   nexServerChanged: event<HostInfo>("nex:server-changed"),
+  nexRemoteStatus: event<TransportStatus>("nex:remote-status"),
+  nexPairInvite: event<string>("nex:pair-invite"),
 } as const;

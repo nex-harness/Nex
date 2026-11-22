@@ -14,7 +14,10 @@
   "urlSchemes": ["nex"],
   "macos": {
     "minimumSystemVersion": "12.0",
-    "dmgTitle": "Nex"
+    "dmgTitle": "Nex",
+    "infoPlist": {
+      "NSCameraUsageDescription": "Scan QR codes to pair with your Nex servers."
+    }
   },
   "windows": {
     "displayName": "Nex",
@@ -35,6 +38,7 @@
       "image": "clients/app/resources/launch-logo.png"
     },
     "infoPlist": {
+      "NSCameraUsageDescription": "Scan QR codes to pair with your Nex servers.",
       "NSAppTransportSecurity": {
         "NSAllowsArbitraryLoads": true,
         "NSAllowsLocalNetworking": true
@@ -43,6 +47,7 @@
   },
   "android": {
     "minSdk": 26,
+    "permissions": ["CAMERA"],
     "adaptiveIcon": {
       "foreground": "clients/app/resources/icon-foreground.png",
       "background": "#121214"

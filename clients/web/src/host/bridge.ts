@@ -1,10 +1,16 @@
 import { isMyGo } from 'mygo-runtime';
-import { events, type HostInfo, NexHost } from './mygo.gen';
+import {
+  events,
+  type HostInfo,
+  NexHost,
+  type PairedHostProfile,
+  type TransportStatus,
+} from './mygo.gen';
 
 export type HostKind = 'browser' | 'mygo-desktop' | 'mygo-mobile';
 export type HostPlatform = 'web' | 'darwin' | 'linux' | 'win32' | 'ios' | 'android';
 
-export type { HostInfo };
+export type { HostInfo, PairedHostProfile, TransportStatus };
 
 export interface ApprovalNotification {
   sessionId: string;
@@ -33,6 +39,13 @@ export interface HostBridge {
   getHostInfo(): Promise<HostInfo | null>;
   setServerUrl(rawUrl: string): Promise<HostInfo>;
   switchConnectionMode(mode: 'local' | 'remote', serverUrl?: string): Promise<HostInfo>;
+  pairWithURI(rawURI: string, deviceName?: string): Promise<HostInfo>;
+  connectPairedHost(nodeID: string): Promise<HostInfo>;
+  removePairedHost(nodeID: string): Promise<HostInfo>;
+  remoteStatus(): Promise<TransportStatus | null>;
+  reconnectRemote(): Promise<TransportStatus | null>;
+  onRemoteStatus(cb: (st: TransportStatus) => void): () => void;
+  onPairInvite(cb: (rawURI: string) => void): () => void;
   getAuthToken(serverUrl?: string): Promise<string | null>;
   setAuthToken(token: string, serverUrl?: string): Promise<void>;
   clearAuthToken(serverUrl?: string): Promise<void>;
@@ -137,6 +150,7 @@ export function createHostBridge(): HostBridge {
         version: '0.3.0',
         connection_mode: normalized ? 'remote' : 'unconfigured',
         server_url: normalized,
+        paired_hosts: [],
         supports_local_mode: false,
         notifications_supported: false,
         recent_servers: normalized ? [normalized] : [],
@@ -156,10 +170,50 @@ export function createHostBridge(): HostBridge {
         version: '0.3.0',
         connection_mode: 'unconfigured',
         server_url: '',
+        paired_hosts: [],
         supports_local_mode: false,
         notifications_supported: false,
         recent_servers: [],
       };
+    },
+
+    async pairWithURI(rawURI: string, deviceName = ''): Promise<HostInfo> {
+      if (!hasNativeMyGo) {
+        throw new Error('Paired remote tunnels require the Nex desktop or mobile app.');
+      }
+      return await NexHost.pairWithURI(rawURI, deviceName);
+    },
+
+    async connectPairedHost(nodeID: string): Promise<HostInfo> {
+      if (!hasNativeMyGo) {
+        throw new Error('Paired remote tunnels require the Nex desktop or mobile app.');
+      }
+      return await NexHost.connectPairedHost(nodeID);
+    },
+
+    async removePairedHost(nodeID: string): Promise<HostInfo> {
+      if (!hasNativeMyGo) {
+        throw new Error('Paired remote tunnels require the Nex desktop or mobile app.');
+      }
+      return await NexHost.removePairedHost(nodeID);
+    },
+
+    async remoteStatus(): Promise<TransportStatus | null> {
+      if (!hasNativeMyGo) return null;
+      try {
+        return await NexHost.remoteStatus();
+      } catch {
+        return null;
+      }
+    },
+
+    async reconnectRemote(): Promise<TransportStatus | null> {
+      if (!hasNativeMyGo) return null;
+      try {
+        return await NexHost.reconnectRemote();
+      } catch {
+        return null;
+      }
     },
 
     async getAuthToken(serverUrl?: string): Promise<string | null> {
@@ -373,6 +427,16 @@ export function createHostBridge(): HostBridge {
     onServerChanged(cb) {
       if (!hasNativeMyGo) return () => {};
       return events.nexServerChanged.on(cb);
+    },
+
+    onRemoteStatus(cb) {
+      if (!hasNativeMyGo) return () => {};
+      return events.nexRemoteStatus.on(cb);
+    },
+
+    onPairInvite(cb) {
+      if (!hasNativeMyGo) return () => {};
+      return events.nexPairInvite.on(cb);
     },
 
     getDeviceFontScale(): number {

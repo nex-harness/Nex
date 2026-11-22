@@ -55,6 +55,7 @@ func RunDesktop(opts DesktopRunOptions) error {
 				winOpts.TitleBarHeight = 40
 			}
 			mainWin = mygo.NewWindow(winOpts)
+			configureWindowPermissions(mainWin)
 		}
 		mainWin.Restore()
 		mainWin.Show()
@@ -120,11 +121,13 @@ func RunDesktop(opts DesktopRunOptions) error {
 	})
 
 	mygo.Power.OnResume(func() {
+		go func() { _, _ = svc.ReconnectRemote(context.Background()) }()
 		_ = EventAppResume.Broadcast(time.Now().UnixMilli())
 	})
 
 	mygo.App.OnDidBecomeActive(func() {
 		mygo.ClearNotifications()
+		go func() { _, _ = svc.ReconnectRemote(context.Background()) }()
 		_ = EventAppResume.Broadcast(time.Now().UnixMilli())
 	})
 
@@ -143,12 +146,7 @@ func RunDesktop(opts DesktopRunOptions) error {
 
 	mygo.App.WhenReady(func() {
 		svc.setAppReady(true)
-
-		if svc.startupMode() == "local" {
-			if _, err := svc.ensureLocalStarted(context.Background()); err != nil {
-				log.Printf("nex-app embedded local mode failed: %v", err)
-			}
-		}
+		svc.ensureStartupConnected(context.Background())
 
 		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
 			{Role: mygo.RoleAppMenu},
