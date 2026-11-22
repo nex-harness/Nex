@@ -20,6 +20,7 @@ import {
 import { useMemo, useState } from 'react';
 import { useNexStore } from '../core/store';
 import { SessionRecord } from '../core/types';
+import { hostBridge } from '../host/bridge';
 import { formatMsg, formatRelativeTimeShort } from '../i18n/messages';
 
 function projectLeaf(workspacePath: string, fallback: string): string {
@@ -67,6 +68,25 @@ export function ProjectSidebar() {
   const openSettings = useNexStore((s) => s.openSettings);
   const closeSettings = useNexStore((s) => s.closeSettings);
   const setQuickSearchOpen = useNexStore((s) => s.setQuickSearchOpen);
+
+  const maybeCollapseOnMobile = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768 && useNexStore.getState().sidebarVisible) {
+      toggleSidebar();
+    }
+  };
+  const handleSelectSession = (id: string) => {
+    void selectSession(id);
+    maybeCollapseOnMobile();
+  };
+  const handleStartNewSession = (runnerId?: string, workspacePath?: string) => {
+    startNewSession(runnerId, workspacePath);
+    maybeCollapseOnMobile();
+  };
+  const handleOpenSettings = (section?: 'automations' | 'plugins') => {
+    openSettings(section);
+    maybeCollapseOnMobile();
+  };
+  const isMacMyGo = hostBridge.kind === 'mygo-desktop' && hostBridge.platform === 'darwin';
 
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -164,7 +184,7 @@ export function ProjectSidebar() {
       <div
         key={sess.id}
         data-testid={`session-row-${sess.id}`}
-        onClick={() => void selectSession(sess.id)}
+        onClick={() => handleSelectSession(sess.id)}
         className={`group flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg pr-2 transition-colors ${
           indent ? 'pl-5' : 'pl-2'
         } ${
@@ -239,7 +259,7 @@ export function ProjectSidebar() {
       <div
         key={sess.id}
         data-testid={`session-row-${sess.id}`}
-        onClick={() => void selectSession(sess.id)}
+        onClick={() => handleSelectSession(sess.id)}
         className={`group flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 transition-colors ${
           active ? 'bg-selected font-medium text-foreground' : 'text-foreground-subtle hover:bg-hover hover:text-foreground'
         }`}
@@ -290,7 +310,7 @@ export function ProjectSidebar() {
             title={formatMsg(locale, 'sidebar.newTask')}
             onClick={(e) => {
               e.stopPropagation();
-              startNewSession(group.runnerId, group.workspacePath);
+              handleStartNewSession(group.runnerId, group.workspacePath);
             }}
             className="flex size-5 shrink-0 items-center justify-center rounded-md text-foreground-subtle opacity-0 transition-all hover:bg-selected hover:text-foreground group-hover:opacity-100"
           >
@@ -304,7 +324,7 @@ export function ProjectSidebar() {
               {group.sessions.length === 0 ? (
                 <button
                   type="button"
-                  onClick={() => startNewSession(group.runnerId, group.workspacePath)}
+                  onClick={() => handleStartNewSession(group.runnerId, group.workspacePath)}
                   className="flex h-8 w-full items-center gap-2 rounded-lg pl-5 pr-2 text-left text-ui-sm text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground-subtle"
                 >
                   <Plus className="size-3.5 shrink-0" />
@@ -340,8 +360,12 @@ export function ProjectSidebar() {
       className="group/sidebar flex h-full w-full flex-col border-r border-border bg-sidebar text-foreground select-none"
     >
       {/* History Bar */}
-      <div className="flex h-10 shrink-0 items-center justify-between px-3">
-        <div className="flex items-center gap-1">
+      <div
+        className={`nex-drag-region flex h-10 shrink-0 items-center justify-between pr-3 ${
+          isMacMyGo ? 'pl-[76px]' : 'pl-3'
+        }`}
+      >
+        <div className="nex-no-drag flex items-center gap-1">
           <button
             type="button"
             onClick={() => window.history.back()}
@@ -361,7 +385,7 @@ export function ProjectSidebar() {
           type="button"
           onClick={toggleSidebar}
           title={formatMsg(locale, 'sidePane.collapse')}
-          className="flex size-6 items-center justify-center rounded-md text-foreground-subtlest opacity-0 transition-colors hover:bg-hover hover:text-foreground-subtle focus-visible:opacity-100 group-hover/sidebar:opacity-100"
+          className="nex-no-drag flex size-6 items-center justify-center rounded-md text-foreground-subtlest opacity-0 transition-colors hover:bg-hover hover:text-foreground-subtle focus-visible:opacity-100 group-hover/sidebar:opacity-100"
         >
           <PanelLeftClose className="size-3.5" />
         </button>
@@ -372,7 +396,7 @@ export function ProjectSidebar() {
         <button
           type="button"
           data-testid="new-session-btn"
-          onClick={() => startNewSession()}
+          onClick={() => handleStartNewSession()}
           className="flex h-8 w-full items-center justify-between rounded-lg px-2.5 transition-colors hover:bg-hover"
         >
           <span className="flex items-center gap-2.5 text-ui-base font-normal text-foreground">
@@ -397,7 +421,7 @@ export function ProjectSidebar() {
 
         <button
           type="button"
-          onClick={() => openSettings('automations')}
+          onClick={() => handleOpenSettings('automations')}
           className={`flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-ui-base text-foreground transition-colors hover:bg-hover ${
             mainView === 'settings' && settingsSection === 'automations' ? 'bg-selected' : ''
           }`}
@@ -408,7 +432,7 @@ export function ProjectSidebar() {
 
         <button
           type="button"
-          onClick={() => openSettings('plugins')}
+          onClick={() => handleOpenSettings('plugins')}
           className={`flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-ui-base text-foreground transition-colors hover:bg-hover ${
             mainView === 'settings' && settingsSection === 'plugins' ? 'bg-selected' : ''
           }`}
@@ -520,7 +544,7 @@ export function ProjectSidebar() {
         <button
           type="button"
           data-testid="sidebar-settings-btn"
-          onClick={() => (mainView === 'settings' ? closeSettings() : openSettings())}
+          onClick={() => (mainView === 'settings' ? closeSettings() : handleOpenSettings())}
           title={formatMsg(locale, mainView === 'settings' ? 'workspace.backToWorkspace' : 'settings.title')}
           className="flex size-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
         >

@@ -181,6 +181,19 @@ export function SettingsPage() {
   const { settingsSection, openSettings, closeSettings, locale } = useNexStore();
   const [navFilter, setNavFilter] = useState('');
   const [flashMsg, setFlashMsg] = useState('');
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1440,
+  );
+  const [mobileShowNav, setMobileShowNav] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const isCompact = viewportWidth < 768;
 
   const showFlash = (msg: string) => {
     setFlashMsg(msg);
@@ -203,7 +216,13 @@ export function SettingsPage() {
       className="fixed inset-0 z-40 flex h-dvh w-screen overflow-hidden bg-background text-foreground"
     >
       {/* Left settings sidebar */}
-      <nav className="flex w-[248px] shrink-0 flex-col border-r border-border bg-sidebar px-3 py-3.5 select-none">
+      <nav
+        className={
+          isCompact
+            ? `${mobileShowNav ? 'flex w-full' : 'hidden'} flex-col bg-sidebar px-3 py-3.5 select-none`
+            : 'flex w-[248px] shrink-0 flex-col border-r border-border bg-sidebar px-3 py-3.5 select-none'
+        }
+      >
         <button
           type="button"
           data-testid="settings-back-btn"
@@ -242,7 +261,10 @@ export function SettingsPage() {
                       type="button"
                       data-testid={`settings-nav-${item.id}`}
                       aria-current={active ? 'page' : undefined}
-                      onClick={() => openSettings(item.id)}
+                      onClick={() => {
+                        openSettings(item.id);
+                        setMobileShowNav(false);
+                      }}
                       className={`flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-ui-base transition-colors ${
                         active
                           ? 'bg-black/[0.06] font-medium text-foreground dark:bg-white/[0.1]'
@@ -261,8 +283,32 @@ export function SettingsPage() {
       </nav>
 
       {/* Right content viewport */}
-      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-background px-8 py-10">
+      <div
+        className={`min-h-0 min-w-0 flex-1 overflow-y-auto bg-background px-4 py-6 sm:px-8 sm:py-10 ${
+          isCompact && mobileShowNav ? 'hidden' : 'block'
+        }`}
+      >
         <div className="mx-auto w-full max-w-4xl">
+          {isCompact && (
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                data-testid="settings-mobile-nav-back"
+                onClick={() => setMobileShowNav(true)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-ui-xs font-medium text-foreground-subtle hover:bg-hover hover:text-foreground"
+              >
+                <ArrowLeft className="size-3.5" />
+                <span>{formatMsg(locale, 'settings.mobile.allSections')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={closeSettings}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-black/[0.05] px-2.5 text-ui-xs font-medium text-foreground hover:bg-hover dark:bg-white/[0.07]"
+              >
+                <span>{formatMsg(locale, 'workspace.backToWorkspace')}</span>
+              </button>
+            </div>
+          )}
           <header className={providerHeaderRow ? '' : 'mb-6'}>
             <h1 className="text-[28px] font-bold tracking-tight text-foreground">
               {formatMsg(locale, activeMeta.titleKey)}
@@ -325,6 +371,9 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
     permissionMode,
     setPermissionMode,
     preferences,
+    hostInfo,
+    activeServerUrl,
+    openServerConnect,
     authEnabled,
     updateWebPassword,
     logoutWeb,
@@ -406,6 +455,34 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
 
   return (
     <div className="space-y-6">
+      {(hostInfo || activeServerUrl) && (
+        <div data-testid="settings-server-connection" className="space-y-3">
+          <SectionHeading title={formatMsg(locale, 'settings.connection.title')} />
+          <SettingsGroupCard>
+            <SettingsRow
+              label={formatMsg(locale, 'settings.connection.modeLabel')}
+              description={activeServerUrl || undefined}
+            >
+              <div className="flex items-center gap-2">
+                <span className="rounded-md bg-tag px-2.5 py-1 text-ui-xs font-medium text-foreground">
+                  {hostInfo?.connection_mode === 'local'
+                    ? formatMsg(locale, 'settings.connection.modeLocal')
+                    : formatMsg(locale, 'settings.connection.modeRemote')}
+                </span>
+                <button
+                  type="button"
+                  data-testid="settings-switch-server-btn"
+                  onClick={openServerConnect}
+                  className="inline-flex h-8 items-center rounded-lg border border-border bg-card px-3 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover"
+                >
+                  {formatMsg(locale, 'settings.connection.switchServer')}
+                </button>
+              </div>
+            </SettingsRow>
+          </SettingsGroupCard>
+        </div>
+      )}
+
       <SettingsGroupCard>
         <SettingsRow
           label={formatMsg(locale, 'settings.locale')}

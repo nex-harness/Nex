@@ -2,10 +2,13 @@ import { formatMsg } from '../i18n/messages';
 import { Eye, EyeOff, LoaderCircle, Lock } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { useNexStore } from '../core/store';
+import { hostBridge } from '../host/bridge';
 
 export function AuthGate() {
   const locale = useNexStore((s) => s.locale);
   const loginWithPassword = useNexStore((s) => s.loginWithPassword);
+  const activeServerUrl = useNexStore((s) => s.activeServerUrl);
+  const openServerConnect = useNexStore((s) => s.openServerConnect);
 
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
@@ -40,6 +43,11 @@ export function AuthGate() {
           <p className="mt-1.5 text-ui-sm text-foreground-subtle">
             {formatMsg(locale, 'auth.enterYourAccessPasswordTo')}
           </p>
+          {hostBridge.kind !== 'browser' && activeServerUrl && (
+            <p className="mt-1 max-w-full truncate font-mono text-ui-xs text-foreground-subtlest">
+              {formatMsg(locale, 'auth.connectingTo', { url: activeServerUrl })}
+            </p>
+          )}
         </div>
 
         <form onSubmit={(e) => void handleSubmit(e)} className="mt-6 space-y-3.5">
@@ -85,6 +93,19 @@ export function AuthGate() {
             <span>{submitting ? (formatMsg(locale, 'auth.verifying')) : formatMsg(locale, 'auth.unlock')}</span>
           </button>
         </form>
+
+        {hostBridge.kind !== 'browser' && (
+          <div className="mt-4 flex justify-center border-t border-border pt-3">
+            <button
+              type="button"
+              data-testid="auth-switch-server-btn"
+              onClick={openServerConnect}
+              className="text-ui-xs text-foreground-subtle transition-colors hover:text-foreground"
+            >
+              {formatMsg(locale, 'auth.switchServer')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

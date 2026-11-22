@@ -1,6 +1,7 @@
-.PHONY: test test-web verify-nocgo build-web build build-runners package-server run-local clean
+.PHONY: test test-web verify-nocgo build-web build build-runners package-server run-local clean client-generate client-dev client-dev-ios client-dev-android build-clients-desktop build-client-ios build-client-android
 
 NODE_PATH_DIR := $(shell dirname "$$(command -v node 2>/dev/null || echo /Users/tylinux/.nvm/versions/node/v23.9.0/bin/node)")
+MYGO_CLI := go run github.com/egoist/mygo/cmd/mygo@v0.10.0
 
 test:
 	CGO_ENABLED=0 go test -race -cover ./...
@@ -37,4 +38,25 @@ run-local: build
 	./scripts/start-local.sh
 
 clean:
-	rm -rf bin dist coverage.out
+	rm -rf bin dist coverage.out .mygo
+
+client-generate:
+	PATH="$(NODE_PATH_DIR):$$PATH" $(MYGO_CLI) generate
+
+client-dev:
+	PATH="$(NODE_PATH_DIR):$$PATH" $(MYGO_CLI) dev
+
+client-dev-ios:
+	PATH="$(NODE_PATH_DIR):$$PATH" $(MYGO_CLI) dev -platform ios
+
+client-dev-android:
+	PATH="$(NODE_PATH_DIR):$$PATH" $(MYGO_CLI) dev -platform android
+
+build-clients-desktop:
+	PATH="$(NODE_PATH_DIR):$$PATH" ./scripts/build-clients.sh desktop
+
+build-client-ios:
+	PATH="$(NODE_PATH_DIR):$$PATH" ./scripts/build-clients.sh ios
+
+build-client-android:
+	PATH="$(NODE_PATH_DIR):$$PATH" ./scripts/build-clients.sh android

@@ -1,6 +1,7 @@
 # Binaries & build artifacts
 /bin/
 /dist/
+/.mygo/
 *.exe
 *.dll
 *.so

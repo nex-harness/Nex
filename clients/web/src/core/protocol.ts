@@ -97,21 +97,48 @@ export function safeStorageRemove(key: string): void {
 }
 
 let authRequiredHandler: (() => void) | null = null;
+let runtimeServerUrl = '';
+let runtimeAuthToken = '';
 
 export function setAuthRequiredHandler(fn: (() => void) | null): void {
   authRequiredHandler = fn;
 }
 
+export function setRuntimeServerUrl(url: string): void {
+  runtimeServerUrl = url ? url.trim().replace(/\/+$/, '') : '';
+}
+
+export function getRuntimeServerUrl(): string {
+  return runtimeServerUrl;
+}
+
+export function setRuntimeAuthToken(token: string): void {
+  runtimeAuthToken = token ? token.trim() : '';
+}
+
+export function getRuntimeAuthToken(): string {
+  return runtimeAuthToken;
+}
+
+export function isEmbeddedMyGoHost(): boolean {
+  if (typeof window === 'undefined') return false;
+  const proto = window.location?.protocol || '';
+  const host = (window.location?.hostname || '').toLowerCase();
+  return proto === 'mygo:' || host === 'mygo.localhost' || host.endsWith('.mygo.localhost');
+}
+
 export function resolveApiBase(): string {
   if (typeof window === 'undefined') return 'http://127.0.0.1:8080';
+  if (runtimeServerUrl) return runtimeServerUrl;
   const override = safeStorageGet('nex.server.url');
   if (override) return override.replace(/\/+$/, '');
+  if (isEmbeddedMyGoHost()) return '';
   return window.location.origin;
 }
 
 export function resolveWsUrl(): string {
   const base = resolveApiBase();
-  const token = safeStorageGet('nex.auth.token');
+  const token = runtimeAuthToken || safeStorageGet('nex.auth.token');
   const query = token ? `?token=${encodeURIComponent(token)}` : '';
   if (base.startsWith('https://')) {
     return 'wss://' + base.slice('https://'.length) + '/ws/client' + query;
@@ -124,7 +151,7 @@ export function resolveWsUrl(): string {
 
 function buildAuthHeaders(extra?: HeadersInit, includeJsonContentType = true): Record<string, string> {
   const headers: Record<string, string> = includeJsonContentType ? { 'Content-Type': 'application/json' } : {};
-  const token = safeStorageGet('nex.auth.token');
+  const token = runtimeAuthToken || safeStorageGet('nex.auth.token');
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }

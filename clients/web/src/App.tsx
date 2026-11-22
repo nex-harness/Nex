@@ -10,11 +10,13 @@ import { DesktopTopOverlay } from './features/DesktopTopOverlay';
 import { GhosttyTerminal } from './features/GhosttyTerminal';
 import { ImagePreviewModal } from './features/ImagePreviewModal';
 import { ProjectSidebar } from './features/ProjectSidebar';
+import { ServerConnectGate } from './features/ServerConnectGate';
 import { SettingsPage } from './features/SettingsPage';
 import { WorkbenchSidebar } from './features/WorkbenchSidebar';
 import { formatMsg } from './i18n/messages';
 
 export function App() {
+  const serverConnectRequired = useNexStore((s) => s.serverConnectRequired);
   const authEnabled = useNexStore((s) => s.authEnabled);
   const authenticated = useNexStore((s) => s.authenticated);
   const locale = useNexStore((s) => s.locale);
@@ -137,8 +139,13 @@ export function App() {
 
   const shouldMountSidePane = sidePaneVisible || hasOpenedSidePane;
   const shouldMountTerminal = showBottomPanel || hasOpenedTerminal;
+  const isCompact = viewportWidth < 768;
 
   const activeBottomTerm = bottomTerminals.find((t) => t.id === activeBottomTermId) || bottomTerminals[0];
+
+  if (serverConnectRequired) {
+    return <ServerConnectGate />;
+  }
 
   if (authEnabled && !authenticated) {
     return <AuthGate />;
@@ -146,7 +153,7 @@ export function App() {
 
   if (mainView === 'settings') {
     return (
-      <div className="zcode-view-enter h-dvh w-screen overflow-hidden">
+      <div className="zcode-view-enter nex-safe-top nex-safe-bottom h-dvh w-screen overflow-hidden">
         <SettingsPage />
         <CommandPaletteModal />
         <ImagePreviewModal />
@@ -157,24 +164,38 @@ export function App() {
   }
 
   return (
-    <div className="relative flex h-dvh w-screen overflow-hidden bg-background text-foreground">
+    <div className="nex-safe-top nex-safe-bottom relative flex h-dvh w-screen overflow-hidden bg-background text-foreground">
       {/* Top-Left Floating Controls when Left Sidebar is Collapsed */}
       <DesktopTopOverlay />
 
-      {/* Smooth ZCode Animated Full-Height Left Sidebar */}
+      {isCompact && sidebarVisible && (
+        <div
+          data-testid="mobile-sidebar-backdrop"
+          onClick={() => useNexStore.getState().toggleSidebar()}
+          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-[1px]"
+        />
+      )}
+
+      {/* Smooth ZCode Animated Full-Height Left Sidebar (Drawer on Mobile) */}
       <div
         data-testid="sidebar-panel"
         data-state={sidebarVisible ? 'open' : 'closed'}
         aria-hidden={!sidebarVisible}
-        style={{ width: sidebarVisible ? `${sidebarWidth}px` : '0px' }}
-        className={`relative h-full shrink-0 overflow-hidden ${
-          draggingPanel === 'sidebar' ? '' : 'transition-[width,opacity] duration-200 ease-out'
-        } ${sidebarVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        style={isCompact ? undefined : { width: sidebarVisible ? `${sidebarWidth}px` : '0px' }}
+        className={
+          isCompact
+            ? `nex-safe-top nex-safe-bottom fixed inset-y-0 left-0 z-40 w-[85vw] max-w-[320px] overflow-hidden shadow-2xl transition-transform duration-200 ease-out ${
+                sidebarVisible ? 'translate-x-0 opacity-100' : 'pointer-events-none -translate-x-full opacity-0'
+              }`
+            : `relative h-full shrink-0 overflow-hidden ${
+                draggingPanel === 'sidebar' ? '' : 'transition-[width,opacity] duration-200 ease-out'
+              } ${sidebarVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`
+        }
       >
-        <div style={{ width: `${sidebarWidth}px` }} className="h-full">
+        <div style={isCompact ? undefined : { width: `${sidebarWidth}px` }} className="h-full w-full">
           <ProjectSidebar />
         </div>
-        {sidebarVisible && (
+        {!isCompact && sidebarVisible && (
           <div
             role="separator"
             aria-label="Resize sidebar"
@@ -260,18 +281,24 @@ export function App() {
         )}
       </div>
 
-      {/* Smooth ZCode Animated Right Side Pane (Mounted on first open; collapses smoothly without reflow) */}
+      {/* Smooth ZCode Animated Right Side Pane (Full-screen overlay sheet on Mobile) */}
       {shouldMountSidePane && (
         <div
           data-testid="side-pane-container"
           data-state={sidePaneVisible ? 'open' : 'closed'}
           aria-hidden={!sidePaneVisible}
-          style={{ width: sidePaneVisible ? `${effectiveSidePaneWidth}px` : '0px' }}
-          className={`relative h-full shrink-0 overflow-hidden ${
-            draggingPanel === 'sidepane' ? '' : 'transition-[width,opacity] duration-200 ease-out'
-          } ${sidePaneVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+          style={isCompact ? undefined : { width: sidePaneVisible ? `${effectiveSidePaneWidth}px` : '0px' }}
+          className={
+            isCompact
+              ? `nex-safe-top nex-safe-bottom fixed inset-0 z-40 bg-background transition-opacity duration-200 ease-out ${
+                  sidePaneVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
+                }`
+              : `relative h-full shrink-0 overflow-hidden ${
+                  draggingPanel === 'sidepane' ? '' : 'transition-[width,opacity] duration-200 ease-out'
+                } ${sidePaneVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`
+          }
         >
-          {sidePaneVisible && (
+          {!isCompact && sidePaneVisible && (
             <div
               role="separator"
               onPointerDown={(e) =>
@@ -280,7 +307,7 @@ export function App() {
               className="absolute top-0 left-0 z-20 h-full w-1.5 cursor-col-resize transition-colors hover:bg-resize-handle/40"
             />
           )}
-          <div style={{ width: `${effectiveSidePaneWidth}px` }} className="h-full">
+          <div style={isCompact ? undefined : { width: `${effectiveSidePaneWidth}px` }} className="h-full w-full">
             <WorkbenchSidebar />
           </div>
         </div>

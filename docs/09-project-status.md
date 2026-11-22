@@ -39,7 +39,7 @@ Nex-v3 是一套 **Go 原生、零 CGO** 的多 Runner Agent Harness，对标 `p
 | M3 | 远程终端 + 多 Tab 工作台 | ✅ 完成 | 零 CGO PTY、`ghostty-web` WASM 终端、Files/Preview/Review/Side Chat 多 Tab |
 | M4 | 扩展生态 | ✅ 完成 | `goja` Code Mode 懒加载 MCP、TS 插件 + 远程 `ctx.ui`、同机并发 Subagent |
 | M5 | Cron + 归档 + 统计 | ✅ 完成 | `robfig/cron/v3`、`kardianos/service`、`main.db`/`archive.db` 冷热分离、小时桶用量看板 |
-| M6 | 桌面端与移动端交付 | ⚠️ 部分完成 | Go 侧宿主与 All-in-One 模式已通，`mygo` 原生容器打包尚未接入 |
+| M6 | 桌面端与移动端交付 | ✅ 完成 | 基于 `egoist/mygo` Web Mode 交付 Linux/macOS/Windows 桌面端与 iOS/Android 移动端，支持 `NexHost` Typed IPC、Keychain/Keystore 鉴权、桌面一体化/远程双模式切换与移动端自适应抽屉布局 |
 
 ### 2.2 质量门禁
 
@@ -158,8 +158,8 @@ Nex-v3 是一套 **Go 原生、零 CGO** 的多 Runner Agent Harness，对标 `p
 
 | 项 | 现状 | 影响 |
 | :--- | :--- | :--- |
-| `mygo` 原生容器 | `clients/app` 只有 Go 侧 `NativeBridge` 与 All-in-One 宿主；`nex-app` 目前用系统浏览器打开 | M6 未真正交付桌面/移动原生壳，`go.mod` 里也没有 `mygo` 依赖 |
-| 推送通知 | `SetMobilePushToken` 仅本地持久化，未对接 APNs / FCM | 移动端锁屏审批唤醒不可用 |
+| `mygo` 原生容器 | ✅ 已完成：`clients/app` 与 `cmd/nex-app` 已切换为 `egoist/mygo` v0.10.0 Web Mode（桌面含托盘/菜单/全局快捷键/单机一体化模式，移动端通过编译标签零 SQLite 隔离） | 五端共用 `clients/web`，参见 [11-mygo-client-guide.md](./11-mygo-client-guide.md) |
+| 推送通知 | `SetMobilePushToken` 与前端 `mygo` 通知通道已预留，未对接远端 APNs / FCM 网关推送 | 后台锁屏状态下的远程审批唤醒需后续接入网关 |
 | ZCode Workflow 编排 | 按需暂缓 | 当前聚焦单会话与多子智能体开发体验 |
 
 ### 4.2 质量缺口

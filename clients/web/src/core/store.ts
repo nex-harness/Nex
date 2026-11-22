@@ -1,8 +1,16 @@
 import { applyDocumentLocale, detectBrowserLocale, formatMsg, type LocaleCode } from '../i18n/messages';
 import { create } from 'zustand';
-import { hostBridge } from '../host/bridge';
+import { hostBridge, type HostInfo } from '../host/bridge';
 import { resolveEffectiveEffort } from './effort';
-import { apiFetch, safeStorageGet, safeStorageRemove, safeStorageSet, setAuthRequiredHandler } from './protocol';
+import {
+  apiFetch,
+  safeStorageGet,
+  safeStorageRemove,
+  safeStorageSet,
+  setAuthRequiredHandler,
+  setRuntimeAuthToken,
+  setRuntimeServerUrl,
+} from './protocol';
 import { applySessionEvent, emptyStreamState, RawSessionEventRow, SessionStreamState } from './reducer';
 import {
   AgentProfile,
@@ -75,6 +83,7 @@ export function persistActiveSessionId(sessionId: string): void {
 }
 
 let wsHandlersWired = false;
+let hostEventsWired = false;
 
 export function applyDocumentTheme(theme: UserPreferences['theme']): void {
   if (typeof document === 'undefined') return;
@@ -149,6 +158,9 @@ let gitSummaryInFlight: Promise<GitSummary | null> | null = null;
 let gitSummaryInFlightDiffs = false;
 
 export interface AppState {
+  hostInfo: HostInfo | null;
+  serverConnectRequired: boolean;
+  activeServerUrl: string;
   wsConnected: boolean;
   authChecked: boolean;
   authEnabled: boolean;
@@ -233,6 +245,10 @@ export interface AppState {
   updateThemeQuick: (theme: UserPreferences['theme']) => Promise<void>;
 
   bootstrap: () => Promise<void>;
+  connectToServer: (rawUrl: string) => Promise<{ ok: boolean; error?: string }>;
+  useLocalDesktopMode: () => Promise<{ ok: boolean; error?: string }>;
+  openServerConnect: () => void;
+  cancelServerConnect: () => void;
   checkAuthStatus: () => Promise<{ enabled: boolean; authenticated: boolean }>;
   loginWithPassword: (password: string) => Promise<{ ok: boolean; error?: string }>;
   logoutWeb: () => Promise<void>;
@@ -331,6 +347,9 @@ const INITIAL_LOCALE: LocaleCode = detectBrowserLocale(safeStorageGet('nex.local
 applyDocumentLocale(INITIAL_LOCALE);
 
 export const useNexStore = create<AppState>((set, get) => ({
+  hostInfo: null,
+  serverConnectRequired: false,
+  activeServerUrl: '',
   wsConnected: false,
   authChecked: false,
   authEnabled: false,
@@ -338,7 +357,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   locale: INITIAL_LOCALE,
   mainView: 'workspace',
   settingsSection: 'general',
-  sidebarVisible: true,
+  sidebarVisible: typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
   sidePaneVisible: false,
   showBottomPanel: false,
   quickSearchOpen: false,
@@ -588,6 +607,75 @@ export const useNexStore = create<AppState>((set, get) => ({
     await apiFetch('/api/v1/preferences', { method: 'PUT', body: JSON.stringify(nextPrefs) }).catch(() => {});
   },
 
+  openServerConnect: () => set({ serverConnectRequired: true }),
+  cancelServerConnect: () => {
+    if (get().activeServerUrl) {
+      set({ serverConnectRequired: false });
+    }
+  },
+
+  connectToServer: async (rawUrl) => {
+    try {
+      const info = await hostBridge.setServerUrl(rawUrl);
+      const nextUrl = info.server_url || rawUrl.trim().replace(/\/+$/, '');
+      setRuntimeServerUrl(nextUrl);
+      const tok = (await hostBridge.getAuthToken(nextUrl)) || '';
+      setRuntimeAuthToken(tok);
+      if (tok) safeStorageSet('nex.auth.token', tok);
+      else safeStorageRemove('nex.auth.token');
+      wsClient.disconnect();
+      persistActiveSessionId('');
+      set({
+        hostInfo: info,
+        activeServerUrl: nextUrl,
+        serverConnectRequired: false,
+        authChecked: false,
+        authenticated: true,
+        activeSessionId: '',
+        sessions: [],
+        runners: [],
+        streams: {},
+        selectedRunnerId: '',
+        selectedWorkspacePath: '',
+      });
+      await get().bootstrap();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Failed to connect' };
+    }
+  },
+
+  useLocalDesktopMode: async () => {
+    try {
+      const info = await hostBridge.switchConnectionMode('local');
+      const nextUrl = info.server_url || info.local_url || '';
+      setRuntimeServerUrl(nextUrl);
+      const tok = nextUrl ? (await hostBridge.getAuthToken(nextUrl)) || '' : '';
+      setRuntimeAuthToken(tok);
+      if (tok) safeStorageSet('nex.auth.token', tok);
+      else safeStorageRemove('nex.auth.token');
+      wsClient.disconnect();
+      persistActiveSessionId('');
+      set({
+        hostInfo: info,
+        activeServerUrl: nextUrl,
+        serverConnectRequired: false,
+        authChecked: false,
+        authenticated: true,
+        activeSessionId: '',
+        sessions: [],
+        runners: [],
+        streams: {},
+        selectedRunnerId: '',
+        selectedWorkspacePath: '',
+      });
+      await get().bootstrap();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Local mode unavailable' };
+    }
+  },
+
   checkAuthStatus: async () => {
     try {
       const st = await apiFetch<{ enabled: boolean; authenticated: boolean }>('/api/v1/auth/status');
@@ -596,6 +684,10 @@ export const useNexStore = create<AppState>((set, get) => ({
       set({ authChecked: true, authEnabled: enabled, authenticated });
       return { enabled, authenticated };
     } catch {
+      if (hostBridge.kind !== 'browser') {
+        set({ authChecked: false, authenticated: false, serverConnectRequired: true });
+        return { enabled: true, authenticated: false };
+      }
       set({ authChecked: true, authEnabled: false, authenticated: true });
       return { enabled: false, authenticated: true };
     }
@@ -608,7 +700,9 @@ export const useNexStore = create<AppState>((set, get) => ({
         body: JSON.stringify({ password }),
       });
       if (res?.token) {
+        setRuntimeAuthToken(res.token);
         safeStorageSet('nex.auth.token', res.token);
+        await hostBridge.setAuthToken(res.token, get().activeServerUrl || undefined);
       }
       set({ authChecked: true, authEnabled: Boolean(res?.enabled ?? true), authenticated: true });
       await get().bootstrap();
@@ -624,7 +718,9 @@ export const useNexStore = create<AppState>((set, get) => ({
     } catch {
       // ignore
     }
+    setRuntimeAuthToken('');
     safeStorageRemove('nex.auth.token');
+    await hostBridge.clearAuthToken(get().activeServerUrl || undefined);
     wsClient.disconnect();
     set({ authenticated: false, wsConnected: false, mainView: 'workspace' });
   },
@@ -636,9 +732,13 @@ export const useNexStore = create<AppState>((set, get) => ({
         body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
       });
       if (res?.token) {
+        setRuntimeAuthToken(res.token);
         safeStorageSet('nex.auth.token', res.token);
+        await hostBridge.setAuthToken(res.token, get().activeServerUrl || undefined);
       } else if (!res?.enabled) {
+        setRuntimeAuthToken('');
         safeStorageRemove('nex.auth.token');
+        await hostBridge.clearAuthToken(get().activeServerUrl || undefined);
       }
       set({ authEnabled: Boolean(res?.enabled), authenticated: true });
       return { ok: true, enabled: Boolean(res?.enabled) };
@@ -652,10 +752,78 @@ export const useNexStore = create<AppState>((set, get) => ({
     applyDocumentLocale(get().locale);
 
     setAuthRequiredHandler(() => {
+      setRuntimeAuthToken('');
       safeStorageRemove('nex.auth.token');
+      void hostBridge.clearAuthToken(get().activeServerUrl || undefined);
       wsClient.disconnect();
       set({ authEnabled: true, authenticated: false, wsConnected: false });
     });
+
+    if (!hostEventsWired) {
+      hostEventsWired = true;
+      hostBridge.onAppResume(() => {
+        if (!get().serverConnectRequired && (!get().authEnabled || get().authenticated)) {
+          wsClient.reconnectNow();
+        }
+      });
+      hostBridge.onOpenSession((sid) => {
+        if (sid) {
+          set({ mainView: 'workspace', serverConnectRequired: false });
+          void get().selectSession(sid);
+        }
+      });
+      hostBridge.onOpenSettings((section) => {
+        set({ serverConnectRequired: false });
+        get().openSettings((section || 'general') as SettingsSectionId);
+      });
+      hostBridge.onNewTask(() => {
+        set({ serverConnectRequired: false, mainView: 'workspace' });
+        get().startNewSession();
+      });
+      hostBridge.onServerChanged((info) => {
+        const nextUrl = info.server_url || '';
+        const prevUrl = get().activeServerUrl;
+        set({ hostInfo: info });
+        if (!nextUrl) {
+          setRuntimeServerUrl('');
+          set({ activeServerUrl: '', serverConnectRequired: true });
+          wsClient.disconnect();
+          return;
+        }
+        if (nextUrl !== prevUrl) {
+          void (async () => {
+            setRuntimeServerUrl(nextUrl);
+            const tok = (await hostBridge.getAuthToken(nextUrl)) || '';
+            setRuntimeAuthToken(tok);
+            set({
+              activeServerUrl: nextUrl,
+              serverConnectRequired: false,
+              activeSessionId: '',
+              sessions: [],
+              runners: [],
+              streams: {},
+            });
+            wsClient.disconnect();
+            await get().bootstrap();
+          })();
+        }
+      });
+    }
+
+    const info = await hostBridge.getHostInfo();
+    if (info) {
+      set({ hostInfo: info });
+      if (!info.server_url) {
+        setRuntimeServerUrl('');
+        set({ activeServerUrl: '', serverConnectRequired: true });
+        return;
+      }
+      setRuntimeServerUrl(info.server_url);
+      const tok = (await hostBridge.getAuthToken(info.server_url)) || '';
+      setRuntimeAuthToken(tok);
+      if (tok) safeStorageSet('nex.auth.token', tok);
+      set({ activeServerUrl: info.server_url, serverConnectRequired: false });
+    }
 
     const auth = await get().checkAuthStatus();
     if (auth.enabled && !auth.authenticated) {
@@ -1189,6 +1357,7 @@ export const useNexStore = create<AppState>((set, get) => ({
       },
     }));
 
+    hostBridge.haptic('light');
     wsClient.sendEnvelope(
       'session.prompt',
       {

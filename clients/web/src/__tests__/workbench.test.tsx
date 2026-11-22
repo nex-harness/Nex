@@ -6,6 +6,7 @@ import { BROWSER_BINARY_SCREENCAST, decodePTYBinaryFrame, encodePTYBinaryFrame, 
 import { applySessionEvent, emptyStreamState } from '../core/reducer';
 import { persistActiveSessionId, readPersistedSessionId, useNexStore } from '../core/store';
 import { wsClient } from '../core/wsClient';
+import { createHostBridge } from '../host/bridge';
 import { parsePastedSSHTarget } from '../features/SettingsRunners';
 
 let originalBootstrap: (() => Promise<void>) | null = null;
@@ -2426,5 +2427,186 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     const browserModelSelect = screen.getByTestId('builtin-subagent-browser-model-select') as HTMLSelectElement;
     expect(browserModelSelect).toBeTruthy();
     expect(browserModelSelect.value).toBe('');
+  });
+
+  it('detects mygo desktop/mobile hosts via window.mygo and invokes typed NexHost IPC & lifecycle events', async () => {
+    const origMyGo = (globalThis as { mygo?: unknown }).mygo;
+    try {
+      const listeners = new Map<string, (payload: unknown) => void>();
+      const callMock = vi.fn(async (method: string, ...args: unknown[]) => {
+        if (method === 'NexHost.Info') {
+          return {
+            platform: 'ios',
+            form_factor: 'mobile',
+            version: '0.3.0',
+            connection_mode: 'unconfigured',
+            server_url: '',
+            supports_local_mode: false,
+            recent_servers: [],
+          };
+        }
+        if (method === 'NexHost.SetServerURL') {
+          return {
+            platform: 'ios',
+            form_factor: 'mobile',
+            version: '0.3.0',
+            connection_mode: 'remote',
+            server_url: String(args[0] || ''),
+            supports_local_mode: false,
+            recent_servers: [String(args[0] || '')],
+          };
+        }
+        return null;
+      });
+      const onMock = vi.fn((ev: string, fn: (payload: unknown) => void) => {
+        listeners.set(ev, fn);
+        return () => listeners.delete(ev);
+      });
+
+      (globalThis as { mygo?: unknown }).mygo = {
+        platform: 'ios',
+        windowId: 1,
+        version: '0.10.0',
+        call: callMock,
+        callWith: (method: string, args: unknown[]) => callMock(method, ...(args || [])),
+        on: onMock,
+      };
+      const iosBridge = createHostBridge();
+      expect(iosBridge.kind).toBe('mygo-mobile');
+      expect(iosBridge.platform).toBe('ios');
+      const info = await iosBridge.getHostInfo();
+      expect(info?.platform).toBe('ios');
+      expect(callMock).toHaveBeenCalledWith('NexHost.Info');
+      await iosBridge.setServerUrl('https://nex.tylinux.cn');
+      expect(callMock).toHaveBeenCalledWith('NexHost.SetServerURL', 'https://nex.tylinux.cn');
+
+      const resumeSpy = vi.fn();
+      iosBridge.onAppResume(resumeSpy);
+      expect(onMock).toHaveBeenCalledWith('nex:app-resume', resumeSpy);
+      listeners.get('nex:app-resume')?.(1700000000000);
+      expect(resumeSpy).toHaveBeenCalledWith(1700000000000);
+
+      (globalThis as { mygo?: unknown }).mygo = { platform: 'android', call: callMock, on: onMock };
+      expect(createHostBridge().kind).toBe('mygo-mobile');
+      expect(createHostBridge().platform).toBe('android');
+
+      (globalThis as { mygo?: unknown }).mygo = { platform: 'darwin', call: callMock, on: onMock };
+      expect(createHostBridge().kind).toBe('mygo-desktop');
+      expect(createHostBridge().platform).toBe('darwin');
+    } finally {
+      (globalThis as { mygo?: unknown }).mygo = origMyGo;
+    }
+  });
+
+  it('renders ServerConnectGate with health check validation and toggles local-mode button by host capability', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+    const connectSpy = vi.fn(async () => ({ ok: true }));
+    const origConnect = useNexStore.getState().connectToServer;
+
+    try {
+      useNexStore.setState({
+        authEnabled: false,
+        authenticated: true,
+        locale: 'en-US',
+        serverConnectRequired: true,
+        activeServerUrl: '',
+        hostInfo: {
+          platform: 'darwin',
+          form_factor: 'desktop',
+          version: '0.3.0',
+          connection_mode: 'unconfigured',
+          server_url: '',
+          supports_local_mode: true,
+          recent_servers: [],
+        },
+        connectToServer: connectSpy,
+      });
+
+      const { rerender } = render(<App />);
+      expect(screen.getByTestId('server-connect-gate')).toBeTruthy();
+      expect(screen.getByTestId('server-local-mode-btn')).toBeTruthy();
+
+      fireEvent.change(screen.getByTestId('server-url-input'), {
+        target: { value: 'https://nex.tylinux.cn/' },
+      });
+      fireEvent.click(screen.getByTestId('server-connect-btn'));
+
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalledWith('https://nex.tylinux.cn/api/v1/health');
+        expect(connectSpy).toHaveBeenCalledWith('https://nex.tylinux.cn');
+      });
+
+      act(() => {
+        useNexStore.setState({
+          hostInfo: {
+            platform: 'android',
+            form_factor: 'mobile',
+            version: '0.3.0',
+            connection_mode: 'unconfigured',
+            server_url: '',
+            supports_local_mode: false,
+            recent_servers: [],
+          },
+        });
+      });
+      rerender(<App />);
+      expect(screen.queryByTestId('server-local-mode-btn')).toBeNull();
+    } finally {
+      useNexStore.setState({ serverConnectRequired: false, hostInfo: null, connectToServer: origConnect });
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('adapts sidebar drawer, full-screen right pane, and settings navigation on compact mobile viewports (<768px)', () => {
+    const origWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 390 });
+
+    try {
+      useNexStore.setState({
+        authEnabled: false,
+        authenticated: true,
+        serverConnectRequired: false,
+        mainView: 'workspace',
+        locale: 'en-US',
+        sidebarVisible: true,
+        sidePaneVisible: true,
+        rightTabs: [{ id: 'tab_m_1', kind: 'browser', title: 'Browser', closable: true }],
+        activeRightTabId: 'tab_m_1',
+        hostInfo: {
+          platform: 'ios',
+          form_factor: 'mobile',
+          version: '0.3.0',
+          connection_mode: 'remote',
+          server_url: 'https://nex.tylinux.cn',
+          supports_local_mode: false,
+          recent_servers: ['https://nex.tylinux.cn'],
+        },
+        activeServerUrl: 'https://nex.tylinux.cn',
+      });
+
+      const { rerender } = render(<App />);
+      expect(screen.getByTestId('mobile-sidebar-backdrop')).toBeTruthy();
+      expect(screen.getByTestId('side-pane-container').className).toContain('fixed inset-0');
+
+      act(() => {
+        useNexStore.setState({ mainView: 'settings', settingsSection: 'general' });
+      });
+      rerender(<App />);
+      expect(screen.getByTestId('settings-mobile-nav-back')).toBeTruthy();
+      expect(screen.getByTestId('settings-server-connection')).toBeTruthy();
+      expect(screen.getByTestId('settings-switch-server-btn')).toBeTruthy();
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: origWidth });
+      useNexStore.setState({
+        mainView: 'workspace',
+        sidePaneVisible: false,
+        rightTabs: [],
+        activeRightTabId: '',
+        hostInfo: null,
+        activeServerUrl: '',
+      });
+    }
   });
 });

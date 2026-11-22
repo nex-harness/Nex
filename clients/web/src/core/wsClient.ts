@@ -93,6 +93,23 @@ class NexWSClient {
     this.ws = null;
   }
 
+  reconnectNow(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    const prev = this.ws;
+    this.ws = null;
+    this.connected = false;
+    this.shouldReconnect = false;
+    try {
+      prev?.close();
+    } catch {
+      // ignore close errors
+    }
+    this.connect();
+  }
+
   onStatus(fn: (connected: boolean) => void): () => void {
     this.statusListeners.add(fn);
     return () => this.statusListeners.delete(fn);

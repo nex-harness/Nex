@@ -51,6 +51,7 @@ import { clampEffortIndex, formatEffortLabel, resolveEffortLevels } from '../cor
 import { emptyStreamState } from '../core/reducer';
 import { useNexStore } from '../core/store';
 import { ChatTurnItem, ModelMeta, ThinkingEffort, ToolCallCard } from '../core/types';
+import { hostBridge } from '../host/bridge';
 import { formatMsg, type LocaleCode, type MessageKey } from '../i18n/messages';
 import { ChatLoading } from './ChatLoading';
 import { ContextWindowsButton } from './ContextPopover';
@@ -2892,6 +2893,9 @@ export function ConversationPane() {
           : 'pt-14 pb-5 @min-[960px]/conversation:pt-5'
       : 'py-5';
 
+  const isMacMyGo = hostBridge.kind === 'mygo-desktop' && hostBridge.platform === 'darwin';
+  const collapsedHeaderPad = isMacMyGo ? 'pl-[196px]' : 'pl-[132px]';
+
   return (
     <section
       data-conversation-container="true"
@@ -2899,11 +2903,11 @@ export function ConversationPane() {
     >
       {isDraft ? (
         <header
-          className={`flex h-12 shrink-0 items-center justify-between pr-4 transition-[padding] duration-200 ${
-            sidebarVisible ? 'pl-4' : 'pl-[132px]'
+          className={`nex-drag-region flex h-12 shrink-0 items-center justify-between pr-4 transition-[padding] duration-200 ${
+            sidebarVisible ? 'pl-4' : collapsedHeaderPad
           }`}
         >
-          <div className="flex min-w-0 items-center gap-1">
+          <div className="nex-no-drag flex min-w-0 items-center gap-1">
             {sidebarVisible && (
               <button
                 type="button"
@@ -2921,11 +2925,11 @@ export function ConversationPane() {
       ) : (
         <header
           data-testid="conversation-header"
-          className={`flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background pr-4 transition-[padding] duration-200 ${
-            sidebarVisible ? 'pl-4' : 'pl-[132px]'
+          className={`nex-drag-region flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background pr-4 transition-[padding] duration-200 ${
+            sidebarVisible ? 'pl-4' : collapsedHeaderPad
           }`}
         >
-          <div className="flex min-w-0 items-center gap-1.5">
+          <div className="nex-no-drag flex min-w-0 items-center gap-1.5">
             {sidebarVisible && (
               <button
                 type="button"

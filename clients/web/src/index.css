@@ -743,3 +743,27 @@ pre,
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-foreground-subtlest);
 }
+
+/* Native desktop titlebar drag regions & mobile safe-area inset helpers */
+.nex-drag-region {
+  --app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.nex-no-drag {
+  --app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.nex-safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.nex-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.nex-safe-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
