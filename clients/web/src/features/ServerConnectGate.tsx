@@ -1,14 +1,20 @@
-import { ArrowLeft, Globe, Laptop, LoaderCircle, Server } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { ArrowLeft, Globe, Laptop, LoaderCircle, QrCode, Server, ShieldCheck, Trash2 } from 'lucide-react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { useNexStore } from '../core/store';
 import { formatMsg } from '../i18n/messages';
+import { QRScannerModal } from './QRScannerModal';
 
 export function ServerConnectGate() {
   const locale = useNexStore((s) => s.locale);
   const hostInfo = useNexStore((s) => s.hostInfo);
   const activeServerUrl = useNexStore((s) => s.activeServerUrl);
+  const pendingPairInviteURI = useNexStore((s) => s.pendingPairInviteURI);
   const connectToServer = useNexStore((s) => s.connectToServer);
   const useLocalDesktopMode = useNexStore((s) => s.useLocalDesktopMode);
+  const pairWithURI = useNexStore((s) => s.pairWithURI);
+  const connectPairedHost = useNexStore((s) => s.connectPairedHost);
+  const removePairedHost = useNexStore((s) => s.removePairedHost);
+  const clearPendingPairInvite = useNexStore((s) => s.clearPendingPairInvite);
   const cancelServerConnect = useNexStore((s) => s.cancelServerConnect);
 
   const [url, setUrl] = useState(
@@ -16,9 +22,20 @@ export function ServerConnectGate() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [localBusy, setLocalBusy] = useState(false);
+  const [pairModalOpen, setPairModalOpen] = useState(() => Boolean(pendingPairInviteURI));
+  const [pairBusy, setPairBusy] = useState(false);
+  const [pairError, setPairError] = useState('');
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    if (pendingPairInviteURI) {
+      setPairModalOpen(true);
+    }
+  }, [pendingPairInviteURI]);
+
   const supportsLocal = Boolean(hostInfo?.supports_local_mode);
+  const supportsPairing = Boolean(hostInfo);
+  const pairedHosts = hostInfo?.paired_hosts || [];
   const recentServers = hostInfo?.recent_servers || [];
   const canCancel = Boolean(activeServerUrl);
 
@@ -76,6 +93,21 @@ export function ServerConnectGate() {
     }
   };
 
+  const handlePairSubmit = async (uri: string, deviceName: string) => {
+    setPairBusy(true);
+    setPairError('');
+    try {
+      const res = await pairWithURI(uri, deviceName);
+      if (!res.ok) {
+        setPairError(res.error || formatMsg(locale, 'client.pair.invalidUri'));
+        return;
+      }
+      setPairModalOpen(false);
+    } finally {
+      setPairBusy(false);
+    }
+  };
+
   return (
     <div
       data-testid="server-connect-gate"
@@ -83,7 +115,7 @@ export function ServerConnectGate() {
     >
       <div className="nex-drag-region fixed inset-x-0 top-0 h-8" />
 
-      <div className="w-full max-w-[420px] rounded-2xl border border-border bg-card p-6 shadow-xl">
+      <div className="w-full max-w-[440px] rounded-2xl border border-border bg-card p-6 shadow-xl">
         {canCancel && (
           <button
             type="button"
@@ -108,7 +140,66 @@ export function ServerConnectGate() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-3.5">
+        {pairedHosts.length > 0 && (
+          <div data-testid="paired-hosts-list" className="mt-5 space-y-2">
+            <div className="text-ui-xs font-medium text-foreground-subtlest">
+              {formatMsg(locale, 'client.connect.pairedHostsHeading')}
+            </div>
+            <div className="space-y-2">
+              {pairedHosts.map((host) => (
+                <div
+                  key={host.node_id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-border bg-surface px-3 py-2.5"
+                >
+                  <button
+                    type="button"
+                    data-testid={`paired-host-connect-${host.node_id}`}
+                    onClick={() => void connectPairedHost(host.node_id)}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                  >
+                    <ShieldCheck className="size-4 shrink-0 text-success-surface-fg" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-ui-sm font-medium text-foreground">
+                        {host.host_name || host.node_id}
+                      </div>
+                      <div className="truncate font-mono text-[11px] text-foreground-subtlest">
+                        {host.node_id}
+                        {host.last_transport ? ` · ${host.last_transport}` : ''}
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`paired-host-remove-${host.node_id}`}
+                    aria-label={formatMsg(locale, 'client.connect.removeHost')}
+                    onClick={() => void removePairedHost(host.node_id)}
+                    className="flex size-7 shrink-0 items-center justify-center rounded-lg text-foreground-subtlest transition-colors hover:bg-hover hover:text-destructive-surface-fg"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {supportsPairing && (
+          <button
+            type="button"
+            data-testid="server-pair-qr-btn"
+            disabled={submitting || localBusy}
+            onClick={() => {
+              setPairError('');
+              setPairModalOpen(true);
+            }}
+            className="mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface text-ui-sm font-medium text-foreground transition-colors hover:bg-hover"
+          >
+            <QrCode className="size-4" />
+            <span>{formatMsg(locale, 'client.connect.scanPairBtn')}</span>
+          </button>
+        )}
+
+        <form onSubmit={handleSubmit} className="mt-5 space-y-3.5">
           <div>
             <label className="mb-1.5 block text-ui-xs font-medium text-foreground-subtle">
               {formatMsg(locale, 'client.connect.urlLabel')}
@@ -116,7 +207,7 @@ export function ServerConnectGate() {
             <div className="flex h-10 items-center gap-2 rounded-xl border border-border bg-input px-3 focus-within:border-brand-blue">
               <Globe className="size-4 shrink-0 text-foreground-subtlest" />
               <input
-                autoFocus
+                autoFocus={!supportsPairing}
                 type="url"
                 inputMode="url"
                 autoCapitalize="none"
@@ -204,6 +295,19 @@ export function ServerConnectGate() {
           </>
         )}
       </div>
+
+      <QRScannerModal
+        open={pairModalOpen}
+        initialURI={pendingPairInviteURI}
+        busy={pairBusy}
+        error={pairError}
+        onClose={() => {
+          setPairModalOpen(false);
+          setPairError('');
+          clearPendingPairInvite();
+        }}
+        onSubmitURI={handlePairSubmit}
+      />
     </div>
   );
 }

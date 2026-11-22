@@ -2880,4 +2880,215 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       fetchSpy.mockRestore();
     }
   });
+
+  it('renders Remote Access settings, saves config, renders offline SVG QR code, and revokes paired devices', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = (init?.method || 'GET').toUpperCase();
+      if (url.endsWith('/api/v1/remote/status')) {
+        return new Response(
+          JSON.stringify({
+            status: {
+              node_id: 'nex_studio_abc123',
+              fingerprint: 'a'.repeat(64),
+              short_fingerprint: 'aaaa:aaaa:aaaa:aaaa',
+              enabled: true,
+              host_name: 'Studio Mac',
+              relay_url: 'https://nex.tylinux.cn',
+              relay_connected: true,
+              direct_urls: ['https://studio.tailnet.ts.net'],
+              lan_urls: ['http://192.168.1.50:8080'],
+              active_tunnels: 1,
+              config: {
+                enabled: true,
+                host_name: 'Studio Mac',
+                relay_url: 'https://nex.tylinux.cn',
+                direct_urls: ['https://studio.tailnet.ts.net'],
+                prefer_lan: true,
+              },
+            },
+            paired_device_count: 1,
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.endsWith('/api/v1/remote/devices') && method === 'GET') {
+        return new Response(
+          JSON.stringify({
+            devices: [
+              {
+                id: 'dev_iphone_1',
+                name: 'iPhone 16 Pro',
+                platform: 'ios',
+                pubkey_fp: 'bbbbccccddddeeeeffff111122223333',
+                created_at: Date.now() - 60_000,
+                last_seen_at: Date.now() - 5_000,
+                last_transport: 'relay',
+                revoked_at: 0,
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.endsWith('/api/v1/remote/config') && method === 'PUT') {
+        return new Response(
+          JSON.stringify({
+            node_id: 'nex_studio_abc123',
+            fingerprint: 'a'.repeat(64),
+            short_fingerprint: 'aaaa:aaaa:aaaa:aaaa',
+            enabled: true,
+            host_name: 'Updated Mac',
+            relay_url: 'https://relay.custom.cn',
+            relay_connected: true,
+            direct_urls: [],
+            lan_urls: ['http://192.168.1.50:8080'],
+            active_tunnels: 1,
+            config: {
+              enabled: true,
+              host_name: 'Updated Mac',
+              relay_url: 'https://relay.custom.cn',
+              direct_urls: [],
+              prefer_lan: true,
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.endsWith('/api/v1/remote/pair/start') && method === 'POST') {
+        return new Response(
+          JSON.stringify({
+            pair_uri: 'nex://pair?v=1&node=nex_studio_abc123&fp=' + 'a'.repeat(64) + '&token=one_time_tok',
+            token: 'one_time_tok',
+            expires_at: Date.now() + 300_000,
+            node_id: 'nex_studio_abc123',
+            fingerprint: 'a'.repeat(64),
+            short_fingerprint: 'aaaa:aaaa:aaaa:aaaa',
+            host_name: 'Studio Mac',
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes('/api/v1/remote/devices/dev_iphone_1') && method === 'DELETE') {
+        return new Response(JSON.stringify({ ok: true, device_id: 'dev_iphone_1' }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    try {
+      useNexStore.setState({
+        authEnabled: false,
+        authenticated: true,
+        serverConnectRequired: false,
+        locale: 'en-US',
+        mainView: 'settings',
+        settingsSection: 'remote',
+      });
+
+      render(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('remote-node-id').textContent).toBe('nex_studio_abc123');
+        expect(screen.getByTestId('remote-revoke-device-dev_iphone_1')).toBeTruthy();
+      });
+
+      fireEvent.change(screen.getByTestId('remote-relay-url-input'), {
+        target: { value: 'https://relay.custom.cn' },
+      });
+      fireEvent.click(screen.getByTestId('remote-save-btn'));
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalledWith(
+          expect.stringContaining('/api/v1/remote/config'),
+          expect.objectContaining({
+            method: 'PUT',
+            body: expect.stringContaining('https://relay.custom.cn'),
+          }),
+        );
+      });
+
+      fireEvent.click(screen.getByTestId('remote-pair-start-btn'));
+      await waitFor(() => {
+        const svg = screen.getByTestId('remote-pair-qr-svg');
+        expect(svg.querySelector('path')?.getAttribute('d')).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByTestId('remote-revoke-device-dev_iphone_1'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('remote-revoke-device-dev_iphone_1')).toBeNull();
+      });
+    } finally {
+      useNexStore.setState({ mainView: 'workspace', settingsSection: 'general' });
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('shows paired hosts and opens QRScannerModal in ServerConnectGate to submit nex://pair URI', async () => {
+    const pairSpy = vi.fn(async () => ({ ok: true }));
+    const connectPairedSpy = vi.fn(async () => ({ ok: true }));
+    const removePairedSpy = vi.fn(async () => ({ ok: true }));
+    const origPair = useNexStore.getState().pairWithURI;
+    const origConnectPaired = useNexStore.getState().connectPairedHost;
+    const origRemovePaired = useNexStore.getState().removePairedHost;
+
+    try {
+      useNexStore.setState({
+        authEnabled: false,
+        authenticated: true,
+        serverConnectRequired: true,
+        activeServerUrl: '',
+        pendingPairInviteURI: '',
+        locale: 'en-US',
+        hostInfo: {
+          platform: 'ios',
+          form_factor: 'mobile',
+          version: '0.3.0',
+          connection_mode: 'unconfigured',
+          server_url: '',
+          paired_hosts: [
+            {
+              node_id: 'nex_home_001',
+              host_name: 'Home Server',
+              fingerprint: 'b'.repeat(64),
+              device_id: 'dev_1',
+              last_transport: 'relay',
+              paired_at: 1700000000000,
+            },
+          ],
+          supports_local_mode: false,
+          notifications_supported: true,
+          recent_servers: [],
+        },
+        pairWithURI: pairSpy,
+        connectPairedHost: connectPairedSpy,
+        removePairedHost: removePairedSpy,
+      });
+
+      render(<App />);
+
+      expect(screen.getByTestId('paired-hosts-list')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('paired-host-connect-nex_home_001'));
+      expect(connectPairedSpy).toHaveBeenCalledWith('nex_home_001');
+
+      fireEvent.click(screen.getByTestId('server-pair-qr-btn'));
+      expect(screen.getByTestId('qr-scanner-modal')).toBeTruthy();
+
+      const pairURI = `nex://pair?v=1&node=nex_new_1&fp=${'c'.repeat(64)}&token=tok_pair_9`;
+      fireEvent.change(screen.getByTestId('qr-manual-uri-input'), { target: { value: pairURI } });
+      fireEvent.change(screen.getByTestId('qr-device-name-input'), { target: { value: 'iPad Pro' } });
+      fireEvent.click(screen.getByTestId('qr-manual-submit-btn'));
+
+      await waitFor(() => {
+        expect(pairSpy).toHaveBeenCalledWith(pairURI, 'iPad Pro');
+      });
+    } finally {
+      useNexStore.setState({
+        serverConnectRequired: false,
+        hostInfo: null,
+        pendingPairInviteURI: '',
+        pairWithURI: origPair,
+        connectPairedHost: origConnectPaired,
+        removePairedHost: origRemovePaired,
+      });
+    }
+  });
 });

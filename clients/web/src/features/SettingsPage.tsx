@@ -23,6 +23,7 @@ import {
   Palette,
   Pencil,
   Plus,
+  Radio,
   RefreshCw,
   Search,
   Settings2,
@@ -48,6 +49,7 @@ import {
   SkillsAndPluginsSection,
 } from './SettingsCapabilities';
 import { SettingsBrowserSection } from './SettingsBrowser';
+import { SettingsRemoteAccessSection } from './SettingsRemoteAccess';
 import { RunnersSettingsSection } from './SettingsRunners';
 
 /* -------------------------------------------------------------------------- */
@@ -157,6 +159,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'appearance', icon: Palette, titleKey: 'settings.appearance.title', descKey: 'settings.appearance.desc', groupKey: 'settings.group.basics' },
   { id: 'providers', icon: Package, titleKey: 'settings.modelProvider.title', descKey: 'settings.modelProvider.desc', groupKey: 'settings.group.basics' },
   { id: 'runners', icon: HardDrive, titleKey: 'settings.remoteDevices.title', descKey: 'settings.remoteDevices.desc', groupKey: 'settings.group.basics' },
+  { id: 'remote', icon: Radio, titleKey: 'settings.remote.title', descKey: 'settings.remote.desc', groupKey: 'settings.group.basics' },
 
   { id: 'browser', icon: Globe, titleKey: 'settings.browser.title', descKey: 'settings.browser.desc', groupKey: 'settings.group.agentCapabilities' },
   { id: 'agents', icon: Bot, titleKey: 'settings.subagents.title', descKey: 'settings.subagents.desc', groupKey: 'settings.group.agentCapabilities' },
@@ -343,6 +346,7 @@ export function SettingsPage() {
             />
           )}
           {activeMeta.id === 'runners' && <RunnersSettingsSection onFlash={showFlash} />}
+          {activeMeta.id === 'remote' && <SettingsRemoteAccessSection onFlash={showFlash} />}
           {activeMeta.id === 'browser' && <SettingsBrowserSection onFlash={showFlash} />}
           {activeMeta.id === 'agents' && <AgentsSettingsSection onFlash={showFlash} />}
           {activeMeta.id === 'memories' && <MemoriesSettingsSection onFlash={showFlash} />}
@@ -380,6 +384,8 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
     setPermissionMode,
     preferences,
     hostInfo,
+    remoteTransportStatus,
+    reconnectRemote,
     activeServerUrl,
     openServerConnect,
     authEnabled,
@@ -500,14 +506,44 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
           <SettingsGroupCard>
             <SettingsRow
               label={formatMsg(locale, 'settings.connection.modeLabel')}
-              description={activeServerUrl || undefined}
+              description={
+                hostInfo?.connection_mode === 'paired'
+                  ? `${hostInfo.active_host_name || hostInfo.active_node_id || ''}${activeServerUrl ? ` (${activeServerUrl})` : ''}`
+                  : activeServerUrl || undefined
+              }
             >
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <span className="rounded-md bg-tag px-2.5 py-1 text-ui-xs font-medium text-foreground">
                   {hostInfo?.connection_mode === 'local'
                     ? formatMsg(locale, 'settings.connection.modeLocal')
-                    : formatMsg(locale, 'settings.connection.modeRemote')}
+                    : hostInfo?.connection_mode === 'paired'
+                      ? formatMsg(locale, 'settings.connection.modePaired')
+                      : formatMsg(locale, 'settings.connection.modeRemote')}
                 </span>
+                {hostInfo?.connection_mode === 'paired' && (
+                  <>
+                    <span
+                      data-testid="settings-remote-transport-badge"
+                      className="rounded-md bg-success-surface px-2.5 py-1 text-ui-xs font-medium text-success-surface-fg"
+                    >
+                      {(() => {
+                        const tr = remoteTransportStatus?.transport || hostInfo.active_transport || 'disconnected';
+                        if (tr === 'lan') return formatMsg(locale, 'settings.connection.transportLan');
+                        if (tr === 'direct') return formatMsg(locale, 'settings.connection.transportDirect');
+                        if (tr === 'tsnet') return formatMsg(locale, 'settings.connection.transportTsnet');
+                        if (tr === 'relay') return formatMsg(locale, 'settings.connection.transportRelay');
+                        return formatMsg(locale, 'settings.connection.transportDisconnected');
+                      })()}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void reconnectRemote()}
+                      className="inline-flex h-8 items-center rounded-lg border border-border bg-card px-2.5 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover"
+                    >
+                      {formatMsg(locale, 'settings.connection.reconnectBtn')}
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   data-testid="settings-switch-server-btn"

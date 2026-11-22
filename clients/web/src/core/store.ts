@@ -1,6 +1,6 @@
 import { applyDocumentLocale, detectBrowserLocale, formatMsg, type LocaleCode } from '../i18n/messages';
 import { create } from 'zustand';
-import { hostBridge, type HostInfo } from '../host/bridge';
+import { hostBridge, type HostInfo, type TransportStatus } from '../host/bridge';
 import { resolveEffectiveEffort } from './effort';
 import {
   apiFetch,
@@ -161,6 +161,8 @@ let gitSummaryInFlightDiffs = false;
 
 export interface AppState {
   hostInfo: HostInfo | null;
+  remoteTransportStatus: TransportStatus | null;
+  pendingPairInviteURI: string;
   serverConnectRequired: boolean;
   activeServerUrl: string;
   wsConnected: boolean;
@@ -253,6 +255,11 @@ export interface AppState {
   bootstrap: () => Promise<void>;
   connectToServer: (rawUrl: string) => Promise<{ ok: boolean; error?: string }>;
   useLocalDesktopMode: () => Promise<{ ok: boolean; error?: string }>;
+  pairWithURI: (rawURI: string, deviceName?: string) => Promise<{ ok: boolean; error?: string }>;
+  connectPairedHost: (nodeID: string) => Promise<{ ok: boolean; error?: string }>;
+  removePairedHost: (nodeID: string) => Promise<{ ok: boolean; error?: string }>;
+  reconnectRemote: () => Promise<void>;
+  clearPendingPairInvite: () => void;
   openServerConnect: () => void;
   cancelServerConnect: () => void;
   checkAuthStatus: () => Promise<{ enabled: boolean; authenticated: boolean }>;
@@ -400,6 +407,8 @@ applyDocumentLocale(INITIAL_LOCALE);
 
 export const useNexStore = create<AppState>((set, get) => ({
   hostInfo: null,
+  remoteTransportStatus: null,
+  pendingPairInviteURI: '',
   serverConnectRequired: false,
   activeServerUrl: '',
   wsConnected: false,
@@ -786,6 +795,7 @@ export const useNexStore = create<AppState>((set, get) => ({
       persistActiveSessionId('');
       set({
         hostInfo: info,
+        remoteTransportStatus: null,
         activeServerUrl: nextUrl,
         serverConnectRequired: false,
         authChecked: false,
@@ -802,6 +812,104 @@ export const useNexStore = create<AppState>((set, get) => ({
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Local mode unavailable' };
     }
+  },
+
+  clearPendingPairInvite: () => set({ pendingPairInviteURI: '' }),
+
+  pairWithURI: async (rawURI, deviceName = '') => {
+    try {
+      const info = await hostBridge.pairWithURI(rawURI, deviceName);
+      const nextUrl = info.server_url || '';
+      setRuntimeServerUrl(nextUrl);
+      setRuntimeAuthToken('');
+      safeStorageRemove('nex.auth.token');
+      wsClient.disconnect();
+      persistActiveSessionId('');
+      const rStatus = await hostBridge.remoteStatus();
+      set({
+        hostInfo: info,
+        remoteTransportStatus: rStatus,
+        pendingPairInviteURI: '',
+        activeServerUrl: nextUrl,
+        serverConnectRequired: false,
+        authChecked: false,
+        authenticated: true,
+        activeSessionId: '',
+        sessions: [],
+        runners: [],
+        streams: {},
+        selectedRunnerId: '',
+        selectedWorkspacePath: '',
+      });
+      await get().bootstrap();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Pairing failed' };
+    }
+  },
+
+  connectPairedHost: async (nodeID) => {
+    try {
+      const info = await hostBridge.connectPairedHost(nodeID);
+      const nextUrl = info.server_url || '';
+      setRuntimeServerUrl(nextUrl);
+      setRuntimeAuthToken('');
+      safeStorageRemove('nex.auth.token');
+      wsClient.disconnect();
+      persistActiveSessionId('');
+      const rStatus = await hostBridge.remoteStatus();
+      set({
+        hostInfo: info,
+        remoteTransportStatus: rStatus,
+        activeServerUrl: nextUrl,
+        serverConnectRequired: !nextUrl,
+        authChecked: false,
+        authenticated: true,
+        activeSessionId: '',
+        sessions: [],
+        runners: [],
+        streams: {},
+        selectedRunnerId: '',
+        selectedWorkspacePath: '',
+      });
+      if (nextUrl) {
+        await get().bootstrap();
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Failed to connect paired host' };
+    }
+  },
+
+  removePairedHost: async (nodeID) => {
+    try {
+      const info = await hostBridge.removePairedHost(nodeID);
+      const nextUrl = info.server_url || '';
+      setRuntimeServerUrl(nextUrl);
+      set((s) => ({
+        hostInfo: info,
+        activeServerUrl: nextUrl,
+        remoteTransportStatus: info.connection_mode === 'paired' ? s.remoteTransportStatus : null,
+        serverConnectRequired: !nextUrl,
+      }));
+      if (nextUrl) {
+        await get().bootstrap();
+      } else {
+        wsClient.disconnect();
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Failed to remove paired host' };
+    }
+  },
+
+  reconnectRemote: async () => {
+    const st = await hostBridge.reconnectRemote();
+    const info = await hostBridge.getHostInfo();
+    set((prev) => ({
+      remoteTransportStatus: st ?? prev.remoteTransportStatus,
+      hostInfo: info ?? prev.hostInfo,
+    }));
   },
 
   checkAuthStatus: async () => {
@@ -936,11 +1044,23 @@ export const useNexStore = create<AppState>((set, get) => ({
           })();
         }
       });
+      hostBridge.onRemoteStatus((st) => {
+        set({ remoteTransportStatus: st });
+      });
+      hostBridge.onPairInvite((rawURI) => {
+        if (rawURI) {
+          set({ pendingPairInviteURI: rawURI, serverConnectRequired: true });
+        }
+      });
     }
 
     const info = await hostBridge.getHostInfo();
     if (info) {
       set({ hostInfo: info });
+      if (info.connection_mode === 'paired') {
+        const rStatus = await hostBridge.remoteStatus();
+        set({ remoteTransportStatus: rStatus });
+      }
       if (!info.server_url) {
         setRuntimeServerUrl('');
         set({ activeServerUrl: '', serverConnectRequired: true });

@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "ghostty-web": "^0.3.0",
+    "jsqr": "^1.4.0",
     "lucide-react": "^0.475.0",
     "mygo-runtime": "0.10.0",
+    "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zustand": "^5.0.3"
@@ -20,6 +22,7 @@
     "@tailwindcss/vite": "^4.0.6",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "jsdom": "^26.0.0",

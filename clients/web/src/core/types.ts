@@ -573,6 +573,7 @@ export type SettingsSectionId =
   | 'appearance'
   | 'providers'
   | 'runners'
+  | 'remote'
   | 'browser'
   | 'agents'
   | 'memories'
@@ -582,3 +583,55 @@ export type SettingsSectionId =
   | 'automations'
   | 'usage'
   | 'archives';
+
+export interface RemoteHostConfig {
+  enabled: boolean;
+  host_name: string;
+  relay_url: string;
+  relay_token?: string;
+  direct_urls?: string[];
+  prefer_lan: boolean;
+  tsnet_enabled?: boolean;
+  tsnet_control_url?: string;
+  tsnet_hostname?: string;
+  tsnet_download_mirror?: string;
+}
+
+export interface RemoteHostStatus {
+  node_id: string;
+  fingerprint: string;
+  short_fingerprint: string;
+  enabled: boolean;
+  host_name: string;
+  relay_url: string;
+  relay_connected: boolean;
+  last_relay_error?: string;
+  direct_urls: string[];
+  lan_urls: string[];
+  active_tunnels: number;
+  config: RemoteHostConfig;
+}
+
+export interface RemotePairingSession {
+  pair_uri: string;
+  token: string;
+  expires_at: number;
+  node_id: string;
+  fingerprint: string;
+  short_fingerprint: string;
+  host_name: string;
+  relay_url?: string;
+  direct_urls?: string[];
+  lan_urls?: string[];
+}
+
+export interface RemotePairedDevice {
+  id: string;
+  name: string;
+  platform: string;
+  pubkey_fp: string;
+  created_at: number;
+  last_seen_at: number;
+  last_transport: string;
+  revoked_at: number;
+}
