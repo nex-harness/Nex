@@ -2499,8 +2499,8 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
   });
 
   it('renders ServerConnectGate with health check validation and toggles local-mode button by host capability', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
     );
     const connectSpy = vi.fn(async () => ({ ok: true }));
     const origConnect = useNexStore.getState().connectToServer;
@@ -2519,6 +2519,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
           connection_mode: 'unconfigured',
           server_url: '',
           supports_local_mode: true,
+          notifications_supported: true,
           recent_servers: [],
         },
         connectToServer: connectSpy,
@@ -2547,6 +2548,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
             connection_mode: 'unconfigured',
             server_url: '',
             supports_local_mode: false,
+            notifications_supported: true,
             recent_servers: [],
           },
         });
@@ -2581,6 +2583,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
           connection_mode: 'remote',
           server_url: 'https://nex.tylinux.cn',
           supports_local_mode: false,
+          notifications_supported: true,
           recent_servers: ['https://nex.tylinux.cn'],
         },
         activeServerUrl: 'https://nex.tylinux.cn',
@@ -2609,6 +2612,269 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
         hostInfo: null,
         activeServerUrl: '',
       });
+    }
+  });
+
+  it('dispatches task_completed and question notifications with focus/background rules and click-to-open-session', async () => {
+    const origNotif = (globalThis as { Notification?: unknown }).Notification;
+    const origHasFocus = document.hasFocus;
+    const origVisDesc = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    const origSelect = useNexStore.getState().selectSession;
+    const selectSpy = vi.fn(async (sid: string) => {
+      useNexStore.setState({ activeSessionId: sid });
+    });
+
+    const createdNotifications: Array<{ title: string; options?: NotificationOptions; onclick: (() => void) | null; close: ReturnType<typeof vi.fn> }> = [];
+    class MockNotification {
+      static permission: NotificationPermission = 'granted';
+      static requestPermission = vi.fn(async () => 'granted' as NotificationPermission);
+      onclick: (() => void) | null = null;
+      close = vi.fn();
+      constructor(title: string, options?: NotificationOptions) {
+        const entry = { title, options, onclick: null as (() => void) | null, close: this.close };
+        createdNotifications.push(entry);
+        return new Proxy(this, {
+          set(target, prop, val) {
+            if (prop === 'onclick') entry.onclick = val as (() => void) | null;
+            (target as Record<PropertyKey, unknown>)[prop] = val;
+            return true;
+          },
+        });
+      }
+    }
+
+    try {
+      (globalThis as { Notification?: unknown }).Notification = MockNotification;
+      document.hasFocus = () => true;
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+
+      useNexStore.setState({
+        authEnabled: false,
+        authenticated: true,
+        serverConnectRequired: false,
+        locale: 'en-US',
+        mainView: 'workspace',
+        activeSessionId: 'sess_active',
+        notificationToasts: [],
+        sessions: [
+          {
+            id: 'sess_active',
+            runner_id: 'r1',
+            depth: 0,
+            title: 'Active Task',
+            workspace_path: '/ws',
+            agent_profile_slug: 'default',
+            model_id: 'm1',
+            provider_id: 'p1',
+            permission_mode: 'interactive',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 0,
+            created_at: 1,
+            updated_at: 1,
+            last_active_at: 1,
+          },
+          {
+            id: 'sess_bg_1',
+            runner_id: 'r1',
+            depth: 0,
+            title: 'Build Release',
+            workspace_path: '/ws',
+            agent_profile_slug: 'default',
+            model_id: 'm1',
+            provider_id: 'p1',
+            permission_mode: 'interactive',
+            status: 'running',
+            latest_context_tokens: 0,
+            context_window_limit: 0,
+            created_at: 1,
+            updated_at: 1,
+            last_active_at: 1,
+          },
+        ],
+        preferences: {
+          theme: 'light',
+          code_theme: 'github-light',
+          font_family: 'Inter',
+          mono_font_family: 'monospace',
+          expand_thinking: false,
+          auto_archive_after_days: 30,
+          notify_enabled: true,
+          notify_on_complete: true,
+          notify_on_input: true,
+          notify_only_background: true,
+        },
+        selectSession: selectSpy,
+      });
+
+      // 1. Focused on same active session with notify_only_background=true -> suppressed
+      await act(async () => {
+        await useNexStore.getState().dispatchClientNotification({
+          session_id: 'sess_active',
+          kind: 'task_completed',
+          session_title: 'Active Task',
+          request_id: 'r_suppressed',
+        });
+      });
+      expect(createdNotifications).toHaveLength(0);
+
+      // 2. Different session while focused -> delivers browser Notification AND pushes in-app toast
+      await act(async () => {
+        await useNexStore.getState().dispatchClientNotification({
+          session_id: 'sess_bg_1',
+          kind: 'question',
+          session_title: 'Build Release',
+          title: 'Choose deploy target',
+          body: 'prod or staging',
+          request_id: 'q_100',
+        });
+      });
+      expect(createdNotifications).toHaveLength(1);
+      expect(createdNotifications[0].title).toContain('Build Release');
+      expect(createdNotifications[0].options?.body).toContain('Choose deploy target');
+      expect(useNexStore.getState().notificationToasts).toHaveLength(1);
+
+      // Clicking notification switches to the session
+      act(() => {
+        createdNotifications[0].onclick?.();
+      });
+      expect(selectSpy).toHaveBeenCalledWith('sess_bg_1');
+      expect(useNexStore.getState().activeSessionId).toBe('sess_bg_1');
+
+      // 3. With notify_only_background=false, even focused active session notifies
+      act(() => {
+        useNexStore.setState((s) => ({
+          preferences: { ...s.preferences, notify_only_background: false },
+          notificationToasts: [],
+        }));
+      });
+      await act(async () => {
+        await useNexStore.getState().dispatchClientNotification({
+          session_id: 'sess_bg_1',
+          kind: 'task_completed',
+          session_title: 'Build Release',
+          request_id: 'c_101',
+        });
+      });
+      expect(createdNotifications).toHaveLength(2);
+
+      // 4. Master & per-category opt-out flags suppress delivery
+      act(() => {
+        useNexStore.setState((s) => ({
+          preferences: { ...s.preferences, notify_on_complete: false, notify_on_input: false },
+        }));
+      });
+      await act(async () => {
+        await useNexStore.getState().dispatchClientNotification({
+          session_id: 'sess_bg_1',
+          kind: 'task_completed',
+          request_id: 'c_102',
+        });
+        await useNexStore.getState().dispatchClientNotification({
+          session_id: 'sess_bg_1',
+          kind: 'approval',
+          tool_name: 'bash',
+          request_id: 'a_103',
+        });
+      });
+      expect(createdNotifications).toHaveLength(2);
+
+      // 5. In-app toast click navigates to toast session and dismisses toast
+      act(() => {
+        useNexStore.setState({ activeSessionId: 'sess_active', mainView: 'workspace' });
+        useNexStore.getState().pushNotificationToast({
+          kind: 'plan_approval',
+          sessionId: 'sess_bg_1',
+          title: 'Plan ready',
+          body: 'Review plan',
+        });
+      });
+      render(<App />);
+      const toastEl = screen.getByTestId('in-app-notification-toast');
+      fireEvent.click(toastEl);
+      expect(selectSpy).toHaveBeenLastCalledWith('sess_bg_1');
+      expect(useNexStore.getState().notificationToasts).toHaveLength(0);
+    } finally {
+      (globalThis as { Notification?: unknown }).Notification = origNotif;
+      document.hasFocus = origHasFocus;
+      if (origVisDesc) {
+        Object.defineProperty(document, 'visibilityState', origVisDesc);
+      }
+      useNexStore.setState({ notificationToasts: [], selectSession: origSelect });
+    }
+  });
+
+  it('renders Notifications settings in GeneralSettingsSection with permission request, toggles, and test button', async () => {
+    const origNotif = (globalThis as { Notification?: unknown }).Notification;
+    const origRefresh = useNexStore.getState().refreshInitialData;
+    const reqPermSpy = vi.fn(async () => {
+      MockNotification.permission = 'granted';
+      return 'granted' as NotificationPermission;
+    });
+    const shownTests: string[] = [];
+    class MockNotification {
+      static permission: NotificationPermission = 'default';
+      static requestPermission = reqPermSpy;
+      onclick: (() => void) | null = null;
+      close = vi.fn();
+      constructor(title: string) {
+        shownTests.push(title);
+      }
+    }
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+    const refreshSpy = vi.fn(async () => {});
+
+    try {
+      (globalThis as { Notification?: unknown }).Notification = MockNotification;
+      useNexStore.setState({
+        authEnabled: false,
+        authenticated: true,
+        serverConnectRequired: false,
+        locale: 'en-US',
+        mainView: 'settings',
+        settingsSection: 'general',
+        hostInfo: null,
+        preferences: {
+          theme: 'light',
+          code_theme: 'github-light',
+          font_family: 'Inter',
+          mono_font_family: 'monospace',
+          expand_thinking: false,
+          auto_archive_after_days: 30,
+          notify_enabled: true,
+          notify_on_complete: true,
+          notify_on_input: true,
+          notify_only_background: true,
+        },
+        refreshInitialData: refreshSpy,
+      });
+
+      render(<App />);
+      expect(screen.getByTestId('settings-notifications')).toBeTruthy();
+      expect(screen.getByTestId('settings-notify-request-btn')).toBeTruthy();
+
+      fireEvent.click(screen.getByTestId('settings-notify-enabled'));
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalledWith(
+          expect.stringContaining('/api/v1/preferences'),
+          expect.objectContaining({
+            method: 'PUT',
+            body: expect.stringContaining('"notify_enabled":false'),
+          }),
+        );
+      });
+
+      fireEvent.click(screen.getByTestId('settings-notify-test-btn'));
+      await waitFor(() => {
+        expect(reqPermSpy).toHaveBeenCalledTimes(1);
+        expect(shownTests).toHaveLength(1);
+      });
+    } finally {
+      (globalThis as { Notification?: unknown }).Notification = origNotif;
+      useNexStore.setState({ mainView: 'workspace', refreshInitialData: origRefresh });
+      fetchSpy.mockRestore();
     }
   });
 });

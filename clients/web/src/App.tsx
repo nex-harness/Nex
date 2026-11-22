@@ -9,6 +9,7 @@ import { ConversationPane } from './features/ConversationPane';
 import { DesktopTopOverlay } from './features/DesktopTopOverlay';
 import { GhosttyTerminal } from './features/GhosttyTerminal';
 import { ImagePreviewModal } from './features/ImagePreviewModal';
+import { NotificationToastStack } from './features/NotificationToastStack';
 import { ProjectSidebar } from './features/ProjectSidebar';
 import { ServerConnectGate } from './features/ServerConnectGate';
 import { SettingsPage } from './features/SettingsPage';
@@ -157,6 +158,7 @@ export function App() {
         <SettingsPage />
         <CommandPaletteModal />
         <ImagePreviewModal />
+        <NotificationToastStack />
         {pendingApproval && <ApprovalModal approval={pendingApproval} />}
         {pendingUIPrompt && <UIPromptModal prompt={pendingUIPrompt} />}
       </div>
@@ -316,6 +318,7 @@ export function App() {
       {/* Command Palette, Image Preview & Blocking Interaction Dialogs */}
       <CommandPaletteModal />
       <ImagePreviewModal />
+      <NotificationToastStack />
       {pendingApproval && <ApprovalModal approval={pendingApproval} />}
       {pendingUIPrompt && <UIPromptModal prompt={pendingUIPrompt} />}
     </div>

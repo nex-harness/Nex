@@ -12,6 +12,21 @@ export interface ApprovalNotification {
   toolName: string;
 }
 
+export type NotificationPermissionState = 'granted' | 'denied' | 'default' | 'unsupported' | 'native';
+
+export interface SystemNotificationPayload {
+  title: string;
+  body: string;
+  sessionId?: string;
+  tag?: string;
+  onClick?: () => void;
+}
+
+export interface NotifyDeliveryResult {
+  delivered: boolean;
+  reason?: 'permission_required' | 'permission_denied' | 'unsupported' | 'error';
+}
+
 export interface HostBridge {
   readonly kind: HostKind;
   readonly platform: HostPlatform;
@@ -21,6 +36,10 @@ export interface HostBridge {
   getAuthToken(serverUrl?: string): Promise<string | null>;
   setAuthToken(token: string, serverUrl?: string): Promise<void>;
   clearAuthToken(serverUrl?: string): Promise<void>;
+  getNotificationPermission(): NotificationPermissionState;
+  requestNotificationPermission(): Promise<NotificationPermissionState>;
+  isWindowFocused(): boolean;
+  notify(payload: SystemNotificationPayload): Promise<NotifyDeliveryResult>;
   notifyApprovalRequested(payload: ApprovalNotification): Promise<void>;
   haptic(style: 'selection' | 'light' | 'medium' | 'heavy' | 'success' | 'warning' | 'error'): void;
   pickDirectory(): Promise<string | null>;
@@ -119,6 +138,7 @@ export function createHostBridge(): HostBridge {
         connection_mode: normalized ? 'remote' : 'unconfigured',
         server_url: normalized,
         supports_local_mode: false,
+        notifications_supported: false,
         recent_servers: normalized ? [normalized] : [],
       };
     },
@@ -137,6 +157,7 @@ export function createHostBridge(): HostBridge {
         connection_mode: 'unconfigured',
         server_url: '',
         supports_local_mode: false,
+        notifications_supported: false,
         recent_servers: [],
       };
     },
@@ -186,24 +207,105 @@ export function createHostBridge(): HostBridge {
       }
     },
 
-    async notifyApprovalRequested(payload: ApprovalNotification): Promise<void> {
-      const title = `Approval required on ${payload.runnerName}`;
-      const body = `Tool "${payload.toolName}" is waiting for authorization.`;
+    getNotificationPermission(): NotificationPermissionState {
+      if (hasNativeMyGo || legacyIpc) {
+        return 'native';
+      }
+      if (typeof Notification === 'undefined') {
+        return 'unsupported';
+      }
+      return Notification.permission;
+    },
+
+    async requestNotificationPermission(): Promise<NotificationPermissionState> {
+      if (hasNativeMyGo || legacyIpc) {
+        return 'native';
+      }
+      if (typeof Notification === 'undefined' || typeof Notification.requestPermission !== 'function') {
+        return 'unsupported';
+      }
+      try {
+        return await Notification.requestPermission();
+      } catch {
+        return Notification.permission;
+      }
+    },
+
+    isWindowFocused(): boolean {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return false;
+      }
+      if (hasNativeMyGo) {
+        const mygoRt = (globalThis as { mygo?: { windowActive?: boolean } }).mygo;
+        if (typeof mygoRt?.windowActive === 'boolean') {
+          return mygoRt.windowActive;
+        }
+      }
+      if (typeof document !== 'undefined' && typeof document.hasFocus === 'function') {
+        return document.hasFocus();
+      }
+      return true;
+    },
+
+    async notify(payload: SystemNotificationPayload): Promise<NotifyDeliveryResult> {
       if (hasNativeMyGo) {
         try {
-          await NexHost.notify(title, body, payload.sessionId);
-          return;
-        } catch {
-          // fall through to browser notification
+          await NexHost.notify(payload.title, payload.body, payload.sessionId || '');
+          return { delivered: true };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+          if (msg.includes('denied')) {
+            return { delivered: false, reason: 'permission_denied' };
+          }
+          if (msg.includes('unsupported')) {
+            return { delivered: false, reason: 'unsupported' };
+          }
+          return { delivered: false, reason: 'error' };
         }
       }
       if (legacyIpc?.notify) {
-        await legacyIpc.notify(title, body);
-        return;
+        try {
+          await legacyIpc.notify(payload.title, payload.body);
+          return { delivered: true };
+        } catch {
+          return { delivered: false, reason: 'error' };
+        }
       }
-      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        new Notification(title, { body });
+      if (typeof Notification === 'undefined') {
+        return { delivered: false, reason: 'unsupported' };
       }
+      if (Notification.permission === 'denied') {
+        return { delivered: false, reason: 'permission_denied' };
+      }
+      if (Notification.permission !== 'granted') {
+        return { delivered: false, reason: 'permission_required' };
+      }
+      try {
+        const n = new Notification(payload.title, {
+          body: payload.body,
+          tag: payload.tag || payload.sessionId || undefined,
+        });
+        n.onclick = () => {
+          try {
+            window.focus();
+            n.close();
+          } catch {
+            // ignore focus/close errors in synthetic environments
+          }
+          payload.onClick?.();
+        };
+        return { delivered: true };
+      } catch {
+        return { delivered: false, reason: 'error' };
+      }
+    },
+
+    async notifyApprovalRequested(payload: ApprovalNotification): Promise<void> {
+      await this.notify({
+        sessionId: payload.sessionId,
+        title: `Approval required on ${payload.runnerName}`,
+        body: `Tool "${payload.toolName}" is waiting for authorization.`,
+      });
     },
 
     haptic(style): void {

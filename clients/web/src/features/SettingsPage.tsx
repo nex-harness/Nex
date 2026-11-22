@@ -3,6 +3,7 @@ import {
   Archive,
   ArrowLeft,
   BarChart3,
+  Bell,
   Blocks,
   Bot,
   Brain,
@@ -102,15 +103,17 @@ export type ToggleProps = {
   onChange: (checked: boolean) => void;
   label?: string;
   disabled?: boolean;
+  testId?: string;
 };
 
-export function Toggle({ checked, onChange, label, disabled }: ToggleProps) {
+export function Toggle({ checked, onChange, label, disabled, testId }: ToggleProps) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      data-testid={testId}
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
@@ -397,6 +400,37 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
   const [confirmPwd, setConfirmPwd] = useState('');
   const [pwdError, setPwdError] = useState('');
   const [pwdBusy, setPwdBusy] = useState(false);
+  const [notifyPerm, setNotifyPerm] = useState(() => hostBridge.getNotificationPermission());
+
+  const notifyEnabled = preferences.notify_enabled !== false;
+  const notifyOnComplete = preferences.notify_on_complete !== false;
+  const notifyOnInput = preferences.notify_on_input !== false;
+  const notifyOnlyBackground = preferences.notify_only_background !== false;
+
+  const handleRequestNotifyPermission = async () => {
+    const perm = await hostBridge.requestNotificationPermission();
+    setNotifyPerm(perm);
+  };
+
+  const handleTestNotification = async () => {
+    let perm = hostBridge.getNotificationPermission();
+    if (hostBridge.kind === 'browser' && perm === 'default') {
+      perm = await hostBridge.requestNotificationPermission();
+    }
+    setNotifyPerm(perm);
+    const res = await hostBridge.notify({
+      title: formatMsg(locale, 'notify.testTitle'),
+      body: formatMsg(locale, 'notify.testBody'),
+      sessionId: 'test:ping',
+    });
+    if (res.delivered) {
+      onFlash(formatMsg(locale, 'settings.notifications.testSent'));
+    } else if (res.reason === 'permission_denied' || res.reason === 'permission_required') {
+      onFlash(formatMsg(locale, 'settings.notifications.testBlocked'));
+    } else {
+      onFlash(formatMsg(locale, 'settings.notifications.testUnsupported'));
+    }
+  };
 
   const handleSavePassword = async () => {
     setPwdError('');
@@ -558,6 +592,145 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
           </select>
         </SettingsRow>
       </SettingsGroupCard>
+
+      <div data-testid="settings-notifications" className="space-y-3">
+        <SectionHeading
+          title={formatMsg(locale, 'settings.notifications.title')}
+          description={formatMsg(locale, 'settings.notifications.description')}
+        />
+
+        <SettingsGroupCard>
+          {hostBridge.kind === 'browser' ? (
+            <SettingsRow
+              label={
+                <span className="inline-flex items-center gap-2">
+                  <Bell className="size-4 text-foreground-subtle" />
+                  <span>{formatMsg(locale, 'settings.notifications.browserPermission')}</span>
+                </span>
+              }
+              description={formatMsg(locale, 'settings.notifications.browserPermissionDesc')}
+            >
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <span
+                  data-testid="settings-notify-permission-badge"
+                  className={`rounded-md px-2.5 py-1 text-ui-xs font-medium ${
+                    notifyPerm === 'granted'
+                      ? 'bg-success-surface text-success-surface-fg'
+                      : 'bg-surface text-foreground-subtle'
+                  }`}
+                >
+                  {notifyPerm === 'granted'
+                    ? formatMsg(locale, 'settings.notifications.statusGranted')
+                    : notifyPerm === 'denied'
+                      ? formatMsg(locale, 'settings.notifications.statusDenied')
+                      : notifyPerm === 'unsupported'
+                        ? formatMsg(locale, 'settings.notifications.statusUnsupported')
+                        : formatMsg(locale, 'settings.notifications.statusDefault')}
+                </span>
+                {notifyPerm === 'default' && (
+                  <button
+                    type="button"
+                    data-testid="settings-notify-request-btn"
+                    onClick={() => void handleRequestNotifyPermission()}
+                    className="inline-flex h-8 items-center rounded-lg border border-border bg-card px-3 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover"
+                  >
+                    {formatMsg(locale, 'settings.notifications.enableBrowserBtn')}
+                  </button>
+                )}
+              </div>
+            </SettingsRow>
+          ) : (
+            <SettingsRow
+              label={
+                <span className="inline-flex items-center gap-2">
+                  <Bell className="size-4 text-foreground-subtle" />
+                  <span>{formatMsg(locale, 'settings.notifications.nativeStatus')}</span>
+                </span>
+              }
+              description={formatMsg(locale, 'settings.notifications.nativeStatusDesc')}
+            >
+              <span
+                data-testid="settings-notify-permission-badge"
+                className={`rounded-md px-2.5 py-1 text-ui-xs font-medium ${
+                  hostInfo?.notifications_supported !== false
+                    ? 'bg-success-surface text-success-surface-fg'
+                    : 'bg-surface text-foreground-subtle'
+                }`}
+              >
+                {hostInfo?.notifications_supported !== false
+                  ? formatMsg(locale, 'settings.notifications.statusNativeSupported')
+                  : formatMsg(locale, 'settings.notifications.statusNativeUnpackaged')}
+              </span>
+            </SettingsRow>
+          )}
+
+          <SettingsRow
+            label={formatMsg(locale, 'settings.notifications.enabled')}
+            description={formatMsg(locale, 'settings.notifications.enabledDesc')}
+          >
+            <Toggle
+              testId="settings-notify-enabled"
+              checked={notifyEnabled}
+              onChange={(checked) => void savePreferences({ notify_enabled: checked })}
+              label={formatMsg(locale, 'settings.notifications.enabled')}
+            />
+          </SettingsRow>
+
+          {notifyEnabled && (
+            <>
+              <SettingsRow
+                label={formatMsg(locale, 'settings.notifications.onComplete')}
+                description={formatMsg(locale, 'settings.notifications.onCompleteDesc')}
+              >
+                <Toggle
+                  testId="settings-notify-complete"
+                  checked={notifyOnComplete}
+                  onChange={(checked) => void savePreferences({ notify_on_complete: checked })}
+                  label={formatMsg(locale, 'settings.notifications.onComplete')}
+                />
+              </SettingsRow>
+
+              <SettingsRow
+                label={formatMsg(locale, 'settings.notifications.onInput')}
+                description={formatMsg(locale, 'settings.notifications.onInputDesc')}
+              >
+                <Toggle
+                  testId="settings-notify-input"
+                  checked={notifyOnInput}
+                  onChange={(checked) => void savePreferences({ notify_on_input: checked })}
+                  label={formatMsg(locale, 'settings.notifications.onInput')}
+                />
+              </SettingsRow>
+
+              <SettingsRow
+                label={formatMsg(locale, 'settings.notifications.onlyBackground')}
+                description={formatMsg(locale, 'settings.notifications.onlyBackgroundDesc')}
+              >
+                <Toggle
+                  testId="settings-notify-background"
+                  checked={notifyOnlyBackground}
+                  onChange={(checked) => void savePreferences({ notify_only_background: checked })}
+                  label={formatMsg(locale, 'settings.notifications.onlyBackground')}
+                />
+              </SettingsRow>
+            </>
+          )}
+
+          <SettingsRow
+            label={formatMsg(locale, 'settings.notifications.testLabel')}
+            description={formatMsg(locale, 'settings.notifications.testDesc')}
+          >
+            <button
+              type="button"
+              data-testid="settings-notify-test-btn"
+              onClick={() => void handleTestNotification()}
+              className="inline-flex h-8 items-center rounded-lg border border-border bg-card px-3 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover"
+            >
+              {formatMsg(locale, 'settings.notifications.testBtn')}
+            </button>
+          </SettingsRow>
+        </SettingsGroupCard>
+      </div>
 
       <SectionHeading
         title={formatMsg(locale, 'settings.sessionStorage')}

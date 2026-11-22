@@ -114,8 +114,8 @@ func RunDesktop(opts DesktopRunOptions) error {
 
 	mygo.App.OnNotificationClick(func(id string) {
 		getOrCreateWindow()
-		if id != "" {
-			_ = EventOpenSession.Broadcast(id)
+		if sid := parseNotificationSessionID(id); sid != "" {
+			_ = EventOpenSession.Broadcast(sid)
 		}
 	})
 

@@ -148,3 +148,22 @@ func TestHostServicePersistenceSecretsAndModeSwitch(t *testing.T) {
 		t.Fatalf("unexpected remote host info after switch: %+v", remoteInfo)
 	}
 }
+
+func TestParseNotificationSessionID(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"session:sess_1", "sess_1"},
+		{"  session:sess_abc  ", "sess_abc"},
+		{"mygo-12345", ""},
+		{"test:ping", ""},
+		{"", ""},
+		{"sess_legacy", "sess_legacy"},
+	}
+	for _, tc := range cases {
+		if got := parseNotificationSessionID(tc.in); got != tc.want {
+			t.Fatalf("parseNotificationSessionID(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

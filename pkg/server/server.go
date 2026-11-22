@@ -101,13 +101,14 @@ type Server struct {
 	mux    *http.ServeMux
 	client *http.Client
 
-	mu              sync.RWMutex
-	runners         map[string]*runnerConn
-	clients         map[string]*clientConn
-	ptyToRunner     map[string]string
-	browserToRunner map[string]string
-	pendingRPC      map[string]chan protocol.Envelope
-	modelsCache     modelsDevCache
+	mu               sync.RWMutex
+	runners          map[string]*runnerConn
+	clients          map[string]*clientConn
+	ptyToRunner      map[string]string
+	browserToRunner  map[string]string
+	planNotifiedSess map[string]bool
+	pendingRPC       map[string]chan protocol.Envelope
+	modelsCache      modelsDevCache
 }
 
 // New constructs and wires a Control Plane Server.
@@ -125,11 +126,12 @@ func New(cfg Config) (*Server, error) {
 		store:           cfg.Store,
 		mux:             http.NewServeMux(),
 		client:          hc,
-		runners:         make(map[string]*runnerConn),
-		clients:         make(map[string]*clientConn),
-		ptyToRunner:     make(map[string]string),
-		browserToRunner: make(map[string]string),
-		pendingRPC:      make(map[string]chan protocol.Envelope),
+		runners:          make(map[string]*runnerConn),
+		clients:          make(map[string]*clientConn),
+		ptyToRunner:      make(map[string]string),
+		browserToRunner:  make(map[string]string),
+		planNotifiedSess: make(map[string]bool),
+		pendingRPC:       make(map[string]chan protocol.Envelope),
 	}
 
 	// Seed default embedded models if models table is currently empty

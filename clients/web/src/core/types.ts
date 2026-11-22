@@ -68,6 +68,37 @@ export interface UserPreferences {
   browser_attach_url?: string;
   browser_executable_path?: string;
   browser_download_mirror?: string;
+  notify_enabled?: boolean;
+  notify_on_complete?: boolean;
+  notify_on_input?: boolean;
+  notify_only_background?: boolean;
+}
+
+export type ClientNotificationKind =
+  | 'task_completed'
+  | 'question'
+  | 'approval'
+  | 'plan_approval'
+  | 'browser_handoff';
+
+export interface ClientNotificationPayload {
+  session_id: string;
+  runner_id?: string;
+  kind: ClientNotificationKind;
+  session_title?: string;
+  title?: string;
+  body?: string;
+  tool_name?: string;
+  request_id?: string;
+}
+
+export interface InAppNotificationToast {
+  id: string;
+  kind: ClientNotificationKind;
+  sessionId: string;
+  title: string;
+  body: string;
+  createdAt: number;
 }
 
 export interface AgentProfile {

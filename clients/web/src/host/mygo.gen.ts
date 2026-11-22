@@ -13,6 +13,7 @@ export interface HostInfo {
   server_url: string;
   local_url?: string;
   supports_local_mode: boolean;
+  notifications_supported: boolean;
   recent_servers: string[];
 }
 

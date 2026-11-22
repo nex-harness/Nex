@@ -30,8 +30,8 @@ func RunMobile() error {
 	})
 
 	mygo.App.OnNotificationClick(func(id string) {
-		if id != "" {
-			_ = EventOpenSession.Broadcast(id)
+		if sid := parseNotificationSessionID(id); sid != "" {
+			_ = EventOpenSession.Broadcast(sid)
 		}
 	})
 

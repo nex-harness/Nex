@@ -164,6 +164,34 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 
 		case protocol.TypeBrowserHandoff:
 			s.broadcastToAllClients(ctx, env)
+			var hst struct {
+				SessionID string `json:"session_id"`
+				TabID     string `json:"tab_id"`
+				State     string `json:"state"`
+				Reason    string `json:"reason,omitempty"`
+				Message   string `json:"message,omitempty"`
+			}
+			if json.Unmarshal(env.Payload, &hst) == nil && hst.State == "awaiting_human" && hst.SessionID != "" {
+				sessionTitle := ""
+				isChild := false
+				if sess, err := s.store.GetSession(ctx, hst.SessionID); err == nil && sess != nil {
+					if sess.ParentSessionID != "" {
+						isChild = true
+					}
+					sessionTitle = strings.TrimSpace(sess.Title)
+				}
+				if !isChild {
+					s.emitClientNotification(ctx, protocol.ClientNotificationPayload{
+						SessionID:    hst.SessionID,
+						RunnerID:     hello.RunnerID,
+						Kind:         "browser_handoff",
+						SessionTitle: sessionTitle,
+						Title:        strings.TrimSpace(hst.Reason),
+						Body:         strings.TrimSpace(hst.Message),
+						RequestID:    hst.TabID,
+					})
+				}
+			}
 		}
 	}
 }
@@ -263,6 +291,7 @@ func (s *Server) ingestRunnerSessionEvent(ctx context.Context, rc *runnerConn, e
 	outEnv.RunnerID = rc.id
 	outEnv.Seq = savedEv.Seq
 	s.broadcastSessionEvent(ctx, savedEv.SessionID, outEnv)
+	s.maybeEmitSessionNotification(ctx, rc.id, savedEv)
 }
 
 func (s *Server) handleRunnerRemoteMCPCall(ctx context.Context, rc *runnerConn, env protocol.Envelope) {
@@ -702,5 +731,120 @@ func (s *Server) broadcastToAllClients(ctx context.Context, env protocol.Envelop
 
 	for _, c := range clients {
 		_ = c.sendJSON(ctx, env)
+	}
+}
+
+func (s *Server) emitClientNotification(ctx context.Context, payload protocol.ClientNotificationPayload) {
+	if strings.TrimSpace(payload.SessionID) == "" || strings.TrimSpace(payload.Kind) == "" {
+		return
+	}
+	env, err := protocol.NewEnvelope(protocol.TypeClientNotify, payload)
+	if err != nil {
+		return
+	}
+	env.SessionID = payload.SessionID
+	env.RunnerID = payload.RunnerID
+	s.broadcastToAllClients(ctx, env)
+}
+
+func (s *Server) maybeEmitSessionNotification(ctx context.Context, runnerID string, ev store.SessionEvent) {
+	switch ev.EventType {
+	case "agent_start":
+		s.mu.Lock()
+		delete(s.planNotifiedSess, ev.SessionID)
+		s.mu.Unlock()
+		return
+	case "agent_end", "ui_prompt_requested", "approval_requested", "tool_execution_end":
+	default:
+		return
+	}
+
+	sessionTitle := ""
+	if sess, err := s.store.GetSession(ctx, ev.SessionID); err == nil && sess != nil {
+		if sess.ParentSessionID != "" {
+			return
+		}
+		sessionTitle = strings.TrimSpace(sess.Title)
+	}
+
+	var inner struct {
+		Error      string `json:"error,omitempty"`
+		ToolCallID string `json:"tool_call_id,omitempty"`
+		ToolName   string `json:"tool_name,omitempty"`
+		ToolResult *struct {
+			IsError bool `json:"is_error,omitempty"`
+		} `json:"tool_result,omitempty"`
+		ApprovalID string                           `json:"approval_id,omitempty"`
+		UIPrompt   *protocol.UIPromptRequestPayload `json:"ui_prompt,omitempty"`
+	}
+	_ = json.Unmarshal(ev.Payload, &inner)
+
+	switch ev.EventType {
+	case "tool_execution_end":
+		if inner.ToolName == "exit_plan_mode" && (inner.ToolResult == nil || !inner.ToolResult.IsError) {
+			s.mu.Lock()
+			s.planNotifiedSess[ev.SessionID] = true
+			s.mu.Unlock()
+			s.emitClientNotification(ctx, protocol.ClientNotificationPayload{
+				SessionID:    ev.SessionID,
+				RunnerID:     runnerID,
+				Kind:         "plan_approval",
+				SessionTitle: sessionTitle,
+				ToolName:     "exit_plan_mode",
+				RequestID:    inner.ToolCallID,
+			})
+		}
+	case "agent_end":
+		s.mu.Lock()
+		planNotified := s.planNotifiedSess[ev.SessionID]
+		delete(s.planNotifiedSess, ev.SessionID)
+		s.mu.Unlock()
+		if planNotified {
+			return
+		}
+		if strings.Contains(strings.ToLower(inner.Error), "cancel") {
+			return
+		}
+		s.emitClientNotification(ctx, protocol.ClientNotificationPayload{
+			SessionID:    ev.SessionID,
+			RunnerID:     runnerID,
+			Kind:         "task_completed",
+			SessionTitle: sessionTitle,
+			Body:         strings.TrimSpace(inner.Error),
+		})
+	case "ui_prompt_requested":
+		reqID := ""
+		title := ""
+		body := ""
+		if inner.UIPrompt != nil {
+			reqID = strings.TrimSpace(inner.UIPrompt.RequestID)
+			title = strings.TrimSpace(inner.UIPrompt.Title)
+			body = strings.TrimSpace(inner.UIPrompt.Message)
+			if body == "" && len(inner.UIPrompt.Options) > 0 {
+				limit := len(inner.UIPrompt.Options)
+				if limit > 3 {
+					limit = 3
+				}
+				body = strings.Join(inner.UIPrompt.Options[:limit], " / ")
+			}
+		}
+		s.emitClientNotification(ctx, protocol.ClientNotificationPayload{
+			SessionID:    ev.SessionID,
+			RunnerID:     runnerID,
+			Kind:         "question",
+			SessionTitle: sessionTitle,
+			Title:        title,
+			Body:         body,
+			RequestID:    reqID,
+		})
+	case "approval_requested":
+		s.emitClientNotification(ctx, protocol.ClientNotificationPayload{
+			SessionID:    ev.SessionID,
+			RunnerID:     runnerID,
+			Kind:         "approval",
+			SessionTitle: sessionTitle,
+			ToolName:     inner.ToolName,
+			RequestID:    inner.ApprovalID,
+		})
 	}
 }

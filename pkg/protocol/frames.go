@@ -23,6 +23,7 @@ const (
 
 	// Client Subscription & Session Control
 	TypeClientSubscribe = "client.subscribe"
+	TypeClientNotify    = "client.notify"
 	TypeSessionPrompt   = "session.prompt"
 	TypeSessionSteer    = "session.steer"
 	TypeSessionFollowUp = "session.follow_up"
@@ -214,6 +215,19 @@ type UIResolvePayload struct {
 	Canceled  bool   `json:"canceled,omitempty"`
 	Confirmed bool   `json:"confirmed,omitempty"`
 	Value     string `json:"value,omitempty"`
+}
+
+// ClientNotificationPayload broadcasts user-facing alert triggers (task completion,
+// questions, approvals, plan review, browser handoff) to all connected Web/Desktop/Mobile clients.
+type ClientNotificationPayload struct {
+	SessionID    string `json:"session_id"`
+	RunnerID     string `json:"runner_id,omitempty"`
+	Kind         string `json:"kind"` // "task_completed" | "question" | "approval" | "plan_approval" | "browser_handoff"
+	SessionTitle string `json:"session_title,omitempty"`
+	Title        string `json:"title,omitempty"`
+	Body         string `json:"body,omitempty"`
+	ToolName     string `json:"tool_name,omitempty"`
+	RequestID    string `json:"request_id,omitempty"`
 }
 
 // BlobFetchPayload asks a Runner to upload a CAS Trace/Prompt blob on demand.

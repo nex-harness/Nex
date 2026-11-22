@@ -126,6 +126,10 @@ type UserPreferences struct {
 	BrowserAttachURL      string `json:"browser_attach_url"`       // Optional CDP HTTP/WS endpoint for attach_cdp
 	BrowserExecutablePath string `json:"browser_executable_path"`  // Optional override Chrome/Chromium path
 	BrowserDownloadMirror string `json:"browser_download_mirror"`  // Optional Chrome for Testing mirror URL
+	NotifyEnabled         bool   `json:"notify_enabled"`           // Master toggle for Web / Desktop / Mobile notifications
+	NotifyOnComplete      bool   `json:"notify_on_complete"`       // Notify when a session run finishes
+	NotifyOnInput         bool   `json:"notify_on_input"`          // Notify when question, approval, plan review, or handoff waits on user
+	NotifyOnlyBackground  bool   `json:"notify_only_background"`   // Suppress notification when focused on the same active session
 }
 
 func DefaultUserPreferences() UserPreferences {
@@ -146,6 +150,10 @@ func DefaultUserPreferences() UserPreferences {
 		BrowserAttachURL:      "",
 		BrowserExecutablePath: "",
 		BrowserDownloadMirror: "",
+		NotifyEnabled:         true,
+		NotifyOnComplete:      true,
+		NotifyOnInput:         true,
+		NotifyOnlyBackground:  true,
 	}
 }
 

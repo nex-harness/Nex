@@ -19,11 +19,13 @@ import {
   BrowserProbeResult,
   BrowserSessionState,
   ChatImageBlock,
+  ClientNotificationPayload,
   ComposerAttachment,
   CronJobRecord,
   DirEntry,
   FilePreview,
   GitSummary,
+  InAppNotificationToast,
   MCPServerRecord,
   MemoryRecord,
   ModelMeta,
@@ -213,6 +215,7 @@ export interface AppState {
   browserStates: Record<string, BrowserSessionState>;
   browserProbes: Record<string, BrowserProbeResult>;
   browserInstalling: Record<string, boolean>;
+  notificationToasts: InAppNotificationToast[];
 
   rightTabs: WorkbenchTab[];
   activeRightTabId: string;
@@ -243,6 +246,9 @@ export interface AppState {
   setThinkingEffort: (effort: ThinkingEffort) => void;
   setPermissionMode: (mode: 'full_access' | 'interactive' | 'read_only' | 'plan') => void;
   updateThemeQuick: (theme: UserPreferences['theme']) => Promise<void>;
+  pushNotificationToast: (toast: Omit<InAppNotificationToast, 'id' | 'createdAt'>) => void;
+  dismissNotificationToast: (id: string) => void;
+  dispatchClientNotification: (payload: ClientNotificationPayload) => Promise<void>;
 
   bootstrap: () => Promise<void>;
   connectToServer: (rawUrl: string) => Promise<{ ok: boolean; error?: string }>;
@@ -341,7 +347,53 @@ const DEFAULT_PREFS: UserPreferences = {
   mono_font_family: 'JetBrains Mono, SFMono-Regular, Menlo, monospace',
   expand_thinking: false,
   auto_archive_after_days: 30,
+  notify_enabled: true,
+  notify_on_complete: true,
+  notify_on_input: true,
+  notify_only_background: true,
 };
+
+const NOTIFY_DEDUP_WINDOW_MS = 5000;
+const recentNotifyKeys = new Map<string, number>();
+
+function formatClientNotificationCopy(
+  locale: LocaleCode,
+  payload: ClientNotificationPayload,
+  sessions: SessionRecord[],
+): { title: string; body: string } {
+  const fromList = sessions.find((s) => s.id === payload.session_id)?.title?.trim() || '';
+  const sessionLabel = (payload.session_title || '').trim() || fromList || formatMsg(locale, 'notify.defaultSessionTitle');
+
+  switch (payload.kind) {
+    case 'task_completed':
+      return {
+        title: formatMsg(locale, 'notify.taskCompletedTitle', { session: sessionLabel }),
+        body: payload.body?.trim()
+          ? formatMsg(locale, 'notify.taskCompletedErrorBody', { error: payload.body.trim() })
+          : formatMsg(locale, 'notify.taskCompletedBody'),
+      };
+    case 'question':
+      return {
+        title: formatMsg(locale, 'notify.questionTitle', { session: sessionLabel }),
+        body: [payload.title?.trim(), payload.body?.trim()].filter(Boolean).join(' — ') || formatMsg(locale, 'notify.questionDefaultBody'),
+      };
+    case 'approval':
+      return {
+        title: formatMsg(locale, 'notify.approvalTitle', { session: sessionLabel }),
+        body: formatMsg(locale, 'notify.approvalBody', { tool: payload.tool_name || 'tool' }),
+      };
+    case 'plan_approval':
+      return {
+        title: formatMsg(locale, 'notify.planApprovalTitle', { session: sessionLabel }),
+        body: formatMsg(locale, 'notify.planApprovalBody'),
+      };
+    case 'browser_handoff':
+      return {
+        title: formatMsg(locale, 'notify.browserHandoffTitle', { session: sessionLabel }),
+        body: [payload.title?.trim(), payload.body?.trim()].filter(Boolean).join(' — ') || formatMsg(locale, 'notify.browserHandoffDefaultBody'),
+      };
+  }
+}
 
 const INITIAL_LOCALE: LocaleCode = detectBrowserLocale(safeStorageGet('nex.locale'));
 applyDocumentLocale(INITIAL_LOCALE);
@@ -441,6 +493,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   browserStates: {},
   browserProbes: {},
   browserInstalling: {},
+  notificationToasts: [],
 
   openSettings: (section) => {
     set((s) => ({ mainView: 'settings', settingsSection: section || s.settingsSection }));
@@ -605,6 +658,81 @@ export const useNexStore = create<AppState>((set, get) => ({
     applyDocumentTheme(theme);
     set({ preferences: nextPrefs });
     await apiFetch('/api/v1/preferences', { method: 'PUT', body: JSON.stringify(nextPrefs) }).catch(() => {});
+  },
+
+  pushNotificationToast: (toast) => {
+    const id = `toast_${crypto.randomUUID().slice(0, 8)}`;
+    const nextToast: InAppNotificationToast = {
+      ...toast,
+      id,
+      createdAt: Date.now(),
+    };
+    set((s) => ({
+      notificationToasts: [...s.notificationToasts, nextToast].slice(-3),
+    }));
+    setTimeout(() => {
+      get().dismissNotificationToast(id);
+    }, 7000);
+  },
+
+  dismissNotificationToast: (id) =>
+    set((s) => ({
+      notificationToasts: s.notificationToasts.filter((t) => t.id !== id),
+    })),
+
+  dispatchClientNotification: async (payload) => {
+    const st = get();
+    const prefs = st.preferences;
+    if (prefs.notify_enabled === false) return;
+    if (payload.kind === 'task_completed' && prefs.notify_on_complete === false) return;
+    if (payload.kind !== 'task_completed' && prefs.notify_on_input === false) return;
+
+    const focused = hostBridge.isWindowFocused();
+    const viewingSameSession =
+      st.mainView === 'workspace' &&
+      Boolean(payload.session_id) &&
+      st.activeSessionId === payload.session_id;
+    if (prefs.notify_only_background !== false && focused && viewingSameSession) {
+      return;
+    }
+
+    const now = Date.now();
+    for (const [k, ts] of recentNotifyKeys.entries()) {
+      if (now - ts > NOTIFY_DEDUP_WINDOW_MS) {
+        recentNotifyKeys.delete(k);
+      }
+    }
+    const dedupKey = `${payload.kind}:${payload.session_id}:${payload.request_id || ''}`;
+    const prevTs = recentNotifyKeys.get(dedupKey);
+    if (prevTs && now - prevTs < NOTIFY_DEDUP_WINDOW_MS) {
+      return;
+    }
+    recentNotifyKeys.set(dedupKey, now);
+
+    const { title, body } = formatClientNotificationCopy(st.locale, payload, st.sessions);
+    hostBridge.haptic(payload.kind === 'task_completed' ? 'success' : 'warning');
+
+    const result = await hostBridge.notify({
+      title,
+      body,
+      sessionId: payload.session_id,
+      tag: `nex:${payload.session_id}:${payload.kind}`,
+      onClick: () => {
+        set({ mainView: 'workspace', serverConnectRequired: false });
+        if (payload.session_id) {
+          void get().selectSession(payload.session_id);
+        }
+      },
+    });
+
+    if (focused && (!viewingSameSession || !result.delivered)) {
+      get().pushNotificationToast({
+        kind: payload.kind,
+        sessionId: payload.session_id,
+        title,
+        body,
+      });
+    }
   },
 
   openServerConnect: () => set({ serverConnectRequired: true }),
@@ -863,7 +991,6 @@ export const useNexStore = create<AppState>((set, get) => ({
           let nextSessions = state.sessions;
           for (const [sid, group] of batch) {
             let cur = nextStreams[sid] || emptyStreamState();
-            const prevApproval = cur.pendingApproval;
             for (const raw of group.rows) {
               if (raw.event_type === 'session_title_updated') {
                 const newTitle = String((raw.payload || {}).title || '').trim();
@@ -885,13 +1012,6 @@ export const useNexStore = create<AppState>((set, get) => ({
                   nextSessions = nextSessions.map((s) => (s.id === sid ? { ...s, status: 'idle' } : s));
                 }
               }
-            }
-            if (cur.pendingApproval && cur.pendingApproval !== prevApproval) {
-              void hostBridge.notifyApprovalRequested({
-                sessionId: sid,
-                runnerName: group.runnerId,
-                toolName: cur.pendingApproval.toolName,
-              });
             }
             nextStreams[sid] = cur;
           }
@@ -962,6 +1082,18 @@ export const useNexStore = create<AppState>((set, get) => ({
         }
         if (env.type === 'memory.sync') {
           void get().refreshRegistries();
+          return;
+        }
+        if (env.type === 'client.notify' && env.payload) {
+          const payload = env.payload as ClientNotificationPayload;
+          if (payload.kind === 'task_completed' && payload.session_id) {
+            set((state) => ({
+              sessions: state.sessions.some((s) => s.id === payload.session_id && s.status === 'running')
+                ? state.sessions.map((s) => (s.id === payload.session_id ? { ...s, status: 'idle' } : s))
+                : state.sessions,
+            }));
+          }
+          void get().dispatchClientNotification(payload);
           return;
         }
         if (env.type === 'browser.state' && env.payload) {

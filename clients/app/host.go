@@ -28,14 +28,15 @@ var (
 
 // HostInfo describes the active mygo runtime container and connection target.
 type HostInfo struct {
-	Platform          string   `json:"platform"`
-	FormFactor        string   `json:"form_factor"`
-	Version           string   `json:"version"`
-	ConnectionMode    string   `json:"connection_mode"`
-	ServerURL         string   `json:"server_url"`
-	LocalURL          string   `json:"local_url,omitempty"`
-	SupportsLocalMode bool     `json:"supports_local_mode"`
-	RecentServers     []string `json:"recent_servers"`
+	Platform               string   `json:"platform"`
+	FormFactor             string   `json:"form_factor"`
+	Version                string   `json:"version"`
+	ConnectionMode         string   `json:"connection_mode"`
+	ServerURL              string   `json:"server_url"`
+	LocalURL               string   `json:"local_url,omitempty"`
+	SupportsLocalMode      bool     `json:"supports_local_mode"`
+	NotificationsSupported bool     `json:"notifications_supported"`
+	RecentServers          []string `json:"recent_servers"`
 }
 
 // SecretStore persists sensitive per-server tokens.
@@ -212,15 +213,20 @@ func (h *HostService) infoLocked() HostInfo {
 	}
 	recent := make([]string, len(h.cfg.RecentServers))
 	copy(recent, h.cfg.RecentServers)
+	notifSupported := false
+	if h.appReady {
+		notifSupported = mygo.NotificationsSupported()
+	}
 	return HostInfo{
-		Platform:          PlatformName(),
-		FormFactor:        FormFactorName(),
-		Version:           ver,
-		ConnectionMode:    h.cfg.ConnectionMode,
-		ServerURL:         effectiveURL,
-		LocalURL:          h.localURL,
-		SupportsLocalMode: supportsLocalMode,
-		RecentServers:     recent,
+		Platform:               PlatformName(),
+		FormFactor:             FormFactorName(),
+		Version:                ver,
+		ConnectionMode:         h.cfg.ConnectionMode,
+		ServerURL:              effectiveURL,
+		LocalURL:               h.localURL,
+		SupportsLocalMode:      supportsLocalMode,
+		NotificationsSupported: notifSupported,
+		RecentServers:          recent,
 	}
 }
 
@@ -321,26 +327,40 @@ func (h *HostService) ClearAuthToken(serverURL string) error {
 	return h.secrets.Delete(tokenSecretKey(serverURL))
 }
 
+// parseNotificationSessionID extracts a session ID from a notification identifier,
+// returning "" for test notifications or auto-generated IDs so clicks only focus the window.
+func parseNotificationSessionID(id string) string {
+	id = strings.TrimSpace(id)
+	if strings.HasPrefix(id, "session:") {
+		return strings.TrimSpace(strings.TrimPrefix(id, "session:"))
+	}
+	if id == "" || strings.HasPrefix(id, "mygo-") || strings.HasPrefix(id, "test:") {
+		return ""
+	}
+	return id
+}
+
 // Notify displays a native desktop or mobile notification for approval alerts or task events.
 func (h *HostService) Notify(title, body, sessionID string) error {
 	h.mu.Lock()
 	ready := h.appReady
 	h.mu.Unlock()
 	if !ready || !mygo.NotificationsSupported() {
-		return nil
+		return errors.ErrUnsupported
 	}
-	notifID := strings.TrimSpace(sessionID)
+	sid := strings.TrimSpace(sessionID)
+	notifID := ""
+	group := ""
+	if sid != "" && !strings.HasPrefix(sid, "test:") {
+		notifID = "session:" + sid
+		group = sid
+	}
 	n := mygo.NewNotification(mygo.NotificationOptions{
 		ID:    notifID,
-		Group: notifID,
+		Group: group,
 		Title: title,
 		Body:  body,
 	})
-	if notifID != "" {
-		n.OnClick(func() {
-			_ = EventOpenSession.Broadcast(notifID)
-		})
-	}
 	return n.Show()
 }
 

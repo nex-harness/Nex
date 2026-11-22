@@ -124,7 +124,10 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, prefs)
 	case http.MethodPut, http.MethodPost:
-		var prefs store.UserPreferences
+		prefs, err := s.store.GetUserPreferences(r.Context())
+		if err != nil {
+			prefs = store.DefaultUserPreferences()
+		}
 		if err := json.NewDecoder(r.Body).Decode(&prefs); err != nil {
 			writeErr(w, http.StatusBadRequest, err)
 			return
