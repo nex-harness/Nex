@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/nex-harness/nex/pkg/remote"
 )
 
 const (
@@ -149,7 +151,39 @@ func extractRequestToken(r *http.Request) string {
 	return ""
 }
 
+func extractDeviceToken(r *http.Request) string {
+	if tok := strings.TrimSpace(r.Header.Get("X-Nex-Device-Token")); tok != "" {
+		return tok
+	}
+	return strings.TrimSpace(r.URL.Query().Get("device_token"))
+}
+
+func sha256Hex(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
+
 func (s *Server) isRequestAuthenticated(ctx context.Context, r *http.Request) (enabled bool, ok bool) {
+	if peer, hasPeer := remote.PeerFromContext(ctx); hasPeer {
+		if !peer.PairingOnly && peer.DeviceID != "" {
+			if dev, err := s.store.GetPairedDeviceByFP(ctx, peer.PubKeyFP); err == nil && dev != nil {
+				cfg := s.loadWebAuthConfig(ctx)
+				return strings.TrimSpace(cfg.PasswordHash) != "", true
+			}
+		}
+		return true, false
+	}
+
+	if devTok := extractDeviceToken(r); devTok != "" {
+		if dev, err := s.store.GetPairedDeviceByTokenHash(ctx, sha256Hex(devTok)); err == nil && dev != nil {
+			_ = s.store.TouchPairedDevice(ctx, dev.ID, "")
+			cfg := s.loadWebAuthConfig(ctx)
+			return strings.TrimSpace(cfg.PasswordHash) != "", true
+		}
+		// Explicitly reject unknown or revoked paired-device credentials even if Web Password is off
+		return true, false
+	}
+
 	cfg := s.loadWebAuthConfig(ctx)
 	if strings.TrimSpace(cfg.PasswordHash) == "" {
 		return false, true
@@ -183,10 +217,11 @@ func setAuthCookie(w http.ResponseWriter, r *http.Request, token string, maxAge 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
-		// Static SPA assets, health check, runner reverse WS, and auth bootstrap/login endpoints remain accessible
+		// Static SPA assets, health check, runner reverse WS, pairing exchange, and auth bootstrap endpoints remain accessible
 		if p == "/api/v1/health" ||
 			p == "/api/v1/auth/status" ||
 			p == "/api/v1/auth/login" ||
+			p == "/api/v1/remote/pair/complete" ||
 			p == "/api/v1/ssh/binary" ||
 			p == "/ws/runner" ||
 			strings.HasPrefix(p, "/llm-proxy/") ||

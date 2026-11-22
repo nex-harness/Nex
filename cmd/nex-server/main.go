@@ -4,9 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/nex-harness/nex/pkg/server"
 	"github.com/nex-harness/nex/pkg/store"
@@ -30,10 +32,18 @@ func main() {
 	}
 	defer st.Close()
 
+	listenPort := 8080
+	if _, portStr, err := net.SplitHostPort(*addr); err == nil {
+		if p, pErr := strconv.Atoi(portStr); pErr == nil && p > 0 {
+			listenPort = p
+		}
+	}
+
 	srv, err := server.New(server.Config{
 		Store:         st,
 		PairingSecret: *pairingToken,
 		PublicBaseURL: *publicURL,
+		ListenPort:    listenPort,
 		RunnersDir:    *runnersDir,
 		StaticFS:      embeddedWebFS(),
 		EnableRelay:   *enableRelay,
@@ -42,6 +52,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to init nex-server: %v", err)
 	}
+	defer srv.Close()
 
 	fmt.Printf("nex-server listening on %s (data: %s)\n", *addr, *dataDir)
 	if err := http.ListenAndServe(*addr, srv.Handler()); err != nil {

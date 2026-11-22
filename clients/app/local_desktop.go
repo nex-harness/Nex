@@ -21,6 +21,7 @@ const supportsLocalMode = true
 type AllInOneInstance struct {
 	URL        string
 	httpServer *http.Server
+	cpSrv      *server.Server
 	serverDB   *store.Store
 	node       *runner.Node
 	wiring     *runner.DefaultRuntimeWiring
@@ -37,6 +38,10 @@ func StartAllInOne(ctx context.Context, baseDataDir, workspaceDir, listenAddr st
 		return nil, err
 	}
 	actualAddr := ln.Addr().String()
+	listenPort := 0
+	if tcpAddr, ok := ln.Addr().(*net.TCPAddr); ok {
+		listenPort = tcpAddr.Port
+	}
 
 	srvStore, err := store.Open(filepath.Join(baseDataDir, "server"))
 	if err != nil {
@@ -45,8 +50,9 @@ func StartAllInOne(ctx context.Context, baseDataDir, workspaceDir, listenAddr st
 	}
 
 	cpSrv, err := server.New(server.Config{
-		Store:    srvStore,
-		StaticFS: webui.DistFS(),
+		Store:      srvStore,
+		ListenPort: listenPort,
+		StaticFS:   webui.DistFS(),
 	})
 	if err != nil {
 		_ = srvStore.Close()
@@ -79,6 +85,7 @@ func StartAllInOne(ctx context.Context, baseDataDir, workspaceDir, listenAddr st
 	return &AllInOneInstance{
 		URL:        "http://" + actualAddr,
 		httpServer: httpSrv,
+		cpSrv:      cpSrv,
 		serverDB:   srvStore,
 		node:       node,
 		wiring:     wiring,
@@ -91,6 +98,9 @@ func (a *AllInOneInstance) Close() error {
 	a.cancel()
 	a.wiring.Close()
 	_ = a.node.Close()
+	if a.cpSrv != nil {
+		_ = a.cpSrv.Close()
+	}
 	_ = a.httpServer.Close()
 	return a.serverDB.Close()
 }

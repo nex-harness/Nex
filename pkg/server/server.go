@@ -20,6 +20,7 @@ import (
 	"github.com/nex-harness/nex/pkg/ai"
 	"github.com/nex-harness/nex/pkg/protocol"
 	"github.com/nex-harness/nex/pkg/relay"
+	"github.com/nex-harness/nex/pkg/remote"
 	"github.com/nex-harness/nex/pkg/store"
 )
 
@@ -33,6 +34,7 @@ type Config struct {
 	Store         *store.Store
 	PairingSecret string          // Optional shared pairing token for Runner registration
 	PublicBaseURL string          // Advertised base URL for /llm-proxy/*
+	ListenPort    int             // Local TCP listen port for LAN URL advertisement
 	RunnersDir    string          // Optional directory containing prebuilt multi-platform nex-runner-<os>-<arch> binaries
 	StaticFS      fs.FS           // Optional embedded clients/web/dist filesystem
 	HTTPClient    *http.Client    // Optional custom HTTP client (for tests / models.dev / proxy)
@@ -99,11 +101,12 @@ func (cc *clientConn) sendBinary(ctx context.Context, frame []byte) error {
 
 // Server implements the Nex-v3 Central Control Plane (HTTP REST + WS Hub + LLM Proxy).
 type Server struct {
-	cfg    Config
-	store  *store.Store
-	mux    *http.ServeMux
-	client *http.Client
-	relay  *relay.Server
+	cfg       Config
+	store     *store.Store
+	mux       *http.ServeMux
+	client    *http.Client
+	relay     *relay.Server
+	remoteMgr *remote.HostManager
 
 	mu               sync.RWMutex
 	runners          map[string]*runnerConn
@@ -148,7 +151,44 @@ func New(cfg Config) (*Server, error) {
 	}
 
 	s.registerRoutes()
+
+	rm, err := remote.NewHostManager(remote.HostManagerOptions{
+		DataDir:    cfg.Store.DataDir(),
+		ListenPort: cfg.ListenPort,
+		Handler:    s.Handler(),
+		DeviceAuthorizer: func(pubkeyFP string) (string, bool) {
+			dev, dErr := cfg.Store.GetPairedDeviceByFP(context.Background(), pubkeyFP)
+			if dErr != nil || dev == nil {
+				return "", false
+			}
+			_ = cfg.Store.TouchPairedDevice(context.Background(), dev.ID, "relay")
+			return dev.ID, true
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	rcfg := remote.DefaultHostConfig()
+	if rawCfg, gErr := cfg.Store.GetRemoteHostConfigJSON(ctx); gErr == nil && strings.TrimSpace(rawCfg) != "" {
+		_ = json.Unmarshal([]byte(rawCfg), &rcfg)
+	}
+	rm.ApplyConfig(rcfg)
+	s.remoteMgr = rm
+
 	return s, nil
+}
+
+// RemoteManager returns the server's zero-trust Remote Access coordinator.
+func (s *Server) RemoteManager() *remote.HostManager {
+	return s.remoteMgr
+}
+
+// Close releases background remote-access tunnels and relay links cleanly.
+func (s *Server) Close() error {
+	if s.remoteMgr != nil {
+		return s.remoteMgr.Close()
+	}
+	return nil
 }
 
 func (s *Server) seedBuiltInProvidersAndModels(ctx context.Context) error {
@@ -175,7 +215,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Nex-Device-Token")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

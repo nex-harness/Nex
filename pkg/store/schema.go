@@ -288,6 +288,21 @@ CREATE TABLE IF NOT EXISTS ssh_targets (
     created_at       INTEGER NOT NULL,
     updated_at       INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS paired_devices (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    platform        TEXT NOT NULL DEFAULT '',
+    pubkey_fp       TEXT NOT NULL UNIQUE,
+    pubkey_pem      TEXT NOT NULL DEFAULT '',
+    token_hash      TEXT NOT NULL,
+    created_at      INTEGER NOT NULL,
+    last_seen_at    INTEGER NOT NULL DEFAULT 0,
+    last_transport  TEXT NOT NULL DEFAULT '',
+    revoked_at      INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_paired_devices_token ON paired_devices(token_hash);
 `
 
 const archiveSchemaSQL = `

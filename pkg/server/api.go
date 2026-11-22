@@ -68,6 +68,12 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/ssh/targets/", s.handleSSHTargetSubroutes)
 	s.mux.HandleFunc("/api/v1/ssh/binaries", s.handleSSHBinaries)
 	s.mux.HandleFunc("/api/v1/ssh/binary", s.handleSSHBinaryDownload)
+	s.mux.HandleFunc("/api/v1/remote/status", s.handleRemoteStatus)
+	s.mux.HandleFunc("/api/v1/remote/config", s.handleRemoteConfig)
+	s.mux.HandleFunc("/api/v1/remote/pair/start", s.handleRemotePairStart)
+	s.mux.HandleFunc("/api/v1/remote/pair/complete", s.handleRemotePairComplete)
+	s.mux.HandleFunc("/api/v1/remote/devices", s.handleRemoteDevices)
+	s.mux.HandleFunc("/api/v1/remote/devices/", s.handleRemoteDeviceSubroutes)
 
 	if s.relay != nil {
 		s.relay.Mount(s.mux)
