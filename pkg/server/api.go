@@ -69,6 +69,10 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/ssh/binaries", s.handleSSHBinaries)
 	s.mux.HandleFunc("/api/v1/ssh/binary", s.handleSSHBinaryDownload)
 
+	if s.relay != nil {
+		s.relay.Mount(s.mux)
+	}
+
 	// Embedded Web UI SPA fallback
 	if s.cfg.StaticFS != nil {
 		fileServer := http.FileServer(http.FS(s.cfg.StaticFS))

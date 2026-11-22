@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nex-harness/nex/pkg/ai"
 	"github.com/nex-harness/nex/pkg/protocol"
+	"github.com/nex-harness/nex/pkg/relay"
 	"github.com/nex-harness/nex/pkg/store"
 )
 
@@ -36,6 +37,8 @@ type Config struct {
 	StaticFS      fs.FS           // Optional embedded clients/web/dist filesystem
 	HTTPClient    *http.Client    // Optional custom HTTP client (for tests / models.dev / proxy)
 	RemoteMCP     RemoteMCPExecutor
+	EnableRelay   bool   // Mount stateless zero-trust /relay/v1/* endpoints onto this server
+	RelayToken    string // Optional shared token protecting /relay/v1/*
 }
 
 type runnerConn struct {
@@ -100,6 +103,7 @@ type Server struct {
 	store  *store.Store
 	mux    *http.ServeMux
 	client *http.Client
+	relay  *relay.Server
 
 	mu               sync.RWMutex
 	runners          map[string]*runnerConn
@@ -132,6 +136,9 @@ func New(cfg Config) (*Server, error) {
 		browserToRunner:  make(map[string]string),
 		planNotifiedSess: make(map[string]bool),
 		pendingRPC:       make(map[string]chan protocol.Envelope),
+	}
+	if cfg.EnableRelay {
+		s.relay = relay.New(relay.Config{AuthToken: cfg.RelayToken})
 	}
 
 	// Seed default embedded models if models table is currently empty

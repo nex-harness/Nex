@@ -21,6 +21,7 @@ build: build-web
 	mkdir -p bin
 	CGO_ENABLED=0 go build -trimpath -o bin/nex-server ./cmd/nex-server
 	CGO_ENABLED=0 go build -trimpath -o bin/nex-runner ./cmd/nex-runner
+	CGO_ENABLED=0 go build -trimpath -o bin/nex-relay ./cmd/nex-relay
 	CGO_ENABLED=0 go build -trimpath -o bin/nex-app ./cmd/nex-app
 
 build-runners:
