@@ -597,6 +597,29 @@ export interface RemoteHostConfig {
   tsnet_download_mirror?: string;
 }
 
+export interface SystemTailscaleStatus {
+  available: boolean;
+  running: boolean;
+  backend_state: string;
+  dns_name?: string;
+  tailscale_ips?: string[];
+  suggested_urls?: string[];
+  error?: string;
+}
+
+export interface TSNetSidecarStatus {
+  platform_supported: boolean;
+  installed: boolean;
+  binary_path?: string;
+  running: boolean;
+  state: 'not_installed' | 'stopped' | 'starting' | 'needs_login' | 'running' | 'error' | 'unsupported_mobile' | string;
+  auth_url?: string;
+  dns_name?: string;
+  tailscale_ips?: string[];
+  listen_url?: string;
+  error?: string;
+}
+
 export interface RemoteHostStatus {
   node_id: string;
   fingerprint: string;
@@ -609,6 +632,8 @@ export interface RemoteHostStatus {
   direct_urls: string[];
   lan_urls: string[];
   active_tunnels: number;
+  system_tailscale?: SystemTailscaleStatus;
+  tsnet?: TSNetSidecarStatus;
   config: RemoteHostConfig;
 }
 

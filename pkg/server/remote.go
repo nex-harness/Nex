@@ -193,3 +193,52 @@ func (s *Server) handleRemoteDeviceSubroutes(w http.ResponseWriter, r *http.Requ
 		"device_id": id,
 	})
 }
+
+func (s *Server) handleRemoteTSNetProbe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	sysTS, tsStatus := s.remoteMgr.ProbeTSNet(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{
+		"system_tailscale": sysTS,
+		"tsnet":            tsStatus,
+	})
+}
+
+func (s *Server) handleRemoteTSNetInstall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		DownloadURL string `json:"download_url"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	st, err := s.remoteMgr.InstallTSNet(r.Context(), body.DownloadURL, s.client)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":    true,
+		"tsnet": st,
+	})
+}
+
+func (s *Server) handleRemoteTSNetUninstall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if err := s.remoteMgr.UninstallTSNet(); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	sysTS, tsStatus := s.remoteMgr.ProbeTSNet(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":               true,
+		"system_tailscale": sysTS,
+		"tsnet":            tsStatus,
+	})
+}

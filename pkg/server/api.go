@@ -74,6 +74,9 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/remote/pair/complete", s.handleRemotePairComplete)
 	s.mux.HandleFunc("/api/v1/remote/devices", s.handleRemoteDevices)
 	s.mux.HandleFunc("/api/v1/remote/devices/", s.handleRemoteDeviceSubroutes)
+	s.mux.HandleFunc("/api/v1/remote/tsnet/probe", s.handleRemoteTSNetProbe)
+	s.mux.HandleFunc("/api/v1/remote/tsnet/install", s.handleRemoteTSNetInstall)
+	s.mux.HandleFunc("/api/v1/remote/tsnet", s.handleRemoteTSNetUninstall)
 
 	if s.relay != nil {
 		s.relay.Mount(s.mux)

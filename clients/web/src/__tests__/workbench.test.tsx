@@ -2899,12 +2899,24 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
               direct_urls: ['https://studio.tailnet.ts.net'],
               lan_urls: ['http://192.168.1.50:8080'],
               active_tunnels: 1,
+              system_tailscale: {
+                available: false,
+                running: false,
+                backend_state: 'not_installed',
+              },
+              tsnet: {
+                platform_supported: true,
+                installed: false,
+                running: false,
+                state: 'not_installed',
+              },
               config: {
                 enabled: true,
                 host_name: 'Studio Mac',
                 relay_url: 'https://nex.tylinux.cn',
                 direct_urls: ['https://studio.tailnet.ts.net'],
                 prefer_lan: true,
+                tsnet_enabled: false,
               },
             },
             paired_device_count: 1,
@@ -2972,6 +2984,25 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       if (url.includes('/api/v1/remote/devices/dev_iphone_1') && method === 'DELETE') {
         return new Response(JSON.stringify({ ok: true, device_id: 'dev_iphone_1' }), { status: 200 });
       }
+      if (url.endsWith('/api/v1/remote/tsnet/probe')) {
+        return new Response(
+          JSON.stringify({
+            system_tailscale: {
+              available: true,
+              running: true,
+              backend_state: 'Running',
+              dns_name: 'studio-mac.ts.net',
+            },
+            tsnet: {
+              platform_supported: true,
+              installed: false,
+              running: false,
+              state: 'not_installed',
+            },
+          }),
+          { status: 200 },
+        );
+      }
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     });
 
@@ -3015,6 +3046,12 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       fireEvent.click(screen.getByTestId('remote-revoke-device-dev_iphone_1'));
       await waitFor(() => {
         expect(screen.queryByTestId('remote-revoke-device-dev_iphone_1')).toBeNull();
+      });
+
+      expect(screen.getByTestId('remote-tailscale-card')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('remote-tsnet-probe-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('remote-system-tailscale-badge').textContent).toContain('studio-mac.ts.net');
       });
     } finally {
       useNexStore.setState({ mainView: 'workspace', settingsSection: 'general' });

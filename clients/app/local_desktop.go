@@ -19,13 +19,14 @@ const supportsLocalMode = true
 // AllInOneInstance manages an optional embedded Control Plane Server + local embedded Runner
 // inside the Desktop host process ("Single-Machine Out-of-the-Box Mode" from Spec 02 Section 5).
 type AllInOneInstance struct {
-	URL        string
-	httpServer *http.Server
-	cpSrv      *server.Server
-	serverDB   *store.Store
-	node       *runner.Node
-	wiring     *runner.DefaultRuntimeWiring
-	cancel     context.CancelFunc
+	URL            string
+	httpServer     *http.Server
+	cpSrv          *server.Server
+	serverDB       *store.Store
+	node           *runner.Node
+	wiring         *runner.DefaultRuntimeWiring
+	sleepInhibitor *SleepInhibitor
+	cancel         context.CancelFunc
 }
 
 // StartAllInOne boots an embedded nex-server (serving embedded Web UI) and auto-connects an in-process local nex-runner.
@@ -82,20 +83,27 @@ func StartAllInOne(ctx context.Context, baseDataDir, workspaceDir, listenAddr st
 	runCtx, cancel := context.WithCancel(ctx)
 	go node.StartConnectLoop(runCtx)
 
+	inhibitor := &SleepInhibitor{}
+	inhibitor.Start()
+
 	return &AllInOneInstance{
-		URL:        "http://" + actualAddr,
-		httpServer: httpSrv,
-		cpSrv:      cpSrv,
-		serverDB:   srvStore,
-		node:       node,
-		wiring:     wiring,
-		cancel:     cancel,
+		URL:            "http://" + actualAddr,
+		httpServer:     httpSrv,
+		cpSrv:          cpSrv,
+		serverDB:       srvStore,
+		node:           node,
+		wiring:         wiring,
+		sleepInhibitor: inhibitor,
+		cancel:         cancel,
 	}, nil
 }
 
 // Close cleanly shuts down the embedded Runner and embedded Server.
 func (a *AllInOneInstance) Close() error {
 	a.cancel()
+	if a.sleepInhibitor != nil {
+		a.sleepInhibitor.Stop()
+	}
 	a.wiring.Close()
 	_ = a.node.Close()
 	if a.cpSrv != nil {

@@ -18,6 +18,8 @@ export function BrowserTabPanel() {
   const activeSessionId = useNexStore((s) => s.activeSessionId);
   const selectedRunnerId = useNexStore((s) => s.selectedRunnerId);
   const wsConnected = useNexStore((s) => s.wsConnected);
+  const hostInfo = useNexStore((s) => s.hostInfo);
+  const remoteTransportStatus = useNexStore((s) => s.remoteTransportStatus);
   const browserStates = useNexStore((s) => s.browserStates);
   const sendBrowserControl = useNexStore((s) => s.sendBrowserControl);
   const sendBrowserInput = useNexStore((s) => s.sendBrowserInput);
@@ -43,6 +45,9 @@ export function BrowserTabPanel() {
     setUrlDraft(activeTab?.url || '');
   }, [activeTab?.tab_id, activeTab?.url]);
 
+  const activeTransport = remoteTransportStatus?.transport || hostInfo?.active_transport || '';
+  const isRelayed = hostInfo?.connection_mode === 'paired' && activeTransport === 'relay';
+
   useEffect(() => {
     setHasFrame(false);
     if (!activeTabId || !selectedRunnerId || !wsConnected) return;
@@ -53,9 +58,9 @@ export function BrowserTabPanel() {
       session_id: sessionKey,
       tab_id: activeTabId,
       action: 'stream_start',
-      max_width: vw,
-      max_height: vh,
-      quality: 72,
+      max_width: isRelayed ? Math.min(vw, 960) : vw,
+      max_height: isRelayed ? Math.min(vh, 540) : vh,
+      quality: isRelayed ? 58 : 72,
     });
 
     const off = wsClient.onBrowserFrame(activeTabId, (jpegBytes) => {

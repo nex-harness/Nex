@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -47,18 +48,20 @@ func DefaultHostConfig() HostConfig {
 
 // HostStatus summarizes live remote-access identity, connectivity, and reachability.
 type HostStatus struct {
-	NodeID           string   `json:"node_id"`
-	Fingerprint      string   `json:"fingerprint"`
-	ShortFingerprint string   `json:"short_fingerprint"`
-	Enabled          bool     `json:"enabled"`
-	HostName         string   `json:"host_name"`
-	RelayURL         string   `json:"relay_url"`
-	RelayConnected   bool     `json:"relay_connected"`
-	LastRelayError   string   `json:"last_relay_error,omitempty"`
-	DirectURLs       []string `json:"direct_urls"`
-	LANURLs          []string `json:"lan_urls"`
-	ActiveTunnels    int      `json:"active_tunnels"`
-	Config           HostConfig `json:"config"`
+	NodeID           string                `json:"node_id"`
+	Fingerprint      string                `json:"fingerprint"`
+	ShortFingerprint string                `json:"short_fingerprint"`
+	Enabled          bool                  `json:"enabled"`
+	HostName         string                `json:"host_name"`
+	RelayURL         string                `json:"relay_url"`
+	RelayConnected   bool                  `json:"relay_connected"`
+	LastRelayError   string                `json:"last_relay_error,omitempty"`
+	DirectURLs       []string              `json:"direct_urls"`
+	LANURLs          []string              `json:"lan_urls"`
+	ActiveTunnels    int                   `json:"active_tunnels"`
+	SystemTailscale  SystemTailscaleStatus `json:"system_tailscale"`
+	TSNet            TSNetSidecarStatus    `json:"tsnet"`
+	Config           HostConfig            `json:"config"`
 }
 
 // PairingSession is returned by POST /api/v1/remote/pair/start to display QR codes / copyable URIs.
@@ -85,10 +88,12 @@ type HostManagerOptions struct {
 
 // HostManager owns the host's Ed25519 identity, pairing tokens, outbound relay link, and active tunnels.
 type HostManager struct {
+	dataDir    string
 	identity   *Identity
 	listenPort int
 	handler    http.Handler
 	authorizer func(pubkeyFP string) (deviceID string, ok bool)
+	tsnet      *TSNetHostRunner
 
 	mu             sync.Mutex
 	cfg            HostConfig
@@ -111,10 +116,12 @@ func NewHostManager(opts HostManagerOptions) (*HostManager, error) {
 		return nil, err
 	}
 	return &HostManager{
+		dataDir:        opts.DataDir,
 		identity:       id,
 		listenPort:     opts.ListenPort,
 		handler:        opts.Handler,
 		authorizer:     opts.DeviceAuthorizer,
+		tsnet:          NewTSNetHostRunner(opts.DataDir),
 		cfg:            DefaultHostConfig(),
 		pairingTokens:  make(map[string]time.Time),
 		activeSessions: make(map[string]map[*yamux.Session]struct{}),
@@ -154,10 +161,27 @@ func (m *HostManager) ApplyConfig(cfg HostConfig) {
 	if shouldRunRelay {
 		relayCtx, m.relayCancel = context.WithCancel(context.Background())
 	}
+	listenPort := m.listenPort
 	m.mu.Unlock()
 
 	if shouldRunRelay {
 		go m.runRelayLoop(relayCtx, cfg.RelayURL, cfg.RelayToken)
+	}
+
+	// Priority rule: use system Tailscale if connected; only launch managed nex-tsnet sidecar fallback when absent.
+	if m.tsnet != nil {
+		sysTS := ProbeSystemTailscale(context.Background(), listenPort)
+		if cfg.Enabled && cfg.TSNetEnabled && !sysTS.Running && listenPort > 0 && ProbeTSNetSidecar(m.dataDir).Installed {
+			_ = m.tsnet.Start(TSNetHostOptions{
+				DataDir:     m.dataDir,
+				Hostname:    cfg.TSNetHostname,
+				ControlURL:  cfg.TSNetControlURL,
+				UpstreamURL: fmt.Sprintf("http://127.0.0.1:%d", listenPort),
+				ListenPort:  listenPort,
+			})
+		} else {
+			m.tsnet.Stop()
+		}
 	}
 }
 
@@ -263,6 +287,21 @@ func (m *HostManager) StartPairing(ttl time.Duration) (PairingSession, error) {
 	if cfg.PreferLAN && listenPort > 0 {
 		lanURLs = DiscoverLANURLs(listenPort)
 	}
+	sysTS := ProbeSystemTailscale(context.Background(), listenPort)
+	tsStatus := TSNetSidecarStatus{}
+	if m.tsnet != nil {
+		tsStatus = m.tsnet.Status()
+	}
+	mergedDirect := append([]string(nil), cfg.DirectURLs...)
+	mergedDirect = append(mergedDirect, sysTS.SuggestedURLs...)
+	if tsStatus.Running {
+		mergedDirect = append(mergedDirect, buildTailnetURLs(tsStatus.DNSName, tsStatus.TailscaleIPs, listenPort)...)
+		if tsStatus.ListenURL != "" {
+			mergedDirect = append(mergedDirect, tsStatus.ListenURL)
+		}
+	}
+	mergedDirect = cleanURLList(mergedDirect)
+
 	inv := PairingInvite{
 		Version:     1,
 		NodeID:      m.identity.NodeID,
@@ -271,7 +310,7 @@ func (m *HostManager) StartPairing(ttl time.Duration) (PairingSession, error) {
 		Token:       token,
 		RelayURL:    cfg.RelayURL,
 		RelayToken:  cfg.RelayToken,
-		DirectURLs:  cfg.DirectURLs,
+		DirectURLs:  mergedDirect,
 		LANURLs:     lanURLs,
 	}
 	return PairingSession{
@@ -283,7 +322,7 @@ func (m *HostManager) StartPairing(ttl time.Duration) (PairingSession, error) {
 		ShortFingerprint: ShortFingerprint(m.identity.Fingerprint),
 		HostName:         cfg.HostName,
 		RelayURL:         cfg.RelayURL,
-		DirectURLs:       cfg.DirectURLs,
+		DirectURLs:       mergedDirect,
 		LANURLs:          lanURLs,
 	}, nil
 }
@@ -358,7 +397,21 @@ func (m *HostManager) Status() HostStatus {
 	if cfg.PreferLAN && listenPort > 0 {
 		lanURLs = DiscoverLANURLs(listenPort)
 	}
+	sysTS := ProbeSystemTailscale(context.Background(), listenPort)
+	tsStatus := TSNetSidecarStatus{}
+	if m.tsnet != nil {
+		tsStatus = m.tsnet.Status()
+	}
+
 	direct := append([]string(nil), cfg.DirectURLs...)
+	direct = append(direct, sysTS.SuggestedURLs...)
+	if tsStatus.Running {
+		direct = append(direct, buildTailnetURLs(tsStatus.DNSName, tsStatus.TailscaleIPs, listenPort)...)
+		if tsStatus.ListenURL != "" {
+			direct = append(direct, tsStatus.ListenURL)
+		}
+	}
+	direct = cleanURLList(direct)
 	if direct == nil {
 		direct = []string{}
 	}
@@ -377,11 +430,53 @@ func (m *HostManager) Status() HostStatus {
 		DirectURLs:       direct,
 		LANURLs:          lanURLs,
 		ActiveTunnels:    active,
+		SystemTailscale:  sysTS,
+		TSNet:            tsStatus,
 		Config:           cfg,
 	}
 }
 
-// Close shuts down the outbound relay loop and terminates all active remote tunnels.
+// ProbeTSNet returns live System Tailscale status plus managed nex-tsnet sidecar readiness.
+func (m *HostManager) ProbeTSNet(ctx context.Context) (SystemTailscaleStatus, TSNetSidecarStatus) {
+	m.mu.Lock()
+	listenPort := m.listenPort
+	m.mu.Unlock()
+	sysTS := ProbeSystemTailscale(ctx, listenPort)
+	tsStatus := TSNetSidecarStatus{}
+	if m.tsnet != nil {
+		tsStatus = m.tsnet.Status()
+	}
+	return sysTS, tsStatus
+}
+
+// InstallTSNet downloads the optional nex-tsnet sidecar and applies config if enabled & needed.
+func (m *HostManager) InstallTSNet(ctx context.Context, downloadURLOrMirror string, hc *http.Client) (TSNetSidecarStatus, error) {
+	m.mu.Lock()
+	cfg := m.cfg
+	m.mu.Unlock()
+	if strings.TrimSpace(downloadURLOrMirror) == "" {
+		downloadURLOrMirror = cfg.TSNetDownloadMirror
+	}
+	st, err := InstallTSNetSidecar(ctx, m.dataDir, downloadURLOrMirror, hc)
+	if err != nil {
+		return st, err
+	}
+	m.ApplyConfig(cfg)
+	if m.tsnet != nil {
+		return m.tsnet.Status(), nil
+	}
+	return st, nil
+}
+
+// UninstallTSNet stops any running managed nex-tsnet sidecar and removes its binary.
+func (m *HostManager) UninstallTSNet() error {
+	if m.tsnet != nil {
+		m.tsnet.Stop()
+	}
+	return UninstallTSNetSidecar(m.dataDir)
+}
+
+// Close shuts down the outbound relay loop, sidecar, and all active remote tunnels.
 func (m *HostManager) Close() error {
 	m.mu.Lock()
 	if m.closed {
@@ -401,6 +496,9 @@ func (m *HostManager) Close() error {
 	}
 	m.mu.Unlock()
 
+	if m.tsnet != nil {
+		m.tsnet.Stop()
+	}
 	for _, s := range toClose {
 		_ = s.Close()
 	}
