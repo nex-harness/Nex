@@ -2481,7 +2481,6 @@ function Composer({
   );
 }
 
-const WATERMARK_PATHS = ['M22 24h88L74 62H8z', 'M120 24h64l-44 96H82z', 'M120 24l44 96'];
 const EMPTY_STREAM = emptyStreamState();
 
 const MemoTurnItem = memo(function MemoTurnItemImpl({
@@ -3107,19 +3106,6 @@ export function ConversationPane() {
           {isDraft ? (
             <div className="flex h-full flex-col items-center justify-center pb-10">
               <div className="zcode-draft-hero flex flex-col items-center">
-                <svg
-                  viewBox="0 0 224 144"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.25"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                  className="pointer-events-none mb-2 h-36 w-56 text-foreground/[0.06]"
-                >
-                  {WATERMARK_PATHS.map((d) => (
-                    <path key={d} d={d} />
-                  ))}
-                </svg>
                 <h1 className="mb-7 text-center text-[26px] font-semibold tracking-tight text-foreground">
                   {formatMsg(locale, getGreetingKey(new Date().getHours()))}
                 </h1>
