@@ -16,6 +16,7 @@ import {
 import { wsClient } from '../core/wsClient';
 import { createHostBridge } from '../host/bridge';
 import { parsePastedSSHTarget } from '../features/SettingsRunners';
+import { computeTurnTickLayout } from '../features/ConversationPane';
 
 let originalBootstrap: (() => Promise<void>) | null = null;
 
@@ -3657,5 +3658,90 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     fireEvent.click(loadEarlierBtn);
     await waitFor(() => expect(screen.getByText('Turn message #1')).toBeTruthy());
     expect(screen.queryByTestId('load-earlier-turns-bar')).toBeNull();
+  });
+
+  it('bounds turn-tick-rail within max height and increases density / samples cleanly for long conversations', () => {
+    const makeItems = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        id: `tick_t_${i + 1}`,
+        seq: i + 1,
+        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+        text: `Turn ${i + 1}`,
+        thinking: '',
+        toolCalls: [],
+      }));
+
+    // 1. Short conversation (6 turns): normal 16px slot height and 2px gap
+    const shortLayout = computeTurnTickLayout(makeItems(6), 'tick_t_6', 360);
+    expect(shortLayout.entries).toHaveLength(6);
+    expect(shortLayout.slotHeightPx).toBe(16);
+    expect(shortLayout.gapPx).toBe(2);
+    expect(shortLayout.totalHeightPx).toBeLessThanOrEqual(360);
+
+    // 2. Long conversation (60 turns): tighter density (6px per tick, 0 gap) fits all 60 within 360px
+    const denseLayout = computeTurnTickLayout(makeItems(60), 'tick_t_60', 360);
+    expect(denseLayout.entries).toHaveLength(60);
+    expect(denseLayout.slotHeightPx).toBe(6);
+    expect(denseLayout.gapPx).toBe(0);
+    expect(denseLayout.totalHeightPx).toBeLessThanOrEqual(360);
+
+    // 3. Ultra-long conversation (200 turns): sampled cleanly to fit <= 360px, keeping first, active, and last
+    const hugeItems = makeItems(200);
+    const sampledLayout = computeTurnTickLayout(hugeItems, 'tick_t_77', 360);
+    expect(sampledLayout.entries.length).toBeLessThanOrEqual(90);
+    expect(sampledLayout.slotHeightPx).toBe(4);
+    expect(sampledLayout.totalHeightPx).toBeLessThanOrEqual(360);
+    expect(sampledLayout.entries[0].idx).toBe(0);
+    expect(sampledLayout.entries[sampledLayout.entries.length - 1].idx).toBe(199);
+    expect(sampledLayout.entries.some((e) => e.item.id === 'tick_t_77')).toBe(true);
+
+    // 4. DOM rendering for 60 turns uses tightened density and keeps turn-tick-0 clickable
+    useNexStore.setState({
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      mainView: 'workspace',
+      activeSessionId: 'sess_dense_ticks',
+      sessions: [
+        {
+          id: 'sess_dense_ticks',
+          runner_id: 'r_local',
+          depth: 0,
+          title: 'Dense Ticks',
+          workspace_path: '/tmp/ws',
+          agent_profile_slug: 'main',
+          model_id: 'm1',
+          provider_id: 'p1',
+          permission_mode: 'full_access',
+          status: 'idle',
+          latest_context_tokens: 0,
+          context_window_limit: 128000,
+          created_at: 1000,
+          updated_at: 2000,
+          last_active_at: 2000,
+        },
+      ],
+      streams: {
+        sess_dense_ticks: {
+          lastSeq: 60,
+          running: false,
+          items: makeItems(60),
+          latestTelemetry: null,
+          turnTelemetries: [],
+          uiBadges: {},
+          pendingApproval: null,
+          pendingUIPrompt: null,
+          todos: [],
+          goals: [],
+        },
+      },
+    });
+
+    render(<App />);
+    const rail = screen.getByTestId('turn-tick-rail');
+    expect(Number(rail.getAttribute('data-tick-slot-height'))).toBeLessThan(16);
+    expect(rail.style.maxHeight).toBe('calc(100% - 24px)');
+    expect(screen.getByTestId('turn-tick-0')).toBeTruthy();
+    expect(screen.getByTestId('turn-tick-59')).toBeTruthy();
   });
 });

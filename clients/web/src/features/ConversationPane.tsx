@@ -2701,6 +2701,88 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
   );
 });
 
+const TICK_RAIL_DEFAULT_BUDGET_PX = 360;
+const TICK_RAIL_MAX_BUDGET_PX = 420;
+const TICK_RAIL_MIN_BUDGET_PX = 120;
+const TICK_DEFAULT_SLOT_PX = 16;
+const TICK_DEFAULT_GAP_PX = 2;
+const TICK_MIN_SLOT_PX = 4;
+
+export interface TurnTickLayoutEntry {
+  item: ChatTurnItem;
+  idx: number;
+}
+
+export interface TurnTickLayout {
+  entries: TurnTickLayoutEntry[];
+  slotHeightPx: number;
+  gapPx: number;
+  totalHeightPx: number;
+}
+
+/**
+ * Fits the left-edge turn tick rail within `railBudgetPx` by progressively increasing
+ * vertical tick density and, for very long sessions, evenly sampling ticks while always
+ * keeping the first, last, and active turn accessible.
+ */
+export function computeTurnTickLayout(
+  items: ChatTurnItem[],
+  activeTurnId: string,
+  railBudgetPx: number = TICK_RAIL_DEFAULT_BUDGET_PX,
+): TurnTickLayout {
+  if (items.length === 0) {
+    return { entries: [], slotHeightPx: TICK_DEFAULT_SLOT_PX, gapPx: TICK_DEFAULT_GAP_PX, totalHeightPx: 0 };
+  }
+
+  const budget = Math.max(40, Math.floor(railBudgetPx));
+  const maxTicks = Math.max(2, Math.floor(budget / TICK_MIN_SLOT_PX));
+  const rawActiveIdx = activeTurnId ? items.findIndex((it) => it.id === activeTurnId) : -1;
+  const activeIdx = rawActiveIdx >= 0 ? rawActiveIdx : items.length - 1;
+
+  let indices: number[];
+  if (items.length <= maxTicks) {
+    indices = items.map((_, i) => i);
+  } else {
+    const sampled: number[] = [];
+    for (let k = 0; k < maxTicks; k++) {
+      const idx = Math.round((k * (items.length - 1)) / (maxTicks - 1));
+      if (sampled.length === 0 || sampled[sampled.length - 1] !== idx) {
+        sampled.push(idx);
+      }
+    }
+    if (!sampled.includes(activeIdx) && sampled.length >= 3) {
+      let bestSlot = 1;
+      let bestDist = Number.POSITIVE_INFINITY;
+      for (let s = 1; s < sampled.length - 1; s++) {
+        const d = Math.abs(sampled[s] - activeIdx);
+        if (d < bestDist) {
+          bestDist = d;
+          bestSlot = s;
+        }
+      }
+      sampled[bestSlot] = activeIdx;
+      sampled.sort((a, b) => a - b);
+    }
+    indices = sampled;
+  }
+
+  const count = indices.length;
+  const defaultTotal = count * (TICK_DEFAULT_SLOT_PX + TICK_DEFAULT_GAP_PX) - TICK_DEFAULT_GAP_PX;
+  let slotHeightPx = TICK_DEFAULT_SLOT_PX;
+  let gapPx = TICK_DEFAULT_GAP_PX;
+  if (defaultTotal > budget) {
+    gapPx = 0;
+    slotHeightPx = Math.max(TICK_MIN_SLOT_PX, Math.floor(budget / count));
+  }
+
+  return {
+    entries: indices.map((idx) => ({ item: items[idx], idx })),
+    slotHeightPx,
+    gapPx,
+    totalHeightPx: count * slotHeightPx + Math.max(0, count - 1) * gapPx,
+  };
+}
+
 export function ConversationPane() {
   const locale = useNexStore((s) => s.locale);
   const sidebarVisible = useNexStore((s) => s.sidebarVisible);
@@ -2745,6 +2827,7 @@ export function ConversationPane() {
   const [visibleTurnLimit, setVisibleTurnLimit] = useState(INITIAL_VISIBLE_TURNS);
   const [pendingJumpId, setPendingJumpId] = useState('');
   const [statusPanelMode, setStatusPanelMode] = useState<StatusPanelMode>('auto');
+  const [timelineHeight, setTimelineHeight] = useState(0);
   const hasStatusPanel = useConversationStatusPanelHasContent();
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -2758,6 +2841,35 @@ export function ConversationPane() {
 
   const isDraft = currentStream.items.length === 0 && !activeSessionId;
   const items = currentStream.items;
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const updateHeight = () => {
+      if (el.clientHeight > 0) {
+        setTimelineHeight(el.clientHeight);
+      }
+    };
+    updateHeight();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(updateHeight);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isDraft]);
+
+  const railBudgetPx =
+    timelineHeight > 0
+      ? Math.min(
+          TICK_RAIL_MAX_BUDGET_PX,
+          Math.max(80, Math.min(timelineHeight - 32, Math.max(TICK_RAIL_MIN_BUDGET_PX, Math.floor(timelineHeight * 0.72)))),
+        )
+      : TICK_RAIL_DEFAULT_BUDGET_PX;
+
+  const tickLayout = useMemo(
+    () => computeTurnTickLayout(items, activeTurnId, railBudgetPx),
+    [items, activeTurnId, railBudgetPx],
+  );
+
   const hiddenTurnCount = items.length > visibleTurnLimit ? items.length - visibleTurnLimit : 0;
   const visibleItems = useMemo(
     () => (hiddenTurnCount > 0 ? items.slice(hiddenTurnCount) : items),
@@ -3325,16 +3437,18 @@ export function ConversationPane() {
         </div>
 
         {/* Left-edge turn tick navigator */}
-        {!isDraft && items.length > 0 && (
+        {!isDraft && tickLayout.entries.length > 0 && (
           <div
             data-testid="turn-tick-rail"
-            className="absolute left-1.5 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-start gap-0.5 lg:flex"
+            data-tick-slot-height={tickLayout.slotHeightPx}
+            style={{ maxHeight: 'calc(100% - 24px)', gap: `${tickLayout.gapPx}px` }}
+            className="absolute left-1.5 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-start lg:flex"
           >
-            {items.map((item, idx) => {
+            {tickLayout.entries.map(({ item, idx }) => {
               const isActive = activeTurnId ? activeTurnId === item.id : idx === items.length - 1;
               const rawPreview = item.role === 'user' ? cleanUserDisplayText(item.text) : item.text || item.thinking || '';
               const preview = rawPreview.replace(/\s+/g, ' ').trim().slice(0, 36);
-              const label = `${item.role === 'user' ? (formatMsg(locale, 'chat.you')) : 'Nex'} #${idx + 1}${
+              const label = `${item.role === 'user' ? formatMsg(locale, 'chat.you') : 'Nex'} #${idx + 1}${
                 preview ? ` · ${preview}` : ''
               }`;
               return (
@@ -3345,10 +3459,11 @@ export function ConversationPane() {
                   title={label}
                   aria-label={label}
                   onClick={() => jumpToTurn(item.id)}
-                  className="group/tick relative flex h-4 cursor-pointer items-center px-1.5 focus:outline-none"
+                  style={{ height: `${tickLayout.slotHeightPx}px` }}
+                  className="group/tick relative flex cursor-pointer items-center px-1.5 focus:outline-none"
                 >
                   <span
-                    className={`block h-[2px] rounded-full transition-all duration-150 ${
+                    className={`block ${tickLayout.slotHeightPx <= 5 ? 'h-[1.5px]' : 'h-[2px]'} rounded-full transition-all duration-150 ${
                       isActive
                         ? 'w-4 bg-brand-blue'
                         : item.role === 'user'
@@ -3356,7 +3471,7 @@ export function ConversationPane() {
                           : 'w-2 bg-foreground/20 group-hover/tick:w-4 group-hover/tick:bg-foreground/80'
                     }`}
                   />
-                  <span className="pointer-events-none absolute left-full ml-1.5 hidden max-w-[200px] truncate whitespace-nowrap rounded-md border border-border bg-popover px-2 py-0.5 text-ui-xs text-foreground shadow-md group-hover/tick:block">
+                  <span className="pointer-events-none absolute left-full top-1/2 z-30 ml-1.5 hidden max-w-[200px] -translate-y-1/2 truncate whitespace-nowrap rounded-md border border-border bg-popover px-2 py-0.5 text-ui-xs text-foreground shadow-md group-hover/tick:block">
                     {label}
                   </span>
                 </button>
