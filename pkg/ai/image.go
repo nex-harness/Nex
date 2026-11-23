@@ -39,13 +39,37 @@ type ImageProvider interface {
 	GenerateImages(ctx context.Context, req *ImageRequest) (*ImageResponse, error)
 }
 
-// ImageProviderConfig configures an OpenAI or OpenRouter image provider.
+// ImageDriver identifies the wire protocol for an ImageProvider.
+type ImageDriver string
+
+const (
+	ImageDriverOpenAI     ImageDriver = "openai_images"
+	ImageDriverOpenRouter ImageDriver = "openrouter_images"
+	ImageDriverXAI        ImageDriver = "xai_images"
+	ImageDriverMiniMax    ImageDriver = "minimax_images"
+)
+
+// ImageProviderConfig configures an image generation provider.
 type ImageProviderConfig struct {
-	ProviderID string // e.g. "openai", "openrouter"
+	ProviderID string // e.g. "openai", "openrouter", "xai", "minimax"
 	BaseURL    string
 	APIKey     string
 	Headers    map[string]string
 	HTTPClient *http.Client
+}
+
+// NewImageProvider constructs an ImageProvider for the requested driver.
+func NewImageProvider(driver ImageDriver, cfg ImageProviderConfig) ImageProvider {
+	switch driver {
+	case ImageDriverOpenRouter:
+		return NewOpenRouterImagesProvider(cfg)
+	case ImageDriverXAI:
+		return NewXAIImagesProvider(cfg)
+	case ImageDriverMiniMax:
+		return NewMiniMaxImagesProvider(cfg)
+	default:
+		return NewOpenAIImagesProvider(cfg)
+	}
 }
 
 // OpenAIImagesProvider calls OpenAI-compatible /images/generations and /images/edits endpoints.
@@ -378,6 +402,258 @@ func (p *OpenRouterImagesProvider) GenerateImages(ctx context.Context, req *Imag
 			OutputTokens: parsed.Usage.CompletionTokens,
 			CostUSD:      parsed.Usage.Cost,
 		},
+		StopReason: "stop",
+	}, nil
+}
+
+// XAIImagesProvider calls xAI / Grok's /images/generations endpoint (e.g. grok-2-image).
+type XAIImagesProvider struct {
+	cfg ImageProviderConfig
+}
+
+// NewXAIImagesProvider constructs an xAI (Grok) image generation provider.
+func NewXAIImagesProvider(cfg ImageProviderConfig) *XAIImagesProvider {
+	if strings.TrimSpace(cfg.BaseURL) == "" {
+		cfg.BaseURL = "https://api.x.ai/v1"
+	}
+	if cfg.ProviderID == "" {
+		cfg.ProviderID = "xai"
+	}
+	if cfg.HTTPClient == nil {
+		cfg.HTTPClient = &http.Client{Timeout: 180 * time.Second}
+	}
+	return &XAIImagesProvider{cfg: cfg}
+}
+
+func (p *XAIImagesProvider) GenerateImages(ctx context.Context, req *ImageRequest) (*ImageResponse, error) {
+	if req == nil {
+		return nil, errors.New("image request is nil")
+	}
+	prompt, _ := splitImageInput(req.Input)
+	if strings.TrimSpace(prompt) == "" {
+		return &ImageResponse{
+			Provider:     p.cfg.ProviderID,
+			Model:        req.Model,
+			StopReason:   "error",
+			ErrorMessage: "image prompt is required",
+		}, nil
+	}
+	body := map[string]any{
+		"model":           req.Model,
+		"prompt":          prompt,
+		"response_format": "b64_json",
+	}
+	if req.Count > 0 {
+		body["n"] = req.Count
+	}
+	if req.AspectRatio != "" {
+		body["aspect_ratio"] = req.AspectRatio
+	}
+	raw, _ := json.Marshal(body)
+	baseURL := strings.TrimRight(p.cfg.BaseURL, "/")
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/images/generations", bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	applyImageHeaders(httpReq, p.cfg)
+
+	resp, err := p.cfg.HTTPClient.Do(httpReq)
+	if err != nil {
+		if ctx.Err() != nil {
+			return &ImageResponse{Provider: p.cfg.ProviderID, Model: req.Model, StopReason: "aborted", ErrorMessage: err.Error()}, nil
+		}
+		return &ImageResponse{Provider: p.cfg.ProviderID, Model: req.Model, StopReason: "error", ErrorMessage: err.Error()}, nil
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 32*1024*1024))
+	if resp.StatusCode >= 400 {
+		return &ImageResponse{
+			Provider:     p.cfg.ProviderID,
+			Model:        req.Model,
+			StopReason:   "error",
+			ErrorMessage: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody))),
+		}, nil
+	}
+
+	var parsed struct {
+		Data []struct {
+			B64JSON       string `json:"b64_json"`
+			URL           string `json:"url"`
+			RevisedPrompt string `json:"revised_prompt"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return &ImageResponse{
+			Provider:     p.cfg.ProviderID,
+			Model:        req.Model,
+			StopReason:   "error",
+			ErrorMessage: fmt.Sprintf("decode xai image response: %v", err),
+		}, nil
+	}
+
+	var out []ContentBlock
+	for _, item := range parsed.Data {
+		if item.B64JSON != "" {
+			out = append(out, ImageBase64Block("image/jpeg", item.B64JSON))
+		} else if item.URL != "" {
+			out = append(out, ContentBlock{Type: BlockImage, ImageURL: item.URL, MimeType: "image/jpeg"})
+		}
+		if item.RevisedPrompt != "" {
+			out = append(out, TextBlock(item.RevisedPrompt))
+		}
+	}
+	if len(out) == 0 {
+		return &ImageResponse{
+			Provider:     p.cfg.ProviderID,
+			Model:        req.Model,
+			StopReason:   "error",
+			ErrorMessage: "xai returned no images",
+		}, nil
+	}
+	return &ImageResponse{
+		Provider:   p.cfg.ProviderID,
+		Model:      req.Model,
+		Output:     out,
+		StopReason: "stop",
+	}, nil
+}
+
+// MiniMaxImagesProvider calls MiniMax's /image_generation endpoint (e.g. image-01).
+type MiniMaxImagesProvider struct {
+	cfg ImageProviderConfig
+}
+
+// NewMiniMaxImagesProvider constructs a MiniMax image generation provider.
+func NewMiniMaxImagesProvider(cfg ImageProviderConfig) *MiniMaxImagesProvider {
+	if strings.TrimSpace(cfg.BaseURL) == "" {
+		cfg.BaseURL = "https://api.minimax.io/v1"
+	}
+	if cfg.ProviderID == "" {
+		cfg.ProviderID = "minimax"
+	}
+	if cfg.HTTPClient == nil {
+		cfg.HTTPClient = &http.Client{Timeout: 180 * time.Second}
+	}
+	return &MiniMaxImagesProvider{cfg: cfg}
+}
+
+func (p *MiniMaxImagesProvider) GenerateImages(ctx context.Context, req *ImageRequest) (*ImageResponse, error) {
+	if req == nil {
+		return nil, errors.New("image request is nil")
+	}
+	prompt, refImages := splitImageInput(req.Input)
+	if strings.TrimSpace(prompt) == "" {
+		return &ImageResponse{
+			Provider:     p.cfg.ProviderID,
+			Model:        req.Model,
+			StopReason:   "error",
+			ErrorMessage: "image prompt is required",
+		}, nil
+	}
+	body := map[string]any{
+		"model":           req.Model,
+		"prompt":          prompt,
+		"response_format": "base64",
+	}
+	if req.AspectRatio != "" {
+		body["aspect_ratio"] = req.AspectRatio
+	}
+	if req.Count > 0 {
+		body["n"] = req.Count
+	}
+	if len(refImages) > 0 {
+		refs := make([]map[string]any, 0, len(refImages))
+		for _, img := range refImages {
+			m := img.MimeType
+			if m == "" {
+				m = "image/png"
+			}
+			refs = append(refs, map[string]any{
+				"type":       "character",
+				"image_file": "data:" + m + ";base64," + img.DataB64,
+			})
+		}
+		body["subject_reference"] = refs
+	}
+
+	raw, _ := json.Marshal(body)
+	baseURL := strings.TrimRight(p.cfg.BaseURL, "/")
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/image_generation", bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	applyImageHeaders(httpReq, p.cfg)
+
+	resp, err := p.cfg.HTTPClient.Do(httpReq)
+	if err != nil {
+		if ctx.Err() != nil {
+			return &ImageResponse{Provider: p.cfg.ProviderID, Model: req.Model, StopReason: "aborted", ErrorMessage: err.Error()}, nil
+		}
+		return &ImageResponse{Provider: p.cfg.ProviderID, Model: req.Model, StopReason: "error", ErrorMessage: err.Error()}, nil
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 32*1024*1024))
+	if resp.StatusCode >= 400 {
+		return &ImageResponse{
+			Provider:     p.cfg.ProviderID,
+			Model:        req.Model,
+			StopReason:   "error",
+			ErrorMessage: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody))),
+		}, nil
+	}
+
+	var parsed struct {
+		BaseResp struct {
+			StatusCode int    `json:"status_code"`
+			StatusMsg  string `json:"status_msg"`
+		} `json:"base_resp"`
+		Data struct {
+			ImageBase64 []string `json:"image_base64"`
+			ImageURLs   []string `json:"image_urls"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return &ImageResponse{
+			Provider:     p.cfg.ProviderID,
+			Model:        req.Model,
+			StopReason:   "error",
+			ErrorMessage: fmt.Sprintf("decode minimax image response: %v", err),
+		}, nil
+	}
+	if parsed.BaseResp.StatusCode != 0 {
+		return &ImageResponse{
+			Provider:     p.cfg.ProviderID,
+			Model:        req.Model,
+			StopReason:   "error",
+			ErrorMessage: fmt.Sprintf("minimax error %d: %s", parsed.BaseResp.StatusCode, parsed.BaseResp.StatusMsg),
+		}, nil
+	}
+
+	var out []ContentBlock
+	for _, b64 := range parsed.Data.ImageBase64 {
+		if b64 != "" {
+			out = append(out, ImageBase64Block("image/jpeg", b64))
+		}
+	}
+	for _, u := range parsed.Data.ImageURLs {
+		if u != "" {
+			out = append(out, ContentBlock{Type: BlockImage, ImageURL: u, MimeType: "image/jpeg"})
+		}
+	}
+	if len(out) == 0 {
+		return &ImageResponse{
+			Provider:     p.cfg.ProviderID,
+			Model:        req.Model,
+			StopReason:   "error",
+			ErrorMessage: "minimax returned no images",
+		}, nil
+	}
+	return &ImageResponse{
+		Provider:   p.cfg.ProviderID,
+		Model:      req.Model,
+		Output:     out,
 		StopReason: "stop",
 	}, nil
 }

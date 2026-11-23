@@ -132,11 +132,18 @@ type UserPreferences struct {
 	NotifyOnComplete      bool   `json:"notify_on_complete"`       // Notify when a session run finishes
 	NotifyOnInput         bool   `json:"notify_on_input"`          // Notify when question, approval, plan review, or handoff waits on user
 	NotifyOnlyBackground  bool   `json:"notify_only_background"`   // Suppress notification when focused on the same active session
-	ImageProviderID       string `json:"image_provider_id"`        // Optional dedicated provider for image generation (e.g. "openrouter", "openai")
-	ImageModelID          string `json:"image_model_id"`           // Optional default image model ID (e.g. "google/gemini-2.5-flash-image", "gpt-image-1")
+	ImageMode             string `json:"image_mode"`               // "" | "provider" | "standalone"
+	ImageDriver           string `json:"image_driver"`             // "openai_images" | "openrouter_images" | "xai_images" | "minimax_images"
+	ImageBaseURL          string `json:"image_base_url"`           // Standalone image API endpoint
+	ImageAPIKey           string `json:"image_api_key"`            // Standalone image API key
+	ImageProviderID       string `json:"image_provider_id"`        // Optional dedicated provider for image generation (e.g. "openrouter", "openai", "xai", "minimax")
+	ImageModelID          string `json:"image_model_id"`           // Optional default image model ID (e.g. "google/gemini-2.5-flash-image", "gpt-image-1", "grok-2-image", "image-01")
+	ClassifierMode        string `json:"classifier_mode"`          // "" | "provider" | "standalone"
+	ClassifierDriver      string `json:"classifier_driver"`        // "typesafe_system_one" | "openrouter_system_one"
 	ClassifierProviderID  string `json:"classifier_provider_id"`   // Optional dedicated provider for Jev/System One classifier
 	ClassifierModelID     string `json:"classifier_model_id"`      // Optional default classifier model ID (e.g. "jev-latest", "typesafe/jev-1.14")
-	ClassifierBaseURL     string `json:"classifier_base_url"`      // Optional custom System One endpoint (e.g. local llama.cpp http://127.0.0.1:9931/v1)
+	ClassifierBaseURL     string `json:"classifier_base_url"`      // Standalone/custom System One endpoint (e.g. https://api.typesafe.ai/v1 or http://127.0.0.1:9931/v1)
+	ClassifierAPIKey      string `json:"classifier_api_key"`       // Standalone classifier API key
 	JevAutoApproveEnabled bool   `json:"jev_auto_approve_enabled"` // Use Jev guardrail to auto-approve safe gray-area tool calls
 	JevAutoRouterEnabled  bool   `json:"jev_auto_router_enabled"`  // Use Jev classifier to auto-select model tier / thinking effort
 }

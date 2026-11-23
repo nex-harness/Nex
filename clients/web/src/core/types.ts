@@ -72,11 +72,18 @@ export interface UserPreferences {
   notify_on_complete?: boolean;
   notify_on_input?: boolean;
   notify_only_background?: boolean;
+  image_mode?: 'provider' | 'standalone' | string;
+  image_driver?: 'openai_images' | 'openrouter_images' | 'xai_images' | 'minimax_images' | string;
+  image_base_url?: string;
+  image_api_key?: string;
   image_provider_id?: string;
   image_model_id?: string;
+  classifier_mode?: 'provider' | 'standalone' | string;
+  classifier_driver?: 'typesafe_system_one' | 'openrouter_system_one' | string;
   classifier_provider_id?: string;
   classifier_model_id?: string;
   classifier_base_url?: string;
+  classifier_api_key?: string;
   jev_auto_approve_enabled?: boolean;
   jev_auto_router_enabled?: boolean;
 }

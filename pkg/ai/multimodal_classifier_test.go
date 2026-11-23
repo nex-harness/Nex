@@ -208,3 +208,48 @@ func TestSystemOneClassifierProvider(t *testing.T) {
 		t.Fatalf("expected 42 input tokens, got %d", resp.Usage.InputTokens)
 	}
 }
+
+func TestXAIAndMiniMaxImagesProviders(t *testing.T) {
+	// 1. xAI / Grok
+	var xaiPath string
+	xaiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		xaiPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"b64_json":"/9j/4AAQ","revised_prompt":"grok fox"}]}`))
+	}))
+	defer xaiSrv.Close()
+
+	xaiP := NewImageProvider(ImageDriverXAI, ImageProviderConfig{BaseURL: xaiSrv.URL, APIKey: "xai-key"})
+	xResp, err := xaiP.GenerateImages(context.Background(), &ImageRequest{
+		Model: "grok-2-image",
+		Input: []ContentBlock{TextBlock("a fox")},
+	})
+	if err != nil {
+		t.Fatalf("xai err: %v", err)
+	}
+	if xaiPath != "/images/generations" || xResp.StopReason != "stop" || len(xResp.Output) != 2 {
+		t.Fatalf("unexpected xai resp: path=%q resp=%+v", xaiPath, xResp)
+	}
+
+	// 2. MiniMax
+	var mmPath string
+	mmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mmPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"base_resp":{"status_code":0,"status_msg":"success"},"data":{"image_base64":["/9j/4AAQ"]}}`))
+	}))
+	defer mmSrv.Close()
+
+	mmP := NewImageProvider(ImageDriverMiniMax, ImageProviderConfig{BaseURL: mmSrv.URL, APIKey: "mm-key"})
+	mResp, err := mmP.GenerateImages(context.Background(), &ImageRequest{
+		Model:       "image-01",
+		Input:       []ContentBlock{TextBlock("a fox")},
+		AspectRatio: "16:9",
+	})
+	if err != nil {
+		t.Fatalf("minimax err: %v", err)
+	}
+	if mmPath != "/image_generation" || mResp.StopReason != "stop" || len(mResp.Output) != 1 {
+		t.Fatalf("unexpected minimax resp: path=%q resp=%+v", mmPath, mResp)
+	}
+}
