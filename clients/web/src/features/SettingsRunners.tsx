@@ -1,5 +1,8 @@
 import { formatMsg } from '../i18n/messages';
+import type { LocaleCode } from '../i18n';
 import {
+  AlertTriangle,
+  ArrowUpCircle,
   Check,
   ChevronDown,
   ChevronRight,
@@ -16,6 +19,7 @@ import {
   Plus,
   RefreshCw,
   Server,
+  Shield,
   Square,
   Terminal,
   Trash2,
@@ -25,7 +29,7 @@ import {
 import { type ClipboardEvent, type FormEvent, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../core/protocol';
 import { useNexStore } from '../core/store';
-import { SSHConfigHost, SSHTargetRecord, StagedBinaryInfo } from '../core/types';
+import { type RunnerRecord, type SSHConfigHost, type SSHTargetRecord, type StagedBinaryInfo } from '../core/types';
 import {
   SectionHeading,
   SettingsGroupCard,
@@ -121,8 +125,34 @@ function formatBytesShort(n: number): string {
   return `${n} B`;
 }
 
+function formatRunnerUpdatePhase(locale: LocaleCode, phase?: string, progress?: number): string {
+  if (!phase || phase === 'idle') return '';
+  switch (phase) {
+    case 'queued':
+      return formatMsg(locale, 'runners.phase.queued');
+    case 'draining':
+      return formatMsg(locale, 'runners.phase.draining');
+    case 'downloading':
+      return formatMsg(locale, 'runners.phase.downloading', { pct: Math.round(progress ?? 0) });
+    case 'verifying':
+      return formatMsg(locale, 'runners.phase.verifying');
+    case 'installing':
+      return formatMsg(locale, 'runners.phase.installing');
+    case 'restarting':
+      return formatMsg(locale, 'runners.phase.restarting');
+    case 'succeeded':
+      return formatMsg(locale, 'runners.phase.succeeded');
+    case 'failed':
+      return formatMsg(locale, 'runners.phase.failed');
+    case 'rolled_back':
+      return formatMsg(locale, 'runners.phase.rolled_back');
+    default:
+      return phase;
+  }
+}
+
 export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {
-  const { locale, runners, sshTargets, refreshInitialData, refreshRegistries } = useNexStore();
+  const { locale, runners, sshTargets, refreshInitialData, refreshRegistries, triggerRunnerUpdate, triggerAllRunnersUpdate } = useNexStore();
 
   const [copied, setCopied] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -350,6 +380,53 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
   };
 
   const [removingRunnerIds, setRemovingRunnerIds] = useState<Record<string, boolean>>({});
+  const [upgradingRunnerIds, setUpgradingRunnerIds] = useState<Record<string, boolean>>({});
+  const [upgradingAll, setUpgradingAll] = useState(false);
+
+  const upgradableCount = runners.filter(
+    (r) =>
+      r.status === 'online' &&
+      !r.is_dev &&
+      (r.incompatible || r.update_status === 'update_required' || r.update_status === 'update_available'),
+  ).length;
+
+  const triggerSingleUpgrade = async (r: RunnerRecord, mode: 'when_idle' | 'immediate') => {
+    setUpgradingRunnerIds((prev) => ({ ...prev, [r.id]: true }));
+    try {
+      const res = await triggerRunnerUpdate(r.id, { mode, force: true });
+      if (res.ok) {
+        onFlash(formatMsg(locale, 'runners.updateTriggered', { name: r.name || r.id }));
+      } else if (res.error) {
+        onFlash(res.error);
+      }
+    } finally {
+      setUpgradingRunnerIds((prev) => {
+        const next = { ...prev };
+        delete next[r.id];
+        return next;
+      });
+    }
+  };
+
+  const triggerAllUpgrades = async () => {
+    setUpgradingAll(true);
+    try {
+      const res = await triggerAllRunnersUpdate({ mode: 'when_idle', force: false });
+      if (res.ok) {
+        onFlash(
+          formatMsg(locale, 'runners.updateAllTriggered', {
+            triggered: res.triggered ?? 0,
+            skipped: res.skipped ?? 0,
+          }),
+        );
+      } else if (res.error) {
+        onFlash(res.error);
+      }
+    } finally {
+      setUpgradingAll(false);
+    }
+  };
+
   const removeRunner = async (r: { id: string; name: string }) => {
     setRemovingRunnerIds((prev) => ({ ...prev, [r.id]: true }));
     try {
@@ -553,21 +630,39 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
       </SettingsGroupCard>
 
       {/* Connected Runners */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <SectionHeading
           title={formatMsg(locale, 'runners.connectedRunners', { length: runners.length })}
           description={
             formatMsg(locale, 'runners.liveReverseConnectedRunnersPlatform')
           }
         />
-        <button
-          type="button"
-          onClick={() => void refreshInitialData()}
-          className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
-        >
-          <RefreshCw className="size-3" />
-          <span>{formatMsg(locale, 'common.refresh')}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {upgradableCount > 0 && (
+            <button
+              type="button"
+              data-testid="update-all-runners-btn"
+              disabled={upgradingAll}
+              onClick={() => void triggerAllUpgrades()}
+              className="inline-flex h-7 items-center gap-1 rounded-md border border-brand-blue/30 bg-brand-blue/10 px-2.5 text-ui-xs font-medium text-brand-blue transition-colors hover:bg-brand-blue/20 disabled:opacity-50"
+            >
+              {upgradingAll ? <LoaderCircle className="size-3 animate-spin" /> : <ArrowUpCircle className="size-3" />}
+              <span>
+                {upgradingAll
+                  ? formatMsg(locale, 'runners.updatingAll')
+                  : formatMsg(locale, 'runners.updateAllBtn', { count: upgradableCount })}
+              </span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void refreshInitialData()}
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+          >
+            <RefreshCw className="size-3" />
+            <span>{formatMsg(locale, 'common.refresh')}</span>
+          </button>
+        </div>
       </div>
 
       <SettingsGroupCard>
@@ -578,11 +673,18 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
         ) : (
           runners.map((r) => {
             const removing = Boolean(removingRunnerIds[r.id]);
+            const upgrading = Boolean(upgradingRunnerIds[r.id]);
             const formattedVersion = r.version
               ? r.version.startsWith('v')
                 ? r.version
                 : formatMsg(locale, 'runners.versionLabel', { version: r.version })
               : '';
+            const isRequired = Boolean(r.incompatible || r.update_status === 'update_required');
+            const isAvailable = !isRequired && r.update_status === 'update_available';
+            const phaseLabel = formatRunnerUpdatePhase(locale, r.update_phase, r.update_progress);
+            const activeUpgradePhase = Boolean(
+              r.update_phase && !['idle', 'succeeded', 'failed', 'rolled_back'].includes(r.update_phase),
+            );
             return (
               <div
                 key={r.id}
@@ -614,6 +716,39 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                         {formattedVersion}
                       </span>
                     )}
+                    {r.is_dev && (
+                      <span
+                        data-testid={`runner-dev-badge-${r.id}`}
+                        title={formatMsg(locale, 'runners.devAutoUpdateDisabled')}
+                        className="rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 font-mono text-ui-xs font-medium text-amber-600 dark:text-amber-400"
+                      >
+                        {formatMsg(locale, 'runners.devBadge')}
+                      </span>
+                    )}
+                    {r.elevated && (
+                      <span
+                        data-testid={`runner-admin-badge-${r.id}`}
+                        className="inline-flex items-center gap-1 rounded-md border border-brand-blue/30 bg-brand-blue/10 px-1.5 py-0.5 text-ui-xs font-medium text-brand-blue"
+                      >
+                        <Shield className="size-3" />
+                        <span>{formatMsg(locale, 'runners.adminBadge')}</span>
+                      </span>
+                    )}
+                    {phaseLabel && (
+                      <span
+                        data-testid={`runner-update-phase-${r.id}`}
+                        className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs font-medium ${
+                          r.update_phase === 'failed' || r.update_phase === 'rolled_back'
+                            ? 'bg-destructive-surface text-destructive-surface-fg'
+                            : r.update_phase === 'succeeded'
+                              ? 'bg-success-surface text-success-surface-fg'
+                              : 'bg-brand-blue/10 text-brand-blue'
+                        }`}
+                      >
+                        {activeUpgradePhase && <LoaderCircle className="size-3 animate-spin" />}
+                        <span>{phaseLabel}</span>
+                      </span>
+                    )}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5 text-ui-xs text-foreground-subtle">
                     <span className="rounded bg-surface px-1.5 py-0.5 font-mono">{r.os}</span>
@@ -622,6 +757,59 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     {r.hostname ? <span className="font-mono">{r.hostname}</span> : null}
                     {r.workspace_default ? <span className="truncate font-mono">{r.workspace_default}</span> : null}
                   </div>
+                  {r.status === 'online' && isRequired && (
+                    <div
+                      data-testid={`runner-update-required-${r.id}`}
+                      className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive-surface/60 px-3 py-2 text-ui-xs text-destructive-surface-fg"
+                    >
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <AlertTriangle className="size-3.5 shrink-0" />
+                        <span className="font-medium">
+                          {formatMsg(locale, 'runners.updateRequired', { version: r.target_version || 'latest' })}
+                        </span>
+                        {r.update_reason && <span className="truncate opacity-85">— {r.update_reason}</span>}
+                      </div>
+                      <button
+                        type="button"
+                        data-testid={`upgrade-runner-${r.id}`}
+                        disabled={upgrading || activeUpgradePhase}
+                        onClick={() => void triggerSingleUpgrade(r, 'immediate')}
+                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-destructive px-2 text-ui-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                      >
+                        {upgrading ? <LoaderCircle className="size-3 animate-spin" /> : <ArrowUpCircle className="size-3" />}
+                        <span>{formatMsg(locale, 'runners.updateNowBtn')}</span>
+                      </button>
+                    </div>
+                  )}
+                  {r.status === 'online' && isAvailable && (
+                    <div
+                      data-testid={`runner-update-available-${r.id}`}
+                      className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-ui-xs text-amber-700 dark:text-amber-300"
+                    >
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <ArrowUpCircle className="size-3.5 shrink-0" />
+                        <span className="font-medium">
+                          {formatMsg(locale, 'runners.updateAvailable', { version: r.target_version || 'latest' })}
+                        </span>
+                        {r.is_dev && (
+                          <span className="truncate opacity-80">({formatMsg(locale, 'runners.devAutoUpdateDisabled')})</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        data-testid={`upgrade-runner-${r.id}`}
+                        disabled={upgrading || activeUpgradePhase}
+                        onClick={() => void triggerSingleUpgrade(r, 'when_idle')}
+                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-amber-500/40 bg-card px-2 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover disabled:opacity-50"
+                      >
+                        {upgrading ? <LoaderCircle className="size-3 animate-spin" /> : <ArrowUpCircle className="size-3" />}
+                        <span>{formatMsg(locale, 'runners.updateBtn')}</span>
+                      </button>
+                    </div>
+                  )}
+                  {r.update_error && (
+                    <p className="mt-1 truncate text-ui-xs text-destructive">{r.update_error}</p>
+                  )}
                 </div>
                 <div className="flex items-center justify-end gap-2">
                   <span className="font-mono text-ui-xs tabular-nums text-foreground-subtlest">

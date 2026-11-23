@@ -33,10 +33,14 @@ type RemoteMCPExecutor interface {
 type Config struct {
 	Store         *store.Store
 	PairingSecret string          // Optional shared pairing token for Runner registration
-	PublicBaseURL string          // Advertised base URL for /llm-proxy/*
-	ListenPort    int             // Local TCP listen port for LAN URL advertisement
-	RunnersDir    string          // Optional directory containing prebuilt multi-platform nex-runner-<os>-<arch> binaries
-	StaticFS      fs.FS           // Optional embedded clients/web/dist filesystem
+	PublicBaseURL              string          // Advertised base URL for /llm-proxy/*
+	ListenPort                 int             // Local TCP listen port for LAN URL advertisement
+	RunnersDir                 string          // Optional directory containing prebuilt multi-platform nex-runner-<os>-<arch> binaries
+	Version                    string          // Server build version string
+	ReleaseManifestURL         string          // Optional URL pointing to GitHub/Gitea Release manifest.json / version.json
+	MinRunnerProtocolVersion   int             // Minimum runner protocol_version required (defaults to protocol.MinRunnerProtocolVersion)
+	RequiredRunnerCapabilities []string        // Optional capabilities required for compatibility gating
+	StaticFS                   fs.FS           // Optional embedded clients/web/dist filesystem
 	HTTPClient    *http.Client    // Optional custom HTTP client (for tests / models.dev / proxy)
 	RemoteMCP     RemoteMCPExecutor
 	EnableRelay   bool   // Mount stateless zero-trust /relay/v1/* endpoints onto this server
@@ -111,12 +115,14 @@ type Server struct {
 
 	mu               sync.RWMutex
 	runners          map[string]*runnerConn
+	runnerMeta       map[string]*runnerRuntimeMeta
 	clients          map[string]*clientConn
 	ptyToRunner      map[string]string
 	browserToRunner  map[string]string
 	planNotifiedSess map[string]bool
 	pendingRPC       map[string]chan protocol.Envelope
 	modelsCache      modelsDevCache
+	releaseCache     releaseManifestCache
 }
 
 // New constructs and wires a Control Plane Server.
@@ -130,11 +136,12 @@ func New(cfg Config) (*Server, error) {
 	}
 
 	s := &Server{
-		cfg:             cfg,
-		store:           cfg.Store,
-		mux:             http.NewServeMux(),
-		client:          hc,
+		cfg:              cfg,
+		store:            cfg.Store,
+		mux:              http.NewServeMux(),
+		client:           hc,
 		runners:          make(map[string]*runnerConn),
+		runnerMeta:       make(map[string]*runnerRuntimeMeta),
 		clients:          make(map[string]*clientConn),
 		ptyToRunner:      make(map[string]string),
 		browserToRunner:  make(map[string]string),
@@ -367,6 +374,9 @@ func (s *Server) callRunnerRPC(ctx context.Context, runnerID string, env protoco
 	s.mu.RUnlock()
 	if rc == nil {
 		return protocol.Envelope{}, fmt.Errorf("runner %s is offline", runnerID)
+	}
+	if err := s.checkRunnerCompatible(ctx, runnerID); err != nil {
+		return protocol.Envelope{}, err
 	}
 	if env.ID == "" {
 		env.ID = "rpc_" + uuid.NewString()

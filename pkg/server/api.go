@@ -41,6 +41,9 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/image/test", s.handleImageTest)
 	s.mux.HandleFunc("/api/v1/classifier/test", s.handleClassifierTest)
 	s.mux.HandleFunc("/api/v1/runners", s.handleRunners)
+	s.mux.HandleFunc("/api/v1/runners/manifest", s.handleRunnersManifest)
+	s.mux.HandleFunc("/api/v1/runners/binary/", s.handleRunnerBinaryDownload)
+	s.mux.HandleFunc("/api/v1/runners/update-all", s.handleRunnersUpdateAll)
 	s.mux.HandleFunc("/api/v1/runners/", s.handleRunnerSubroutes)
 	s.mux.HandleFunc("/api/v1/sessions", s.handleSessions)
 	s.mux.HandleFunc("/api/v1/sessions/search", s.handleSessionSearch)
@@ -460,9 +463,10 @@ func (s *Server) handleRunners(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	// Mask auth tokens in UI responses
+	// Mask auth tokens and enrich live runner update/compatibility metadata
 	for i := range list {
 		list[i].AuthToken = ""
+		s.enrichRunnerRecord(r.Context(), &list[i])
 	}
 	writeJSON(w, http.StatusOK, list)
 }
@@ -491,6 +495,10 @@ func (s *Server) handleRunnerSubroutes(w http.ResponseWriter, r *http.Request) {
 		}
 		s.broadcastRunnerStatus(r.Context(), runnerID, "deleted")
 		writeJSON(w, http.StatusOK, map[string]any{"deleted": runnerID})
+		return
+	}
+	if action == "update" {
+		s.handleRunnerUpdateTrigger(w, r, runnerID)
 		return
 	}
 	if action != "dirs" {

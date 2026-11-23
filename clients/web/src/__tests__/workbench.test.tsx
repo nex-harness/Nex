@@ -4179,4 +4179,171 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       useNexStore.setState({ sessionEfforts: {}, draftThinkingEffort: 'high' });
     }
   });
+
+  it('renders runner self-update badges/phases, triggers single & batch upgrades, and shows incompatible banner in composer', async () => {
+    const now = Date.now();
+    const fetchCalls: Array<{ url: string; method?: string; body?: string }> = [];
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      fetchCalls.push({ url, method: init?.method, body: typeof init?.body === 'string' ? init.body : undefined });
+      if (url.includes('/api/v1/runners/update-all')) {
+        return new Response(
+          JSON.stringify({
+            triggered: [{ runner_id: 'run_req' }, { runner_id: 'run_avail' }],
+            skipped: [{ runner_id: 'run_dev', reason: 'dev' }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (url.includes('/api/v1/runners/') && url.endsWith('/update')) {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/v1/runners/pairing')) {
+        return new Response(JSON.stringify({ token: 'tok', ws_url: 'ws://localhost/ws/runner' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/v1/runners')) {
+        return new Response(JSON.stringify(useNexStore.getState().runners), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    try {
+      const testRunners = [
+        {
+          id: 'run_req',
+          name: 'LegacyWin',
+          hostname: 'win-box',
+          os: 'windows',
+          arch: 'amd64',
+          shell: 'powershell',
+          tags: [],
+          synced_config_rev: 1,
+          status: 'online' as const,
+          workspace_default: 'C:/work',
+          version: '0.1.0',
+          last_seen_at: now,
+          elevated: true,
+          incompatible: true,
+          update_status: 'update_required' as const,
+          update_reason: 'protocol_version 0 < min 1',
+          target_version: '0.2.0',
+        },
+        {
+          id: 'run_avail',
+          name: 'ProdLinux',
+          hostname: 'linux-box',
+          os: 'linux',
+          arch: 'amd64',
+          shell: 'bash',
+          tags: [],
+          synced_config_rev: 1,
+          status: 'online' as const,
+          workspace_default: '/srv/app',
+          version: '0.1.9',
+          last_seen_at: now,
+          update_status: 'update_available' as const,
+          target_version: '0.2.0',
+          update_phase: 'downloading',
+          update_progress: 42,
+        },
+        {
+          id: 'run_dev',
+          name: 'LocalDev',
+          hostname: 'mac-dev',
+          os: 'darwin',
+          arch: 'arm64',
+          shell: 'zsh',
+          tags: [],
+          synced_config_rev: 1,
+          status: 'online' as const,
+          workspace_default: '/tmp/dev',
+          version: '0.1.9-dev',
+          last_seen_at: now,
+          is_dev: true,
+          update_status: 'update_available' as const,
+          target_version: '0.2.0',
+        },
+      ];
+
+      useNexStore.setState({
+        serverConnectRequired: false,
+        authEnabled: false,
+        authenticated: true,
+        mainView: 'settings',
+        settingsSection: 'runners',
+        runners: testRunners,
+        selectedRunnerId: 'run_req',
+        selectedWorkspacePath: 'C:/work',
+        selectedProviderId: 'p1',
+        selectedModelId: 'm1',
+        providers: [
+          {
+            id: 'p1',
+            name: 'OpenAI',
+            driver: 'openai_responses',
+            base_url: 'https://api.openai.com',
+            api_key: 'sk-test',
+            proxy_mode: 'direct',
+            enabled: true,
+          },
+        ],
+      });
+
+      render(<App />);
+
+      // 1. SettingsRunners shows Admin badge, Dev badge, downloading phase, required/available banners, and Update All (2 non-dev)
+      expect(screen.getByTestId('runner-admin-badge-run_req')).toBeTruthy();
+      expect(screen.getByTestId('runner-dev-badge-run_dev')).toBeTruthy();
+      expect(screen.getByTestId('runner-update-phase-run_avail').textContent).toContain('42%');
+      expect(screen.getByTestId('runner-update-required-run_req')).toBeTruthy();
+      expect(screen.getByTestId('runner-update-available-run_dev')).toBeTruthy();
+      const updateAllBtn = screen.getByTestId('update-all-runners-btn');
+      expect(updateAllBtn.textContent).toContain('2');
+
+      // 2. Clicking Update All posts to /api/v1/runners/update-all
+      await act(async () => {
+        fireEvent.click(updateAllBtn);
+      });
+      expect(fetchCalls.some((c) => c.url.includes('/api/v1/runners/update-all') && c.method === 'POST')).toBe(true);
+
+      // 3. Clicking single upgrade on required runner posts immediate + force=true
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('upgrade-runner-run_req'));
+      });
+      const singleReq = fetchCalls.find((c) => c.url.includes('/api/v1/runners/run_req/update') && c.method === 'POST');
+      expect(singleReq).toBeTruthy();
+      expect(JSON.parse(singleReq!.body || '{}')).toMatchObject({ mode: 'immediate', force: true });
+
+      // 4. Switching to workspace with incompatible runner shows ConversationPane banner & upgrade button
+      act(() => {
+        useNexStore.setState({ mainView: 'workspace', activeSessionId: '' });
+      });
+      const banner = screen.getByTestId('runner-incompatible-banner');
+      expect(banner.textContent).toContain('LegacyWin');
+      expect(banner.textContent).toContain('protocol_version 0 < min 1');
+
+      const bannerBtn = screen.getByTestId('banner-upgrade-runner-btn');
+      const beforeCount = fetchCalls.filter((c) => c.url.includes('/api/v1/runners/run_req/update')).length;
+      await act(async () => {
+        fireEvent.click(bannerBtn);
+      });
+      const afterCount = fetchCalls.filter((c) => c.url.includes('/api/v1/runners/run_req/update')).length;
+      expect(afterCount).toBe(beforeCount + 1);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });

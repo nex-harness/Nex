@@ -1,6 +1,7 @@
 import {
   Archive,
   ArrowUp,
+  ArrowUpCircle,
   AtSign,
   BookOpen,
   Bot,
@@ -1145,6 +1146,8 @@ function Composer({
   const followUpQueues = useNexStore((s) => s.followUpQueues);
   const removeFollowUp = useNexStore((s) => s.removeFollowUp);
   const promoteFollowUpToSteer = useNexStore((s) => s.promoteFollowUpToSteer);
+  const triggerRunnerUpdate = useNexStore((s) => s.triggerRunnerUpdate);
+  const [upgradingRunner, setUpgradingRunner] = useState(false);
   const activeFollowUps = activeSessionId ? followUpQueues[activeSessionId] || [] : [];
 
   useEffect(() => {
@@ -1286,6 +1289,11 @@ function Composer({
   }, [knownProjects, projectSearch]);
 
   const activeRunner = runners.find((r) => r.id === selectedRunnerId);
+  const isRunnerIncompatible = Boolean(
+    activeRunner &&
+      activeRunner.status === 'online' &&
+      (activeRunner.incompatible || activeRunner.update_status === 'update_required'),
+  );
   const projectLabel =
     (selectedWorkspacePath.split(/[\\/]/).filter(Boolean).pop() || '') ||
     activeRunner?.name ||
@@ -1296,7 +1304,51 @@ function Composer({
   const canSend =
     (Boolean(composerText.trim()) || composerAttachments.length > 0) &&
     Boolean(selectedRunnerId) &&
-    hasValidModel;
+    hasValidModel &&
+    !isRunnerIncompatible;
+
+  const incompatibleRunnerBanner =
+    isRunnerIncompatible && activeRunner ? (
+      <div
+        data-testid="runner-incompatible-banner"
+        className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/40 bg-destructive-surface px-3.5 py-2.5 text-ui-sm text-destructive-surface-fg"
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <ShieldAlert className="mt-0.5 size-4 shrink-0" />
+          <div className="min-w-0">
+            <div className="font-medium">
+              {formatMsg(locale, 'chat.runnerIncompatibleTitle', { name: activeRunner.name || activeRunner.id })}
+            </div>
+            {activeRunner.update_reason && (
+              <div className="text-ui-xs opacity-90">
+                {formatMsg(locale, 'chat.runnerIncompatibleDesc', { reason: activeRunner.update_reason })}
+              </div>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          data-testid="banner-upgrade-runner-btn"
+          disabled={upgradingRunner}
+          onClick={async () => {
+            setUpgradingRunner(true);
+            try {
+              await triggerRunnerUpdate(activeRunner.id, { mode: 'immediate', force: true });
+            } finally {
+              setUpgradingRunner(false);
+            }
+          }}
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-destructive px-3 text-ui-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {upgradingRunner ? <LoaderCircle className="size-3.5 animate-spin" /> : <ArrowUpCircle className="size-3.5" />}
+          <span>
+            {upgradingRunner
+              ? formatMsg(locale, 'chat.upgradingRunner')
+              : formatMsg(locale, 'chat.upgradeRunnerNow')}
+          </span>
+        </button>
+      </div>
+    ) : null;
 
   // Detect active `@` file mention or `/` slash command autocomplete trigger
   const acTrigger = useMemo(() => {
@@ -2361,6 +2413,7 @@ function Composer({
   if (isDraft) {
     return (
       <div ref={rootRef} className="zcode-bottom-dock relative z-30 mx-auto w-full max-w-4xl">
+        {incompatibleRunnerBanner}
         <div className="w-full rounded-2xl bg-black/[0.035] p-1.5 dark:bg-white/[0.04]">
           <div className="relative flex items-center px-2.5 py-1.5">
             <button
@@ -2515,6 +2568,7 @@ function Composer({
 
   return (
     <div ref={rootRef} className="zcode-bottom-dock mx-auto w-full max-w-4xl">
+      {incompatibleRunnerBanner}
       {card}
     </div>
   );

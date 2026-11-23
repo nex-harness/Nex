@@ -63,6 +63,28 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 		WorkspaceDefault: hello.WorkspaceDefault,
 	})
 
+	isDev := hello.IsDev || protocol.IsDevVersion(hello.Version)
+	protoVer := hello.ProtocolVersion
+	if protoVer <= 0 {
+		protoVer = 1
+	}
+	meta := &runnerRuntimeMeta{
+		RunnerID:        hello.RunnerID,
+		OS:              hello.OS,
+		Arch:            hello.Arch,
+		Version:         hello.Version,
+		BuildSHA:        hello.BuildSHA,
+		BinarySHA256:    hello.BinarySHA256,
+		ProtocolVersion: protoVer,
+		Capabilities:    append([]string(nil), hello.Capabilities...),
+		IsDev:           isDev,
+		Elevated:        hello.Elevated,
+		UpdatePhase:     hello.UpdateState,
+		UpdateError:     hello.UpdateError,
+	}
+	s.evaluateRunnerUpdate(ctx, meta)
+	s.setRunnerRuntimeMeta(meta)
+
 	rc := &runnerConn{id: hello.RunnerID, ws: ws}
 	s.mu.Lock()
 	s.runners[hello.RunnerID] = rc
@@ -88,11 +110,28 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 		s.broadcastRunnerStatus(context.Background(), hello.RunnerID, "offline")
 	}()
 
-	// Send runner.welcome with latest config snapshot
+	// Send runner.welcome with latest config snapshot and update compatibility verdict
 	snap, _ := s.buildConfigSnapshot(ctx, hello.RunnerID)
+	autoUpdateAllowed := !meta.IsDev &&
+		(meta.UpdateStatus == "update_available" || meta.UpdateStatus == "update_required") &&
+		len(meta.DownloadURLs) > 0
+	serverVer := strings.TrimSpace(s.cfg.Version)
+	if serverVer == "" {
+		serverVer = "dev"
+	}
 	welcomeEnv, _ := protocol.NewEnvelope(protocol.TypeRunnerWelcome, protocol.RunnerWelcomePayload{
-		RunnerID: hello.RunnerID,
-		Snapshot: snap,
+		RunnerID:           hello.RunnerID,
+		Snapshot:           snap,
+		ServerVersion:      serverVer,
+		MinProtocolVersion: s.effectiveMinRunnerProtocol(),
+		UpdateStatus:       meta.UpdateStatus,
+		UpdateReason:       meta.UpdateReason,
+		TargetVersion:      meta.TargetVersion,
+		TargetBuildSHA:     meta.TargetBuildSHA,
+		TargetSHA256:       meta.TargetSHA256,
+		DownloadURLs:       meta.DownloadURLs,
+		AutoUpdateAllowed:  autoUpdateAllowed,
+		Incompatible:       meta.Incompatible,
 	})
 	_ = rc.sendJSON(ctx, welcomeEnv)
 
@@ -145,6 +184,22 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 
 		case protocol.TypeMemorySync:
 			go s.handleRunnerMemorySync(ctx, env)
+
+		case protocol.TypeRunnerUpdateStatus:
+			var st protocol.RunnerUpdateStatusPayload
+			if json.Unmarshal(env.Payload, &st) == nil {
+				s.mu.Lock()
+				if cur := s.runnerMeta[hello.RunnerID]; cur != nil {
+					cur.UpdatePhase = st.Phase
+					cur.UpdateProgress = st.ProgressPct
+					cur.UpdateError = st.Error
+					if st.Phase == "succeeded" {
+						cur.UpdateError = ""
+					}
+				}
+				s.mu.Unlock()
+				s.broadcastRunnerStatus(ctx, hello.RunnerID, "online")
+			}
 
 		case protocol.TypePTYClosed:
 			s.broadcastToAllClients(ctx, env)
@@ -532,6 +587,15 @@ func (s *Server) routeClientPrompt(ctx context.Context, cc *clientConn, env prot
 	if rc == nil {
 		errEnv, _ := protocol.NewEnvelope(protocol.TypeError, map[string]string{
 			"error": "target runner is offline: " + p.RunnerID,
+		})
+		errEnv.ReplyTo = env.ID
+		errEnv.SessionID = p.SessionID
+		_ = cc.sendJSON(ctx, errEnv)
+		return
+	}
+	if err := s.checkRunnerCompatible(ctx, p.RunnerID); err != nil {
+		errEnv, _ := protocol.NewEnvelope(protocol.TypeError, map[string]string{
+			"error": err.Error(),
 		})
 		errEnv.ReplyTo = env.ID
 		errEnv.SessionID = p.SessionID

@@ -2,9 +2,12 @@ package runner
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -67,6 +70,11 @@ type Config struct {
 	DataDir          string // e.g. "~/.nex-runner"
 	WorkspaceDefault string
 	Version          string
+	BuildSHA         string
+	ProtocolVersion  int
+	Capabilities     []string
+	Elevated         bool
+	AutoUpdate       *bool
 	Tags             []string
 	HTTPClient       *http.Client
 
@@ -76,6 +84,11 @@ type Config struct {
 	PTY              PTYHandler
 	Browser          BrowserHandler
 	Extensions       SessionExtensionBuilder
+	OnBeforeRestart  func()
+}
+
+type activeWorkCounter interface {
+	ActiveCount() int
 }
 
 type activeSession struct {
@@ -86,15 +99,21 @@ type activeSession struct {
 
 // Node is an autonomous Runner capable of both Server-connected execution and offline standalone execution.
 type Node struct {
-	cfg   Config
-	store *store.Store
-	hc    *http.Client
+	cfg          Config
+	store        *store.Store
+	hc           *http.Client
+	binarySHA256 string
+	isDev        bool
+	updater      *Updater
 
 	wsMu sync.RWMutex
 	ws   *websocket.Conn
 
 	mu              sync.Mutex
 	activeSessions  map[string]*activeSession
+	activeTurns     int
+	activePTYs      map[string]bool
+	draining        bool
 	pendingApproval map[string]chan protocol.ApprovalResolvePayload
 	pendingUI       map[string]chan protocol.UIResolvePayload
 	pendingRPC      map[string]chan protocol.Envelope
@@ -119,9 +138,17 @@ func NewNode(cfg Config) (*Node, error) {
 	if cfg.Version == "" {
 		cfg.Version = "dev"
 	}
+	if cfg.ProtocolVersion <= 0 {
+		cfg.ProtocolVersion = protocol.ProtocolVersion
+	}
+	if len(cfg.Capabilities) == 0 {
+		cfg.Capabilities = append([]string(nil), protocol.DefaultRunnerCapabilities...)
+	}
 	if cfg.WorkspaceDefault == "" {
 		cfg.WorkspaceDefault, _ = os.Getwd()
 	}
+	binHash := computeExecutableSHA256()
+	isDev := protocol.IsDevVersion(cfg.Version)
 
 	st, err := store.Open(cfg.DataDir)
 	if err != nil {
@@ -147,15 +174,20 @@ func NewNode(cfg Config) (*Node, error) {
 		hc = &http.Client{Timeout: 5 * time.Minute}
 	}
 
-	return &Node{
+	n := &Node{
 		cfg:             cfg,
 		store:           st,
 		hc:              hc,
+		binarySHA256:    binHash,
+		isDev:           isDev,
 		activeSessions:  make(map[string]*activeSession),
+		activePTYs:      make(map[string]bool),
 		pendingApproval: make(map[string]chan protocol.ApprovalResolvePayload),
 		pendingUI:       make(map[string]chan protocol.UIResolvePayload),
 		pendingRPC:      make(map[string]chan protocol.Envelope),
-	}, nil
+	}
+	n.updater = newUpdater(n)
+	return n, nil
 }
 
 // Store exposes the Runner's local SQLite + CAS store.
@@ -172,6 +204,74 @@ func (n *Node) IsOnline() bool {
 	n.wsMu.RLock()
 	defer n.wsMu.RUnlock()
 	return n.ws != nil
+}
+
+// IsDev reports whether this runner binary is flagged as a dev build.
+func (n *Node) IsDev() bool { return n.isDev }
+
+// Version reports the configured runner version string.
+func (n *Node) Version() string { return n.cfg.Version }
+
+// Elevated reports whether this runner process has elevated privileges.
+func (n *Node) Elevated() bool { return n.cfg.Elevated }
+
+// Updater exposes the self-update coordinator.
+func (n *Node) Updater() *Updater { return n.updater }
+
+// StartWatchdog starts pending update startup verification, if applicable.
+func (n *Node) StartWatchdog(ctx context.Context) {
+	if n.updater != nil {
+		n.updater.StartWatchdog(ctx)
+	}
+}
+
+func (n *Node) autoUpdateEnabled() bool {
+	if n.cfg.AutoUpdate != nil {
+		return *n.cfg.AutoUpdate
+	}
+	return true
+}
+
+func (n *Node) invokeRestartHook() {
+	if n.cfg.OnBeforeRestart != nil {
+		n.cfg.OnBeforeRestart()
+	}
+}
+
+// IsDraining reports whether the runner is draining workload prior to an update restart.
+func (n *Node) IsDraining() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.draining
+}
+
+// SetDraining toggles draining mode (new prompts are rejected while draining).
+func (n *Node) SetDraining(v bool) {
+	n.mu.Lock()
+	n.draining = v
+	n.mu.Unlock()
+}
+
+// ActiveWorkCount returns the count of active turns, sessions, PTYs, and browser sessions.
+func (n *Node) ActiveWorkCount() int {
+	n.mu.Lock()
+	count := n.activeTurns
+	if len(n.activeSessions) > count {
+		count = len(n.activeSessions)
+	}
+	ptyCount := len(n.activePTYs)
+	n.mu.Unlock()
+
+	if c, ok := n.cfg.PTY.(activeWorkCounter); ok {
+		if v := c.ActiveCount(); v > ptyCount {
+			ptyCount = v
+		}
+	}
+	count += ptyCount
+	if c, ok := n.cfg.Browser.(activeWorkCounter); ok {
+		count += c.ActiveCount()
+	}
+	return count
 }
 
 // Close shuts down active sessions, PTYs, and the local store.
@@ -192,6 +292,9 @@ func (n *Node) Close() error {
 
 // StartConnectLoop maintains an outbound reverse WebSocket connection to nex-server with auto-reconnect.
 func (n *Node) StartConnectLoop(ctx context.Context) {
+	if n.updater != nil {
+		n.updater.StartWatchdog(ctx)
+	}
 	if strings.TrimSpace(n.cfg.ServerWSURL) == "" {
 		return
 	}
@@ -244,6 +347,13 @@ func (n *Node) connectOnce(ctx context.Context) error {
 
 	host, _ := os.Hostname()
 	rev, _ := n.store.GetConfigRev(ctx)
+	upState := n.updater.loadState()
+	helloUpdateState := ""
+	helloUpdateErr := ""
+	if upState.Status == "rolled_back" {
+		helloUpdateState = upState.Status
+		helloUpdateErr = upState.LastError
+	}
 	helloEnv, _ := protocol.NewEnvelope(protocol.TypeRunnerHello, protocol.RunnerHelloPayload{
 		RunnerID:         n.cfg.RunnerID,
 		Name:             n.cfg.Name,
@@ -253,6 +363,14 @@ func (n *Node) connectOnce(ctx context.Context) error {
 		Arch:             runtime.GOARCH,
 		Shell:            tools.DefaultShellName(),
 		Version:          n.cfg.Version,
+		BuildSHA:         n.cfg.BuildSHA,
+		BinarySHA256:     n.binarySHA256,
+		ProtocolVersion:  n.cfg.ProtocolVersion,
+		Capabilities:     n.cfg.Capabilities,
+		IsDev:            n.isDev,
+		Elevated:         n.cfg.Elevated,
+		UpdateState:      helloUpdateState,
+		UpdateError:      helloUpdateErr,
 		Tags:             n.cfg.Tags,
 		WorkspaceDefault: n.cfg.WorkspaceDefault,
 		SyncedConfigRev:  rev,
@@ -272,7 +390,8 @@ func (n *Node) connectOnce(ctx context.Context) error {
 		return errors.New("runner: unexpected welcome frame")
 	}
 	var welcome protocol.RunnerWelcomePayload
-	if json.Unmarshal(welcomeEnv.Payload, &welcome) == nil && welcome.Snapshot != nil {
+	welcomeDecoded := json.Unmarshal(welcomeEnv.Payload, &welcome) == nil
+	if welcomeDecoded && welcome.Snapshot != nil {
 		n.ApplyConfigSnapshot(ctx, welcome.Snapshot)
 	}
 
@@ -280,6 +399,9 @@ func (n *Node) connectOnce(ctx context.Context) error {
 	n.ws = ws
 	n.wsMu.Unlock()
 	log.Printf("nex-runner (%s): connected to %s (workspace=%s)", n.cfg.RunnerID, n.cfg.ServerWSURL, n.cfg.WorkspaceDefault)
+	if welcomeDecoded && n.updater != nil {
+		n.updater.HandleWelcome(ctx, welcome)
+	}
 	defer func() {
 		n.wsMu.Lock()
 		if n.ws == ws {
@@ -493,9 +615,22 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 	case protocol.TypeOutboxAck:
 		// Outbox batch ack handled on send; individual acks also supported cleanly.
 
+	case protocol.TypeRunnerUpdate:
+		var up protocol.RunnerUpdatePayload
+		if json.Unmarshal(env.Payload, &up) == nil && n.updater != nil {
+			n.updater.HandleUpdateCommand(ctx, up)
+		}
+
 	case protocol.TypeSessionPrompt:
 		var p protocol.PromptPayload
 		if json.Unmarshal(env.Payload, &p) == nil {
+			if n.IsDraining() {
+				errEnv, _ := protocol.NewEnvelope(protocol.TypeError, map[string]string{"error": "runner is draining for update"})
+				errEnv.SessionID = p.SessionID
+				errEnv.ReplyTo = env.ID
+				_ = n.sendEnvelope(ctx, errEnv)
+				return
+			}
 			go func() {
 				_, _ = n.ExecutePrompt(context.Background(), p, "chat", true)
 			}()
@@ -697,6 +832,9 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 				return
 			}
 			reply, err := n.cfg.PTY.HandleControl(ctx, env, n.sendBinaryFrame, func(closedID string) {
+				n.mu.Lock()
+				delete(n.activePTYs, closedID)
+				n.mu.Unlock()
 				ce, _ := protocol.NewEnvelope(protocol.TypePTYClosed, map[string]string{"pty_id": closedID})
 				_ = n.sendEnvelope(context.Background(), ce)
 			})
@@ -705,6 +843,26 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 				errEnv.ReplyTo = env.ID
 				_ = n.sendEnvelope(ctx, errEnv)
 				return
+			}
+			switch env.Type {
+			case protocol.TypePTYOpen:
+				var p struct {
+					PTYID string `json:"pty_id"`
+				}
+				if json.Unmarshal(reply.Payload, &p) == nil && p.PTYID != "" {
+					n.mu.Lock()
+					n.activePTYs[p.PTYID] = true
+					n.mu.Unlock()
+				}
+			case protocol.TypePTYClose:
+				var p struct {
+					PTYID string `json:"pty_id"`
+				}
+				if json.Unmarshal(env.Payload, &p) == nil && p.PTYID != "" {
+					n.mu.Lock()
+					delete(n.activePTYs, p.PTYID)
+					n.mu.Unlock()
+				}
 			}
 			reply.ReplyTo = env.ID
 			_ = n.sendEnvelope(ctx, reply)
@@ -820,4 +978,21 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 			_ = n.sendEnvelope(ctx, reply)
 		}()
 	}
+}
+
+func computeExecutableSHA256() string {
+	exe, err := os.Executable()
+	if err != nil || exe == "" {
+		return ""
+	}
+	f, err := os.Open(exe)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
