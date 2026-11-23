@@ -572,6 +572,34 @@ func (n *Node) ApplyConfigSnapshot(ctx context.Context, snap *protocol.ConfigSna
 		cfg.DownloadMirror = snap.BrowserSettings.DownloadMirror
 		n.cfg.Browser.UpdateConfig(cfg)
 	}
+	if snap.MultimodalSettings != nil && n.store != nil {
+		prefs, err := n.store.GetUserPreferences(ctx)
+		if err != nil {
+			prefs = store.DefaultUserPreferences()
+		}
+		ms := snap.MultimodalSettings
+		prefs.ImageMode = ms.ImageMode
+		prefs.ImageDriver = ms.ImageDriver
+		prefs.ImageBaseURL = ms.ImageBaseURL
+		prefs.ImageAPIKey = ms.ImageAPIKey
+		prefs.ImageProviderID = ms.ImageProviderID
+		prefs.ImageModelID = ms.ImageModelID
+		prefs.ImageProviders = ms.ImageProviders
+		prefs.ActiveImageProviderID = ms.ActiveImageProviderID
+		prefs.ActiveImageModelID = ms.ActiveImageModelID
+		prefs.ClassifierMode = ms.ClassifierMode
+		prefs.ClassifierDriver = ms.ClassifierDriver
+		prefs.ClassifierProviderID = ms.ClassifierProviderID
+		prefs.ClassifierModelID = ms.ClassifierModelID
+		prefs.ClassifierBaseURL = ms.ClassifierBaseURL
+		prefs.ClassifierAPIKey = ms.ClassifierAPIKey
+		prefs.ClassifierProviders = ms.ClassifierProviders
+		prefs.ActiveClassifierProviderID = ms.ActiveClassifierProviderID
+		prefs.ActiveClassifierModelID = ms.ActiveClassifierModelID
+		prefs.JevAutoApproveEnabled = ms.JevAutoApproveEnabled
+		prefs.JevAutoRouterEnabled = ms.JevAutoRouterEnabled
+		_ = n.store.SaveUserPreferences(ctx, prefs)
+	}
 	if n.cfg.Extensions != nil {
 		n.cfg.Extensions.OnSnapshotApplied(ctx, snap)
 	}

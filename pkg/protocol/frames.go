@@ -183,6 +183,30 @@ type MemorySyncPayload struct {
 	MemoryID string              `json:"memory_id,omitempty"`
 }
 
+// MultimodalConfigSync distributes Image Generation and Classifier (Jev) settings from Server to Runners.
+type MultimodalConfigSync struct {
+	ImageMode                  string                            `json:"image_mode,omitempty"`
+	ImageDriver                string                            `json:"image_driver,omitempty"`
+	ImageBaseURL               string                            `json:"image_base_url,omitempty"`
+	ImageAPIKey                string                            `json:"image_api_key,omitempty"`
+	ImageProviderID            string                            `json:"image_provider_id,omitempty"`
+	ImageModelID               string                            `json:"image_model_id,omitempty"`
+	ImageProviders             []store.MultimodalProviderProfile `json:"image_providers,omitempty"`
+	ActiveImageProviderID      string                            `json:"active_image_provider_id,omitempty"`
+	ActiveImageModelID         string                            `json:"active_image_model_id,omitempty"`
+	ClassifierMode             string                            `json:"classifier_mode,omitempty"`
+	ClassifierDriver           string                            `json:"classifier_driver,omitempty"`
+	ClassifierProviderID       string                            `json:"classifier_provider_id,omitempty"`
+	ClassifierModelID          string                            `json:"classifier_model_id,omitempty"`
+	ClassifierBaseURL          string                            `json:"classifier_base_url,omitempty"`
+	ClassifierAPIKey           string                            `json:"classifier_api_key,omitempty"`
+	ClassifierProviders        []store.MultimodalProviderProfile `json:"classifier_providers,omitempty"`
+	ActiveClassifierProviderID string                            `json:"active_classifier_provider_id,omitempty"`
+	ActiveClassifierModelID    string                            `json:"active_classifier_model_id,omitempty"`
+	JevAutoApproveEnabled      bool                              `json:"jev_auto_approve_enabled,omitempty"`
+	JevAutoRouterEnabled       bool                              `json:"jev_auto_router_enabled,omitempty"`
+}
+
 // ConfigSnapshot carries centralized configuration down to an autonomous Runner.
 type ConfigSnapshot struct {
 	ConfigRev            int64                                `json:"config_rev"`
@@ -199,6 +223,7 @@ type ConfigSnapshot struct {
 	MemoriesSynced       bool                                 `json:"memories_synced,omitempty"`
 	MemorySettings       *MemoryConfigSync                    `json:"memory_settings,omitempty"`
 	BrowserSettings      *BrowserConfigSync                   `json:"browser_settings,omitempty"`
+	MultimodalSettings   *MultimodalConfigSync                `json:"multimodal_settings,omitempty"`
 }
 
 // RunnerWelcomePayload acknowledges Runner registration and optionally pushes updated config.

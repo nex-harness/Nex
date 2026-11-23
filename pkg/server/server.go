@@ -346,6 +346,28 @@ func (s *Server) buildConfigSnapshot(ctx context.Context, runnerID string) (*pro
 			ExecutablePath: prefs.BrowserExecutablePath,
 			DownloadMirror: prefs.BrowserDownloadMirror,
 		},
+		MultimodalSettings: &protocol.MultimodalConfigSync{
+			ImageMode:                  prefs.ImageMode,
+			ImageDriver:                prefs.ImageDriver,
+			ImageBaseURL:               prefs.ImageBaseURL,
+			ImageAPIKey:                prefs.ImageAPIKey,
+			ImageProviderID:            prefs.ImageProviderID,
+			ImageModelID:               prefs.ImageModelID,
+			ImageProviders:             prefs.ImageProviders,
+			ActiveImageProviderID:      prefs.ActiveImageProviderID,
+			ActiveImageModelID:         prefs.ActiveImageModelID,
+			ClassifierMode:             prefs.ClassifierMode,
+			ClassifierDriver:           prefs.ClassifierDriver,
+			ClassifierProviderID:       prefs.ClassifierProviderID,
+			ClassifierModelID:          prefs.ClassifierModelID,
+			ClassifierBaseURL:          prefs.ClassifierBaseURL,
+			ClassifierAPIKey:           prefs.ClassifierAPIKey,
+			ClassifierProviders:        prefs.ClassifierProviders,
+			ActiveClassifierProviderID: prefs.ActiveClassifierProviderID,
+			ActiveClassifierModelID:    prefs.ActiveClassifierModelID,
+			JevAutoApproveEnabled:      prefs.JevAutoApproveEnabled,
+			JevAutoRouterEnabled:       prefs.JevAutoRouterEnabled,
+		},
 	}, nil
 }
 
