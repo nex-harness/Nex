@@ -92,10 +92,16 @@ func (s *Server) registerRoutes() {
 			}
 			if f, err := s.cfg.StaticFS.Open(clean); err == nil {
 				_ = f.Close()
+				if strings.HasPrefix(clean, "assets/") {
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				} else if clean == "index.html" {
+					w.Header().Set("Cache-Control", "no-cache")
+				}
 				fileServer.ServeHTTP(w, r)
 				return
 			}
 			// SPA fallback to index.html
+			w.Header().Set("Cache-Control", "no-cache")
 			r2 := r.Clone(r.Context())
 			r2.URL.Path = "/"
 			fileServer.ServeHTTP(w, r2)

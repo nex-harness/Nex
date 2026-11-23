@@ -189,15 +189,15 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
           {summary && <span className="min-w-0 truncate text-foreground-subtle">{summary}</span>}
           {chevron()}
         </button>
-        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
-          <div className="zcode-collapsible-inner">
-            {output && (
+        {open && output && (
+          <div className="zcode-collapsible" data-open={true}>
+            <div className="zcode-collapsible-inner">
               <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 font-mono text-ui-sm whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -229,9 +229,9 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
             {chevron()}
           </button>
         </div>
-        <div className="zcode-collapsible" data-open={open && Boolean(tc.diff || output)}>
-          <div className="zcode-collapsible-inner">
-            {(tc.diff || output) && (
+        {open && Boolean(tc.diff || output) && (
+          <div className="zcode-collapsible" data-open={true}>
+            <div className="zcode-collapsible-inner">
               <div
                 className="mb-2 mt-1.5 max-h-60 overflow-auto rounded-xl border border-border bg-card font-mono text-[12px] leading-5"
                 style={{
@@ -246,9 +246,9 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
                   <pre className="whitespace-pre-wrap p-2.5 text-foreground-subtle">{output}</pre>
                 )}
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -270,19 +270,21 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
           {chevron()}
         </button>
         <ToolIndeterminateBar active={running} />
-        <div className="zcode-collapsible" data-open={open}>
-          <div className="zcode-collapsible-inner">
-            <div className="mb-2 mt-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 font-mono text-ui-sm">
-              <div className="truncate text-foreground-subtle">
-                <span className="text-foreground-subtlest">$ </span>
-                {command}
+        {open && (
+          <div className="zcode-collapsible" data-open={true}>
+            <div className="zcode-collapsible-inner">
+              <div className="mb-2 mt-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 font-mono text-ui-sm">
+                <div className="truncate text-foreground-subtle">
+                  <span className="text-foreground-subtlest">$ </span>
+                  {command}
+                </div>
+                {output && (
+                  <pre className="mt-1.5 max-h-52 overflow-auto whitespace-pre-wrap text-foreground-subtle">{output}</pre>
+                )}
               </div>
-              {output && (
-                <pre className="mt-1.5 max-h-52 overflow-auto whitespace-pre-wrap text-foreground-subtle">{output}</pre>
-              )}
             </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -342,15 +344,15 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
             })}
           </div>
         )}
-        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
-          <div className="zcode-collapsible-inner">
-            {output && (
+        {open && output && (
+          <div className="zcode-collapsible" data-open={true}>
+            <div className="zcode-collapsible-inner">
               <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 font-mono text-ui-sm whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -372,15 +374,15 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
           {chevron()}
         </button>
         <ToolIndeterminateBar active={running} />
-        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
-          <div className="zcode-collapsible-inner">
-            {output && (
+        {open && output && (
+          <div className="zcode-collapsible" data-open={true}>
+            <div className="zcode-collapsible-inner">
               <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 font-mono text-ui-sm whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -404,15 +406,15 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
           {question && <span className="min-w-0 truncate text-foreground-subtle">{truncateText(question, 72)}</span>}
           {chevron()}
         </button>
-        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
-          <div className="zcode-collapsible-inner">
-            {output && (
+        {open && output && (
+          <div className="zcode-collapsible" data-open={true}>
+            <div className="zcode-collapsible-inner">
               <div className="ml-2 mt-1 max-h-40 overflow-auto border-l border-border pl-3.5 text-ui-sm whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -437,15 +439,15 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
           {taskId && <span className="min-w-0 truncate font-mono text-ui-sm text-foreground-subtle">{taskId}</span>}
           {chevron()}
         </button>
-        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
-          <div className="zcode-collapsible-inner">
-            {output && (
+        {open && output && (
+          <div className="zcode-collapsible" data-open={true}>
+            <div className="zcode-collapsible-inner">
               <pre className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 font-mono text-ui-sm whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </pre>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -466,15 +468,15 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
           {chevron()}
         </button>
         <ToolIndeterminateBar active={running} />
-        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
-          <div className="zcode-collapsible-inner">
-            {output && (
+        {open && output && (
+          <div className="zcode-collapsible" data-open={true}>
+            <div className="zcode-collapsible-inner">
               <div className="mb-2 mt-1.5 max-h-60 overflow-auto rounded-xl border border-border bg-card p-2.5 font-mono text-[12px] leading-5 whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -496,15 +498,15 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
           {chevron()}
         </button>
         <ToolIndeterminateBar active={running} />
-        <div className="zcode-collapsible" data-open={open && Boolean(output)}>
-          <div className="zcode-collapsible-inner">
-            {output && (
+        {open && output && (
+          <div className="zcode-collapsible" data-open={true}>
+            <div className="zcode-collapsible-inner">
               <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 text-ui-sm whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -613,25 +615,27 @@ function ChangeSummaryCard({ item }: { item: ChatTurnItem }) {
           </button>
         </div>
       </div>
-      <div className="zcode-collapsible" data-open={open}>
-        <div className="zcode-collapsible-inner">
-          <div className="border-t border-border py-1">
-            {files.map((f) => (
-              <button
-                key={f.path}
-                type="button"
-                onClick={() => void openFileInPreviewTab(f.path)}
-                className="flex w-full items-center justify-between gap-2 px-3 py-1 text-left text-ui-sm transition-colors hover:bg-hover"
-              >
-                <span className="truncate font-mono text-foreground-subtle">{f.path}</span>
-                <span className="shrink-0 font-mono text-ui-xs tabular-nums">
-                  <span className="text-success">+{f.adds}</span> <span className="text-destructive">-{f.dels}</span>
-                </span>
-              </button>
-            ))}
+      {open && (
+        <div className="zcode-collapsible" data-open={true}>
+          <div className="zcode-collapsible-inner">
+            <div className="border-t border-border py-1">
+              {files.map((f) => (
+                <button
+                  key={f.path}
+                  type="button"
+                  onClick={() => void openFileInPreviewTab(f.path)}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-1 text-left text-ui-sm transition-colors hover:bg-hover"
+                >
+                  <span className="truncate font-mono text-foreground-subtle">{f.path}</span>
+                  <span className="shrink-0 font-mono text-ui-xs tabular-nums">
+                    <span className="text-success">+{f.adds}</span> <span className="text-destructive">-{f.dels}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -810,8 +814,10 @@ function WorkGroup({
 }) {
   const activeTool = [...item.toolCalls].reverse().find((tc) => tc.status === 'running');
   const stepCount = item.toolCalls.length + (item.thinking ? 1 : 0);
-  const visibleTools = item.toolCalls.filter((tc) => tc.status === 'running' || tc.status === 'error');
-  const hiddenTools = item.toolCalls.filter((tc) => tc.status !== 'running' && tc.status !== 'error');
+  const isProminentTool = (tc: ToolCallCard) =>
+    tc.status === 'running' || tc.status === 'error' || Boolean(tc.images && tc.images.length > 0);
+  const visibleTools = item.toolCalls.filter(isProminentTool);
+  const hiddenTools = item.toolCalls.filter((tc) => !isProminentTool(tc));
 
   const shimmerText = activeTool
     ? toolActivityLabel(activeTool, locale)
@@ -844,27 +850,29 @@ function WorkGroup({
         <ChevronRight className={`size-3.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
       </button>
 
-      <div className="zcode-collapsible" data-open={open}>
-        <div className="zcode-collapsible-inner">
-          <div className="ml-1.5 mb-3 mt-2 space-y-2 border-l border-border pl-3.5">
-            {hasThinking && (
-              <div className="space-y-1">
-                {hasTools && (
-                  <div className="text-ui-xs font-medium text-foreground-subtlest">
-                    {formatMsg(locale, 'chat.thinking2')}
+      {open && (
+        <div className="zcode-collapsible" data-open={true}>
+          <div className="zcode-collapsible-inner">
+            <div className="ml-1.5 mb-3 mt-2 space-y-2 border-l border-border pl-3.5">
+              {hasThinking && (
+                <div className="space-y-1">
+                  {hasTools && (
+                    <div className="text-ui-xs font-medium text-foreground-subtlest">
+                      {formatMsg(locale, 'chat.thinking2')}
+                    </div>
+                  )}
+                  <div className="max-h-72 overflow-auto whitespace-pre-wrap py-0.5 text-ui-base leading-[1.65] tracking-wide text-foreground-subtle">
+                    {item.thinking}
                   </div>
-                )}
-                <div className="max-h-72 overflow-auto whitespace-pre-wrap py-0.5 text-ui-base leading-[1.65] tracking-wide text-foreground-subtle">
-                  {item.thinking}
                 </div>
-              </div>
-            )}
-            {hiddenTools.map((tc) => (
-              <ToolSummaryRow key={tc.id} tc={tc} />
-            ))}
+              )}
+              {hiddenTools.map((tc) => (
+                <ToolSummaryRow key={tc.id} tc={tc} />
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {visibleTools.length > 0 && (
         <div className="mt-0.5 flex flex-col gap-0.5">
@@ -2513,6 +2521,8 @@ function Composer({
 }
 
 const EMPTY_STREAM = emptyStreamState();
+const INITIAL_VISIBLE_TURNS = 24;
+const LOAD_MORE_TURNS_STEP = 24;
 
 const MemoTurnItem = memo(function MemoTurnItemImpl({
   item,
@@ -2732,6 +2742,8 @@ export function ConversationPane() {
   const [copiedId, setCopiedId] = useState(false);
   const [scrolledUp, setScrolledUp] = useState(false);
   const [activeTurnId, setActiveTurnId] = useState('');
+  const [visibleTurnLimit, setVisibleTurnLimit] = useState(INITIAL_VISIBLE_TURNS);
+  const [pendingJumpId, setPendingJumpId] = useState('');
   const [statusPanelMode, setStatusPanelMode] = useState<StatusPanelMode>('auto');
   const hasStatusPanel = useConversationStatusPanelHasContent();
 
@@ -2746,32 +2758,91 @@ export function ConversationPane() {
 
   const isDraft = currentStream.items.length === 0 && !activeSessionId;
   const items = currentStream.items;
+  const hiddenTurnCount = items.length > visibleTurnLimit ? items.length - visibleTurnLimit : 0;
+  const visibleItems = useMemo(
+    () => (hiddenTurnCount > 0 ? items.slice(hiddenTurnCount) : items),
+    [items, hiddenTurnCount],
+  );
+  const prependScrollAnchorRef = useRef<{ prevScrollHeight: number; prevScrollTop: number } | null>(null);
+
+  const loadEarlierTurns = useCallback(
+    (expandAll = false) => {
+      const scrollEl = scrollRef.current;
+      if (scrollEl) {
+        prependScrollAnchorRef.current = {
+          prevScrollHeight: scrollEl.scrollHeight,
+          prevScrollTop: scrollEl.scrollTop,
+        };
+      }
+      followingRef.current = false;
+      setVisibleTurnLimit((prev) =>
+        expandAll ? Number.MAX_SAFE_INTEGER : prev + LOAD_MORE_TURNS_STEP,
+      );
+    },
+    [],
+  );
+
+  useLayoutEffect(() => {
+    const anchor = prependScrollAnchorRef.current;
+    if (!anchor) return;
+    prependScrollAnchorRef.current = null;
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    const delta = scrollEl.scrollHeight - anchor.prevScrollHeight;
+    if (delta > 0) {
+      scrollEl.scrollTop = anchor.prevScrollTop + delta;
+    }
+  }, [hiddenTurnCount]);
 
   const registerTurnRef = useCallback((id: string, el: HTMLDivElement | null) => {
-    turnRefs.current[id] = el;
-  }, []);
-
-  const jumpToTurn = useCallback((id: string) => {
-    const el = turnRefs.current[id];
-    const scrollEl = scrollRef.current;
-    if (!el) return;
-    followingRef.current = false;
-    setActiveTurnId(id);
-    if (scrollEl) {
-      const elRect = el.getBoundingClientRect();
-      const scrollRect = scrollEl.getBoundingClientRect();
-      const targetTop = Math.max(0, scrollEl.scrollTop + (elRect.top - scrollRect.top) - 20);
-      if (typeof scrollEl.scrollTo === 'function') {
-        scrollEl.scrollTo({ top: targetTop, behavior: 'smooth' });
-      } else {
-        scrollEl.scrollTop = targetTop;
-      }
-      const distFromBottom = scrollEl.scrollHeight - targetTop - scrollEl.clientHeight;
-      setScrolledUp(distFromBottom > 120);
-    } else if (typeof el.scrollIntoView === 'function') {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (el) {
+      turnRefs.current[id] = el;
+    } else {
+      delete turnRefs.current[id];
     }
   }, []);
+
+  const jumpToTurn = useCallback(
+    (id: string) => {
+      const el = turnRefs.current[id];
+      if (!el) {
+        const idx = items.findIndex((it) => it.id === id);
+        if (idx >= 0) {
+          followingRef.current = false;
+          setActiveTurnId(id);
+          setPendingJumpId(id);
+          setVisibleTurnLimit((prev) => Math.max(prev, items.length - idx + 4));
+        }
+        return;
+      }
+      const scrollEl = scrollRef.current;
+      followingRef.current = false;
+      setActiveTurnId(id);
+      if (scrollEl) {
+        const elRect = el.getBoundingClientRect();
+        const scrollRect = scrollEl.getBoundingClientRect();
+        const targetTop = Math.max(0, scrollEl.scrollTop + (elRect.top - scrollRect.top) - 20);
+        if (typeof scrollEl.scrollTo === 'function') {
+          scrollEl.scrollTo({ top: targetTop, behavior: 'smooth' });
+        } else {
+          scrollEl.scrollTop = targetTop;
+        }
+        const distFromBottom = scrollEl.scrollHeight - targetTop - scrollEl.clientHeight;
+        setScrolledUp(distFromBottom > 120);
+      } else if (typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    },
+    [items],
+  );
+
+  useEffect(() => {
+    if (!pendingJumpId) return;
+    const el = turnRefs.current[pendingJumpId];
+    if (!el) return;
+    setPendingJumpId('');
+    jumpToTurn(pendingJumpId);
+  }, [pendingJumpId, visibleItems, jumpToTurn]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = scrollRef.current;
@@ -2785,10 +2856,12 @@ export function ConversationPane() {
     }
   }, []);
 
-  // Reset bottom-following intent when switching sessions
+  // Reset bottom-following intent & tail window when switching sessions
   useEffect(() => {
     followingRef.current = true;
     setScrolledUp(false);
+    setVisibleTurnLimit(INITIAL_VISIBLE_TURNS);
+    setPendingJumpId('');
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [activeSessionId]);
@@ -3115,11 +3188,20 @@ export function ConversationPane() {
             } else if (!followingRef.current && !scrolledUp) {
               setScrolledUp(true);
             }
+            if (
+              hiddenTurnCount > 0 &&
+              !followingRef.current &&
+              el.scrollTop <= 80 &&
+              !prependScrollAnchorRef.current
+            ) {
+              loadEarlierTurns(false);
+              return;
+            }
             const scrollRect = el.getBoundingClientRect();
             const probeY = scrollRect.top + scrollRect.height * 0.25;
             let closestId = '';
             let closestDist = Number.POSITIVE_INFINITY;
-            for (const it of items) {
+            for (const it of visibleItems) {
               const node = turnRefs.current[it.id];
               if (!node) continue;
               const d = Math.abs(node.getBoundingClientRect().top - probeY);
@@ -3194,11 +3276,40 @@ export function ConversationPane() {
             </div>
           ) : (
             <div ref={contentRef} className="mx-auto max-w-4xl space-y-5">
-              {items.map((item, idx) => (
+              {hiddenTurnCount > 0 && (
+                <div
+                  data-testid="load-earlier-turns-bar"
+                  className="flex items-center justify-center gap-2 py-1"
+                >
+                  <button
+                    type="button"
+                    data-testid="load-earlier-turns-btn"
+                    onClick={() => loadEarlierTurns(false)}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-ui-xs font-medium text-foreground-subtle shadow-2xs transition-colors hover:border-border-hover hover:bg-hover hover:text-foreground"
+                  >
+                    <span>
+                      {formatMsg(locale, 'chat.loadEarlierTurns', {
+                        count: Math.min(hiddenTurnCount, LOAD_MORE_TURNS_STEP),
+                      })}
+                    </span>
+                  </button>
+                  {hiddenTurnCount > LOAD_MORE_TURNS_STEP && (
+                    <button
+                      type="button"
+                      data-testid="show-all-turns-btn"
+                      onClick={() => loadEarlierTurns(true)}
+                      className="inline-flex h-7 items-center rounded-full px-2.5 text-ui-xs text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground-subtle"
+                    >
+                      {formatMsg(locale, 'chat.showAllTurns', { total: items.length })}
+                    </button>
+                  )}
+                </div>
+              )}
+              {visibleItems.map((item, idx) => (
                 <MemoTurnItem
                   key={item.id}
                   item={item}
-                  isLast={idx === items.length - 1}
+                  isLast={hiddenTurnCount + idx === items.length - 1}
                   locale={locale}
                   registerRef={registerTurnRef}
                 />

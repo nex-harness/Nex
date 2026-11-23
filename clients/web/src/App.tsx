@@ -1,7 +1,7 @@
 import { Plus, SquareTerminal, X } from 'lucide-react';
 import { type PointerEvent as ReactPointerEvent, useEffect, useState } from 'react';
 import { emptyStreamState } from './core/reducer';
-import { readPersistedSessionId, useNexStore } from './core/store';
+import { readPersistedSessionId, readPersistedViewState, useNexStore } from './core/store';
 import { AuthGate } from './features/AuthGate';
 import { CommandPaletteModal } from './features/CommandPaletteModal';
 import { ApprovalModal, UIPromptModal } from './features/ControlModals';
@@ -66,7 +66,17 @@ export function App() {
     };
     const onPopState = () => {
       const sid = readPersistedSessionId();
+      const view = readPersistedViewState();
       const st = useNexStore.getState();
+      if (view.mainView === 'settings') {
+        if (st.mainView !== 'settings' || st.settingsSection !== view.settingsSection) {
+          useNexStore.setState({ mainView: 'settings', settingsSection: view.settingsSection });
+        }
+        return;
+      }
+      if (st.mainView !== 'workspace') {
+        useNexStore.setState({ mainView: 'workspace' });
+      }
       if (sid && sid !== st.activeSessionId) {
         void st.selectSession(sid);
       } else if (!sid && st.activeSessionId) {

@@ -65,6 +65,8 @@ export function formatCompactTokens(n: number): string {
   return String(n);
 }
 
+const memoryStorageFallback = new Map<string, string>();
+
 export function safeStorageGet(key: string): string | null {
   try {
     if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
@@ -73,27 +75,31 @@ export function safeStorageGet(key: string): string | null {
   } catch {
     // ignore storage access errors
   }
-  return null;
+  return memoryStorageFallback.has(key) ? memoryStorageFallback.get(key)! : null;
 }
 
 export function safeStorageSet(key: string, value: string): void {
   try {
     if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
       localStorage.setItem(key, value);
+      return;
     }
   } catch {
     // ignore storage quota/access errors
   }
+  memoryStorageFallback.set(key, value);
 }
 
 export function safeStorageRemove(key: string): void {
   try {
     if (typeof localStorage !== 'undefined' && typeof localStorage.removeItem === 'function') {
       localStorage.removeItem(key);
+      return;
     }
   } catch {
     // ignore storage access errors
   }
+  memoryStorageFallback.delete(key);
 }
 
 let authRequiredHandler: (() => void) | null = null;

@@ -49,6 +49,146 @@ import {
 import { wsClient } from './wsClient';
 
 const ACTIVE_SESSION_STORAGE_KEY = 'nex.activeSessionId';
+const MAIN_VIEW_STORAGE_KEY = 'nex.mainView';
+const SETTINGS_SECTION_STORAGE_KEY = 'nex.settingsSection';
+const COMPOSER_DRAFTS_STORAGE_KEY = 'nex.composerDrafts';
+const COMPOSER_DRAFT_NEW_KEY = '__draft__';
+const MAX_CACHED_COMPOSER_DRAFTS = 48;
+
+const VALID_SETTINGS_SECTIONS = new Set<SettingsSectionId>([
+  'general',
+  'appearance',
+  'providers',
+  'runners',
+  'remote',
+  'browser',
+  'agents',
+  'memories',
+  'plugins',
+  'mcp',
+  'skills',
+  'automations',
+  'usage',
+  'archives',
+]);
+
+function normalizeSettingsSection(raw?: string | null): SettingsSectionId {
+  const clean = (raw || '').trim() as SettingsSectionId;
+  return VALID_SETTINGS_SECTIONS.has(clean) ? clean : 'general';
+}
+
+export function readPersistedViewState(): {
+  mainView: 'workspace' | 'settings';
+  settingsSection: SettingsSectionId;
+} {
+  if (typeof window !== 'undefined') {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const qView = params.get('view')?.trim();
+      const qSection = params.get('section')?.trim();
+      if (qView === 'settings') {
+        return {
+          mainView: 'settings',
+          settingsSection: normalizeSettingsSection(qSection || safeStorageGet(SETTINGS_SECTION_STORAGE_KEY)),
+        };
+      }
+      if (qView === 'workspace' || params.has('session')) {
+        return {
+          mainView: 'workspace',
+          settingsSection: normalizeSettingsSection(safeStorageGet(SETTINGS_SECTION_STORAGE_KEY)),
+        };
+      }
+    } catch {
+      // ignore URL parse errors
+    }
+  }
+  const savedView = safeStorageGet(MAIN_VIEW_STORAGE_KEY)?.trim();
+  const savedSection = normalizeSettingsSection(safeStorageGet(SETTINGS_SECTION_STORAGE_KEY));
+  return {
+    mainView: savedView === 'settings' ? 'settings' : 'workspace',
+    settingsSection: savedSection,
+  };
+}
+
+export function persistViewState(
+  mainView: 'workspace' | 'settings',
+  settingsSection?: SettingsSectionId,
+): void {
+  const section = settingsSection ? normalizeSettingsSection(settingsSection) : undefined;
+  safeStorageSet(MAIN_VIEW_STORAGE_KEY, mainView);
+  if (section) {
+    safeStorageSet(SETTINGS_SECTION_STORAGE_KEY, section);
+  }
+  if (typeof window !== 'undefined' && typeof window.history?.replaceState === 'function') {
+    try {
+      const url = new URL(window.location.href);
+      if (mainView === 'settings') {
+        url.searchParams.set('view', 'settings');
+        url.searchParams.set(
+          'section',
+          section || normalizeSettingsSection(safeStorageGet(SETTINGS_SECTION_STORAGE_KEY)),
+        );
+      } else {
+        url.searchParams.delete('view');
+        url.searchParams.delete('section');
+      }
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    } catch {
+      // ignore history errors in non-http test environments
+    }
+  }
+}
+
+function composerDraftKey(sessionId?: string | null): string {
+  const clean = (sessionId || '').trim();
+  return clean || COMPOSER_DRAFT_NEW_KEY;
+}
+
+function readComposerDraftsMap(): Record<string, string> {
+  try {
+    const raw = safeStorageGet(COMPOSER_DRAFTS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === 'string' && v.length > 0) {
+        out[k] = v;
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function readPersistedComposerDraft(sessionId?: string | null): string {
+  const map = readComposerDraftsMap();
+  return map[composerDraftKey(sessionId)] || '';
+}
+
+export function persistComposerDraft(sessionId: string | null | undefined, text: string): void {
+  const key = composerDraftKey(sessionId);
+  const map = readComposerDraftsMap();
+  if (!text) {
+    if (!(key in map)) return;
+    delete map[key];
+  } else {
+    delete map[key];
+    map[key] = text;
+    const keys = Object.keys(map);
+    if (keys.length > MAX_CACHED_COMPOSER_DRAFTS) {
+      for (const oldKey of keys.slice(0, keys.length - MAX_CACHED_COMPOSER_DRAFTS)) {
+        delete map[oldKey];
+      }
+    }
+  }
+  if (Object.keys(map).length === 0) {
+    safeStorageRemove(COMPOSER_DRAFTS_STORAGE_KEY);
+  } else {
+    safeStorageSet(COMPOSER_DRAFTS_STORAGE_KEY, JSON.stringify(map));
+  }
+}
 
 export function readPersistedSessionId(): string {
   if (typeof window !== 'undefined') {
@@ -88,6 +228,7 @@ let wsHandlersWired = false;
 let hostEventsWired = false;
 
 export function applyDocumentTheme(theme: UserPreferences['theme']): void {
+  safeStorageSet('nex.theme', theme);
   if (typeof document === 'undefined') return;
   const prefersDark =
     typeof window !== 'undefined' && typeof window.matchMedia === 'function'
@@ -268,7 +409,10 @@ export interface AppState {
   updateWebPassword: (currentPassword: string, newPassword: string) => Promise<{ ok: boolean; enabled?: boolean; error?: string }>;
   refreshInitialData: () => Promise<void>;
   refreshRegistries: () => Promise<void>;
-  selectSession: (sessionId: string) => Promise<void>;
+  selectSession: (
+    sessionId: string,
+    opts?: { preserveView?: boolean; preloaded?: [RawSessionEventRow[], TurnTelemetry[]] },
+  ) => Promise<void>;
   startNewSession: (runnerId?: string, workspacePath?: string) => void;
   renameSession: (sessionId: string, newTitle: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
@@ -404,6 +548,7 @@ function formatClientNotificationCopy(
 
 const INITIAL_LOCALE: LocaleCode = detectBrowserLocale(safeStorageGet('nex.locale'));
 applyDocumentLocale(INITIAL_LOCALE);
+const INITIAL_VIEW_STATE = readPersistedViewState();
 
 export const useNexStore = create<AppState>((set, get) => ({
   hostInfo: null,
@@ -416,8 +561,8 @@ export const useNexStore = create<AppState>((set, get) => ({
   authEnabled: false,
   authenticated: true,
   locale: INITIAL_LOCALE,
-  mainView: 'workspace',
-  settingsSection: 'general',
+  mainView: INITIAL_VIEW_STATE.mainView,
+  settingsSection: INITIAL_VIEW_STATE.settingsSection,
   sidebarVisible: typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
   sidePaneVisible: false,
   showBottomPanel: false,
@@ -487,7 +632,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   })(),
   permissionMode: 'full_access',
   activeSessionId: '',
-  composerText: '',
+  composerText: readPersistedComposerDraft(''),
   composerAttachments: [],
 
   streams: {},
@@ -505,10 +650,15 @@ export const useNexStore = create<AppState>((set, get) => ({
   notificationToasts: [],
 
   openSettings: (section) => {
-    set((s) => ({ mainView: 'settings', settingsSection: section || s.settingsSection }));
+    const nextSection = normalizeSettingsSection(section || get().settingsSection);
+    persistViewState('settings', nextSection);
+    set({ mainView: 'settings', settingsSection: nextSection });
     void get().refreshRegistries();
   },
-  closeSettings: () => set({ mainView: 'workspace' }),
+  closeSettings: () => {
+    persistViewState('workspace', get().settingsSection);
+    set({ mainView: 'workspace' });
+  },
   setLocale: (loc) => {
     safeStorageSet('nex.locale', loc);
     applyDocumentLocale(loc);
@@ -552,7 +702,10 @@ export const useNexStore = create<AppState>((set, get) => ({
   openImagePreview: (img) => set({ previewImage: img }),
   closeImagePreview: () => set({ previewImage: null }),
 
-  setComposerText: (text) => set({ composerText: text }),
+  setComposerText: (text) => {
+    persistComposerDraft(get().activeSessionId, text);
+    set({ composerText: text });
+  },
   addComposerAttachment: (att) =>
     set((s) => ({
       composerAttachments: s.composerAttachments.length >= 4 ? s.composerAttachments : [...s.composerAttachments, att],
@@ -563,7 +716,11 @@ export const useNexStore = create<AppState>((set, get) => ({
     })),
   clearComposerAttachments: () => set({ composerAttachments: [] }),
   appendComposerRef: (refText) =>
-    set((s) => ({ composerText: s.composerText ? `${s.composerText} ${refText} ` : `${refText} ` })),
+    set((s) => {
+      const next = s.composerText ? `${s.composerText} ${refText} ` : `${refText} `;
+      persistComposerDraft(s.activeSessionId, next);
+      return { composerText: next };
+    }),
   setSelectedRunner: (id, workspacePath) => {
     const r = get().runners.find((it) => it.id === id);
     const resolvedPath = workspacePath ?? r?.workspace_default ?? '';
@@ -958,6 +1115,7 @@ export const useNexStore = create<AppState>((set, get) => ({
     safeStorageRemove('nex.auth.token');
     await hostBridge.clearAuthToken(get().activeServerUrl || undefined);
     wsClient.disconnect();
+    persistViewState('workspace', get().settingsSection);
     set({ authenticated: false, wsConnected: false, mainView: 'workspace' });
   },
 
@@ -1303,20 +1461,41 @@ export const useNexStore = create<AppState>((set, get) => ({
       });
     }
 
+    const persistedView = readPersistedViewState();
+    if (
+      persistedView.mainView !== get().mainView ||
+      persistedView.settingsSection !== get().settingsSection
+    ) {
+      set({
+        mainView: persistedView.mainView,
+        settingsSection: persistedView.settingsSection,
+      });
+    }
+
+    const savedSessionId = !get().activeSessionId ? readPersistedSessionId() : '';
+    const preloadedSessionPromise = savedSessionId
+      ? Promise.all([
+          apiFetch<RawSessionEventRow[]>(`/api/v1/sessions/${savedSessionId}/events`).catch(() => []),
+          apiFetch<TurnTelemetry[]>(`/api/v1/sessions/${savedSessionId}/telemetry`).catch(() => []),
+        ])
+      : null;
+
     wsClient.connect();
     await get().refreshInitialData();
-    await get().refreshRegistries();
+    void get().refreshRegistries();
 
     // Restore active conversation across page reload (from URL `?session=` or localStorage)
-    if (!get().activeSessionId) {
-      const savedSessionId = readPersistedSessionId();
-      if (savedSessionId) {
-        const exists = get().sessions.some((s) => s.id === savedSessionId);
-        if (exists) {
-          await get().selectSession(savedSessionId);
-        } else {
-          persistActiveSessionId('');
-        }
+    // while keeping Settings open if the user refreshed on a Settings page!
+    if (!get().activeSessionId && savedSessionId) {
+      const exists = get().sessions.some((s) => s.id === savedSessionId);
+      if (exists) {
+        const preloaded = preloadedSessionPromise ? await preloadedSessionPromise : undefined;
+        await get().selectSession(savedSessionId, {
+          preserveView: get().mainView === 'settings',
+          preloaded,
+        });
+      } else {
+        persistActiveSessionId('');
       }
     }
   },
@@ -1405,8 +1584,12 @@ export const useNexStore = create<AppState>((set, get) => ({
     });
   },
 
-  selectSession: async (sessionId) => {
+  selectSession: async (sessionId, opts) => {
+    const preserveView = Boolean(opts?.preserveView);
     persistActiveSessionId(sessionId);
+    if (!preserveView) {
+      persistViewState('workspace', get().settingsSection);
+    }
     const metaBefore = get().sessions.find((s) => s.id === sessionId);
     const boundBefore = get().sessionModels[sessionId];
     const resolvedBefore = resolveCatalogModel(
@@ -1414,16 +1597,19 @@ export const useNexStore = create<AppState>((set, get) => ({
       boundBefore?.providerId ?? metaBefore?.provider_id,
       boundBefore?.modelId ?? metaBefore?.model_id,
     );
-    set({
-      mainView: 'workspace',
+    set((s) => ({
+      mainView: preserveView ? s.mainView : 'workspace',
       activeSessionId: sessionId,
+      composerText: readPersistedComposerDraft(sessionId),
       selectedProviderId: resolvedBefore.providerId,
       selectedModelId: resolvedBefore.modelId,
-    });
-    const [evs, tels] = await Promise.all([
-      apiFetch<RawSessionEventRow[]>(`/api/v1/sessions/${sessionId}/events`).catch(() => []),
-      apiFetch<TurnTelemetry[]>(`/api/v1/sessions/${sessionId}/telemetry`).catch(() => []),
-    ]);
+    }));
+    const [evs, tels] = opts?.preloaded
+      ? opts.preloaded
+      : await Promise.all([
+          apiFetch<RawSessionEventRow[]>(`/api/v1/sessions/${sessionId}/events`).catch(() => []),
+          apiFetch<TurnTelemetry[]>(`/api/v1/sessions/${sessionId}/telemetry`).catch(() => []),
+        ]);
     const meta = get().sessions.find((s) => s.id === sessionId);
     const runnerId = meta?.runner_id || get().selectedRunnerId;
     let st = emptyStreamState();
@@ -1476,11 +1662,13 @@ export const useNexStore = create<AppState>((set, get) => ({
 
   startNewSession: (runnerId, workspacePath) => {
     persistActiveSessionId('');
+    persistViewState('workspace', get().settingsSection);
     set((s) => {
       const resolvedDraft = resolveCatalogModel(s.models, s.draftProviderId, s.draftModelId);
       return {
         mainView: 'workspace',
         activeSessionId: '',
+        composerText: readPersistedComposerDraft(''),
         selectedRunnerId: runnerId || s.selectedRunnerId,
         selectedWorkspacePath: workspacePath !== undefined ? workspacePath : s.selectedWorkspacePath,
         draftProviderId: resolvedDraft.providerId,
@@ -1501,9 +1689,10 @@ export const useNexStore = create<AppState>((set, get) => ({
 
   deleteSession: async (sessionId) => {
     await apiFetch(`/api/v1/sessions/${sessionId}`, { method: 'DELETE' });
+    persistComposerDraft(sessionId, '');
     if (get().activeSessionId === sessionId) {
       persistActiveSessionId('');
-      set({ activeSessionId: '' });
+      set({ activeSessionId: '', composerText: readPersistedComposerDraft('') });
     }
     await get().refreshInitialData();
   },
@@ -1525,6 +1714,7 @@ export const useNexStore = create<AppState>((set, get) => ({
     await get().refreshInitialData();
     await get().selectSession(forked.id);
     if (opts?.prefillText !== undefined) {
+      persistComposerDraft(forked.id, opts.prefillText);
       set({ composerText: opts.prefillText });
     }
     return forked.id;
@@ -1539,6 +1729,7 @@ export const useNexStore = create<AppState>((set, get) => ({
     );
     if ((!text && attachments.length === 0) || !s.selectedRunnerId || !activeModel) return;
 
+    const wasDraft = !s.activeSessionId;
     let sessionId = s.activeSessionId;
     const currentStream = sessionId ? s.streams[sessionId] : undefined;
 
@@ -1558,13 +1749,17 @@ export const useNexStore = create<AppState>((set, get) => ({
           },
         }));
       }
-      if (overrideText === undefined) set({ composerText: '', composerAttachments: [] });
+      if (overrideText === undefined) {
+        persistComposerDraft(sessionId, '');
+        set({ composerText: '', composerAttachments: [] });
+      }
       return;
     }
 
     if (!sessionId) {
       sessionId = `sess_${crypto.randomUUID()}`;
       persistActiveSessionId(sessionId);
+      persistViewState('workspace', s.settingsSection);
       set((prev) => ({
         mainView: 'workspace',
         activeSessionId: sessionId,
@@ -1625,7 +1820,11 @@ export const useNexStore = create<AppState>((set, get) => ({
       },
       { session_id: sessionId, runner_id: s.selectedRunnerId },
     );
-    if (overrideText === undefined) set({ composerText: '', composerAttachments: [] });
+    if (overrideText === undefined) {
+      if (wasDraft) persistComposerDraft('', '');
+      persistComposerDraft(sessionId, '');
+      set({ composerText: '', composerAttachments: [] });
+    }
   },
 
   queueFollowUp: (text) => {
@@ -1695,9 +1894,10 @@ export const useNexStore = create<AppState>((set, get) => ({
 
   archiveSession: async (sessionId) => {
     await apiFetch(`/api/v1/sessions/${sessionId}/archive`, { method: 'POST' });
+    persistComposerDraft(sessionId, '');
     if (get().activeSessionId === sessionId) {
       persistActiveSessionId('');
-      set({ activeSessionId: '' });
+      set({ activeSessionId: '', composerText: readPersistedComposerDraft('') });
     }
     await get().refreshInitialData();
   },

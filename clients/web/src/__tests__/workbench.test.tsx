@@ -4,7 +4,15 @@ import { App } from '../App';
 import { MarkdownRenderer } from '../features/MarkdownRenderer';
 import { BROWSER_BINARY_SCREENCAST, decodePTYBinaryFrame, encodePTYBinaryFrame, PTY_BINARY_STDOUT } from '../core/protocol';
 import { applySessionEvent, emptyStreamState } from '../core/reducer';
-import { persistActiveSessionId, readPersistedSessionId, useNexStore } from '../core/store';
+import {
+  persistActiveSessionId,
+  persistComposerDraft,
+  persistViewState,
+  readPersistedComposerDraft,
+  readPersistedSessionId,
+  readPersistedViewState,
+  useNexStore,
+} from '../core/store';
 import { wsClient } from '../core/wsClient';
 import { createHostBridge } from '../host/bridge';
 import { parsePastedSSHTarget } from '../features/SettingsRunners';
@@ -3551,5 +3559,103 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     } finally {
       globalThis.fetch = origFetch;
     }
+  });
+
+  it('persists Settings view/section across reload, caches composer drafts per session, and progressively renders long conversations', async () => {
+    // 1. Settings view + section round-trips via URL query & storage
+    persistViewState('settings', 'runners');
+    expect(window.location.search).toContain('view=settings');
+    expect(window.location.search).toContain('section=runners');
+    expect(readPersistedViewState()).toEqual({ mainView: 'settings', settingsSection: 'runners' });
+
+    persistViewState('workspace', 'runners');
+    expect(window.location.search).not.toContain('view=settings');
+    expect(readPersistedViewState()).toEqual({ mainView: 'workspace', settingsSection: 'runners' });
+
+    // 2. Per-session & draft composer localStorage caching
+    persistComposerDraft('', 'draft prompt unsent');
+    persistComposerDraft('sess_alpha', 'alpha follow-up draft');
+    expect(readPersistedComposerDraft('')).toBe('draft prompt unsent');
+    expect(readPersistedComposerDraft('sess_alpha')).toBe('alpha follow-up draft');
+
+    useNexStore.setState({ activeSessionId: 'sess_alpha', composerText: 'alpha follow-up draft' });
+    act(() => {
+      useNexStore.getState().setComposerText('updated alpha draft');
+    });
+    expect(readPersistedComposerDraft('sess_alpha')).toBe('updated alpha draft');
+
+    act(() => {
+      useNexStore.getState().startNewSession();
+    });
+    expect(useNexStore.getState().composerText).toBe('draft prompt unsent');
+
+    // Clean up persisted drafts
+    persistComposerDraft('', '');
+    persistComposerDraft('sess_alpha', '');
+    expect(readPersistedComposerDraft('')).toBe('');
+    expect(readPersistedComposerDraft('sess_alpha')).toBe('');
+
+    // 3. Tail-window progressive rendering on long conversations (> 24 turns)
+    const manyItems = Array.from({ length: 30 }, (_, idx) => ({
+      id: `turn_${idx + 1}`,
+      seq: idx + 1,
+      role: (idx % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      text: `Turn message #${idx + 1}`,
+      thinking: '',
+      toolCalls: [],
+    }));
+
+    useNexStore.setState({
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      locale: 'zh-CN',
+      mainView: 'workspace',
+      activeSessionId: 'sess_long_hist',
+      sessions: [
+        {
+          id: 'sess_long_hist',
+          runner_id: 'run_1',
+          depth: 0,
+          title: 'Long History Session',
+          workspace_path: '/tmp/ws',
+          agent_profile_slug: 'main',
+          model_id: 'm1',
+          provider_id: 'p1',
+          permission_mode: 'full_access',
+          status: 'idle',
+          latest_context_tokens: 0,
+          context_window_limit: 128000,
+          created_at: 1000,
+          updated_at: 2000,
+          last_active_at: 2000,
+        },
+      ],
+      streams: {
+        sess_long_hist: {
+          lastSeq: 30,
+          running: false,
+          items: manyItems,
+          latestTelemetry: null,
+          turnTelemetries: [],
+          uiBadges: {},
+          pendingApproval: null,
+          pendingUIPrompt: null,
+          todos: [],
+          goals: [],
+        },
+      },
+    });
+
+    render(<App />);
+    // Latest turn is rendered immediately; oldest 6 turns are deferred behind the load-earlier bar
+    expect(screen.getByText('Turn message #30')).toBeTruthy();
+    expect(screen.queryByText('Turn message #1')).toBeNull();
+    const loadEarlierBtn = screen.getByTestId('load-earlier-turns-btn');
+    expect(loadEarlierBtn.textContent).toContain('6');
+
+    fireEvent.click(loadEarlierBtn);
+    await waitFor(() => expect(screen.getByText('Turn message #1')).toBeTruthy());
+    expect(screen.queryByTestId('load-earlier-turns-bar')).toBeNull();
   });
 });

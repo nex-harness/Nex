@@ -1014,6 +1014,8 @@ export const enUS = {
   "runners.removeRunner": "Remove runner",
   "runners.removedRunner": "Removed runner \"{name}\"",
   "runners.versionLabel": "v{version}",
+  "chat.loadEarlierTurns": "Show {count} earlier messages",
+  "chat.showAllTurns": "Show all ({total})",
 } as const;
 
 export type MessageKey = keyof typeof enUS;

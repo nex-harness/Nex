@@ -1016,4 +1016,6 @@ export const zhCN = {
   "runners.removeRunner": "移除设备",
   "runners.removedRunner": "已移除设备「{name}」",
   "runners.versionLabel": "v{version}",
+  "chat.loadEarlierTurns": "加载更早的 {count} 条消息",
+  "chat.showAllTurns": "展开全部 ({total})",
 } satisfies Record<MessageKey, string>;

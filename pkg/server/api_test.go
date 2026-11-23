@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/coder/websocket"
@@ -456,5 +458,80 @@ func TestModelsDevCatalogCacheSharedAcrossLookupAndFetchRemote(t *testing.T) {
 	rReload := postJSON(t, tsReloaded.URL+"/api/v1/models/lookup", map[string]string{"model_id": "gemini-4-carbon"})
 	if !strings.Contains(string(rReload), `"Gemini 4 Carbon"`) {
 		t.Fatalf("expected reloaded server to serve disk cache offline, got %s", string(rReload))
+	}
+}
+
+func TestGzipCompressionAndStaticAssetCacheHeaders(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	mockFS := fstest.MapFS{
+		"index.html":          {Data: []byte("<!doctype html><html><body>Nex</body></html>")},
+		"assets/app-1234.js":  {Data: []byte(strings.Repeat("console.log('nex');\n", 200))},
+		"assets/app-1234.css": {Data: []byte(strings.Repeat(".nex{color:#fff;}\n", 200))},
+	}
+	srv, err := New(Config{
+		Store:    st,
+		StaticFS: mockFS,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = srv.Close() })
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+
+	rawClient := &http.Client{
+		Transport: &http.Transport{DisableCompression: true},
+	}
+
+	// 1. Hashed asset gets gzip encoding + immutable Cache-Control
+	reqAsset, _ := http.NewRequest(http.MethodGet, ts.URL+"/assets/app-1234.js", nil)
+	reqAsset.Header.Set("Accept-Encoding", "gzip")
+	respAsset, err := rawClient.Do(reqAsset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respAsset.Body.Close()
+	if respAsset.Header.Get("Content-Encoding") != "gzip" {
+		t.Fatalf("expected gzip Content-Encoding on JS asset, got %q", respAsset.Header.Get("Content-Encoding"))
+	}
+	if !strings.Contains(respAsset.Header.Get("Cache-Control"), "immutable") {
+		t.Fatalf("expected immutable Cache-Control on hashed asset, got %q", respAsset.Header.Get("Cache-Control"))
+	}
+	gr, err := gzip.NewReader(respAsset.Body)
+	if err != nil {
+		t.Fatalf("gzip reader failed: %v", err)
+	}
+	unzipped, err := io.ReadAll(gr)
+	_ = gr.Close()
+	if err != nil || !strings.Contains(string(unzipped), "console.log('nex')") {
+		t.Fatalf("unexpected unzipped JS content: err=%v len=%d", err, len(unzipped))
+	}
+
+	// 2. JSON API endpoint gets gzip encoding when requested
+	reqAPI, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/health", nil)
+	reqAPI.Header.Set("Accept-Encoding", "gzip")
+	respAPI, err := rawClient.Do(reqAPI)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respAPI.Body.Close()
+	if respAPI.Header.Get("Content-Encoding") != "gzip" {
+		t.Fatalf("expected gzip Content-Encoding on JSON API, got %q", respAPI.Header.Get("Content-Encoding"))
+	}
+
+	// 3. SPA index.html uses no-cache so deployments take effect immediately
+	reqIdx, _ := http.NewRequest(http.MethodGet, ts.URL+"/", nil)
+	respIdx, err := rawClient.Do(reqIdx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respIdx.Body.Close()
+	if respIdx.Header.Get("Cache-Control") != "no-cache" {
+		t.Fatalf("expected no-cache on index.html, got %q", respIdx.Header.Get("Cache-Control"))
 	}
 }
