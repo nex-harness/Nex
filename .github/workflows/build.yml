@@ -81,6 +81,14 @@ jobs:
           CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-runner-darwin-amd64 ./cmd/nex-runner
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-runner-windows-amd64.exe ./cmd/nex-runner
 
+          REL_BASE=""
+          if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
+            REL_BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          fi
+          VERSION="${VERSION}" COMMIT_SHA="${GITHUB_SHA:-unknown}" RELEASE_BASE_URL="${REL_BASE}" \
+            OUT_FILE=dist/artifacts/runner-manifest.json \
+            ./scripts/gen-runner-manifest.sh dist/artifacts
+
           # Standalone nex-relay binaries
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-relay-linux-amd64 ./cmd/nex-relay
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-relay-linux-arm64 ./cmd/nex-relay

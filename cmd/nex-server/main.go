@@ -24,6 +24,7 @@ func main() {
 	pairingToken := flag.String("pairing-token", os.Getenv("NEX_PAIRING_TOKEN"), "Optional shared pairing token for Runners")
 	publicURL := flag.String("public-url", os.Getenv("NEX_PUBLIC_URL"), "Public base URL advertised for /llm-proxy")
 	runnersDir := flag.String("runners-dir", os.Getenv("NEX_RUNNERS_DIR"), "Optional directory containing prebuilt multi-platform nex-runner binaries")
+	releaseManifestURL := flag.String("release-manifest-url", os.Getenv("NEX_RELEASE_MANIFEST_URL"), "Optional URL to release runner manifest.json for release-first updates")
 	enableRelayDefault := os.Getenv("NEX_ENABLE_RELAY") == "true" || os.Getenv("NEX_ENABLE_RELAY") == "1"
 	enableRelay := flag.Bool("enable-relay", enableRelayDefault, "Mount stateless zero-trust /relay/v1/* endpoints onto this server")
 	relayToken := flag.String("relay-token", os.Getenv("NEX_RELAY_TOKEN"), "Optional shared secret token for embedded relay connections")
@@ -48,14 +49,16 @@ func main() {
 	}
 
 	srv, err := server.New(server.Config{
-		Store:         st,
-		PairingSecret: *pairingToken,
-		PublicBaseURL: *publicURL,
-		ListenPort:    listenPort,
-		RunnersDir:    *runnersDir,
-		StaticFS:      embeddedWebFS(),
-		EnableRelay:   *enableRelay,
-		RelayToken:    *relayToken,
+		Store:              st,
+		Version:            version,
+		PairingSecret:      *pairingToken,
+		PublicBaseURL:      *publicURL,
+		ListenPort:         listenPort,
+		RunnersDir:         *runnersDir,
+		ReleaseManifestURL: *releaseManifestURL,
+		StaticFS:           embeddedWebFS(),
+		EnableRelay:        *enableRelay,
+		RelayToken:         *relayToken,
 	})
 	if err != nil {
 		log.Fatalf("failed to init nex-server: %v", err)

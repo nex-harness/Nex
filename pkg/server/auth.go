@@ -223,6 +223,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			p == "/api/v1/auth/login" ||
 			p == "/api/v1/remote/pair/complete" ||
 			p == "/api/v1/ssh/binary" ||
+			strings.HasPrefix(p, "/api/v1/runners/binary/") ||
 			p == "/ws/runner" ||
 			strings.HasPrefix(p, "/llm-proxy/") ||
 			(!strings.HasPrefix(p, "/api/") && p != "/ws/client") {

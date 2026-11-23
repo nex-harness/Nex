@@ -47,6 +47,7 @@ jobs:
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VER}" -o dist/runners/nex-runner-darwin-arm64 ./cmd/nex-runner
           CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VER}" -o dist/runners/nex-runner-darwin-amd64 ./cmd/nex-runner
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VER}" -o dist/runners/nex-runner-windows-amd64.exe ./cmd/nex-runner
+          VERSION="$VER" COMMIT_SHA="${GITHUB_SHA:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}" ./scripts/gen-runner-manifest.sh dist/runners
           SKIP_WEB=1 ./scripts/package-server.sh linux amd64
           ls -lh dist/nex-server dist/nex-runner dist/runners/
 

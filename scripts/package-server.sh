@@ -50,6 +50,9 @@ for plat in "${RUNNER_PLATFORMS[@]}"; do
     go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "${STAGE_DIR}/runners/${out_name}" ./cmd/nex-runner
 done
 
+VERSION="${VERSION}" COMMIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
+  bash "${ROOT_DIR}/scripts/gen-runner-manifest.sh" "${STAGE_DIR}/runners"
+
 echo "==> Copying startup configs & installer..."
 cp deploy/nex-server.env.example "$STAGE_DIR/config/nex-server.env.example"
 cp -R deploy/systemd "$STAGE_DIR/config/systemd"

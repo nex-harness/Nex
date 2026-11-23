@@ -39,6 +39,9 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/models/lookup", s.handleModelLookup)
 	s.mux.HandleFunc("/api/v1/models/test", s.handleModelTest)
 	s.mux.HandleFunc("/api/v1/runners", s.handleRunners)
+	s.mux.HandleFunc("/api/v1/runners/manifest", s.handleRunnersManifest)
+	s.mux.HandleFunc("/api/v1/runners/binary/", s.handleRunnerBinaryDownload)
+	s.mux.HandleFunc("/api/v1/runners/update-all", s.handleRunnersUpdateAll)
 	s.mux.HandleFunc("/api/v1/runners/", s.handleRunnerSubroutes)
 	s.mux.HandleFunc("/api/v1/sessions", s.handleSessions)
 	s.mux.HandleFunc("/api/v1/sessions/search", s.handleSessionSearch)
@@ -490,6 +493,10 @@ func (s *Server) handleRunnerSubroutes(w http.ResponseWriter, r *http.Request) {
 		}
 		s.broadcastRunnerStatus(r.Context(), runnerID, "deleted")
 		writeJSON(w, http.StatusOK, map[string]any{"deleted": runnerID})
+		return
+	}
+	if action == "update" {
+		s.handleRunnerUpdateTrigger(w, r, runnerID)
 		return
 	}
 	if action != "dirs" {

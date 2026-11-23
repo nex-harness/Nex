@@ -123,6 +123,7 @@ func shouldBypassGzip(r *http.Request) bool {
 		strings.HasPrefix(p, "/llm-proxy/") ||
 		strings.HasPrefix(p, "/relay/") ||
 		strings.HasPrefix(p, "/api/v1/blobs/") ||
+		strings.HasPrefix(p, "/api/v1/runners/binary/") ||
 		p == "/api/v1/ssh/binary" {
 		return true
 	}
