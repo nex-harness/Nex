@@ -11,7 +11,10 @@ import (
 	"github.com/nex-harness/nex/pkg/relay"
 )
 
+var version = "dev"
+
 func main() {
+	showVersion := flag.Bool("version", false, "Print version and exit")
 	defaultAddr := os.Getenv("NEX_RELAY_ADDR")
 	if defaultAddr == "" {
 		defaultAddr = ":8443"
@@ -20,6 +23,11 @@ func main() {
 	token := flag.String("token", os.Getenv("NEX_RELAY_TOKEN"), "Optional shared secret token required for relay connections")
 	acceptTimeout := flag.Duration("accept-timeout", 15*time.Second, "Timeout waiting for intranet host to accept a relayed tunnel")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	srv := relay.New(relay.Config{
 		AuthToken:     *token,

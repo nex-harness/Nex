@@ -1,0 +1,35 @@
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /src
+RUN apk add --no-cache git ca-certificates
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+ARG TARGETARCH=amd64
+ARG VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/nex-server ./cmd/nex-server
+
+# Pre-build multi-platform runners so nex-server can distribute them
+RUN mkdir -p /out/runners && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-linux-amd64 ./cmd/nex-runner && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-linux-arm64 ./cmd/nex-runner && \
+    CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-darwin-arm64 ./cmd/nex-runner && \
+    CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-darwin-amd64 ./cmd/nex-runner && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-windows-amd64.exe ./cmd/nex-runner
+
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates tzdata && \
+    mkdir -p /data /opt/nex-v3/runners
+
+COPY --from=builder /out/nex-server /usr/local/bin/nex-server
+COPY --from=builder /out/runners /opt/nex-v3/runners
+
+ENV NEX_RUNNERS_DIR=/opt/nex-v3/runners
+VOLUME ["/data"]
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/nex-server"]
+CMD ["-addr", ":8080", "-data-dir", "/data"]

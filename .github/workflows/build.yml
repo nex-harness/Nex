@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   test-and-build:
@@ -30,6 +31,17 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Resolve Version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF#refs/tags/}"
+          else
+            VER="0.1.0-dev+${GITHUB_SHA::7}"
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VER}"
+
       - name: Build & Test Web UI
         run: |
           npm --prefix clients/web ci
@@ -39,11 +51,13 @@ jobs:
       - name: Run Go Unit Tests (CGO_ENABLED=0)
         run: CGO_ENABLED=0 go test ./...
 
-      - name: Build Multi-Platform Artifacts (CGO_ENABLED=0)
+      - name: Build Multi-Platform Server, Runner & Relay Artifacts
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p dist/artifacts
 
-          # Package server distributions (each includes bundled multi-platform runners)
+          # Package server distributions (each includes bundled multi-platform runners & version.json)
           SKIP_WEB=1 ./scripts/package-server.sh linux amd64
           SKIP_WEB=1 ./scripts/package-server.sh linux arm64
           SKIP_WEB=1 ./scripts/package-server.sh darwin arm64
@@ -51,19 +65,43 @@ jobs:
           cp dist/nex-server-*.tar.gz dist/artifacts/
 
           # Standalone nex-runner binaries
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/artifacts/nex-runner-linux-amd64 ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/artifacts/nex-runner-linux-arm64 ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o dist/artifacts/nex-runner-darwin-arm64 ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -o dist/artifacts/nex-runner-darwin-amd64 ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o dist/artifacts/nex-runner-windows-amd64.exe ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-runner-linux-amd64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-runner-linux-arm64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-runner-darwin-arm64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-runner-darwin-amd64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-runner-windows-amd64.exe ./cmd/nex-runner
 
           # Standalone nex-relay binaries
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/artifacts/nex-relay-linux-amd64 ./cmd/nex-relay
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/artifacts/nex-relay-linux-arm64 ./cmd/nex-relay
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o dist/artifacts/nex-relay-darwin-arm64 ./cmd/nex-relay
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -o dist/artifacts/nex-relay-darwin-amd64 ./cmd/nex-relay
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-relay-linux-amd64 ./cmd/nex-relay
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-relay-linux-arm64 ./cmd/nex-relay
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-relay-darwin-arm64 ./cmd/nex-relay
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-relay-darwin-amd64 ./cmd/nex-relay
 
-          # Checksums
+          # Generate update manifest (latest.json) for in-app update checks
+          cat > dist/artifacts/latest.json <<EOF
+          {
+            "version": "${VERSION}",
+            "published_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "repo": "${GITHUB_REPOSITORY}"
+          }
+          EOF
+
+      - name: Build Desktop Clients (Linux, Windows, macOS)
+        run: |
+          ./scripts/build-clients.sh desktop
+          if [ -d dist/clients ]; then
+            find dist/clients -maxdepth 3 -type f \( -name '*.dmg' -o -name '*.app' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.tar.gz' -o -name '*.zip' \) -exec cp {} dist/artifacts/ \; || true
+          fi
+
+      - name: Build Android APK
+        run: |
+          ./scripts/build-clients.sh android || echo "::warning::Android APK build failed or SDK missing on runner"
+          if [ -d dist/clients ]; then
+            find dist/clients -maxdepth 3 -type f \( -name '*.apk' -o -name '*.aab' \) -exec cp {} dist/artifacts/ \; || true
+          fi
+
+      - name: Generate Checksums
+        run: |
           (cd dist/artifacts && sha256sum * > SHA256SUMS.txt)
           ls -lh dist/artifacts/
 
@@ -79,3 +117,106 @@ jobs:
         with:
           files: dist/artifacts/*
           generate_release_notes: true
+
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build Web UI & iOS IPA (unsigned / simulator)
+        run: |
+          npm --prefix clients/web ci
+          npm --prefix clients/web run build
+          ./scripts/build-clients.sh ios || ./scripts/build-clients.sh ios-sim || echo "::warning::iOS build skipped (signing certs required for .ipa)"
+          mkdir -p dist/ios-artifacts
+          if [ -d dist/clients ]; then
+            find dist/clients -maxdepth 3 -type f -name '*.ipa' -exec cp {} dist/ios-artifacts/ \; || true
+          fi
+
+      - name: Upload iOS Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nex-v3-ios
+          path: dist/ios-artifacts/*
+          if-no-files-found: ignore
+
+  docker-images:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata (server)
+        id: meta-server
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/nex-server
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Build & Push nex-server Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.server
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-server.outputs.tags }}
+          labels: ${{ steps.meta-server.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+
+      - name: Extract Docker metadata (relay)
+        id: meta-relay
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/nex-relay
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Build & Push nex-relay Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.relay
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-relay.outputs.tags }}
+          labels: ${{ steps.meta-relay.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}

@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 SERVER_OS="${1:-$(go env GOOS)}"
 SERVER_ARCH="${2:-$(go env GOARCH)}"
+VERSION="${VERSION:-dev}"
 PKG_NAME="nex-server-${SERVER_OS}-${SERVER_ARCH}"
 STAGE_DIR="dist/pkg/${PKG_NAME}"
 OUT_TARBALL="dist/${PKG_NAME}.tar.gz"
@@ -32,9 +33,9 @@ if [ "$SERVER_OS" = "windows" ]; then
   SERVER_BIN="nex-server.exe"
 fi
 
-echo "==> Building ${SERVER_BIN} (${SERVER_OS}/${SERVER_ARCH}, CGO_ENABLED=0)..."
+echo "==> Building ${SERVER_BIN} (${SERVER_OS}/${SERVER_ARCH}, CGO_ENABLED=0, version=${VERSION})..."
 CGO_ENABLED=0 GOOS="$SERVER_OS" GOARCH="$SERVER_ARCH" \
-  go build -trimpath -o "${STAGE_DIR}/bin/${SERVER_BIN}" ./cmd/nex-server
+  go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "${STAGE_DIR}/bin/${SERVER_BIN}" ./cmd/nex-server
 
 for plat in "${RUNNER_PLATFORMS[@]}"; do
   os="${plat%/*}"
@@ -56,6 +57,15 @@ cp -R deploy/launchd "$STAGE_DIR/config/launchd"
 cp -R deploy/windows "$STAGE_DIR/config/windows"
 cp deploy/install.sh "$STAGE_DIR/install.sh"
 chmod +x "$STAGE_DIR/install.sh"
+
+cat > "$STAGE_DIR/version.json" <<EOF
+{
+  "version": "${VERSION}",
+  "os": "${SERVER_OS}",
+  "arch": "${SERVER_ARCH}",
+  "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
 
 cat > "$STAGE_DIR/README.txt" <<EOF
 Nex-v3 Server Distribution (${SERVER_OS}/${SERVER_ARCH})

@@ -14,8 +14,11 @@ import (
 	"github.com/nex-harness/nex/pkg/store"
 )
 
+var version = "dev"
+
 func main() {
 	defaultDir := filepath.Join(userHomeOrDot(), ".nex-server")
+	showVersion := flag.Bool("version", false, "Print version and exit")
 	addr := flag.String("addr", ":8080", "HTTP/WebSocket listen address")
 	dataDir := flag.String("data-dir", defaultDir, "Server data directory (main.db, archive.db, blobs)")
 	pairingToken := flag.String("pairing-token", os.Getenv("NEX_PAIRING_TOKEN"), "Optional shared pairing token for Runners")
@@ -25,6 +28,11 @@ func main() {
 	enableRelay := flag.Bool("enable-relay", enableRelayDefault, "Mount stateless zero-trust /relay/v1/* endpoints onto this server")
 	relayToken := flag.String("relay-token", os.Getenv("NEX_RELAY_TOKEN"), "Optional shared secret token for embedded relay connections")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	st, err := store.Open(*dataDir)
 	if err != nil {
