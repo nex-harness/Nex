@@ -12,7 +12,7 @@ import {
   settingsSelectClass,
 } from './SettingsPage';
 
-export function MultimodalAndClassifierSettingsCard({
+export function ImageGenerationSettingsCard({
   onFlash,
 }: {
   onFlash: (msg: string) => void;
@@ -21,53 +21,29 @@ export function MultimodalAndClassifierSettingsCard({
 
   const [imageProviderId, setImageProviderId] = useState(preferences.image_provider_id ?? '');
   const [imageModelId, setImageModelId] = useState(preferences.image_model_id ?? '');
-  const [classifierProviderId, setClassifierProviderId] = useState(preferences.classifier_provider_id ?? '');
-  const [classifierModelId, setClassifierModelId] = useState(preferences.classifier_model_id ?? '');
-  const [classifierBaseUrl, setClassifierBaseUrl] = useState(preferences.classifier_base_url ?? '');
-  const [jevAutoApprove, setJevAutoApprove] = useState(Boolean(preferences.jev_auto_approve_enabled));
-  const [jevAutoRouter, setJevAutoRouter] = useState(Boolean(preferences.jev_auto_router_enabled));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setImageProviderId(preferences.image_provider_id ?? '');
     setImageModelId(preferences.image_model_id ?? '');
-    setClassifierProviderId(preferences.classifier_provider_id ?? '');
-    setClassifierModelId(preferences.classifier_model_id ?? '');
-    setClassifierBaseUrl(preferences.classifier_base_url ?? '');
-    setJevAutoApprove(Boolean(preferences.jev_auto_approve_enabled));
-    setJevAutoRouter(Boolean(preferences.jev_auto_router_enabled));
-  }, [
-    preferences.image_provider_id,
-    preferences.image_model_id,
-    preferences.classifier_provider_id,
-    preferences.classifier_model_id,
-    preferences.classifier_base_url,
-    preferences.jev_auto_approve_enabled,
-    preferences.jev_auto_router_enabled,
-  ]);
+  }, [preferences.image_provider_id, preferences.image_model_id]);
 
   const enabledProviders = providers.filter((p) => p.enabled);
 
-  const save = async (overrides?: Partial<UserPreferences>) => {
+  const save = async () => {
     setSaving(true);
     try {
       const next: UserPreferences = {
         ...preferences,
         image_provider_id: imageProviderId.trim(),
         image_model_id: imageModelId.trim(),
-        classifier_provider_id: classifierProviderId.trim(),
-        classifier_model_id: classifierModelId.trim(),
-        classifier_base_url: classifierBaseUrl.trim(),
-        jev_auto_approve_enabled: jevAutoApprove,
-        jev_auto_router_enabled: jevAutoRouter,
-        ...overrides,
       };
       await apiFetch<UserPreferences>('/api/v1/preferences', {
         method: 'PUT',
         body: JSON.stringify(next),
       });
       await refreshInitialData();
-      onFlash(formatMsg(locale, 'settings.multimodalSaved'));
+      onFlash(formatMsg(locale, 'settings.imageSaved'));
     } catch (err) {
       onFlash(formatMsg(locale, 'settings.multimodalSaveFailed', { error: String(err) }));
     } finally {
@@ -76,13 +52,13 @@ export function MultimodalAndClassifierSettingsCard({
   };
 
   return (
-    <div className="mt-6 space-y-3">
+    <div className="mt-5 space-y-3">
       <div>
         <h3 className="text-ui-lg font-semibold text-foreground">
-          {formatMsg(locale, 'settings.multimodalTitle')}
+          {formatMsg(locale, 'settings.imageSectionTitle')}
         </h3>
         <p className="mt-0.5 text-ui-sm text-foreground-subtle">
-          {formatMsg(locale, 'settings.multimodalDesc')}
+          {formatMsg(locale, 'settings.imageSectionDesc')}
         </p>
       </div>
 
@@ -117,6 +93,88 @@ export function MultimodalAndClassifierSettingsCard({
           />
         </SettingsRow>
 
+        <div className="flex items-center justify-end gap-2 px-5 py-4">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void save()}
+            className="h-8 rounded-lg bg-primary px-4 text-ui-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? formatMsg(locale, 'settings.saving') : formatMsg(locale, 'settings.saveChanges')}
+          </button>
+        </div>
+      </SettingsGroupCard>
+    </div>
+  );
+}
+
+export function ClassifierSettingsCard({
+  onFlash,
+}: {
+  onFlash: (msg: string) => void;
+}) {
+  const { locale, providers, preferences, refreshInitialData } = useNexStore();
+
+  const [classifierProviderId, setClassifierProviderId] = useState(preferences.classifier_provider_id ?? '');
+  const [classifierModelId, setClassifierModelId] = useState(preferences.classifier_model_id ?? '');
+  const [classifierBaseUrl, setClassifierBaseUrl] = useState(preferences.classifier_base_url ?? '');
+  const [jevAutoApprove, setJevAutoApprove] = useState(Boolean(preferences.jev_auto_approve_enabled));
+  const [jevAutoRouter, setJevAutoRouter] = useState(Boolean(preferences.jev_auto_router_enabled));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setClassifierProviderId(preferences.classifier_provider_id ?? '');
+    setClassifierModelId(preferences.classifier_model_id ?? '');
+    setClassifierBaseUrl(preferences.classifier_base_url ?? '');
+    setJevAutoApprove(Boolean(preferences.jev_auto_approve_enabled));
+    setJevAutoRouter(Boolean(preferences.jev_auto_router_enabled));
+  }, [
+    preferences.classifier_provider_id,
+    preferences.classifier_model_id,
+    preferences.classifier_base_url,
+    preferences.jev_auto_approve_enabled,
+    preferences.jev_auto_router_enabled,
+  ]);
+
+  const enabledProviders = providers.filter((p) => p.enabled);
+
+  const save = async (overrides?: Partial<UserPreferences>) => {
+    setSaving(true);
+    try {
+      const next: UserPreferences = {
+        ...preferences,
+        classifier_provider_id: classifierProviderId.trim(),
+        classifier_model_id: classifierModelId.trim(),
+        classifier_base_url: classifierBaseUrl.trim(),
+        jev_auto_approve_enabled: jevAutoApprove,
+        jev_auto_router_enabled: jevAutoRouter,
+        ...overrides,
+      };
+      await apiFetch<UserPreferences>('/api/v1/preferences', {
+        method: 'PUT',
+        body: JSON.stringify(next),
+      });
+      await refreshInitialData();
+      onFlash(formatMsg(locale, 'settings.classifierSaved'));
+    } catch (err) {
+      onFlash(formatMsg(locale, 'settings.multimodalSaveFailed', { error: String(err) }));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-5 space-y-3">
+      <div>
+        <h3 className="text-ui-lg font-semibold text-foreground">
+          {formatMsg(locale, 'settings.classifierSectionTitle')}
+        </h3>
+        <p className="mt-0.5 text-ui-sm text-foreground-subtle">
+          {formatMsg(locale, 'settings.classifierSectionDesc')}
+        </p>
+      </div>
+
+      <SettingsGroupCard>
         <SettingsRow
           label={formatMsg(locale, 'settings.classifierProvider')}
           description={formatMsg(locale, 'settings.classifierProviderDesc')}

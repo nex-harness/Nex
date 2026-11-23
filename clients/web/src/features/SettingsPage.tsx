@@ -49,7 +49,7 @@ import {
   SkillsAndPluginsSection,
 } from './SettingsCapabilities';
 import { SettingsBrowserSection } from './SettingsBrowser';
-import { MultimodalAndClassifierSettingsCard } from './SettingsMultimodal';
+import { ClassifierSettingsCard, ImageGenerationSettingsCard } from './SettingsMultimodal';
 import { SettingsRemoteAccessSection } from './SettingsRemoteAccess';
 import { RunnersSettingsSection } from './SettingsRunners';
 
@@ -1211,6 +1211,7 @@ function ProvidersAndModelsSection({
     reorderProviderModels,
   } = useNexStore();
 
+  const [providersTab, setProvidersTab] = useState<'chat' | 'image' | 'classifier'>('chat');
   const [draft, setDraft] = useState<ProviderDraft | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -1612,18 +1613,58 @@ function ProvidersAndModelsSection({
     <>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-4 text-ui-base text-foreground-subtle">
         <p className="min-w-0 flex-1">{description}</p>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={startNewProvider}
-            className="flex h-8 items-center gap-1 rounded-lg bg-primary px-3.5 text-ui-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
-          >
-            <Plus className="size-3.5" />
-            <span>{formatMsg(locale, 'settings.addProvider')}</span>
-          </button>
-        </div>
+        {providersTab === 'chat' ? (
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={startNewProvider}
+              className="flex h-8 items-center gap-1 rounded-lg bg-primary px-3.5 text-ui-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              <Plus className="size-3.5" />
+              <span>{formatMsg(locale, 'settings.addProvider')}</span>
+            </button>
+          </div>
+        ) : null}
       </div>
 
+      {/* Top segmented tabs so Image Generation & Classifier (Jev) are always immediately visible */}
+      <div
+        role="tablist"
+        aria-label={formatMsg(locale, 'settings.providersTabChat')}
+        className="mt-4 inline-flex flex-wrap items-center gap-1 rounded-xl border border-border bg-surface p-1"
+      >
+        {(
+          [
+            { id: 'chat', labelKey: 'settings.providersTabChat' },
+            { id: 'image', labelKey: 'settings.providersTabImage' },
+            { id: 'classifier', labelKey: 'settings.providersTabClassifier' },
+          ] as const
+        ).map((tab) => {
+          const active = providersTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setProvidersTab(tab.id)}
+              className={`h-8 rounded-lg px-3.5 text-ui-sm font-medium transition-colors ${
+                active
+                  ? 'bg-card text-foreground shadow-xs'
+                  : 'text-foreground-subtle hover:text-foreground'
+              }`}
+            >
+              {formatMsg(locale, tab.labelKey)}
+            </button>
+          );
+        })}
+      </div>
+
+      {providersTab === 'image' ? (
+        <ImageGenerationSettingsCard onFlash={onFlash} />
+      ) : providersTab === 'classifier' ? (
+        <ClassifierSettingsCard onFlash={onFlash} />
+      ) : (
       <div className="mt-5 grid grid-cols-1 overflow-hidden rounded-2xl border border-border bg-card md:grid-cols-[220px_minmax(0,1fr)]">
         {/* Left: custom providers */}
         <div className="space-y-1 border-b border-border p-3 md:border-r md:border-b-0">
@@ -2241,7 +2282,7 @@ function ProvidersAndModelsSection({
           )}
         </div>
       </div>
-      <MultimodalAndClassifierSettingsCard onFlash={onFlash} />
+      )}
     </>
   );
 }
