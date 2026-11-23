@@ -3910,4 +3910,141 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(offlineBadge.textContent).toContain('WindowsT2');
     expect(screen.getByTestId('project-runner-offline-run_offline::/tmp/proj-offline')).toBeTruthy();
   });
+
+  it('inserts new sessions optimistically, shows steady unread blue dot on background finish, and omits sidebar delete button', async () => {
+    const origFetch = globalThis.fetch;
+    const origSendEnvelope = wsClient.sendEnvelope;
+    const sendSpy = vi.fn();
+    wsClient.sendEnvelope = sendSpy;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [],
+    }) as unknown as typeof fetch;
+
+    try {
+      const now = Date.now();
+      useNexStore.setState({
+        serverConnectRequired: false,
+        authEnabled: false,
+        authenticated: true,
+        locale: 'en-US',
+        mainView: 'workspace',
+        sidebarVisible: true,
+        activeSessionId: '',
+        unreadSessionIds: {},
+        selectedRunnerId: 'run_opt',
+        selectedWorkspacePath: '/tmp/proj-opt',
+        selectedProviderId: 'p1',
+        selectedModelId: 'm1',
+        runners: [
+          {
+            id: 'run_opt',
+            name: 'macM4',
+            hostname: 'macM4',
+            os: 'darwin',
+            arch: 'arm64',
+            shell: 'zsh',
+            tags: [],
+            synced_config_rev: 1,
+            status: 'online',
+            workspace_default: '/tmp/proj-opt',
+            version: '0.3.0',
+            last_seen_at: now,
+          },
+        ],
+        providers: [
+          {
+            id: 'p1',
+            name: 'P1',
+            driver: 'anthropic',
+            base_url: '',
+            api_key: '',
+            proxy_mode: 'direct',
+            enabled: true,
+          },
+        ],
+        models: [
+          {
+            id: 'm1',
+            provider_id: 'p1',
+            display_name: 'Model 1',
+            source: 'custom',
+            context_window: 128000,
+            max_output_tokens: 4096,
+            supports_vision: false,
+            supports_pdf: false,
+            supports_tools: true,
+            supports_reasoning: false,
+            supports_caching: false,
+            pricing: { input_per_1m: 0, output_per_1m: 0, cache_read_per_1m: 0, cache_write_per_1m: 0 },
+          },
+        ],
+        sessions: [
+          {
+            id: 'sess_bg',
+            runner_id: 'run_opt',
+            depth: 0,
+            title: 'Background Job',
+            workspace_path: '/tmp/proj-opt',
+            agent_profile_slug: 'main',
+            model_id: 'm1',
+            provider_id: 'p1',
+            permission_mode: 'interactive',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: now - 5_000,
+            updated_at: now - 5_000,
+            last_active_at: now - 5_000,
+          },
+        ],
+        streams: {},
+      });
+
+      render(<App />);
+
+      // 1. Sending a prompt from draft inserts the new session immediately into the sidebar BEFORE any reply
+      act(() => {
+        useNexStore.getState().sendPromptOrSteer('Check sidebar immediately');
+      });
+
+      const createdId = useNexStore.getState().activeSessionId;
+      expect(createdId).toBeTruthy();
+      expect(useNexStore.getState().sessions.some((s) => s.id === createdId)).toBe(true);
+
+      const newRow = screen.getByTestId(`session-row-${createdId}`);
+      expect(newRow.textContent).toContain('Check sidebar immediately');
+      const newDot = screen.getByTestId(`session-status-dot-${createdId}`);
+      expect(newDot.getAttribute('data-status')).toBe('running');
+      expect(newDot.className).toContain('animate-pulse');
+
+      // 3. Sidebar row has Pin / Rename / Archive (3 action buttons), and NO Delete button
+      expect(newRow.querySelectorAll('button')).toHaveLength(3);
+      expect(newRow.querySelector('button[title="Delete task"]')).toBeNull();
+      expect(newRow.querySelector('button[title="Archive task"]')).toBeTruthy();
+
+      // 2. Non-active session completed while user is on another session -> steady (non-pulsing) blue unread dot
+      act(() => {
+        useNexStore.setState((prev) => ({
+          unreadSessionIds: { ...prev.unreadSessionIds, sess_bg: true },
+        }));
+      });
+
+      const unreadDot = screen.getByTestId('session-status-dot-sess_bg');
+      expect(unreadDot.getAttribute('data-status')).toBe('unread');
+      expect(unreadDot.className).toContain('bg-brand-blue');
+      expect(unreadDot.className).not.toContain('animate-pulse');
+
+      // Clicking the unread session clears the unread dot immediately
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('session-row-sess_bg'));
+      });
+      expect(useNexStore.getState().unreadSessionIds.sess_bg).toBeUndefined();
+      expect(screen.queryByTestId('session-status-dot-sess_bg')).toBeNull();
+    } finally {
+      wsClient.sendEnvelope = origSendEnvelope;
+      globalThis.fetch = origFetch;
+      useNexStore.setState({ unreadSessionIds: {} });
+    }
+  });
 });

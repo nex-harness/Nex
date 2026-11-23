@@ -15,7 +15,6 @@ import {
   Plus,
   Search,
   Settings,
-  Trash2,
   X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -44,7 +43,7 @@ interface ProjectGroup {
   sessions: SessionRecord[];
 }
 
-type SessionIndicatorState = 'awaiting' | 'running' | 'error' | 'idle';
+type SessionIndicatorState = 'awaiting' | 'running' | 'error' | 'unread' | 'idle';
 
 function useSessionIndicator(sessionId: string, status: string): SessionIndicatorState {
   return useNexStore((s) => {
@@ -52,6 +51,7 @@ function useSessionIndicator(sessionId: string, status: string): SessionIndicato
     if (st?.pendingUIPrompt || st?.pendingApproval) return 'awaiting';
     if (st ? st.running : status === 'running') return 'running';
     if (status === 'error') return 'error';
+    if (s.unreadSessionIds[sessionId]) return 'unread';
     return 'idle';
   });
 }
@@ -73,7 +73,9 @@ function SessionStatusDot({
       ? 'animate-pulse bg-amber-500'
       : indicator === 'running'
         ? 'animate-pulse bg-brand-blue'
-        : 'bg-destructive';
+        : indicator === 'unread'
+          ? 'bg-brand-blue'
+          : 'bg-destructive';
 
   return (
     <span
@@ -109,7 +111,6 @@ export function ProjectSidebar() {
   const selectSession = useNexStore((s) => s.selectSession);
   const renameSession = useNexStore((s) => s.renameSession);
   const archiveSession = useNexStore((s) => s.archiveSession);
-  const deleteSession = useNexStore((s) => s.deleteSession);
   const togglePinSession = useNexStore((s) => s.togglePinSession);
   const toggleSidebar = useNexStore((s) => s.toggleSidebar);
   const openSettings = useNexStore((s) => s.openSettings);
@@ -302,17 +303,6 @@ export function ProjectSidebar() {
             className="flex size-5 items-center justify-center rounded-md text-foreground-subtle transition-colors hover:bg-selected hover:text-foreground"
           >
             <Archive className="size-3" />
-          </button>
-          <button
-            type="button"
-            title={formatMsg(locale, 'taskList.delete')}
-            onClick={(e) => {
-              e.stopPropagation();
-              void deleteSession(sess.id);
-            }}
-            className="flex size-5 items-center justify-center rounded-md text-foreground-subtle transition-colors hover:bg-destructive-surface hover:text-destructive"
-          >
-            <Trash2 className="size-3" />
           </button>
         </div>
       </div>

@@ -54,6 +54,15 @@ const SETTINGS_SECTION_STORAGE_KEY = 'nex.settingsSection';
 const COMPOSER_DRAFTS_STORAGE_KEY = 'nex.composerDrafts';
 const COMPOSER_DRAFT_NEW_KEY = '__draft__';
 const MAX_CACHED_COMPOSER_DRAFTS = 48;
+const UNREAD_SESSIONS_STORAGE_KEY = 'nex.unread.sessions';
+
+function persistUnreadSessions(next: Record<string, boolean>): void {
+  safeStorageSet(UNREAD_SESSIONS_STORAGE_KEY, JSON.stringify(next));
+}
+
+function isViewingSession(state: { mainView: string; activeSessionId: string }, sid: string): boolean {
+  return Boolean(sid) && state.mainView === 'workspace' && state.activeSessionId === sid;
+}
 
 const VALID_SETTINGS_SECTIONS = new Set<SettingsSectionId>([
   'general',
@@ -319,6 +328,7 @@ export interface AppState {
   quickSearchOpen: boolean;
   previewImage: { src: string; alt?: string } | null;
   pinnedSessionIds: Record<string, boolean>;
+  unreadSessionIds: Record<string, boolean>;
 
   runners: RunnerRecord[];
   providers: ProviderRecord[];
@@ -575,6 +585,14 @@ export const useNexStore = create<AppState>((set, get) => ({
       return {};
     }
   })(),
+  unreadSessionIds: (() => {
+    try {
+      const parsed = JSON.parse(safeStorageGet(UNREAD_SESSIONS_STORAGE_KEY) || '{}');
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, boolean>) : {};
+    } catch {
+      return {};
+    }
+  })(),
 
   runners: [],
   providers: [],
@@ -657,7 +675,15 @@ export const useNexStore = create<AppState>((set, get) => ({
   },
   closeSettings: () => {
     persistViewState('workspace', get().settingsSection);
-    set({ mainView: 'workspace' });
+    set((s) => {
+      if (s.activeSessionId && s.unreadSessionIds[s.activeSessionId]) {
+        const nextUnread = { ...s.unreadSessionIds };
+        delete nextUnread[s.activeSessionId];
+        persistUnreadSessions(nextUnread);
+        return { mainView: 'workspace' as const, unreadSessionIds: nextUnread };
+      }
+      return { mainView: 'workspace' as const };
+    });
   },
   setLocale: (loc) => {
     safeStorageSet('nex.locale', loc);
@@ -1267,6 +1293,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         set((state) => {
           const nextStreams = { ...state.streams };
           let nextSessions = state.sessions;
+          let nextUnread = state.unreadSessionIds;
           for (const [sid, group] of batch) {
             let cur = nextStreams[sid] || emptyStreamState();
             for (const raw of group.rows) {
@@ -1289,13 +1316,22 @@ export const useNexStore = create<AppState>((set, get) => ({
                 if (nextSessions.some((s) => s.id === sid && s.status !== 'idle')) {
                   nextSessions = nextSessions.map((s) => (s.id === sid ? { ...s, status: 'idle' } : s));
                 }
+                if (!isViewingSession(state, sid) && !nextUnread[sid]) {
+                  if (nextUnread === state.unreadSessionIds) nextUnread = { ...state.unreadSessionIds };
+                  nextUnread[sid] = true;
+                }
               }
             }
             nextStreams[sid] = cur;
           }
-          return nextSessions !== state.sessions
-            ? { streams: nextStreams, sessions: nextSessions }
-            : { streams: nextStreams };
+          if (nextUnread !== state.unreadSessionIds) {
+            persistUnreadSessions(nextUnread);
+          }
+          return {
+            streams: nextStreams,
+            ...(nextSessions !== state.sessions ? { sessions: nextSessions } : {}),
+            ...(nextUnread !== state.unreadSessionIds ? { unreadSessionIds: nextUnread } : {}),
+          };
         });
 
         // Automatically drain next queued follow-up message once the session run completes
@@ -1365,11 +1401,33 @@ export const useNexStore = create<AppState>((set, get) => ({
         if (env.type === 'client.notify' && env.payload) {
           const payload = env.payload as ClientNotificationPayload;
           if (payload.kind === 'task_completed' && payload.session_id) {
-            set((state) => ({
-              sessions: state.sessions.some((s) => s.id === payload.session_id && s.status === 'running')
-                ? state.sessions.map((s) => (s.id === payload.session_id ? { ...s, status: 'idle' } : s))
-                : state.sessions,
-            }));
+            const sid = payload.session_id;
+            set((state) => {
+              const hasRunningStatus = state.sessions.some((s) => s.id === sid && s.status === 'running');
+              const st = state.streams[sid];
+              const hasRunningStream = Boolean(st?.running);
+              const markUnread = !isViewingSession(state, sid) && !state.unreadSessionIds[sid];
+              if (!hasRunningStatus && !hasRunningStream && !markUnread) return {};
+              let nextUnread = state.unreadSessionIds;
+              if (markUnread) {
+                nextUnread = { ...state.unreadSessionIds, [sid]: true };
+                persistUnreadSessions(nextUnread);
+              }
+              return {
+                ...(hasRunningStatus
+                  ? { sessions: state.sessions.map((s) => (s.id === sid ? { ...s, status: 'idle' } : s)) }
+                  : {}),
+                ...(hasRunningStream && st
+                  ? {
+                      streams: {
+                        ...state.streams,
+                        [sid]: { ...st, running: false, runStartedAt: undefined },
+                      },
+                    }
+                  : {}),
+                ...(markUnread ? { unreadSessionIds: nextUnread } : {}),
+              };
+            });
           }
           void get().dispatchClientNotification(payload);
           return;
@@ -1545,12 +1603,20 @@ export const useNexStore = create<AppState>((set, get) => ({
         nextModelId = resolvedSess.modelId;
       }
 
+      const fetchedSessions = sessions || [];
+      const fetchedIds = new Set(fetchedSessions.map((it) => it.id));
+      const preservedOptimistic = state.sessions.filter(
+        (it) => !fetchedIds.has(it.id) && Boolean(state.streams[it.id]?.running),
+      );
+      const mergedSessions =
+        preservedOptimistic.length > 0 ? [...preservedOptimistic, ...fetchedSessions] : fetchedSessions;
+
       return {
         runners: runners || [],
         providers: providers || [],
         models: loadedModels,
         preferences: prefs || DEFAULT_PREFS,
-        sessions: sessions || [],
+        sessions: mergedSessions,
         archivedSessions: archives || [],
         todaySummary,
         selectedRunnerId: nextRunner,
@@ -1597,13 +1663,22 @@ export const useNexStore = create<AppState>((set, get) => ({
       boundBefore?.providerId ?? metaBefore?.provider_id,
       boundBefore?.modelId ?? metaBefore?.model_id,
     );
-    set((s) => ({
-      mainView: preserveView ? s.mainView : 'workspace',
-      activeSessionId: sessionId,
-      composerText: readPersistedComposerDraft(sessionId),
-      selectedProviderId: resolvedBefore.providerId,
-      selectedModelId: resolvedBefore.modelId,
-    }));
+    set((s) => {
+      let nextUnread = s.unreadSessionIds;
+      if (!preserveView && s.unreadSessionIds[sessionId]) {
+        nextUnread = { ...s.unreadSessionIds };
+        delete nextUnread[sessionId];
+        persistUnreadSessions(nextUnread);
+      }
+      return {
+        mainView: preserveView ? s.mainView : 'workspace',
+        activeSessionId: sessionId,
+        composerText: readPersistedComposerDraft(sessionId),
+        selectedProviderId: resolvedBefore.providerId,
+        selectedModelId: resolvedBefore.modelId,
+        ...(nextUnread !== s.unreadSessionIds ? { unreadSessionIds: nextUnread } : {}),
+      };
+    });
     const [evs, tels] = opts?.preloaded
       ? opts.preloaded
       : await Promise.all([
@@ -1690,10 +1765,21 @@ export const useNexStore = create<AppState>((set, get) => ({
   deleteSession: async (sessionId) => {
     await apiFetch(`/api/v1/sessions/${sessionId}`, { method: 'DELETE' });
     persistComposerDraft(sessionId, '');
-    if (get().activeSessionId === sessionId) {
-      persistActiveSessionId('');
-      set({ activeSessionId: '', composerText: readPersistedComposerDraft('') });
-    }
+    set((s) => {
+      const updates: Partial<AppState> = {};
+      if (s.activeSessionId === sessionId) {
+        persistActiveSessionId('');
+        updates.activeSessionId = '';
+        updates.composerText = readPersistedComposerDraft('');
+      }
+      if (s.unreadSessionIds[sessionId]) {
+        const nextUnread = { ...s.unreadSessionIds };
+        delete nextUnread[sessionId];
+        persistUnreadSessions(nextUnread);
+        updates.unreadSessionIds = nextUnread;
+      }
+      return updates;
+    });
     await get().refreshInitialData();
   },
 
@@ -1756,13 +1842,43 @@ export const useNexStore = create<AppState>((set, get) => ({
       return;
     }
 
+    let effectivePermMode = s.permissionMode;
+    let promptText = text;
+    if (/^\/plan(?:\s+|$)/i.test(text)) {
+      effectivePermMode = 'plan';
+      promptText = text.replace(/^\/plan\s*/i, '').trim() || text;
+    }
+
     if (!sessionId) {
       sessionId = `sess_${crypto.randomUUID()}`;
       persistActiveSessionId(sessionId);
       persistViewState('workspace', s.settingsSection);
+      const nowMs = Date.now();
+      const runnerObj = s.runners.find((r) => r.id === s.selectedRunnerId);
+      const optimisticTitle =
+        (promptText || text || attachments[0]?.name || 'New task').replace(/\s+/g, ' ').trim().slice(0, 60);
+      const optimisticSession: SessionRecord = {
+        id: sessionId,
+        runner_id: s.selectedRunnerId,
+        depth: 0,
+        title: optimisticTitle,
+        workspace_path: s.selectedWorkspacePath || runnerObj?.workspace_default || '',
+        agent_profile_slug: 'main',
+        model_id: activeModel.id,
+        provider_id: activeModel.provider_id,
+        permission_mode: effectivePermMode,
+        status: 'running',
+        latest_context_tokens: 0,
+        context_window_limit: activeModel.context_window || 128000,
+        created_at: nowMs,
+        updated_at: nowMs,
+        last_active_at: nowMs,
+      };
       set((prev) => ({
         mainView: 'workspace',
         activeSessionId: sessionId,
+        permissionMode: effectivePermMode,
+        sessions: [optimisticSession, ...prev.sessions.filter((it) => it.id !== sessionId)],
         sessionModels: {
           ...prev.sessionModels,
           [sessionId]: { providerId: activeModel.provider_id, modelId: activeModel.id },
@@ -1770,12 +1886,26 @@ export const useNexStore = create<AppState>((set, get) => ({
         streams: { ...prev.streams, [sessionId]: emptyStreamState() },
       }));
     } else {
-      set((prev) => ({
-        sessionModels: {
-          ...prev.sessionModels,
-          [sessionId]: { providerId: activeModel.provider_id, modelId: activeModel.id },
-        },
-      }));
+      const nowMs = Date.now();
+      set((prev) => {
+        let nextUnread = prev.unreadSessionIds;
+        if (prev.unreadSessionIds[sessionId]) {
+          nextUnread = { ...prev.unreadSessionIds };
+          delete nextUnread[sessionId];
+          persistUnreadSessions(nextUnread);
+        }
+        return {
+          permissionMode: effectivePermMode,
+          sessions: prev.sessions.map((it) =>
+            it.id === sessionId ? { ...it, status: 'running', updated_at: nowMs, last_active_at: nowMs } : it,
+          ),
+          sessionModels: {
+            ...prev.sessionModels,
+            [sessionId]: { providerId: activeModel.provider_id, modelId: activeModel.id },
+          },
+          ...(nextUnread !== prev.unreadSessionIds ? { unreadSessionIds: nextUnread } : {}),
+        };
+      });
     }
 
     const images =
@@ -1788,14 +1918,6 @@ export const useNexStore = create<AppState>((set, get) => ({
         : undefined;
 
     const effectiveThinkingEffort = resolveEffectiveEffort(activeModel, s.thinkingEffort);
-
-    let effectivePermMode = s.permissionMode;
-    let promptText = text;
-    if (/^\/plan(?:\s+|$)/i.test(text)) {
-      effectivePermMode = 'plan';
-      promptText = text.replace(/^\/plan\s*/i, '').trim() || text;
-      set({ permissionMode: 'plan' });
-    }
 
     set((prev) => ({
       streams: {
@@ -1895,10 +2017,21 @@ export const useNexStore = create<AppState>((set, get) => ({
   archiveSession: async (sessionId) => {
     await apiFetch(`/api/v1/sessions/${sessionId}/archive`, { method: 'POST' });
     persistComposerDraft(sessionId, '');
-    if (get().activeSessionId === sessionId) {
-      persistActiveSessionId('');
-      set({ activeSessionId: '', composerText: readPersistedComposerDraft('') });
-    }
+    set((s) => {
+      const updates: Partial<AppState> = {};
+      if (s.activeSessionId === sessionId) {
+        persistActiveSessionId('');
+        updates.activeSessionId = '';
+        updates.composerText = readPersistedComposerDraft('');
+      }
+      if (s.unreadSessionIds[sessionId]) {
+        const nextUnread = { ...s.unreadSessionIds };
+        delete nextUnread[sessionId];
+        persistUnreadSessions(nextUnread);
+        updates.unreadSessionIds = nextUnread;
+      }
+      return updates;
+    });
     await get().refreshInitialData();
   },
 
