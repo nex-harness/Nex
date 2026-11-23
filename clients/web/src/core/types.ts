@@ -72,6 +72,13 @@ export interface UserPreferences {
   notify_on_complete?: boolean;
   notify_on_input?: boolean;
   notify_only_background?: boolean;
+  image_provider_id?: string;
+  image_model_id?: string;
+  classifier_provider_id?: string;
+  classifier_model_id?: string;
+  classifier_base_url?: string;
+  jev_auto_approve_enabled?: boolean;
+  jev_auto_router_enabled?: boolean;
 }
 
 export type ClientNotificationKind =

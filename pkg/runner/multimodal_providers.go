@@ -17,13 +17,52 @@ import (
 // 4. OPENROUTER_API_KEY / OPENAI_API_KEY environment variables
 func (n *Node) resolveImageProvider(ctx context.Context, requestedModel string) (ai.ImageProvider, string, error) {
 	reqModel := strings.TrimSpace(requestedModel)
+	var prefProviderID string
+	if n != nil && n.store != nil {
+		if prefs, err := n.store.GetUserPreferences(ctx); err == nil {
+			prefProviderID = strings.TrimSpace(prefs.ImageProviderID)
+			if reqModel == "" {
+				reqModel = strings.TrimSpace(prefs.ImageModelID)
+			}
+		}
+	}
 	if reqModel == "" {
 		reqModel = strings.TrimSpace(os.Getenv("NEX_IMAGE_MODEL"))
 	}
 
 	if n != nil && n.store != nil {
 		if providers, err := n.store.ListProviders(ctx); err == nil {
-			// Prefer OpenRouter when configured or when model contains a slash (e.g. google/gemini-2.5-flash-image)
+			// 1. Honor explicit UserPreferences.ImageProviderID first
+			if prefProviderID != "" {
+				for _, p := range providers {
+					if !p.Enabled || p.ID != prefProviderID || strings.TrimSpace(p.APIKey) == "" {
+						continue
+					}
+					idLower := strings.ToLower(p.ID)
+					urlLower := strings.ToLower(p.BaseURL)
+					if strings.Contains(idLower, "openrouter") || strings.Contains(urlLower, "openrouter.ai") {
+						model := reqModel
+						if model == "" {
+							model = "google/gemini-2.5-flash-image"
+						}
+						return ai.NewOpenRouterImagesProvider(ai.ImageProviderConfig{
+							ProviderID: p.ID,
+							BaseURL:    p.BaseURL,
+							APIKey:     p.APIKey,
+						}), model, nil
+					}
+					model := reqModel
+					if model == "" {
+						model = "gpt-image-1"
+					}
+					return ai.NewOpenAIImagesProvider(ai.ImageProviderConfig{
+						ProviderID: p.ID,
+						BaseURL:    p.BaseURL,
+						APIKey:     p.APIKey,
+					}), model, nil
+				}
+			}
+			// 2. Prefer OpenRouter when configured or when model contains a slash (e.g. google/gemini-2.5-flash-image)
 			for _, p := range providers {
 				if !p.Enabled || strings.TrimSpace(p.APIKey) == "" {
 					continue
@@ -93,8 +132,60 @@ func (n *Node) resolveImageProvider(ctx context.Context, requestedModel string) 
 // 3. Stored OpenRouter provider or OPENROUTER_API_KEY -> https://openrouter.ai/api/v1 (typesafe/jev-1.14)
 func (n *Node) resolveClassifierProvider(ctx context.Context, requestedModel string) (ai.ClassifierProvider, string, error) {
 	reqModel := strings.TrimSpace(requestedModel)
+	var prefProviderID, prefBaseURL string
+	if n != nil && n.store != nil {
+		if prefs, err := n.store.GetUserPreferences(ctx); err == nil {
+			prefProviderID = strings.TrimSpace(prefs.ClassifierProviderID)
+			prefBaseURL = strings.TrimSpace(prefs.ClassifierBaseURL)
+			if reqModel == "" {
+				reqModel = strings.TrimSpace(prefs.ClassifierModelID)
+			}
+		}
+	}
 	if reqModel == "" {
 		reqModel = strings.TrimSpace(os.Getenv("NEX_CLASSIFIER_MODEL"))
+	}
+
+	// 1. Honor explicit UserPreferences.ClassifierBaseURL (e.g. local llama.cpp /v1)
+	if prefBaseURL != "" {
+		model := reqModel
+		if model == "" {
+			model = "jev-latest"
+		}
+		return ai.NewSystemOneClassifierProvider(ai.SystemOneConfig{
+			ProviderID: "custom-classifier",
+			BaseURL:    prefBaseURL,
+			APIKey:     strings.TrimSpace(os.Getenv("NEX_CLASSIFIER_API_KEY")),
+		}), model, nil
+	}
+
+	// 2. Honor explicit UserPreferences.ClassifierProviderID
+	if prefProviderID != "" && n != nil && n.store != nil {
+		if providers, err := n.store.ListProviders(ctx); err == nil {
+			for _, p := range providers {
+				if !p.Enabled || p.ID != prefProviderID || strings.TrimSpace(p.APIKey) == "" {
+					continue
+				}
+				idLower := strings.ToLower(p.ID)
+				urlLower := strings.ToLower(p.BaseURL)
+				imgMode := ai.ClassifierImageAssets
+				defaultModel := "jev-latest"
+				if strings.Contains(idLower, "openrouter") || strings.Contains(urlLower, "openrouter.ai") {
+					imgMode = ai.ClassifierImageStateImageURL
+					defaultModel = "typesafe/jev-1.14"
+				}
+				model := reqModel
+				if model == "" {
+					model = defaultModel
+				}
+				return ai.NewSystemOneClassifierProvider(ai.SystemOneConfig{
+					ProviderID: p.ID,
+					BaseURL:    p.BaseURL,
+					APIKey:     p.APIKey,
+					ImageMode:  imgMode,
+				}), model, nil
+			}
+		}
 	}
 
 	if key := strings.TrimSpace(os.Getenv("TYPESAFE_API_KEY")); key != "" {

@@ -49,6 +49,7 @@ import {
   SkillsAndPluginsSection,
 } from './SettingsCapabilities';
 import { SettingsBrowserSection } from './SettingsBrowser';
+import { MultimodalAndClassifierSettingsCard } from './SettingsMultimodal';
 import { SettingsRemoteAccessSection } from './SettingsRemoteAccess';
 import { RunnersSettingsSection } from './SettingsRunners';
 
@@ -2240,6 +2241,7 @@ function ProvidersAndModelsSection({
           )}
         </div>
       </div>
+      <MultimodalAndClassifierSettingsCard onFlash={onFlash} />
     </>
   );
 }
