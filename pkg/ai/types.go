@@ -210,8 +210,9 @@ type Usage struct {
 	InputTokens      int `json:"input_tokens"`       // Non-cached input tokens
 	OutputTokens     int `json:"output_tokens"`      // Output tokens (including reasoning)
 	ReasoningTokens  int `json:"reasoning_tokens"`   // Subset of output tokens spent thinking
-	CacheReadTokens  int `json:"cache_read_tokens"`  // Tokens served from prompt cache
-	CacheWriteTokens int `json:"cache_write_tokens"` // Tokens written into prompt cache
+	CacheReadTokens  int     `json:"cache_read_tokens"`            // Tokens served from prompt cache
+	CacheWriteTokens int     `json:"cache_write_tokens"`           // Tokens written into prompt cache
+	CostUSD          float64 `json:"cost_usd,omitempty"`           // Optional provider-reported cost in USD (e.g. OpenRouter / System One)
 }
 
 // TotalInputTokens returns total prompt context tokens processed (uncached + cache read + cache write).

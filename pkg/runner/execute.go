@@ -370,6 +370,9 @@ func (n *Node) ExecutePrompt(
 		tools.NewMemoryReadTool(memStore, workDir),
 		tools.NewMemoryDeleteTool(memStore),
 	)
+	if _, _, imgErr := n.resolveImageProvider(parentCtx, ""); imgErr == nil {
+		sessionTools = append(sessionTools, tools.NewGenerateImageTool(n.resolveImageProvider))
+	}
 	if n.cfg.Browser != nil && n.cfg.Browser.Enabled() {
 		sessionTools = append(sessionTools, n.cfg.Browser.SessionTool(sessRec.ID, workDir))
 		sections = append(sections, ai.SystemSection{

@@ -18,24 +18,42 @@ var embeddedModelsSeed []byte
 // DefaultModelsDevURL is the public models.dev JSON registry endpoint.
 const DefaultModelsDevURL = "https://models.dev/api.json"
 
+// ModelType distinguishes chat models from non-chat modalities (image generation, classifiers).
+type ModelType string
+
+const (
+	ModelTypeChat       ModelType = "chat"
+	ModelTypeImage      ModelType = "image"
+	ModelTypeClassifier ModelType = "classifier"
+)
+
 // ModelMeta holds capability, context window, and token pricing metadata for an LLM.
 type ModelMeta struct {
-	ID                string       `json:"id"`
-	ProviderID        string       `json:"provider_id"`
-	DisplayName       string       `json:"display_name"`
-	Source            string       `json:"source"` // "models.dev" | "custom"
-	ContextWindow     int          `json:"context_window"`
-	MaxOutputTokens   int          `json:"max_output_tokens"`
-	SupportsVision    bool         `json:"supports_vision"`
-	SupportsPDF       bool         `json:"supports_pdf"`
-	SupportsAudio     bool         `json:"supports_audio"`
-	SupportsVideo     bool         `json:"supports_video"`
-	SupportsTools     bool         `json:"supports_tools"`
+	ID                string            `json:"id"`
+	ProviderID        string            `json:"provider_id"`
+	DisplayName       string            `json:"display_name"`
+	Type              ModelType         `json:"type,omitempty"` // "" or "chat" | "image" | "classifier"
+	Source            string            `json:"source"`         // "models.dev" | "custom"
+	ContextWindow     int               `json:"context_window"`
+	MaxOutputTokens   int               `json:"max_output_tokens"`
+	SupportsVision    bool              `json:"supports_vision"`
+	SupportsPDF       bool              `json:"supports_pdf"`
+	SupportsAudio     bool              `json:"supports_audio"`
+	SupportsVideo     bool              `json:"supports_video"`
+	SupportsTools     bool              `json:"supports_tools"`
 	SupportsReasoning bool              `json:"supports_reasoning"`
 	SupportsCaching   bool              `json:"supports_caching"`
 	ReasoningLevels   []string          `json:"reasoning_levels,omitempty"`
 	ReasoningMap      map[string]string `json:"reasoning_map,omitempty"`
 	Pricing           ModelPricing      `json:"pricing"`
+}
+
+// EffectiveModelType returns m.Type or ModelTypeChat when unset.
+func EffectiveModelType(m ModelMeta) ModelType {
+	if m.Type == "" {
+		return ModelTypeChat
+	}
+	return m.Type
 }
 
 // DefaultReasoningLevels returns the ordered reasoning effort levels supported by a model.

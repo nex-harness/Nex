@@ -404,6 +404,10 @@ func (w *DefaultRuntimeWiring) PrepareSession(
 		}
 		return nil
 	})
+	cmTool.SetModelBridge(&codemode.ModelBridge{
+		ResolveClassifier: node.resolveClassifierProvider,
+		ResolveImage:      node.resolveImageProvider,
+	})
 	extraTools = append(extraTools, cmTool)
 
 	if mcpSummary := w.mcpPool.NamespaceSummaryPromptForWorkspace(sess.WorkspacePath); mcpSummary != "" {

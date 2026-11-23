@@ -64,11 +64,18 @@ func (kv *SessionKV) Load(key string) any {
 	return out
 }
 
+// ModelBridge provides optional access to classifier (e.g. Jev) and image generation models inside codemode scripts.
+type ModelBridge struct {
+	ResolveClassifier func(ctx context.Context, modelID string) (ai.ClassifierProvider, string, error)
+	ResolveImage      func(ctx context.Context, modelID string) (ai.ImageProvider, string, error)
+}
+
 // Tool exposes the single unified `codemode` LLM tool backed by an isolated zero-privilege goja sandbox.
 type Tool struct {
-	pool       *Pool
-	kv         *SessionKV
-	authorizer SubCallAuthorizer
+	pool        *Pool
+	kv          *SessionKV
+	authorizer  SubCallAuthorizer
+	modelBridge *ModelBridge
 }
 
 // NewTool constructs the `codemode` tool for a session.
@@ -81,6 +88,11 @@ func NewTool(pool *Pool, kv *SessionKV, authorizer SubCallAuthorizer) *Tool {
 		kv:         kv,
 		authorizer: authorizer,
 	}
+}
+
+// SetModelBridge attaches classifier and image model resolvers to the codemode sandbox.
+func (t *Tool) SetModelBridge(b *ModelBridge) {
+	t.modelBridge = b
 }
 
 func (t *Tool) Name() string     { return "codemode" }
@@ -180,11 +192,164 @@ func (t *Tool) Execute(ctx context.Context, _ string, rawArgs json.RawMessage, o
 		}
 	})
 
-	_ = vm.Set("image", func(mime, b64 string) {
-		if b64 != "" {
-			extraBlocks = append(extraBlocks, ai.ImageBase64Block(mime, b64))
+	_ = vm.Set("image", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			return goja.Undefined()
 		}
+		if len(call.Arguments) >= 2 && call.Arguments[0].ExportType().Kind().String() == "string" {
+			mime := call.Arguments[0].String()
+			b64 := call.Arguments[1].String()
+			if b64 != "" {
+				extraBlocks = append(extraBlocks, ai.ImageBase64Block(mime, b64))
+			}
+			return goja.Undefined()
+		}
+		exp := call.Arguments[0].Export()
+		switch v := exp.(type) {
+		case string:
+			if strings.HasPrefix(v, "data:") {
+				rest := strings.TrimPrefix(v, "data:")
+				if semi := strings.Index(rest, ";base64,"); semi > 0 {
+					extraBlocks = append(extraBlocks, ai.ImageBase64Block(rest[:semi], rest[semi+len(";base64,"):]))
+				}
+			}
+		case map[string]any:
+			mime, _ := v["mime_type"].(string)
+			if mime == "" {
+				mime, _ = v["mimeType"].(string)
+			}
+			if mime == "" {
+				mime = "image/png"
+			}
+			b64, _ := v["data_b64"].(string)
+			if b64 == "" {
+				b64, _ = v["data"].(string)
+			}
+			if b64 != "" {
+				extraBlocks = append(extraBlocks, ai.ImageBase64Block(mime, b64))
+			}
+		}
+		return goja.Undefined()
 	})
+
+	// Concurrency semaphore: at most 4 concurrent models.* calls per script.
+	modelSem := make(chan struct{}, 4)
+	modelsObj := vm.NewObject()
+	_ = modelsObj.Set("classify", func(modelRef any, reqVal any) *goja.Promise {
+		promise, resolve, reject := vm.NewPromise()
+		if t.modelBridge == nil || t.modelBridge.ResolveClassifier == nil {
+			_ = reject(vm.ToValue("no classifier model provider configured"))
+			return promise
+		}
+		var modelID string
+		switch m := modelRef.(type) {
+		case string:
+			modelID = m
+		case map[string]any:
+			modelID, _ = m["id"].(string)
+		}
+		rawReq, err := json.Marshal(reqVal)
+		if err != nil {
+			_ = reject(vm.ToValue("invalid classify request: " + err.Error()))
+			return promise
+		}
+		var cReq ai.ClassifyRequest
+		if err := json.Unmarshal(rawReq, &cReq); err != nil {
+			_ = reject(vm.ToValue("invalid classify request: " + err.Error()))
+			return promise
+		}
+		pendingAsync++
+		go func() {
+			var resObj any
+			var resErr error
+			select {
+			case modelSem <- struct{}{}:
+				defer func() { <-modelSem }()
+				prov, resolvedModel, rErr := t.modelBridge.ResolveClassifier(execCtx, modelID)
+				if rErr != nil {
+					resErr = rErr
+				} else {
+					cReq.Model = resolvedModel
+					resp, cErr := prov.Classify(execCtx, &cReq)
+					if cErr != nil {
+						resErr = cErr
+					} else {
+						b, _ := json.Marshal(resp)
+						_ = json.Unmarshal(b, &resObj)
+					}
+				}
+			case <-execCtx.Done():
+				resErr = execCtx.Err()
+			}
+			vmTasks <- func() {
+				pendingAsync--
+				if resErr != nil {
+					_ = reject(vm.ToValue(resErr.Error()))
+				} else {
+					_ = resolve(resObj)
+				}
+			}
+		}()
+		return promise
+	})
+	_ = modelsObj.Set("generateImages", func(modelRef any, reqVal any) *goja.Promise {
+		promise, resolve, reject := vm.NewPromise()
+		if t.modelBridge == nil || t.modelBridge.ResolveImage == nil {
+			_ = reject(vm.ToValue("no image generation provider configured"))
+			return promise
+		}
+		var modelID string
+		switch m := modelRef.(type) {
+		case string:
+			modelID = m
+		case map[string]any:
+			modelID, _ = m["id"].(string)
+		}
+		rawReq, err := json.Marshal(reqVal)
+		if err != nil {
+			_ = reject(vm.ToValue("invalid generateImages request: " + err.Error()))
+			return promise
+		}
+		var iReq ai.ImageRequest
+		if err := json.Unmarshal(rawReq, &iReq); err != nil {
+			_ = reject(vm.ToValue("invalid generateImages request: " + err.Error()))
+			return promise
+		}
+		pendingAsync++
+		go func() {
+			var resObj any
+			var resErr error
+			select {
+			case modelSem <- struct{}{}:
+				defer func() { <-modelSem }()
+				prov, resolvedModel, rErr := t.modelBridge.ResolveImage(execCtx, modelID)
+				if rErr != nil {
+					resErr = rErr
+				} else {
+					iReq.Model = resolvedModel
+					resp, gErr := prov.GenerateImages(execCtx, &iReq)
+					if gErr != nil {
+						resErr = gErr
+					} else {
+						b, _ := json.Marshal(resp)
+						_ = json.Unmarshal(b, &resObj)
+					}
+				}
+			case <-execCtx.Done():
+				resErr = execCtx.Err()
+			}
+			vmTasks <- func() {
+				pendingAsync--
+				if resErr != nil {
+					_ = reject(vm.ToValue(resErr.Error()))
+				} else {
+					_ = resolve(resObj)
+				}
+			}
+		}()
+		return promise
+	})
+	_ = vm.Set("models", modelsObj)
 
 	_ = vm.Set("store", func(key string, val any) {
 		if err := t.kv.Store(key, val); err != nil {
