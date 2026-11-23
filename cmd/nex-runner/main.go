@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 
 	"github.com/kardianos/service"
@@ -42,13 +43,24 @@ func main() {
 		fmt.Printf("nex-runner service %s succeeded\n", action)
 		return
 	}
+	// Support `nex-runner autostart install|uninstall|status` (Windows elevated Task Scheduler logon task)
+	if len(os.Args) >= 3 && os.Args[1] == "autostart" {
+		if err := handleAutostartSubcommand(os.Args[2], os.Args[3:]); err != nil {
+			log.Fatalf("autostart %s failed: %v", os.Args[2], err)
+		}
+		return
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	runDaemon(ctx, os.Args[1:])
+	runDaemonWithCancel(ctx, stop, os.Args[1:])
 }
 
 func runDaemon(ctx context.Context, rawArgs []string) {
+	runDaemonWithCancel(ctx, nil, rawArgs)
+}
+
+func runDaemonWithCancel(ctx context.Context, cancel context.CancelFunc, rawArgs []string) {
 	fs := flag.NewFlagSet("nex-runner", flag.ExitOnError)
 	defaultDir := filepath.Join(userHomeOrDot(), ".nex-runner")
 	cwd, _ := os.Getwd()
@@ -62,8 +74,21 @@ func runDaemon(ctx context.Context, rawArgs []string) {
 	oncePrompt := fs.String("prompt", "", "Optional standalone headless one-shot prompt (offline autonomous execution)")
 	autoUpdateDefault := os.Getenv("NEX_AUTO_UPDATE") != "false" && os.Getenv("NEX_AUTO_UPDATE") != "0"
 	autoUpdate := fs.Bool("auto-update", autoUpdateDefault, "Allow automatic self-updates for non-dev builds")
+	noUACDefault := os.Getenv("NEX_NO_UAC") == "1" || os.Getenv("NEX_NO_UAC") == "true"
+	noUAC := fs.Bool("no-uac", noUACDefault, "Skip automatic Windows UAC elevation prompt on startup")
+	uacAttempted := fs.Bool("uac-attempted", false, "Internal flag preventing infinite UAC elevation loops")
+	trayDefault := runtime.GOOS == "windows" && service.Interactive()
+	trayEnabled := fs.Bool("tray", trayDefault, "Show Windows system tray icon and control menu")
 	_ = fs.Parse(rawArgs)
 
+	interactive := service.Interactive() && *oncePrompt == ""
+	if relaunched, err := maybeElevateWindows(rawArgs, *noUAC, *uacAttempted, interactive); relaunched {
+		return
+	} else if err != nil {
+		log.Printf("nex-runner: Windows UAC elevation skipped/cancelled (%v); continuing with standard privileges", err)
+	}
+
+	var trayCleanup func()
 	node, err := runner.NewNode(runner.Config{
 		RunnerID:         *runnerID,
 		Name:             *name,
@@ -73,12 +98,23 @@ func runDaemon(ctx context.Context, rawArgs []string) {
 		WorkspaceDefault: *workspace,
 		Version:          version,
 		BuildSHA:         buildSHA,
+		Elevated:         isProcessElevated(),
 		AutoUpdate:       autoUpdate,
+		OnBeforeRestart: func() {
+			if trayCleanup != nil {
+				trayCleanup()
+			}
+		},
 	})
 	if err != nil {
 		log.Fatalf("failed to initialize nex-runner: %v", err)
 	}
 	defer node.Close()
+
+	if *oncePrompt == "" {
+		trayCleanup = startWindowsTray(ctx, cancel, node, rawArgs, *trayEnabled)
+		defer trayCleanup()
+	}
 
 	wiring := runner.AttachDefaultSubsystems(node)
 	defer wiring.Close()

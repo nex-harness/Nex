@@ -60,6 +60,7 @@ type Updater struct {
 	updating       bool
 	watchdogCancel context.CancelFunc
 	watchdogDone   bool
+	lastWelcome    *protocol.RunnerWelcomePayload
 }
 
 func newUpdater(n *Node) *Updater {
@@ -128,6 +129,11 @@ func defaultSmokeCheckBinary(ctx context.Context, binPath string) error {
 // HandleWelcome evaluates whether a runner.welcome response should schedule an automatic self-update.
 func (u *Updater) HandleWelcome(ctx context.Context, welcome protocol.RunnerWelcomePayload) {
 	u.ConfirmHealthy(ctx)
+	u.mu.Lock()
+	cp := welcome
+	cp.DownloadURLs = append([]string(nil), welcome.DownloadURLs...)
+	u.lastWelcome = &cp
+	u.mu.Unlock()
 
 	if u.node.isDev {
 		if welcome.UpdateStatus == "update_required" || welcome.UpdateStatus == "update_available" {
@@ -190,6 +196,25 @@ func (u *Updater) HandleUpdateCommand(ctx context.Context, payload protocol.Runn
 		return
 	}
 	u.TriggerAsync(ctx, payload)
+}
+
+// TriggerManualFromLastWelcome starts a forced manual update if the server advertised update URLs on last welcome.
+func (u *Updater) TriggerManualFromLastWelcome(ctx context.Context) bool {
+	u.mu.Lock()
+	w := u.lastWelcome
+	u.mu.Unlock()
+	if w == nil || len(w.DownloadURLs) == 0 || (w.UpdateStatus != "update_available" && w.UpdateStatus != "update_required") {
+		return false
+	}
+	u.TriggerAsync(ctx, protocol.RunnerUpdatePayload{
+		RequestID:      fmt.Sprintf("manual_%d", time.Now().UnixMilli()),
+		TargetVersion:  w.TargetVersion,
+		ExpectedSHA256: w.TargetSHA256,
+		DownloadURLs:   append([]string(nil), w.DownloadURLs...),
+		Mode:           "when_idle",
+		Force:          true,
+	})
+	return true
 }
 
 // TriggerAsync schedules an update attempt if not already updating and not in rollback cooldown (unless forced).
