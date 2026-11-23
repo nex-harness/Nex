@@ -1,9 +1,9 @@
-import { Eye, EyeOff } from 'lucide-react';
+import { Cable, Check, Eye, EyeOff, Package, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../core/protocol';
 import { useNexStore } from '../core/store';
-import { UserPreferences } from '../core/types';
-import { formatMsg } from '../i18n/messages';
+import { MultimodalProviderProfile, ProviderRecord, UserPreferences } from '../core/types';
+import { formatMsg, type MessageKey } from '../i18n/messages';
 import {
   SettingsGroupCard,
   SettingsRow,
@@ -13,74 +13,141 @@ import {
   settingsSelectClass,
 } from './SettingsPage';
 
-const IMAGE_DRIVER_PLACEHOLDERS: Record<string, { url: string; model: string }> = {
-  openai_images: { url: 'https://api.openai.com/v1', model: 'gpt-image-1' },
-  openrouter_images: { url: 'https://openrouter.ai/api/v1', model: 'google/gemini-2.5-flash-image' },
-  xai_images: { url: 'https://api.x.ai/v1', model: 'grok-2-image' },
-  minimax_images: { url: 'https://api.minimax.io/v1', model: 'image-01' },
-};
+type ModalityKind = 'image' | 'classifier';
 
-export function ImageGenerationSettingsCard({
+interface DriverOption {
+  id: string;
+  labelKey: MessageKey;
+  defaultUrl: string;
+  defaultModel: string;
+}
+
+const IMAGE_DRIVERS: DriverOption[] = [
+  {
+    id: 'openrouter_images',
+    labelKey: 'settings.imageDriverOpenRouter',
+    defaultUrl: 'https://openrouter.ai/api/v1',
+    defaultModel: 'google/gemini-2.5-flash-image',
+  },
+  {
+    id: 'openai_images',
+    labelKey: 'settings.imageDriverOpenAI',
+    defaultUrl: 'https://api.openai.com/v1',
+    defaultModel: 'gpt-image-1',
+  },
+  {
+    id: 'xai_images',
+    labelKey: 'settings.imageDriverXAI',
+    defaultUrl: 'https://api.x.ai/v1',
+    defaultModel: 'grok-2-image',
+  },
+  {
+    id: 'minimax_images',
+    labelKey: 'settings.imageDriverMiniMax',
+    defaultUrl: 'https://api.minimax.io/v1',
+    defaultModel: 'image-01',
+  },
+];
+
+const CLASSIFIER_DRIVERS: DriverOption[] = [
+  {
+    id: 'typesafe_system_one',
+    labelKey: 'settings.classifierDriverTypeSafe',
+    defaultUrl: 'https://api.typesafe.ai/v1',
+    defaultModel: 'jev-latest',
+  },
+  {
+    id: 'openrouter_system_one',
+    labelKey: 'settings.classifierDriverOpenRouter',
+    defaultUrl: 'https://openrouter.ai/api/v1',
+    defaultModel: 'typesafe/jev-1.14',
+  },
+];
+
+function inferDriverFromChatProvider(kind: ModalityKind, p: ProviderRecord): DriverOption {
+  const id = (p.id || '').toLowerCase();
+  const url = (p.base_url || '').toLowerCase();
+  if (kind === 'classifier') {
+    if (id.includes('openrouter') || url.includes('openrouter.ai')) {
+      return CLASSIFIER_DRIVERS[1];
+    }
+    return CLASSIFIER_DRIVERS[0];
+  }
+  if (id.includes('openrouter') || url.includes('openrouter.ai')) return IMAGE_DRIVERS[0];
+  if (id.includes('xai') || id.includes('grok') || url.includes('api.x.ai')) return IMAGE_DRIVERS[2];
+  if (id.includes('minimax') || url.includes('minimax')) return IMAGE_DRIVERS[3];
+  return IMAGE_DRIVERS[1];
+}
+
+function MultimodalProviderManager({
+  kind,
   onFlash,
 }: {
+  kind: ModalityKind;
   onFlash: (msg: string) => void;
 }) {
-  const { locale, providers, preferences, refreshInitialData } = useNexStore();
+  const { locale, providers: chatProviders, preferences, refreshInitialData } = useNexStore();
+  const drivers = kind === 'image' ? IMAGE_DRIVERS : CLASSIFIER_DRIVERS;
 
-  const initialMode =
-    preferences.image_mode === 'standalone' || (!preferences.image_mode && Boolean(preferences.image_base_url))
-      ? 'standalone'
-      : 'provider';
-  const [mode, setMode] = useState<'provider' | 'standalone'>(initialMode);
-  const [driver, setDriver] = useState(preferences.image_driver || 'openrouter_images');
-  const [baseUrl, setBaseUrl] = useState(preferences.image_base_url ?? '');
-  const [apiKey, setApiKey] = useState(preferences.image_api_key ?? '');
+  const storedProfiles: MultimodalProviderProfile[] =
+    kind === 'image' ? preferences.image_providers ?? [] : preferences.classifier_providers ?? [];
+  const storedActiveProviderId =
+    kind === 'image'
+      ? preferences.active_image_provider_id ?? ''
+      : preferences.active_classifier_provider_id ?? '';
+  const storedActiveModelId =
+    kind === 'image'
+      ? preferences.active_image_model_id ?? ''
+      : preferences.active_classifier_model_id ?? '';
+
+  const [profiles, setProfiles] = useState<MultimodalProviderProfile[]>(storedProfiles);
+  const [selectedId, setSelectedId] = useState<string>(storedActiveProviderId || storedProfiles[0]?.id || '');
+  const [activeProviderId, setActiveProviderId] = useState<string>(storedActiveProviderId);
+  const [activeModelId, setActiveModelId] = useState<string>(storedActiveModelId);
   const [showKey, setShowKey] = useState(false);
-  const [imageProviderId, setImageProviderId] = useState(preferences.image_provider_id ?? '');
-  const [imageModelId, setImageModelId] = useState(preferences.image_model_id ?? '');
+  const [newModelInput, setNewModelInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const [testingModel, setTestingModel] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; msg: string }>>({});
 
   useEffect(() => {
-    setMode(
-      preferences.image_mode === 'standalone' || (!preferences.image_mode && Boolean(preferences.image_base_url))
-        ? 'standalone'
-        : 'provider',
-    );
-    setDriver(preferences.image_driver || 'openrouter_images');
-    setBaseUrl(preferences.image_base_url ?? '');
-    setApiKey(preferences.image_api_key ?? '');
-    setImageProviderId(preferences.image_provider_id ?? '');
-    setImageModelId(preferences.image_model_id ?? '');
-  }, [
-    preferences.image_mode,
-    preferences.image_driver,
-    preferences.image_base_url,
-    preferences.image_api_key,
-    preferences.image_provider_id,
-    preferences.image_model_id,
-  ]);
+    setProfiles(storedProfiles);
+    setActiveProviderId(storedActiveProviderId);
+    setActiveModelId(storedActiveModelId);
+    if (!selectedId && storedProfiles.length > 0) {
+      setSelectedId(storedActiveProviderId || storedProfiles[0].id);
+    }
+  }, [storedProfiles, storedActiveProviderId, storedActiveModelId]);
 
-  const enabledProviders = providers.filter((p) => p.enabled);
-  const ph = IMAGE_DRIVER_PLACEHOLDERS[driver] || IMAGE_DRIVER_PLACEHOLDERS.openai_images;
+  const selected = profiles.find((p) => p.id === selectedId) || null;
+  const selectedDriver = drivers.find((d) => d.id === selected?.driver) || drivers[0];
 
-  const save = async () => {
+  const persist = async (
+    nextProfiles: MultimodalProviderProfile[],
+    nextActivePid: string,
+    nextActiveMid: string,
+    flashKey?: MessageKey,
+  ) => {
     setSaving(true);
     try {
-      const next: UserPreferences = {
-        ...preferences,
-        image_mode: mode,
-        image_driver: driver,
-        image_base_url: baseUrl.trim(),
-        image_api_key: apiKey.trim(),
-        image_provider_id: imageProviderId.trim(),
-        image_model_id: imageModelId.trim(),
-      };
+      const patch: Partial<UserPreferences> =
+        kind === 'image'
+          ? {
+              image_providers: nextProfiles,
+              active_image_provider_id: nextActivePid,
+              active_image_model_id: nextActiveMid,
+            }
+          : {
+              classifier_providers: nextProfiles,
+              active_classifier_provider_id: nextActivePid,
+              active_classifier_model_id: nextActiveMid,
+            };
       await apiFetch<UserPreferences>('/api/v1/preferences', {
         method: 'PUT',
-        body: JSON.stringify(next),
+        body: JSON.stringify({ ...preferences, ...patch }),
       });
       await refreshInitialData();
-      onFlash(formatMsg(locale, 'settings.imageSaved'));
+      if (flashKey) onFlash(formatMsg(locale, flashKey));
     } catch (err) {
       onFlash(formatMsg(locale, 'settings.multimodalSaveFailed', { error: String(err) }));
     } finally {
@@ -88,390 +155,503 @@ export function ImageGenerationSettingsCard({
     }
   };
 
+  const addNewProvider = () => {
+    const def = drivers[0];
+    const id = `${kind}-${Date.now().toString(36)}`;
+    const prof: MultimodalProviderProfile = {
+      id,
+      name: kind === 'image' ? 'New Image Provider' : 'New Classifier Provider',
+      driver: def.id,
+      base_url: def.defaultUrl,
+      api_key: '',
+      models: [def.defaultModel],
+    };
+    const next = [...profiles, prof];
+    setProfiles(next);
+    setSelectedId(id);
+    const nextActivePid = activeProviderId || id;
+    const nextActiveMid = activeModelId || def.defaultModel;
+    setActiveProviderId(nextActivePid);
+    setActiveModelId(nextActiveMid);
+    void persist(next, nextActivePid, nextActiveMid);
+  };
+
+  const importFromChatProvider = (chatId: string) => {
+    if (!chatId) return;
+    const cp = chatProviders.find((p) => p.id === chatId);
+    if (!cp) return;
+    const drv = inferDriverFromChatProvider(kind, cp);
+    const id = `${kind}-${cp.id}-${Date.now().toString(36).slice(-4)}`;
+    const prof: MultimodalProviderProfile = {
+      id,
+      name: cp.name || cp.id,
+      driver: drv.id,
+      base_url: cp.base_url || drv.defaultUrl,
+      api_key: cp.api_key || '',
+      models: [drv.defaultModel],
+    };
+    const next = [...profiles, prof];
+    setProfiles(next);
+    setSelectedId(id);
+    const nextActivePid = activeProviderId || id;
+    const nextActiveMid = activeModelId || drv.defaultModel;
+    setActiveProviderId(nextActivePid);
+    setActiveModelId(nextActiveMid);
+    void persist(
+      next,
+      nextActivePid,
+      nextActiveMid,
+      kind === 'image' ? 'settings.imageSaved' : 'settings.classifierSaved',
+    );
+  };
+
+  const updateSelected = (patch: Partial<MultimodalProviderProfile>) => {
+    if (!selected) return;
+    setProfiles((prev) => prev.map((p) => (p.id === selected.id ? { ...p, ...patch } : p)));
+  };
+
+  const deleteSelected = () => {
+    if (!selected) return;
+    const next = profiles.filter((p) => p.id !== selected.id);
+    let nextActivePid = activeProviderId;
+    let nextActiveMid = activeModelId;
+    if (activeProviderId === selected.id) {
+      nextActivePid = next[0]?.id || '';
+      nextActiveMid = next[0]?.models?.[0] || '';
+    }
+    setProfiles(next);
+    setSelectedId(next[0]?.id || '');
+    setActiveProviderId(nextActivePid);
+    setActiveModelId(nextActiveMid);
+    void persist(next, nextActivePid, nextActiveMid);
+  };
+
+  const addModelToSelected = () => {
+    if (!selected) return;
+    const m = newModelInput.trim();
+    if (!m) return;
+    const cur = selected.models ?? [];
+    if (cur.includes(m)) {
+      setNewModelInput('');
+      return;
+    }
+    const nextProfiles = profiles.map((p) => (p.id === selected.id ? { ...p, models: [...cur, m] } : p));
+    setProfiles(nextProfiles);
+    setNewModelInput('');
+    const nextActivePid = activeProviderId || selected.id;
+    const nextActiveMid = activeModelId || m;
+    setActiveProviderId(nextActivePid);
+    setActiveModelId(nextActiveMid);
+    void persist(nextProfiles, nextActivePid, nextActiveMid);
+  };
+
+  const removeModelFromSelected = (modelId: string) => {
+    if (!selected) return;
+    const nextModels = (selected.models ?? []).filter((m) => m !== modelId);
+    const nextProfiles = profiles.map((p) => (p.id === selected.id ? { ...p, models: nextModels } : p));
+    let nextActivePid = activeProviderId;
+    let nextActiveMid = activeModelId;
+    if (activeProviderId === selected.id && activeModelId === modelId) {
+      nextActiveMid = nextModels[0] || '';
+      if (!nextActiveMid) nextActivePid = '';
+    }
+    setProfiles(nextProfiles);
+    setActiveProviderId(nextActivePid);
+    setActiveModelId(nextActiveMid);
+    void persist(nextProfiles, nextActivePid, nextActiveMid);
+  };
+
+  const activateModel = (providerId: string, modelId: string) => {
+    setActiveProviderId(providerId);
+    setActiveModelId(modelId);
+    void persist(
+      profiles,
+      providerId,
+      modelId,
+      kind === 'image' ? 'settings.imageSaved' : 'settings.classifierSaved',
+    );
+  };
+
+  const testModel = async (modelId: string) => {
+    if (!selected) return;
+    const key = `${selected.id}:${modelId}`;
+    setTestingModel(key);
+    try {
+      const endpoint = kind === 'image' ? '/api/v1/image/test' : '/api/v1/classifier/test';
+      const res = await apiFetch<{ ok: boolean; latency_ms?: number; error?: string; summary?: string }>(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({
+          driver: selected.driver,
+          base_url: selected.base_url,
+          api_key: selected.api_key || '',
+          model_id: modelId,
+        }),
+      });
+      if (res.ok) {
+        const msg = formatMsg(locale, 'settings.multimodalTestPassed', { ms: String(res.latency_ms ?? 0) });
+        setTestResults((prev) => ({
+          ...prev,
+          [key]: { ok: true, msg: res.summary ? `${msg} · ${res.summary}` : msg },
+        }));
+      } else {
+        setTestResults((prev) => ({
+          ...prev,
+          [key]: {
+            ok: false,
+            msg: formatMsg(locale, 'settings.multimodalTestFailed', { error: res.error || 'unknown' }),
+          },
+        }));
+      }
+    } catch (err) {
+      setTestResults((prev) => ({
+        ...prev,
+        [key]: { ok: false, msg: formatMsg(locale, 'settings.multimodalTestFailed', { error: String(err) }) },
+      }));
+    } finally {
+      setTestingModel(null);
+    }
+  };
+
+  const enabledChatProviders = chatProviders.filter((p) => p.enabled);
+
   return (
     <div className="mt-5 space-y-3">
-      <div>
-        <h3 className="text-ui-lg font-semibold text-foreground">
-          {formatMsg(locale, 'settings.imageSectionTitle')}
-        </h3>
-        <p className="mt-0.5 text-ui-sm text-foreground-subtle">
-          {formatMsg(locale, 'settings.imageSectionDesc')}
-        </p>
-      </div>
-
-      <SettingsGroupCard>
-        <SettingsRow
-          label={formatMsg(locale, 'settings.configMode')}
-          description={formatMsg(locale, 'settings.configModeDesc')}
-        >
-          <div className="inline-flex rounded-lg border border-border bg-surface p-0.5">
-            {(
-              [
-                { id: 'provider', labelKey: 'settings.configModeProvider' },
-                { id: 'standalone', labelKey: 'settings.configModeStandalone' },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setMode(opt.id)}
-                className={`h-7 rounded-md px-3 text-ui-xs font-medium transition-colors ${
-                  mode === opt.id
-                    ? 'bg-card text-foreground shadow-xs'
-                    : 'text-foreground-subtle hover:text-foreground'
-                }`}
-              >
-                {formatMsg(locale, opt.labelKey)}
-              </button>
-            ))}
-          </div>
-        </SettingsRow>
-
-        {mode === 'provider' ? (
-          <SettingsRow
-            label={formatMsg(locale, 'settings.imageProvider')}
-            description={formatMsg(locale, 'settings.imageProviderDesc')}
-          >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-ui-lg font-semibold text-foreground">
+            {formatMsg(locale, kind === 'image' ? 'settings.imageSectionTitle' : 'settings.classifierSectionTitle')}
+          </h3>
+          <p className="mt-0.5 text-ui-sm text-foreground-subtle">
+            {formatMsg(locale, kind === 'image' ? 'settings.imageSectionDesc' : 'settings.classifierSectionDesc')}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {enabledChatProviders.length > 0 ? (
             <select
-              value={imageProviderId}
-              onChange={(e) => setImageProviderId(e.target.value)}
-              className={settingsSelectClass}
+              value=""
+              onChange={(e) => importFromChatProvider(e.target.value)}
+              className="h-8 rounded-lg border border-border bg-input px-2.5 text-ui-xs text-foreground"
             >
-              <option value="">{formatMsg(locale, 'settings.imageProviderAuto')}</option>
-              {enabledProviders.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name || p.id}
+              <option value="">{formatMsg(locale, 'settings.multimodalImportFromChat')}</option>
+              {enabledChatProviders.map((cp) => (
+                <option key={cp.id} value={cp.id}>
+                  {cp.name || cp.id}
                 </option>
               ))}
             </select>
-          </SettingsRow>
-        ) : (
-          <>
-            <SettingsRow
-              label={formatMsg(locale, 'settings.imageDriver')}
-              description={formatMsg(locale, 'settings.imageDriverDesc')}
-            >
-              <select
-                value={driver}
-                onChange={(e) => setDriver(e.target.value)}
-                className={settingsSelectClass}
-              >
-                <option value="openrouter_images">{formatMsg(locale, 'settings.imageDriverOpenRouter')}</option>
-                <option value="openai_images">{formatMsg(locale, 'settings.imageDriverOpenAI')}</option>
-                <option value="xai_images">{formatMsg(locale, 'settings.imageDriverXAI')}</option>
-                <option value="minimax_images">{formatMsg(locale, 'settings.imageDriverMiniMax')}</option>
-              </select>
-            </SettingsRow>
+          ) : null}
+          <button
+            type="button"
+            onClick={addNewProvider}
+            className="flex h-8 items-center gap-1 rounded-lg bg-primary px-3 text-ui-sm font-medium text-primary-foreground hover:opacity-90"
+          >
+            <Plus className="size-3.5" />
+            <span>{formatMsg(locale, 'settings.multimodalAddProvider')}</span>
+          </button>
+        </div>
+      </div>
 
-            <SettingsRow
-              label={formatMsg(locale, 'settings.apiEndpoint')}
-              description={formatMsg(locale, 'settings.apiEndpointImageDesc')}
-            >
-              <input
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                placeholder={ph.url}
-                className={settingsInputClass}
-              />
-            </SettingsRow>
+      <div className="grid grid-cols-1 overflow-hidden rounded-2xl border border-border bg-card md:grid-cols-[220px_minmax(0,1fr)]">
+        {/* Left: provider list */}
+        <div className="space-y-1 border-b border-border p-3 md:border-r md:border-b-0">
+          {profiles.length === 0 ? (
+            <p className="px-2.5 py-3 text-ui-xs text-foreground-subtlest">
+              {formatMsg(locale, 'settings.multimodalNoProviders')}
+            </p>
+          ) : (
+            profiles.map((p) => {
+              const isSelected = p.id === selected?.id;
+              const isActive = p.id === activeProviderId;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setSelectedId(p.id)}
+                  className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-ui-sm transition-colors ${
+                    isSelected
+                      ? 'bg-hover font-medium text-foreground'
+                      : 'text-foreground-subtle hover:bg-hover/60 hover:text-foreground'
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={`size-2 shrink-0 rounded-full ${isActive ? 'bg-primary' : 'bg-border'}`}
+                    />
+                    <span className="truncate">{p.name || p.id}</span>
+                  </span>
+                  <span className="shrink-0 font-mono text-ui-xs text-foreground-subtlest">
+                    {(p.models ?? []).length}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
 
-            <SettingsRow
-              label={formatMsg(locale, 'settings.apiKey')}
-              description={formatMsg(locale, 'settings.apiKeyImageDesc')}
-            >
-              <div className="relative flex items-center">
+        {/* Right: provider details + models + test */}
+        <div className="min-w-0 p-5">
+          {!selected ? (
+            <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 text-center">
+              <Package className="size-6 text-foreground-subtlest" />
+              <p className="text-ui-sm text-foreground-subtle">
+                {formatMsg(locale, 'settings.multimodalSelectProvider')}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-2">
                 <input
-                  type={showKey ? 'text' : 'password'}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="sk-..."
-                  className={`${settingsMonoInputClass} pr-9`}
+                  value={selected.name}
+                  onChange={(e) => updateSelected({ name: e.target.value })}
+                  onBlur={() => void persist(profiles, activeProviderId, activeModelId)}
+                  className="h-8 min-w-0 flex-1 rounded-lg border border-border/70 bg-input/60 px-2.5 text-ui-base font-semibold text-foreground"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowKey((v) => !v)}
-                  className="absolute right-2 flex size-6 items-center justify-center rounded text-foreground-subtlest hover:text-foreground"
+                  onClick={deleteSelected}
+                  title={formatMsg(locale, 'settings.multimodalDeleteProvider')}
+                  className="flex size-8 items-center justify-center rounded-lg text-foreground-subtlest hover:bg-destructive-surface hover:text-destructive-surface-fg"
                 >
-                  {showKey ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                  <Trash2 className="size-4" />
                 </button>
               </div>
-            </SettingsRow>
-          </>
-        )}
 
-        <SettingsRow
-          label={formatMsg(locale, 'settings.imageModelId')}
-          description={formatMsg(locale, 'settings.imageModelIdDesc')}
-        >
-          <input
-            value={imageModelId}
-            onChange={(e) => setImageModelId(e.target.value)}
-            placeholder={ph.model}
-            className={settingsMonoInputClass}
-          />
-        </SettingsRow>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-ui-xs font-medium text-foreground-subtle">
+                    {formatMsg(locale, kind === 'image' ? 'settings.imageDriver' : 'settings.classifierDriver')}
+                  </span>
+                  <select
+                    value={selected.driver}
+                    onChange={(e) => {
+                      const nextDrv = drivers.find((d) => d.id === e.target.value) || drivers[0];
+                      updateSelected({
+                        driver: nextDrv.id,
+                        base_url: selected.base_url || nextDrv.defaultUrl,
+                      });
+                    }}
+                    className={settingsSelectClass}
+                  >
+                    {drivers.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {formatMsg(locale, d.labelKey)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-4">
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void save()}
-            className="h-8 rounded-lg bg-primary px-4 text-ui-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          >
-            {saving ? formatMsg(locale, 'settings.saving') : formatMsg(locale, 'settings.saveChanges')}
-          </button>
+                <label className="space-y-1">
+                  <span className="text-ui-xs font-medium text-foreground-subtle">
+                    {formatMsg(locale, 'settings.apiEndpoint')}
+                  </span>
+                  <input
+                    value={selected.base_url}
+                    onChange={(e) => updateSelected({ base_url: e.target.value })}
+                    placeholder={selectedDriver.defaultUrl}
+                    className={settingsInputClass}
+                  />
+                </label>
+              </div>
+
+              <label className="block space-y-1">
+                <span className="text-ui-xs font-medium text-foreground-subtle">
+                  {formatMsg(locale, 'settings.apiKey')}
+                </span>
+                <div className="relative flex items-center">
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    value={selected.api_key ?? ''}
+                    onChange={(e) => updateSelected({ api_key: e.target.value })}
+                    placeholder={kind === 'classifier' ? 'ts-... (optional for llama.cpp)' : 'sk-...'}
+                    className={`${settingsMonoInputClass} pr-9`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey((v) => !v)}
+                    className="absolute right-2 flex size-6 items-center justify-center rounded text-foreground-subtlest hover:text-foreground"
+                  >
+                    {showKey ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                  </button>
+                </div>
+              </label>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() =>
+                    void persist(
+                      profiles,
+                      activeProviderId,
+                      activeModelId,
+                      kind === 'image' ? 'settings.imageSaved' : 'settings.classifierSaved',
+                    )
+                  }
+                  className="h-8 rounded-lg bg-primary px-4 text-ui-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                >
+                  {saving ? formatMsg(locale, 'settings.saving') : formatMsg(locale, 'settings.saveChanges')}
+                </button>
+              </div>
+
+              {/* Models under this provider */}
+              <div className="space-y-2 border-t border-border pt-4">
+                <div className="text-ui-xs font-medium text-foreground-subtle">
+                  {formatMsg(locale, 'settings.multimodalModelsTitle')}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    value={newModelInput}
+                    onChange={(e) => setNewModelInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addModelToSelected();
+                      }
+                    }}
+                    placeholder={selectedDriver.defaultModel}
+                    className={settingsMonoInputClass}
+                  />
+                  <button
+                    type="button"
+                    onClick={addModelToSelected}
+                    className="h-9 shrink-0 rounded-lg border border-border bg-surface px-3 text-ui-xs font-medium text-foreground hover:bg-hover"
+                  >
+                    {formatMsg(locale, 'settings.multimodalAddModel')}
+                  </button>
+                </div>
+
+                <div className="divide-y divide-border rounded-xl border border-border bg-surface/40">
+                  {(selected.models ?? []).map((m) => {
+                    const isActive = activeProviderId === selected.id && activeModelId === m;
+                    const testKey = `${selected.id}:${m}`;
+                    const testing = testingModel === testKey;
+                    const tRes = testResults[testKey];
+                    return (
+                      <div key={m} className="flex flex-col gap-1 px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate font-mono text-ui-sm text-foreground">{m}</span>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={testing}
+                              onClick={() => void testModel(m)}
+                              title={formatMsg(locale, 'settings.testModelConnection')}
+                              className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest hover:bg-hover hover:text-foreground disabled:opacity-40"
+                            >
+                              <Cable className={`size-3.5 ${testing ? 'animate-pulse text-primary' : ''}`} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeModelFromSelected(m)}
+                              title={formatMsg(locale, 'settings.deleteModel')}
+                              className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest hover:bg-destructive-surface hover:text-destructive-surface-fg"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => activateModel(selected.id, m)}
+                              className={`flex h-7 items-center gap-1 rounded-md px-2.5 text-ui-xs font-medium transition-colors ${
+                                isActive
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'border border-border bg-card text-foreground-subtle hover:text-foreground'
+                              }`}
+                            >
+                              {isActive ? <Check className="size-3" /> : null}
+                              <span>
+                                {formatMsg(
+                                  locale,
+                                  isActive ? 'settings.multimodalActiveBadge' : 'settings.multimodalSetActive',
+                                )}
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                        {tRes ? (
+                          <div
+                            className={`text-ui-xs ${tRes.ok ? 'text-emerald-500' : 'text-destructive-surface-fg'}`}
+                          >
+                            {tRes.msg}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      </SettingsGroupCard>
+      </div>
     </div>
   );
 }
 
-export function ClassifierSettingsCard({
-  onFlash,
-}: {
-  onFlash: (msg: string) => void;
-}) {
-  const { locale, providers, preferences, refreshInitialData } = useNexStore();
+export function ImageGenerationSettingsCard({ onFlash }: { onFlash: (msg: string) => void }) {
+  return <MultimodalProviderManager kind="image" onFlash={onFlash} />;
+}
 
-  const initialMode =
-    preferences.classifier_mode === 'standalone' ||
-    (!preferences.classifier_mode && Boolean(preferences.classifier_base_url))
-      ? 'standalone'
-      : 'provider';
-  const [mode, setMode] = useState<'provider' | 'standalone'>(initialMode);
-  const [driver, setDriver] = useState(preferences.classifier_driver || 'typesafe_system_one');
-  const [classifierProviderId, setClassifierProviderId] = useState(preferences.classifier_provider_id ?? '');
-  const [classifierModelId, setClassifierModelId] = useState(preferences.classifier_model_id ?? '');
-  const [classifierBaseUrl, setClassifierBaseUrl] = useState(preferences.classifier_base_url ?? '');
-  const [classifierApiKey, setClassifierApiKey] = useState(preferences.classifier_api_key ?? '');
-  const [showKey, setShowKey] = useState(false);
+export function ClassifierSettingsCard({ onFlash }: { onFlash: (msg: string) => void }) {
+  const { locale, preferences, refreshInitialData } = useNexStore();
   const [jevAutoApprove, setJevAutoApprove] = useState(Boolean(preferences.jev_auto_approve_enabled));
   const [jevAutoRouter, setJevAutoRouter] = useState(Boolean(preferences.jev_auto_router_enabled));
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setMode(
-      preferences.classifier_mode === 'standalone' ||
-        (!preferences.classifier_mode && Boolean(preferences.classifier_base_url))
-        ? 'standalone'
-        : 'provider',
-    );
-    setDriver(preferences.classifier_driver || 'typesafe_system_one');
-    setClassifierProviderId(preferences.classifier_provider_id ?? '');
-    setClassifierModelId(preferences.classifier_model_id ?? '');
-    setClassifierBaseUrl(preferences.classifier_base_url ?? '');
-    setClassifierApiKey(preferences.classifier_api_key ?? '');
     setJevAutoApprove(Boolean(preferences.jev_auto_approve_enabled));
     setJevAutoRouter(Boolean(preferences.jev_auto_router_enabled));
-  }, [
-    preferences.classifier_mode,
-    preferences.classifier_driver,
-    preferences.classifier_provider_id,
-    preferences.classifier_model_id,
-    preferences.classifier_base_url,
-    preferences.classifier_api_key,
-    preferences.jev_auto_approve_enabled,
-    preferences.jev_auto_router_enabled,
-  ]);
+  }, [preferences.jev_auto_approve_enabled, preferences.jev_auto_router_enabled]);
 
-  const enabledProviders = providers.filter((p) => p.enabled);
-
-  const save = async (overrides?: Partial<UserPreferences>) => {
-    setSaving(true);
+  const saveToggle = async (patch: Partial<UserPreferences>) => {
     try {
-      const next: UserPreferences = {
-        ...preferences,
-        classifier_mode: mode,
-        classifier_driver: driver,
-        classifier_provider_id: classifierProviderId.trim(),
-        classifier_model_id: classifierModelId.trim(),
-        classifier_base_url: classifierBaseUrl.trim(),
-        classifier_api_key: classifierApiKey.trim(),
-        jev_auto_approve_enabled: jevAutoApprove,
-        jev_auto_router_enabled: jevAutoRouter,
-        ...overrides,
-      };
       await apiFetch<UserPreferences>('/api/v1/preferences', {
         method: 'PUT',
-        body: JSON.stringify(next),
+        body: JSON.stringify({ ...preferences, ...patch }),
       });
       await refreshInitialData();
       onFlash(formatMsg(locale, 'settings.classifierSaved'));
     } catch (err) {
       onFlash(formatMsg(locale, 'settings.multimodalSaveFailed', { error: String(err) }));
-    } finally {
-      setSaving(false);
     }
   };
 
   return (
-    <div className="mt-5 space-y-3">
-      <div>
-        <h3 className="text-ui-lg font-semibold text-foreground">
-          {formatMsg(locale, 'settings.classifierSectionTitle')}
-        </h3>
-        <p className="mt-0.5 text-ui-sm text-foreground-subtle">
-          {formatMsg(locale, 'settings.classifierSectionDesc')}
-        </p>
-      </div>
+    <div className="space-y-5">
+      <MultimodalProviderManager kind="classifier" onFlash={onFlash} />
 
-      <SettingsGroupCard>
-        <SettingsRow
-          label={formatMsg(locale, 'settings.configMode')}
-          description={formatMsg(locale, 'settings.configModeDesc')}
-        >
-          <div className="inline-flex rounded-lg border border-border bg-surface p-0.5">
-            {(
-              [
-                { id: 'provider', labelKey: 'settings.configModeProvider' },
-                { id: 'standalone', labelKey: 'settings.configModeStandalone' },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setMode(opt.id)}
-                className={`h-7 rounded-md px-3 text-ui-xs font-medium transition-colors ${
-                  mode === opt.id
-                    ? 'bg-card text-foreground shadow-xs'
-                    : 'text-foreground-subtle hover:text-foreground'
-                }`}
-              >
-                {formatMsg(locale, opt.labelKey)}
-              </button>
-            ))}
-          </div>
-        </SettingsRow>
-
-        {mode === 'provider' ? (
+      <div className="space-y-2">
+        <h4 className="text-ui-base font-semibold text-foreground">
+          {formatMsg(locale, 'settings.multimodalJevBehavior')}
+        </h4>
+        <SettingsGroupCard>
           <SettingsRow
-            label={formatMsg(locale, 'settings.classifierProvider')}
-            description={formatMsg(locale, 'settings.classifierProviderDesc')}
-          >
-            <select
-              value={classifierProviderId}
-              onChange={(e) => setClassifierProviderId(e.target.value)}
-              className={settingsSelectClass}
-            >
-              <option value="">{formatMsg(locale, 'settings.classifierProviderAuto')}</option>
-              {enabledProviders.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name || p.id}
-                </option>
-              ))}
-            </select>
-          </SettingsRow>
-        ) : (
-          <>
-            <SettingsRow
-              label={formatMsg(locale, 'settings.classifierDriver')}
-              description={formatMsg(locale, 'settings.classifierDriverDesc')}
-            >
-              <select
-                value={driver}
-                onChange={(e) => setDriver(e.target.value)}
-                className={settingsSelectClass}
-              >
-                <option value="typesafe_system_one">
-                  {formatMsg(locale, 'settings.classifierDriverTypeSafe')}
-                </option>
-                <option value="openrouter_system_one">
-                  {formatMsg(locale, 'settings.classifierDriverOpenRouter')}
-                </option>
-              </select>
-            </SettingsRow>
-
-            <SettingsRow
-              label={formatMsg(locale, 'settings.apiEndpoint')}
-              description={formatMsg(locale, 'settings.apiEndpointClassifierDesc')}
-            >
-              <input
-                value={classifierBaseUrl}
-                onChange={(e) => setClassifierBaseUrl(e.target.value)}
-                placeholder={
-                  driver === 'openrouter_system_one'
-                    ? 'https://openrouter.ai/api/v1'
-                    : 'https://api.typesafe.ai/v1'
-                }
-                className={settingsInputClass}
-              />
-            </SettingsRow>
-
-            <SettingsRow
-              label={formatMsg(locale, 'settings.apiKey')}
-              description={formatMsg(locale, 'settings.apiKeyClassifierDesc')}
-            >
-              <div className="relative flex items-center">
-                <input
-                  type={showKey ? 'text' : 'password'}
-                  value={classifierApiKey}
-                  onChange={(e) => setClassifierApiKey(e.target.value)}
-                  placeholder="ts-..."
-                  className={`${settingsMonoInputClass} pr-9`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowKey((v) => !v)}
-                  className="absolute right-2 flex size-6 items-center justify-center rounded text-foreground-subtlest hover:text-foreground"
-                >
-                  {showKey ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                </button>
-              </div>
-            </SettingsRow>
-          </>
-        )}
-
-        <SettingsRow
-          label={formatMsg(locale, 'settings.classifierModelId')}
-          description={formatMsg(locale, 'settings.classifierModelIdDesc')}
-        >
-          <input
-            value={classifierModelId}
-            onChange={(e) => setClassifierModelId(e.target.value)}
-            placeholder={driver === 'openrouter_system_one' ? 'typesafe/jev-1.14' : 'jev-latest'}
-            className={settingsMonoInputClass}
-          />
-        </SettingsRow>
-
-        <SettingsRow
-          label={formatMsg(locale, 'settings.jevAutoApprove')}
-          description={formatMsg(locale, 'settings.jevAutoApproveDesc')}
-        >
-          <Toggle
-            checked={jevAutoApprove}
-            onChange={(checked) => {
-              setJevAutoApprove(checked);
-              void save({ jev_auto_approve_enabled: checked });
-            }}
             label={formatMsg(locale, 'settings.jevAutoApprove')}
-          />
-        </SettingsRow>
-
-        <SettingsRow
-          label={formatMsg(locale, 'settings.jevAutoRouter')}
-          description={formatMsg(locale, 'settings.jevAutoRouterDesc')}
-        >
-          <Toggle
-            checked={jevAutoRouter}
-            onChange={(checked) => {
-              setJevAutoRouter(checked);
-              void save({ jev_auto_router_enabled: checked });
-            }}
-            label={formatMsg(locale, 'settings.jevAutoRouter')}
-          />
-        </SettingsRow>
-
-        <div className="flex items-center justify-end gap-2 px-5 py-4">
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void save()}
-            className="h-8 rounded-lg bg-primary px-4 text-ui-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            description={formatMsg(locale, 'settings.jevAutoApproveDesc')}
           >
-            {saving ? formatMsg(locale, 'settings.saving') : formatMsg(locale, 'settings.saveChanges')}
-          </button>
-        </div>
-      </SettingsGroupCard>
+            <Toggle
+              checked={jevAutoApprove}
+              onChange={(checked) => {
+                setJevAutoApprove(checked);
+                void saveToggle({ jev_auto_approve_enabled: checked });
+              }}
+              label={formatMsg(locale, 'settings.jevAutoApprove')}
+            />
+          </SettingsRow>
+          <SettingsRow
+            label={formatMsg(locale, 'settings.jevAutoRouter')}
+            description={formatMsg(locale, 'settings.jevAutoRouterDesc')}
+          >
+            <Toggle
+              checked={jevAutoRouter}
+              onChange={(checked) => {
+                setJevAutoRouter(checked);
+                void saveToggle({ jev_auto_router_enabled: checked });
+              }}
+              label={formatMsg(locale, 'settings.jevAutoRouter')}
+            />
+          </SettingsRow>
+        </SettingsGroupCard>
+      </div>
     </div>
   );
 }

@@ -51,6 +51,15 @@ export interface ModelMeta {
   pricing: ModelPricing;
 }
 
+export interface MultimodalProviderProfile {
+  id: string;
+  name: string;
+  driver: string;
+  base_url: string;
+  api_key?: string;
+  models?: string[];
+}
+
 export interface UserPreferences {
   theme: 'dark' | 'light' | 'system';
   code_theme: string;
@@ -86,6 +95,12 @@ export interface UserPreferences {
   classifier_api_key?: string;
   jev_auto_approve_enabled?: boolean;
   jev_auto_router_enabled?: boolean;
+  image_providers?: MultimodalProviderProfile[];
+  active_image_provider_id?: string;
+  active_image_model_id?: string;
+  classifier_providers?: MultimodalProviderProfile[];
+  active_classifier_provider_id?: string;
+  active_classifier_model_id?: string;
 }
 
 export type ClientNotificationKind =

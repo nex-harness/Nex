@@ -38,6 +38,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/models/fetch-remote", s.handleModelsFetchRemote)
 	s.mux.HandleFunc("/api/v1/models/lookup", s.handleModelLookup)
 	s.mux.HandleFunc("/api/v1/models/test", s.handleModelTest)
+	s.mux.HandleFunc("/api/v1/image/test", s.handleImageTest)
+	s.mux.HandleFunc("/api/v1/classifier/test", s.handleClassifierTest)
 	s.mux.HandleFunc("/api/v1/runners", s.handleRunners)
 	s.mux.HandleFunc("/api/v1/runners/", s.handleRunnerSubroutes)
 	s.mux.HandleFunc("/api/v1/sessions", s.handleSessions)

@@ -43,6 +43,32 @@ func (n *Node) resolveImageProvider(ctx context.Context, requestedModel string) 
 		reqModel = strings.TrimSpace(os.Getenv("NEX_IMAGE_MODEL"))
 	}
 
+	// 0. Active profile from multi-provider ImageProviders list
+	if hasPrefs && len(prefs.ImageProviders) > 0 && strings.TrimSpace(prefs.ActiveImageProviderID) != "" {
+		activePID := strings.TrimSpace(prefs.ActiveImageProviderID)
+		for _, prof := range prefs.ImageProviders {
+			if prof.ID != activePID {
+				continue
+			}
+			driver, defaultModel := inferImageDriverAndDefaultModel(prof.Driver, prof.BaseURL)
+			model := reqModel
+			if model == "" {
+				model = strings.TrimSpace(prefs.ActiveImageModelID)
+			}
+			if model == "" && len(prof.Models) > 0 {
+				model = strings.TrimSpace(prof.Models[0])
+			}
+			if model == "" {
+				model = defaultModel
+			}
+			return ai.NewImageProvider(driver, ai.ImageProviderConfig{
+				ProviderID: prof.ID,
+				BaseURL:    strings.TrimSpace(prof.BaseURL),
+				APIKey:     strings.TrimSpace(prof.APIKey),
+			}), model, nil
+		}
+	}
+
 	// 1. Standalone image configuration from UserPreferences
 	if hasPrefs && (prefs.ImageMode == "standalone" || (prefs.ImageMode == "" && strings.TrimSpace(prefs.ImageBaseURL) != "")) {
 		driver, defaultModel := inferImageDriverAndDefaultModel(prefs.ImageDriver, prefs.ImageBaseURL)
@@ -172,6 +198,44 @@ func (n *Node) resolveClassifierProvider(ctx context.Context, requestedModel str
 	}
 	if reqModel == "" {
 		reqModel = strings.TrimSpace(os.Getenv("NEX_CLASSIFIER_MODEL"))
+	}
+
+	// 0. Active profile from multi-provider ClassifierProviders list
+	if hasPrefs && len(prefs.ClassifierProviders) > 0 && strings.TrimSpace(prefs.ActiveClassifierProviderID) != "" {
+		activePID := strings.TrimSpace(prefs.ActiveClassifierProviderID)
+		for _, prof := range prefs.ClassifierProviders {
+			if prof.ID != activePID {
+				continue
+			}
+			baseURL := strings.TrimSpace(prof.BaseURL)
+			imgMode := ai.ClassifierImageAssets
+			defaultModel := "jev-latest"
+			if prof.Driver == "openrouter_system_one" || strings.Contains(strings.ToLower(baseURL), "openrouter.ai") {
+				imgMode = ai.ClassifierImageStateImageURL
+				defaultModel = "typesafe/jev-1.14"
+				if baseURL == "" {
+					baseURL = "https://openrouter.ai/api/v1"
+				}
+			} else if baseURL == "" {
+				baseURL = "https://api.typesafe.ai/v1"
+			}
+			model := reqModel
+			if model == "" {
+				model = strings.TrimSpace(prefs.ActiveClassifierModelID)
+			}
+			if model == "" && len(prof.Models) > 0 {
+				model = strings.TrimSpace(prof.Models[0])
+			}
+			if model == "" {
+				model = defaultModel
+			}
+			return ai.NewSystemOneClassifierProvider(ai.SystemOneConfig{
+				ProviderID: prof.ID,
+				BaseURL:    baseURL,
+				APIKey:     strings.TrimSpace(prof.APIKey),
+				ImageMode:  imgMode,
+			}), model, nil
+		}
 	}
 
 	// 1. Standalone classifier configuration from UserPreferences

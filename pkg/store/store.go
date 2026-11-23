@@ -111,6 +111,17 @@ func (s *Store) DataDir() string { return s.dataDir }
 
 // --- Preferences & Config Revision ---
 
+// MultimodalProviderProfile stores a named provider profile (endpoint, key, driver, models)
+// for non-chat modalities (Image Generation or Classifier/Jev).
+type MultimodalProviderProfile struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Driver  string   `json:"driver"`             // image: openai_images|openrouter_images|xai_images|minimax_images; classifier: typesafe_system_one|openrouter_system_one
+	BaseURL string   `json:"base_url"`           // Optional custom API endpoint
+	APIKey  string   `json:"api_key,omitempty"`  // Bearer API key (optional for local llama.cpp)
+	Models  []string `json:"models,omitempty"`   // Configured model IDs under this provider
+}
+
 type UserPreferences struct {
 	Theme                 string `json:"theme"`                    // "dark" | "light" | "system"
 	CodeTheme             string `json:"code_theme"`               // e.g. "github-dark"
@@ -144,8 +155,14 @@ type UserPreferences struct {
 	ClassifierModelID     string `json:"classifier_model_id"`      // Optional default classifier model ID (e.g. "jev-latest", "typesafe/jev-1.14")
 	ClassifierBaseURL     string `json:"classifier_base_url"`      // Standalone/custom System One endpoint (e.g. https://api.typesafe.ai/v1 or http://127.0.0.1:9931/v1)
 	ClassifierAPIKey      string `json:"classifier_api_key"`       // Standalone classifier API key
-	JevAutoApproveEnabled bool   `json:"jev_auto_approve_enabled"` // Use Jev guardrail to auto-approve safe gray-area tool calls
-	JevAutoRouterEnabled  bool   `json:"jev_auto_router_enabled"`  // Use Jev classifier to auto-select model tier / thinking effort
+	JevAutoApproveEnabled      bool                        `json:"jev_auto_approve_enabled"`             // Use Jev guardrail to auto-approve safe gray-area tool calls
+	JevAutoRouterEnabled       bool                        `json:"jev_auto_router_enabled"`              // Use Jev classifier to auto-select model tier / thinking effort
+	ImageProviders             []MultimodalProviderProfile `json:"image_providers,omitempty"`            // Multi-provider profiles for image generation
+	ActiveImageProviderID      string                      `json:"active_image_provider_id,omitempty"`   // Single active image provider ID
+	ActiveImageModelID         string                      `json:"active_image_model_id,omitempty"`      // Single active image model ID
+	ClassifierProviders        []MultimodalProviderProfile `json:"classifier_providers,omitempty"`       // Multi-provider profiles for Jev/System One classifiers
+	ActiveClassifierProviderID string                      `json:"active_classifier_provider_id,omitempty"` // Single active classifier provider ID
+	ActiveClassifierModelID    string                      `json:"active_classifier_model_id,omitempty"`    // Single active classifier model ID
 }
 
 func DefaultUserPreferences() UserPreferences {
