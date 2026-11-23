@@ -320,7 +320,6 @@ export function App() {
       <ImagePreviewModal />
       <NotificationToastStack />
       {pendingApproval && <ApprovalModal approval={pendingApproval} />}
-      {pendingUIPrompt && <UIPromptModal prompt={pendingUIPrompt} />}
     </div>
   );
 }

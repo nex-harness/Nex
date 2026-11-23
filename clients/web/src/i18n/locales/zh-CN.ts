@@ -1004,4 +1004,13 @@ export const zhCN = {
   "settings.remote.tsnetNeedMirror": "请先填写 nex-tsnet 下载地址或镜像源前缀。",
   "settings.remote.tsnetStatePrefix": "插件状态：{state}",
   "settings.remote.tsnetLoginPrompt": "请扫码或打开下方链接完成 Tailscale 节点授权登录：",
+  "questionCard.customPlaceholder": "输入你的回答...",
+  "questionCard.keyboardHint": "使用 Tab / 方向键切换，按 Enter 或 Space 选择",
+  "questionCard.dismiss": "忽略",
+  "questionCard.submit": "提交",
+  "questionCard.prevQuestion": "上一题",
+  "questionCard.nextQuestion": "下一题",
+  "questionCard.yes": "是",
+  "questionCard.no": "否",
+  "questionCard.multiSelectHint": "可多选",
 } satisfies Record<MessageKey, string>;

@@ -75,8 +75,24 @@ func (n *Node) RequestUIPrompt(ctx context.Context, sessionID string, req protoc
 
 	select {
 	case res := <-ch:
+		resolvedBytes, _ := json.Marshal(map[string]any{
+			"type":       agent.EventUIPromptResolved,
+			"request_id": req.RequestID,
+			"canceled":   res.Canceled,
+		})
+		if n.IsOnline() {
+			n.recordAndEmitSessionEvent(ctx, sessionID, 0, string(agent.EventUIPromptResolved), resolvedBytes, nil)
+		}
 		return res, nil
 	case <-ctx.Done():
+		resolvedBytes, _ := json.Marshal(map[string]any{
+			"type":       agent.EventUIPromptResolved,
+			"request_id": req.RequestID,
+			"canceled":   true,
+		})
+		if n.IsOnline() {
+			n.recordAndEmitSessionEvent(context.Background(), sessionID, 0, string(agent.EventUIPromptResolved), resolvedBytes, nil)
+		}
 		return protocol.UIResolvePayload{Canceled: true}, ctx.Err()
 	}
 }

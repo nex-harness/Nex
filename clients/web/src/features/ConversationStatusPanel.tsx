@@ -466,11 +466,23 @@ export function ConversationStatusPanel({
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-3.5 space-y-3.5">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3.5 pb-3.5 pt-3 space-y-3.5">
+              {(() => {
+                const firstSection: 'git' | 'goal' | 'progress' | 'terminals' | 'agents' = hasGit
+                  ? 'git'
+                  : hasGoal
+                    ? 'goal'
+                    : hasProgress
+                      ? 'progress'
+                      : hasTerminals
+                        ? 'terminals'
+                        : 'agents';
+                return (
+                  <>
               {/* 1. Git tools */}
               {hasGit && (
                 <section className="space-y-0.5">
-                  <div className="pr-12 text-ui-sm font-medium text-foreground-subtle">
+                  <div className="flex min-h-6 items-center pr-14 text-ui-sm font-medium text-foreground-subtle">
                     {formatMsg(locale, 'chat.statusPanel.environment')}
                   </div>
 
@@ -544,8 +556,8 @@ export function ConversationStatusPanel({
 
               {/* 2. Goal */}
               {hasGoal && (
-                <section className={`space-y-2 ${hasGit ? 'border-t border-border pt-3' : ''}`}>
-                  <div className="flex items-center gap-1.5">
+                <section className={`space-y-2 ${firstSection !== 'goal' ? 'border-t border-border pt-3' : ''}`}>
+                  <div className={`flex items-center gap-1.5 ${firstSection === 'goal' ? 'min-h-6 pr-14' : ''}`}>
                     <span className="text-ui-sm font-medium text-foreground-subtle">
                       {formatMsg(locale, 'chat.statusPanel.goal')}
                     </span>
@@ -567,8 +579,14 @@ export function ConversationStatusPanel({
 
               {/* 3. Progress — strictly stream.todos written by todo_write */}
               {hasProgress && (
-                <section className="border-t border-border pt-3">
-                  <div className="flex items-center justify-between">
+                <section
+                  data-testid="status-panel-progress-section"
+                  className={firstSection !== 'progress' ? 'border-t border-border pt-3' : ''}
+                >
+                  <div
+                    data-testid="status-panel-progress-header"
+                    className={`flex items-center justify-between gap-2 ${firstSection === 'progress' ? 'min-h-6 pr-14' : ''}`}
+                  >
                     <span className="text-ui-sm font-medium text-foreground-subtle">
                       {formatMsg(locale, 'chat.statusPanel.todo')}
                     </span>
@@ -610,8 +628,8 @@ export function ConversationStatusPanel({
 
               {/* 4. Terminals */}
               {hasTerminals && (
-                <section className="border-t border-border pt-3">
-                  <div className="flex items-center justify-between pb-2">
+                <section className={firstSection !== 'terminals' ? 'border-t border-border pt-3' : ''}>
+                  <div className={`flex items-center justify-between gap-2 pb-2 ${firstSection === 'terminals' ? 'min-h-6 pr-14' : ''}`}>
                     <span className="text-ui-sm font-medium text-foreground-subtle">Terminals</span>
                     <span className="text-ui-sm text-foreground-subtlest">
                       {activeTerminals.length} in background
@@ -648,8 +666,8 @@ export function ConversationStatusPanel({
 
               {/* 5. Agents */}
               {hasAgents && (
-                <section className="border-t border-border pt-3">
-                  <div className="text-ui-sm font-medium text-foreground-subtle">
+                <section className={firstSection !== 'agents' ? 'border-t border-border pt-3' : ''}>
+                  <div className={`text-ui-sm font-medium text-foreground-subtle ${firstSection === 'agents' ? 'flex min-h-6 items-center pr-14' : ''}`}>
                     {formatMsg(locale, 'chat.statusPanel.agents')}
                   </div>
 
@@ -746,6 +764,9 @@ export function ConversationStatusPanel({
                   )}
                 </section>
               )}
+                  </>
+                );
+              })()}
             </div>
         </div>
       </aside>

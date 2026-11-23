@@ -197,16 +197,41 @@ type ApprovalResolvePayload struct {
 	Reason     string `json:"reason,omitempty"`
 }
 
+// UIPromptOption represents a structured selectable option with bold label and muted description.
+type UIPromptOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+}
+
+// UIPromptQuestion represents one question page in a multi-question interactive prompt card.
+type UIPromptQuestion struct {
+	ID           string           `json:"id,omitempty"`
+	Header       string           `json:"header,omitempty"`
+	Question     string           `json:"question"`
+	Message      string           `json:"message,omitempty"`
+	Kind         string           `json:"kind,omitempty"` // "select" | "confirm" | "input"
+	Options      []UIPromptOption `json:"options,omitempty"`
+	MultiSelect  bool             `json:"multi_select,omitempty"`
+	AllowCustom  *bool            `json:"allow_custom,omitempty"`
+	Placeholder  string           `json:"placeholder,omitempty"`
+	DefaultValue string           `json:"default_value,omitempty"`
+}
+
 // UIPromptRequestPayload represents a remote declarative ctx.ui prompt from a headless Runner plugin.
 type UIPromptRequestPayload struct {
-	RequestID    string   `json:"request_id"`
-	Kind         string   `json:"kind"` // "select" | "confirm" | "input"
-	Title        string   `json:"title"`
-	Message      string   `json:"message,omitempty"`
-	Placeholder  string   `json:"placeholder,omitempty"`
-	Options      []string `json:"options,omitempty"`
-	Password     bool     `json:"password,omitempty"`
-	DefaultValue string   `json:"default_value,omitempty"`
+	RequestID    string             `json:"request_id"`
+	Kind         string             `json:"kind"` // "select" | "confirm" | "input"
+	Header       string             `json:"header,omitempty"`
+	Title        string             `json:"title"`
+	Message      string             `json:"message,omitempty"`
+	Placeholder  string             `json:"placeholder,omitempty"`
+	Options      []string           `json:"options,omitempty"`
+	OptionItems  []UIPromptOption   `json:"option_items,omitempty"`
+	MultiSelect  bool               `json:"multi_select,omitempty"`
+	AllowCustom  *bool              `json:"allow_custom,omitempty"`
+	Questions    []UIPromptQuestion `json:"questions,omitempty"`
+	Password     bool               `json:"password,omitempty"`
+	DefaultValue string             `json:"default_value,omitempty"`
 }
 
 // UIResolvePayload returns the user's response to a remote ctx.ui prompt.

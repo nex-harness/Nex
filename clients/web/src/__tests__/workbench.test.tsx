@@ -3128,4 +3128,266 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       });
     }
   });
+
+  it('renders ZCode-style inline Question Card without modal overlay and supports pager + custom answer + keyboard nav', () => {
+    const origResolve = useNexStore.getState().resolveUIPrompt;
+    const resolveSpy = vi.fn();
+
+    try {
+      useNexStore.setState({
+        serverConnectRequired: false,
+        authEnabled: false,
+        authenticated: true,
+        mainView: 'workspace',
+        previewImage: null,
+        locale: 'en-US',
+        activeSessionId: 'sess_q_1',
+        sessions: [
+          {
+            id: 'sess_q_1',
+            runner_id: 'r_local',
+            depth: 0,
+            title: 'Question Session',
+            workspace_path: '/tmp/ws',
+            agent_profile_slug: 'main',
+            model_id: 'm1',
+            provider_id: 'p1',
+            permission_mode: 'interactive',
+            status: 'running',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: 1000,
+            updated_at: 2000,
+            last_active_at: 2000,
+          },
+        ],
+        resolveUIPrompt: resolveSpy,
+        streams: {
+          sess_q_1: {
+            lastSeq: 1,
+            running: true,
+            items: [
+              {
+                id: 'u_q_1',
+                seq: 1,
+                role: 'user',
+                text: 'Test question',
+                thinking: '',
+                toolCalls: [],
+              },
+            ],
+            latestTelemetry: null,
+            turnTelemetries: [],
+            uiBadges: {},
+            pendingApproval: null,
+            pendingUIPrompt: {
+              requestId: 'uip_card_1',
+              sessionId: 'sess_q_1',
+              runnerId: 'r_local',
+              kind: 'select',
+              header: 'Testing',
+              title: 'How do you prefer to work?',
+              questions: [
+                {
+                  header: 'Testing',
+                  question: 'How do you prefer to work?',
+                  kind: 'select',
+                  options: [
+                    { label: 'Plan first', description: 'Propose steps before coding' },
+                    { label: 'Dive right in', description: 'Start coding immediately' },
+                  ],
+                },
+                {
+                  header: 'Scope',
+                  question: 'Which target?',
+                  kind: 'select',
+                  options: [{ label: 'Web' }, { label: 'Desktop' }],
+                },
+              ],
+            },
+            todos: [],
+            goals: [],
+          },
+        },
+      });
+
+      render(<App />);
+
+      const card = screen.getByTestId('inline-question-card');
+      expect(card).toBeTruthy();
+      expect(card.closest('.zcode-dialog-overlay')).toBeNull();
+      expect(document.querySelector('.zcode-dialog-overlay')).toBeNull();
+      expect(screen.getByTestId('question-card-header').textContent).toBe('Testing');
+      expect(screen.getByTestId('question-card-title').textContent).toBe('How do you prefer to work?');
+      expect(screen.getByTestId('question-pager-indicator').textContent).toBe('1 / 2');
+      expect(screen.getByTestId('question-option-0').textContent).toContain('Plan first');
+      expect(screen.getByTestId('question-option-0').textContent).toContain('Propose steps before coding');
+
+      // Keyboard select first option via Space
+      fireEvent.keyDown(card, { key: ' ' });
+      expect(screen.getByTestId('question-option-0').getAttribute('aria-selected')).toBe('true');
+
+      // Advance to page 2 and type custom answer
+      fireEvent.click(screen.getByTestId('question-pager-next'));
+      expect(screen.getByTestId('question-pager-indicator').textContent).toBe('2 / 2');
+      expect(screen.getByTestId('question-card-header').textContent).toBe('Scope');
+      const customInput = screen.getByTestId('question-custom-input') as HTMLInputElement;
+      fireEvent.change(customInput, { target: { value: 'Mobile App' } });
+
+      fireEvent.click(screen.getByTestId('question-submit-btn'));
+      expect(resolveSpy).toHaveBeenCalledWith(
+        'uip_card_1',
+        true,
+        JSON.stringify({
+          answers: [
+            { question: 'How do you prefer to work?', answer: 'Plan first' },
+            { question: 'Which target?', answer: 'Mobile App' },
+          ],
+        }),
+      );
+
+      fireEvent.click(screen.getByTestId('question-dismiss-btn'));
+      expect(resolveSpy).toHaveBeenCalledWith('uip_card_1', false, '', true);
+    } finally {
+      useNexStore.setState({
+        resolveUIPrompt: origResolve,
+      });
+    }
+  });
+
+  it('auto-grows composer textarea height cleanly on multiline input up to 200px', () => {
+    useNexStore.setState({
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      mainView: 'workspace',
+      activeSessionId: 'sess_comp_1',
+      sessions: [
+        {
+          id: 'sess_comp_1',
+          runner_id: 'r_local',
+          depth: 0,
+          title: 'Composer Test',
+          workspace_path: '/tmp/ws',
+          agent_profile_slug: 'main',
+          model_id: 'm1',
+          provider_id: 'p1',
+          permission_mode: 'interactive',
+          status: 'idle',
+          latest_context_tokens: 0,
+          context_window_limit: 128000,
+          created_at: 1000,
+          updated_at: 2000,
+          last_active_at: 2000,
+        },
+      ],
+      streams: {
+        sess_comp_1: {
+          lastSeq: 1,
+          running: false,
+          items: [
+            {
+              id: 'u_comp_1',
+              seq: 1,
+              role: 'user',
+              text: 'Hello',
+              thinking: '',
+              toolCalls: [],
+            },
+          ],
+          latestTelemetry: null,
+          turnTelemetries: [],
+          uiBadges: {},
+          pendingApproval: null,
+          pendingUIPrompt: null,
+          todos: [],
+          goals: [],
+        },
+      },
+    });
+
+    render(<App />);
+    const textarea = screen.getByTestId('composer-input') as HTMLTextAreaElement;
+
+    let mockScrollHeight = 88;
+    Object.defineProperty(textarea, 'scrollHeight', {
+      configurable: true,
+      get: () => mockScrollHeight,
+    });
+
+    fireEvent.change(textarea, { target: { value: 'Line 1\nLine 2\nLine 3' } });
+    expect(textarea.style.height).toBe('88px');
+    expect(textarea.style.overflowY).toBe('hidden');
+
+    mockScrollHeight = 280;
+    fireEvent.change(textarea, { target: { value: 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8' } });
+    expect(textarea.style.height).toBe('200px');
+    expect(textarea.style.overflowY).toBe('auto');
+  });
+
+  it('prevents top-right status controls from overlapping Progress 5/5 when Progress is first', () => {
+    useNexStore.setState({
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      mainView: 'workspace',
+      activeSessionId: 'sess_prog_1',
+      gitSummary: null,
+      sessions: [
+        {
+          id: 'sess_prog_1',
+          runner_id: 'r_local',
+          depth: 0,
+          title: 'Progress Only',
+          workspace_path: '/tmp/ws',
+          agent_profile_slug: 'main',
+          model_id: 'm1',
+          provider_id: 'p1',
+          permission_mode: 'interactive',
+          status: 'idle',
+          latest_context_tokens: 0,
+          context_window_limit: 128000,
+          created_at: 1000,
+          updated_at: 2000,
+          last_active_at: 2000,
+        },
+      ],
+      streams: {
+        sess_prog_1: {
+          lastSeq: 1,
+          running: false,
+          items: [
+            {
+              id: 'u_prog_1',
+              seq: 1,
+              role: 'user',
+              text: 'Check progress',
+              thinking: '',
+              toolCalls: [],
+            },
+          ],
+          latestTelemetry: null,
+          turnTelemetries: [],
+          uiBadges: {},
+          pendingApproval: null,
+          pendingUIPrompt: null,
+          goals: [],
+          todos: [
+            { content: 'Task 1', status: 'completed' },
+            { content: 'Task 2', status: 'completed' },
+            { content: 'Task 3', status: 'completed' },
+            { content: 'Task 4', status: 'completed' },
+            { content: 'Task 5', status: 'completed' },
+          ],
+        },
+      },
+    });
+
+    render(<App />);
+    const progressSection = screen.getByTestId('status-panel-progress-section');
+    const progressHeader = screen.getByTestId('status-panel-progress-header');
+    expect(progressSection.className).not.toContain('border-t');
+    expect(progressHeader.className).toContain('pr-14');
+    expect(progressHeader.textContent).toContain('5/5');
+  });
 });

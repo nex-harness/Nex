@@ -212,12 +212,14 @@ func TestWebFetchSSRFGuardHTMLStrippingAndCache(t *testing.T) {
 }
 
 type mockUIPrompter struct {
-	hasUI bool
-	reply protocol.UIResolvePayload
+	hasUI   bool
+	reply   protocol.UIResolvePayload
+	lastReq protocol.UIPromptRequestPayload
 }
 
 func (m *mockUIPrompter) HasUI() bool { return m.hasUI }
-func (m *mockUIPrompter) Prompt(_ context.Context, _ protocol.UIPromptRequestPayload) (protocol.UIResolvePayload, error) {
+func (m *mockUIPrompter) Prompt(_ context.Context, req protocol.UIPromptRequestPayload) (protocol.UIResolvePayload, error) {
+	m.lastReq = req
 	return m.reply, nil
 }
 
@@ -249,6 +251,39 @@ func TestAskUserQuestionTool(t *testing.T) {
 	res, err = tool.Execute(context.Background(), "", json.RawMessage(`{"question":"API token?"}`), nil)
 	if err != nil || !res.IsError || !strings.Contains(res.Output, "headless") {
 		t.Fatalf("expected headless error without default, got %+v err=%v", res, err)
+	}
+
+	// Structured options + header
+	ui.hasUI = true
+	ui.reply = protocol.UIResolvePayload{Value: "先规划再动手"}
+	res, err = tool.Execute(context.Background(), "", json.RawMessage(`{
+		"header": "测试",
+		"question": "你更喜欢哪种工作方式？",
+		"options": [
+			{"label": "先规划再动手", "description": "先给出方案和步骤，确认后再执行"},
+			{"label": "直接开干", "description": "不需要确认，直接开始做事"}
+		]
+	}`), nil)
+	if err != nil || res.IsError || !strings.Contains(res.Output, "先规划再动手") {
+		t.Fatalf("unexpected structured select result: %+v err=%v", res, err)
+	}
+	if ui.lastReq.Header != "测试" || len(ui.lastReq.OptionItems) != 2 || ui.lastReq.OptionItems[0].Description == "" || len(ui.lastReq.Options) != 2 {
+		t.Fatalf("expected structured OptionItems and legacy Options labels, got %+v", ui.lastReq)
+	}
+
+	// Multi-question paginated payload & JSON answers decoding
+	ui.reply = protocol.UIResolvePayload{Value: `{"answers":[{"question":"DB?","answer":"SQLite"},{"question":"Auth?","answer":"JWT"}]}`}
+	res, err = tool.Execute(context.Background(), "", json.RawMessage(`{
+		"questions": [
+			{"header": "Storage", "question": "DB?", "options": ["SQLite", "Postgres"]},
+			{"header": "Security", "question": "Auth?", "options": ["JWT", "Session"]}
+		]
+	}`), nil)
+	if err != nil || res.IsError || !strings.Contains(res.Output, "1. DB?: SQLite") || !strings.Contains(res.Output, "2. Auth?: JWT") {
+		t.Fatalf("unexpected multi-question result: %+v err=%v", res, err)
+	}
+	if len(ui.lastReq.Questions) != 2 || ui.lastReq.Title != "DB?" {
+		t.Fatalf("expected 2 questions in payload, got %+v", ui.lastReq)
 	}
 }
 

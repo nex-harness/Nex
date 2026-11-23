@@ -1,4 +1,13 @@
-import { ChatTurnItem, GoalEntry, PendingApproval, PendingUIPrompt, TodoItem, TurnTelemetry } from './types';
+import {
+  ChatTurnItem,
+  GoalEntry,
+  PendingApproval,
+  PendingUIPrompt,
+  TodoItem,
+  TurnTelemetry,
+  UIPromptOption,
+  UIPromptQuestion,
+} from './types';
 
 export interface SessionStreamState {
   lastSeq: number;
@@ -233,6 +242,8 @@ export function applySessionEvent(
     case 'agent_end': {
       running = false;
       runStartedAt = undefined;
+      pendingUIPrompt = null;
+      pendingApproval = null;
       const lastIdx = items.length - 1;
       if (lastIdx >= 0 && (items[lastIdx].streaming || items[lastIdx].optimistic)) {
         items = items.slice();
@@ -465,19 +476,67 @@ export function applySessionEvent(
 
     case 'ui_prompt_requested': {
       const uip = (p.ui_prompt || {}) as Record<string, unknown>;
+      const parseOptionItems = (raw: unknown): UIPromptOption[] | undefined => {
+        if (!Array.isArray(raw)) return undefined;
+        const parsed: UIPromptOption[] = [];
+        for (const item of raw) {
+          if (typeof item === 'string') {
+            const label = item.trim();
+            if (label) parsed.push({ label });
+          } else if (item && typeof item === 'object') {
+            const rec = item as Record<string, unknown>;
+            const label = String(rec.label || rec.title || '').trim();
+            const desc = rec.description ? String(rec.description).trim() : undefined;
+            if (label) parsed.push({ label, description: desc || undefined });
+          }
+        }
+        return parsed.length > 0 ? parsed : undefined;
+      };
+      const parseQuestions = (raw: unknown): UIPromptQuestion[] | undefined => {
+        if (!Array.isArray(raw) || raw.length === 0) return undefined;
+        const list: UIPromptQuestion[] = [];
+        for (const q of raw) {
+          if (!q || typeof q !== 'object') continue;
+          const rec = q as Record<string, unknown>;
+          const question = String(rec.question || '').trim();
+          if (!question) continue;
+          list.push({
+            id: rec.id ? String(rec.id) : undefined,
+            header: rec.header ? String(rec.header) : undefined,
+            question,
+            message: rec.message ? String(rec.message) : undefined,
+            kind: rec.kind ? (rec.kind as 'select' | 'confirm' | 'input') : undefined,
+            options: parseOptionItems(rec.options),
+            multiSelect: typeof rec.multi_select === 'boolean' ? rec.multi_select : undefined,
+            allowCustom: typeof rec.allow_custom === 'boolean' ? rec.allow_custom : undefined,
+            placeholder: rec.placeholder ? String(rec.placeholder) : undefined,
+            defaultValue: rec.default_value ? String(rec.default_value) : undefined,
+          });
+        }
+        return list.length > 0 ? list : undefined;
+      };
       pendingUIPrompt = {
         requestId: String(uip.request_id || ''),
         sessionId: ev.session_id,
         runnerId,
         kind: (uip.kind as 'select' | 'confirm' | 'input') || 'select',
+        header: uip.header ? String(uip.header) : undefined,
         title: String(uip.title || ''),
         message: uip.message ? String(uip.message) : undefined,
         placeholder: uip.placeholder ? String(uip.placeholder) : undefined,
         options: Array.isArray(uip.options) ? uip.options.map(String) : undefined,
+        optionItems: parseOptionItems(uip.option_items),
+        multiSelect: typeof uip.multi_select === 'boolean' ? uip.multi_select : undefined,
+        allowCustom: typeof uip.allow_custom === 'boolean' ? uip.allow_custom : undefined,
+        questions: parseQuestions(uip.questions),
         defaultValue: uip.default_value ? String(uip.default_value) : undefined,
       };
       break;
     }
+
+    case 'ui_prompt_resolved':
+      pendingUIPrompt = null;
+      break;
 
     case 'ui_status_updated': {
       const key = String(p.key || '');

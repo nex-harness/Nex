@@ -1002,6 +1002,15 @@ export const enUS = {
   "settings.remote.tsnetNeedMirror": "Please enter a nex-tsnet download URL or mirror first.",
   "settings.remote.tsnetStatePrefix": "Sidecar: {state}",
   "settings.remote.tsnetLoginPrompt": "Scan or open this link to authorize the nex-tsnet node in Tailscale:",
+  "questionCard.customPlaceholder": "Enter your answer...",
+  "questionCard.keyboardHint": "Use Tab / arrow keys to choose, then Enter or Space to select",
+  "questionCard.dismiss": "Dismiss",
+  "questionCard.submit": "Submit",
+  "questionCard.prevQuestion": "Previous question",
+  "questionCard.nextQuestion": "Next question",
+  "questionCard.yes": "Yes",
+  "questionCard.no": "No",
+  "questionCard.multiSelectHint": "Multiple choices allowed",
 } as const;
 
 export type MessageKey = keyof typeof enUS;

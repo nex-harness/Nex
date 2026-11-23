@@ -46,7 +46,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { type CSSProperties, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { clampEffortIndex, formatEffortLabel, resolveEffortLevels } from '../core/effort';
 import { emptyStreamState } from '../core/reducer';
 import { useNexStore } from '../core/store';
@@ -54,6 +54,7 @@ import { ChatTurnItem, ModelMeta, ThinkingEffort, ToolCallCard } from '../core/t
 import { formatMsg, type LocaleCode, type MessageKey } from '../i18n/messages';
 import { ChatLoading } from './ChatLoading';
 import { ContextWindowsButton } from './ContextPopover';
+import { InlineQuestionCard } from './ControlModals';
 import {
   ConversationStatusPanel,
   type StatusPanelMode,
@@ -385,7 +386,10 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
   }
 
   if (tc.name === 'ask_user_question') {
-    const question = String(args.question || '');
+    const firstListed = Array.isArray(args.questions)
+      ? (args.questions[0] as { question?: string } | undefined)?.question
+      : undefined;
+    const question = String(args.question || firstListed || '');
     return (
       <div className="flex max-w-full flex-col">
         <button
@@ -1090,6 +1094,33 @@ function Composer({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const MAX_COMPOSER_HEIGHT = 200;
+  const syncTextareaHeight = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const scrollH = el.scrollHeight;
+    if (scrollH > 0) {
+      const clamped = Math.min(scrollH, MAX_COMPOSER_HEIGHT);
+      el.style.height = `${clamped}px`;
+    }
+    el.style.overflowY = scrollH > MAX_COMPOSER_HEIGHT ? 'auto' : 'hidden';
+  }, []);
+
+  useLayoutEffect(() => {
+    syncTextareaHeight();
+  }, [composerText, isDraft, syncTextareaHeight]);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      syncTextareaHeight();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [syncTextareaHeight]);
+
   const providers = useNexStore((s) => s.providers);
   const sessions = useNexStore((s) => s.sessions);
   const activeSessionId = useNexStore((s) => s.activeSessionId);
@@ -1758,7 +1789,7 @@ function Composer({
             ? formatMsg(locale, 'chat.askNexAnythingFileSession')
             : formatMsg(locale, 'chat.askForFollowUpFile')
         }
-        className={`${isDraft ? 'min-h-[58px]' : ''} w-full resize-none bg-transparent text-ui-base leading-relaxed text-foreground placeholder-foreground-subtlest`}
+        className={`${isDraft ? 'min-h-[52px]' : 'min-h-[24px]'} block max-h-[200px] w-full resize-none overflow-y-hidden bg-transparent text-ui-base leading-relaxed text-foreground placeholder-foreground-subtlest`}
       />
     </>
   );
@@ -3111,29 +3142,33 @@ export function ConversationPane() {
                 </h1>
               </div>
 
-              <Composer
-                isDraft
-                locale={locale}
-                stream={currentStream}
-                models={models}
-                runners={runners}
-                selectedProviderId={selectedProviderId}
-                selectedModelId={selectedModelId}
-                thinkingEffort={thinkingEffort}
-                permissionMode={permissionMode}
-                selectedRunnerId={selectedRunnerId}
-                selectedWorkspacePath={selectedWorkspacePath}
-                activeModelLimit={activeModelMeta?.context_window || 200000}
-                setComposerText={setComposerText}
-                setSelectedRunner={setSelectedRunner}
-                setSelectedProvider={setSelectedProvider}
-                setSelectedModel={setSelectedModel}
-                setThinkingEffort={setThinkingEffort}
-                setPermissionMode={setPermissionMode}
-                sendPromptOrSteer={sendPromptOrSteer}
-                abortActiveSession={abortActiveSession}
-                composerText={composerText}
-              />
+              {currentStream.pendingUIPrompt ? (
+                <InlineQuestionCard key={currentStream.pendingUIPrompt.requestId} prompt={currentStream.pendingUIPrompt} />
+              ) : (
+                <Composer
+                  isDraft
+                  locale={locale}
+                  stream={currentStream}
+                  models={models}
+                  runners={runners}
+                  selectedProviderId={selectedProviderId}
+                  selectedModelId={selectedModelId}
+                  thinkingEffort={thinkingEffort}
+                  permissionMode={permissionMode}
+                  selectedRunnerId={selectedRunnerId}
+                  selectedWorkspacePath={selectedWorkspacePath}
+                  activeModelLimit={activeModelMeta?.context_window || 200000}
+                  setComposerText={setComposerText}
+                  setSelectedRunner={setSelectedRunner}
+                  setSelectedProvider={setSelectedProvider}
+                  setSelectedModel={setSelectedModel}
+                  setThinkingEffort={setThinkingEffort}
+                  setPermissionMode={setPermissionMode}
+                  sendPromptOrSteer={sendPromptOrSteer}
+                  abortActiveSession={abortActiveSession}
+                  composerText={composerText}
+                />
+              )}
 
               <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
                 {CHIPS.map((chip, index) => {
@@ -3234,32 +3269,36 @@ export function ConversationPane() {
         <ConversationStatusPanel mode={statusPanelMode} onModeChange={setStatusPanelMode} />
       </div>
 
-      {/* Sticky bottom Composer (draft mode renders its own centered tray inside the canvas) */}
+      {/* Sticky bottom Question Card or Composer (draft mode renders its own centered tray inside the canvas) */}
       {!isDraft && (
         <div className={`shrink-0 px-4 pb-3.5 pt-2 sm:px-8 transition-[padding] duration-200 ease-out ${statusRightReserveClass}`}>
-          <Composer
-            isDraft={false}
-            locale={locale}
-            stream={currentStream}
-            models={models}
-            runners={runners}
-            selectedProviderId={selectedProviderId}
-            selectedModelId={selectedModelId}
-            thinkingEffort={thinkingEffort}
-            permissionMode={permissionMode}
-            selectedRunnerId={selectedRunnerId}
-            selectedWorkspacePath={selectedWorkspacePath}
-            activeModelLimit={activeModelMeta?.context_window || 200000}
-            setComposerText={setComposerText}
-            setSelectedRunner={setSelectedRunner}
-            setSelectedProvider={setSelectedProvider}
-            setSelectedModel={setSelectedModel}
-            setThinkingEffort={setThinkingEffort}
-            setPermissionMode={setPermissionMode}
-            sendPromptOrSteer={sendPromptOrSteer}
-            abortActiveSession={abortActiveSession}
-            composerText={composerText}
-          />
+          {currentStream.pendingUIPrompt ? (
+            <InlineQuestionCard key={currentStream.pendingUIPrompt.requestId} prompt={currentStream.pendingUIPrompt} />
+          ) : (
+            <Composer
+              isDraft={false}
+              locale={locale}
+              stream={currentStream}
+              models={models}
+              runners={runners}
+              selectedProviderId={selectedProviderId}
+              selectedModelId={selectedModelId}
+              thinkingEffort={thinkingEffort}
+              permissionMode={permissionMode}
+              selectedRunnerId={selectedRunnerId}
+              selectedWorkspacePath={selectedWorkspacePath}
+              activeModelLimit={activeModelMeta?.context_window || 200000}
+              setComposerText={setComposerText}
+              setSelectedRunner={setSelectedRunner}
+              setSelectedProvider={setSelectedProvider}
+              setSelectedModel={setSelectedModel}
+              setThinkingEffort={setThinkingEffort}
+              setPermissionMode={setPermissionMode}
+              sendPromptOrSteer={sendPromptOrSteer}
+              abortActiveSession={abortActiveSession}
+              composerText={composerText}
+            />
+          )}
         </div>
       )}
     </section>

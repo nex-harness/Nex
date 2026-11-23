@@ -341,15 +341,38 @@ export interface PendingApproval {
   argsJson: string;
 }
 
+export interface UIPromptOption {
+  label: string;
+  description?: string;
+}
+
+export interface UIPromptQuestion {
+  id?: string;
+  header?: string;
+  question: string;
+  message?: string;
+  kind?: 'select' | 'confirm' | 'input';
+  options?: UIPromptOption[];
+  multiSelect?: boolean;
+  allowCustom?: boolean;
+  placeholder?: string;
+  defaultValue?: string;
+}
+
 export interface PendingUIPrompt {
   requestId: string;
   sessionId: string;
   runnerId: string;
   kind: 'select' | 'confirm' | 'input';
+  header?: string;
   title: string;
   message?: string;
   placeholder?: string;
   options?: string[];
+  optionItems?: UIPromptOption[];
+  multiSelect?: boolean;
+  allowCustom?: boolean;
+  questions?: UIPromptQuestion[];
   defaultValue?: string;
 }
 
