@@ -3744,4 +3744,170 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(screen.getByTestId('turn-tick-0')).toBeTruthy();
     expect(screen.getByTestId('turn-tick-59')).toBeTruthy();
   });
+
+  it('places session status dots before conversation titles and renders CloudOff only on offline runner badges', () => {
+    const now = Date.now();
+    useNexStore.setState({
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      mainView: 'workspace',
+      sidebarVisible: true,
+      activeSessionId: 'sess_run',
+      runners: [
+        {
+          id: 'run_online',
+          name: 'macM4',
+          hostname: 'macM4',
+          os: 'darwin',
+          arch: 'arm64',
+          shell: 'zsh',
+          tags: [],
+          synced_config_rev: 1,
+          status: 'online',
+          workspace_default: '/tmp/proj-online',
+          version: '0.3.0',
+          last_seen_at: now,
+        },
+        {
+          id: 'run_offline',
+          name: 'WindowsT2',
+          hostname: 'WindowsT2',
+          os: 'windows',
+          arch: 'amd64',
+          shell: 'powershell',
+          tags: [],
+          synced_config_rev: 1,
+          status: 'offline',
+          workspace_default: '/tmp/proj-offline',
+          version: '0.3.0',
+          last_seen_at: now - 60_000,
+        },
+      ],
+      sessions: [
+        {
+          id: 'sess_run',
+          runner_id: 'run_online',
+          depth: 0,
+          title: 'Running Task Title',
+          workspace_path: '/tmp/proj-online',
+          agent_profile_slug: 'main',
+          model_id: 'm1',
+          provider_id: 'p1',
+          permission_mode: 'interactive',
+          status: 'running',
+          latest_context_tokens: 0,
+          context_window_limit: 128000,
+          created_at: now - 10_000,
+          updated_at: now - 1_000,
+          last_active_at: now - 1_000,
+        },
+        {
+          id: 'sess_await',
+          runner_id: 'run_online',
+          depth: 0,
+          title: 'Awaiting Input Title',
+          workspace_path: '/tmp/proj-online',
+          agent_profile_slug: 'main',
+          model_id: 'm1',
+          provider_id: 'p1',
+          permission_mode: 'interactive',
+          status: 'running',
+          latest_context_tokens: 0,
+          context_window_limit: 128000,
+          created_at: now - 20_000,
+          updated_at: now - 2_000,
+          last_active_at: now - 2_000,
+        },
+        {
+          id: 'sess_err',
+          runner_id: 'run_offline',
+          depth: 0,
+          title: 'Errored Task Title',
+          workspace_path: '/tmp/proj-offline',
+          agent_profile_slug: 'main',
+          model_id: 'm1',
+          provider_id: 'p1',
+          permission_mode: 'interactive',
+          status: 'error',
+          latest_context_tokens: 0,
+          context_window_limit: 128000,
+          created_at: now - 30_000,
+          updated_at: now - 3_000,
+          last_active_at: now - 3_000,
+        },
+        {
+          id: 'sess_idle',
+          runner_id: 'run_offline',
+          depth: 0,
+          title: 'Idle Task Title',
+          workspace_path: '/tmp/proj-offline',
+          agent_profile_slug: 'main',
+          model_id: 'm1',
+          provider_id: 'p1',
+          permission_mode: 'interactive',
+          status: 'idle',
+          latest_context_tokens: 0,
+          context_window_limit: 128000,
+          created_at: now - 40_000,
+          updated_at: now - 4_000,
+          last_active_at: now - 4_000,
+        },
+      ],
+      streams: {
+        sess_run: {
+          ...emptyStreamState(),
+          running: true,
+        },
+        sess_await: {
+          ...emptyStreamState(),
+          running: true,
+          pendingUIPrompt: {
+            requestId: 'uip_await',
+            sessionId: 'sess_await',
+            runnerId: 'run_online',
+            kind: 'input',
+            title: 'Confirm?',
+          },
+        },
+      },
+    });
+
+    render(<App />);
+
+    // Running dot appears BEFORE the title element in DOM order (left side) and pulses blue
+    const runRow = screen.getByTestId('session-row-sess_run');
+    const runDot = screen.getByTestId('session-status-dot-sess_run');
+    const runTitle = Array.from(runRow.querySelectorAll('span')).find((el) => el.textContent === 'Running Task Title')!;
+    expect(runTitle).toBeTruthy();
+    expect(runDot.getAttribute('data-status')).toBe('running');
+    expect(runDot.className).toContain('bg-brand-blue');
+    expect(runDot.className).toContain('animate-pulse');
+    expect(runRow.contains(runDot)).toBe(true);
+    expect(runDot.compareDocumentPosition(runTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Awaiting input dot uses amber pulse
+    const awaitDot = screen.getByTestId('session-status-dot-sess_await');
+    expect(awaitDot.getAttribute('data-status')).toBe('awaiting');
+    expect(awaitDot.className).toContain('bg-amber-500');
+
+    // Errored session shows red dot
+    const errDot = screen.getByTestId('session-status-dot-sess_err');
+    expect(errDot.getAttribute('data-status')).toBe('error');
+    expect(errDot.className).toContain('bg-destructive');
+
+    // Idle session renders no dot
+    expect(screen.queryByTestId('session-status-dot-sess_idle')).toBeNull();
+
+    // Online runner badge has NO green dot and NO offline cloud icon
+    const onlineBadge = screen.getByTestId('project-runner-badge-run_online::/tmp/proj-online');
+    expect(onlineBadge.textContent).toContain('macM4');
+    expect(onlineBadge.querySelector('.bg-success')).toBeNull();
+    expect(screen.queryByTestId('project-runner-offline-run_online::/tmp/proj-online')).toBeNull();
+
+    // Offline runner badge displays CloudOff icon
+    const offlineBadge = screen.getByTestId('project-runner-badge-run_offline::/tmp/proj-offline');
+    expect(offlineBadge.textContent).toContain('WindowsT2');
+    expect(screen.getByTestId('project-runner-offline-run_offline::/tmp/proj-offline')).toBeTruthy();
+  });
 });

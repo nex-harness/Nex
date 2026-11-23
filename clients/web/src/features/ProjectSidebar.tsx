@@ -6,6 +6,7 @@ import {
   CalendarClock,
   Check,
   CirclePlus,
+  CloudOff,
   Folder,
   ListFilter,
   PanelLeftClose,
@@ -43,13 +44,57 @@ interface ProjectGroup {
   sessions: SessionRecord[];
 }
 
-function SessionRunningDot({ sessionId, status }: { sessionId: string; status: string }) {
-  const running = useNexStore((s) => {
+type SessionIndicatorState = 'awaiting' | 'running' | 'error' | 'idle';
+
+function useSessionIndicator(sessionId: string, status: string): SessionIndicatorState {
+  return useNexStore((s) => {
     const st = s.streams[sessionId];
-    return st ? st.running : status === 'running';
+    if (st?.pendingUIPrompt || st?.pendingApproval) return 'awaiting';
+    if (st ? st.running : status === 'running') return 'running';
+    if (status === 'error') return 'error';
+    return 'idle';
   });
-  if (!running) return null;
-  return <span className="size-1.5 animate-pulse rounded-full bg-brand-blue" />;
+}
+
+function SessionStatusDot({
+  sessionId,
+  status,
+  className = '',
+}: {
+  sessionId: string;
+  status: string;
+  className?: string;
+}) {
+  const indicator = useSessionIndicator(sessionId, status);
+  if (indicator === 'idle') return null;
+
+  const toneClass =
+    indicator === 'awaiting'
+      ? 'animate-pulse bg-amber-500'
+      : indicator === 'running'
+        ? 'animate-pulse bg-brand-blue'
+        : 'bg-destructive';
+
+  return (
+    <span
+      data-testid={`session-status-dot-${sessionId}`}
+      data-status={indicator}
+      className={`size-1.5 shrink-0 rounded-full ${toneClass} ${className}`.trim()}
+    />
+  );
+}
+
+function PinnedLeadingSlot({ sessionId, status }: { sessionId: string; status: string }) {
+  const indicator = useSessionIndicator(sessionId, status);
+  if (indicator === 'idle') {
+    return <Pin className="size-3.5" />;
+  }
+  return (
+    <>
+      <SessionStatusDot sessionId={sessionId} status={status} className="group-hover:hidden" />
+      <Pin className="hidden size-3.5 group-hover:block" />
+    </>
+  );
 }
 
 export function ProjectSidebar() {
@@ -202,18 +247,25 @@ export function ProjectSidebar() {
         key={sess.id}
         data-testid={`session-row-${sess.id}`}
         onClick={() => handleSelectSession(sess.id)}
-        className={`group flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg pr-2 transition-colors ${
-          indent ? 'pl-5' : 'pl-2'
+        className={`group relative flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg pr-2 transition-colors ${
+          indent ? 'pl-6' : 'pl-2'
         } ${
           active ? 'bg-selected font-medium text-foreground' : 'text-foreground-subtle hover:bg-hover hover:text-foreground'
         }`}
       >
-        <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-ui-base" style={FADE_MASK}>
-          {sess.title}
+        {indent && (
+          <span className="pointer-events-none absolute left-2 flex w-4 items-center justify-center">
+            <SessionStatusDot sessionId={sess.id} status={sess.status} />
+          </span>
+        )}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          {!indent && <SessionStatusDot sessionId={sess.id} status={sess.status} />}
+          <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-ui-base" style={FADE_MASK}>
+            {sess.title}
+          </span>
         </span>
 
-        <span className="flex shrink-0 items-center gap-1.5 text-ui-xs tabular-nums text-foreground-subtlest group-hover:hidden">
-          <SessionRunningDot sessionId={sess.id} status={sess.status} />
+        <span className="flex shrink-0 items-center text-ui-xs tabular-nums text-foreground-subtlest group-hover:hidden">
           {formatRelativeTimeShort(sess.last_active_at || sess.updated_at, locale)}
         </span>
 
@@ -289,17 +341,16 @@ export function ProjectSidebar() {
               e.stopPropagation();
               togglePinSession(sess.id);
             }}
-            className="shrink-0 text-foreground-subtle transition-colors hover:text-foreground"
+            className="flex size-4 shrink-0 items-center justify-center text-foreground-subtle transition-colors hover:text-foreground"
           >
-            <Pin className="size-3.5" />
+            <PinnedLeadingSlot sessionId={sess.id} status={sess.status} />
           </button>
           <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-ui-base" style={FADE_MASK}>
             {sess.title}
           </span>
         </span>
 
-        <span className="flex shrink-0 items-center gap-1.5 text-ui-xs tabular-nums text-foreground-subtlest">
-          <SessionRunningDot sessionId={sess.id} status={sess.status} />
+        <span className="flex shrink-0 items-center text-ui-xs tabular-nums text-foreground-subtlest">
           {formatRelativeTimeShort(sess.last_active_at || sess.updated_at, locale)}
         </span>
       </div>
@@ -328,11 +379,10 @@ export function ProjectSidebar() {
                 title={group.workspacePath ? `${group.runnerName}: ${group.workspacePath}` : group.runnerName}
                 className="inline-flex max-w-[96px] shrink-0 items-center gap-1 rounded bg-tag px-1.5 py-0.5 text-[11px] leading-tight text-foreground-subtle"
               >
-                {group.runnerStatus && (
-                  <span
-                    className={`size-1.5 shrink-0 rounded-full ${
-                      group.runnerStatus === 'online' ? 'bg-success' : 'bg-foreground-subtlest'
-                    }`}
+                {group.runnerStatus === 'offline' && (
+                  <CloudOff
+                    data-testid={`project-runner-offline-${group.key}`}
+                    className="size-3 shrink-0 text-foreground-subtlest"
                   />
                 )}
                 <span className="truncate">{group.runnerName}</span>
