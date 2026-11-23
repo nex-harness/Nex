@@ -25,6 +25,21 @@ type RunnerRecord struct {
 	AuthToken        string   `json:"auth_token,omitempty"`
 	WorkspaceDefault string   `json:"workspace_default"`
 	CreatedAt        int64    `json:"created_at"`
+
+	// Live runtime / update metadata (enriched in-memory by Server from runner.hello & manifest)
+	BuildSHA        string   `json:"build_sha,omitempty"`
+	BinarySHA256    string   `json:"binary_sha256,omitempty"`
+	ProtocolVersion int      `json:"protocol_version,omitempty"`
+	Capabilities    []string `json:"capabilities,omitempty"`
+	IsDev           bool     `json:"is_dev,omitempty"`
+	Elevated        bool     `json:"elevated,omitempty"`
+	UpdateStatus    string   `json:"update_status,omitempty"` // "up_to_date" | "update_available" | "update_required"
+	UpdateReason    string   `json:"update_reason,omitempty"`
+	TargetVersion   string   `json:"target_version,omitempty"`
+	UpdatePhase     string   `json:"update_phase,omitempty"`
+	UpdateProgress  int      `json:"update_progress,omitempty"`
+	UpdateError     string   `json:"update_error,omitempty"`
+	Incompatible    bool     `json:"incompatible,omitempty"`
 }
 
 func (s *Store) UpsertRunner(ctx context.Context, r RunnerRecord) error {

@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,16 +11,30 @@ import (
 	"github.com/nex-harness/nex/pkg/store"
 )
 
-const ProtocolVersion = 1
+const (
+	ProtocolVersion          = 1
+	MinRunnerProtocolVersion = 1
+)
+
+// DefaultRunnerCapabilities advertises core runner capabilities for server-side compatibility gating.
+var DefaultRunnerCapabilities = []string{"self_update_v1", "ask_user_v2", "browser_v1"}
+
+// IsDevVersion reports whether a runner or server build string represents a development build.
+func IsDevVersion(version string) bool {
+	v := strings.TrimSpace(version)
+	return v == "" || v == "dev" || strings.Contains(v, "-dev") || strings.Contains(v, "-dirty")
+}
 
 // Frame Types exchanged over /ws/runner and /ws/client.
 const (
 	// Handshake & Sync
-	TypeRunnerHello   = "runner.hello"
-	TypeRunnerWelcome = "runner.welcome"
-	TypeConfigSync    = "config.sync"
-	TypeOutboxAck     = "outbox.ack"
-	TypeRunnerStatus  = "runner.status"
+	TypeRunnerHello        = "runner.hello"
+	TypeRunnerWelcome      = "runner.welcome"
+	TypeRunnerUpdate       = "runner.update"
+	TypeRunnerUpdateStatus = "runner.update_status"
+	TypeConfigSync         = "config.sync"
+	TypeOutboxAck          = "outbox.ack"
+	TypeRunnerStatus       = "runner.status"
 
 	// Client Subscription & Session Control
 	TypeClientSubscribe = "client.subscribe"
@@ -110,9 +125,37 @@ type RunnerHelloPayload struct {
 	Arch             string   `json:"arch"`
 	Shell            string   `json:"shell"`
 	Version          string   `json:"version"`
+	BuildSHA         string   `json:"build_sha,omitempty"`
+	BinarySHA256     string   `json:"binary_sha256,omitempty"`
+	ProtocolVersion  int      `json:"protocol_version,omitempty"`
+	Capabilities     []string `json:"capabilities,omitempty"`
+	IsDev            bool     `json:"is_dev,omitempty"`
+	Elevated         bool     `json:"elevated,omitempty"`
+	UpdateState      string   `json:"update_state,omitempty"`
+	UpdateError      string   `json:"update_error,omitempty"`
 	Tags             []string `json:"tags,omitempty"`
 	WorkspaceDefault string   `json:"workspace_default"`
 	SyncedConfigRev  int64    `json:"synced_config_rev"`
+}
+
+// RunnerUpdatePayload instructs a connected Runner to download and install an update.
+type RunnerUpdatePayload struct {
+	RequestID      string   `json:"request_id"`
+	TargetVersion  string   `json:"target_version,omitempty"`
+	ExpectedSHA256 string   `json:"expected_sha256,omitempty"`
+	DownloadURLs   []string `json:"download_urls,omitempty"`
+	Mode           string   `json:"mode"` // "when_idle" | "immediate"
+	Force          bool     `json:"force,omitempty"`
+}
+
+// RunnerUpdateStatusPayload reports live self-update progress or errors back to Server/UI.
+type RunnerUpdateStatusPayload struct {
+	RequestID     string `json:"request_id,omitempty"`
+	Phase         string `json:"phase"` // "idle" | "draining" | "downloading" | "verifying" | "installing" | "restarting" | "succeeded" | "failed" | "rolled_back"
+	ProgressPct   int    `json:"progress_pct,omitempty"`
+	TargetVersion string `json:"target_version,omitempty"`
+	Message       string `json:"message,omitempty"`
+	Error         string `json:"error,omitempty"`
 }
 
 // MemoryConfigSync distributes memory automation preferences from Server to Runners.
@@ -160,8 +203,18 @@ type ConfigSnapshot struct {
 
 // RunnerWelcomePayload acknowledges Runner registration and optionally pushes updated config.
 type RunnerWelcomePayload struct {
-	RunnerID string          `json:"runner_id"`
-	Snapshot *ConfigSnapshot `json:"snapshot,omitempty"`
+	RunnerID           string          `json:"runner_id"`
+	Snapshot           *ConfigSnapshot `json:"snapshot,omitempty"`
+	ServerVersion      string          `json:"server_version,omitempty"`
+	MinProtocolVersion int             `json:"min_protocol_version,omitempty"`
+	UpdateStatus       string          `json:"update_status,omitempty"` // "up_to_date" | "update_available" | "update_required"
+	UpdateReason       string          `json:"update_reason,omitempty"`
+	TargetVersion      string          `json:"target_version,omitempty"`
+	TargetBuildSHA     string          `json:"target_build_sha,omitempty"`
+	TargetSHA256       string          `json:"target_sha256,omitempty"`
+	DownloadURLs       []string        `json:"download_urls,omitempty"`
+	AutoUpdateAllowed  bool            `json:"auto_update_allowed,omitempty"`
+	Incompatible       bool            `json:"incompatible,omitempty"`
 }
 
 // ClientSubscribePayload subscribes a UI client to session events starting after LastSeenSeq.

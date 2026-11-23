@@ -458,9 +458,10 @@ func (s *Server) handleRunners(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	// Mask auth tokens in UI responses
+	// Mask auth tokens and enrich live runner update/compatibility metadata
 	for i := range list {
 		list[i].AuthToken = ""
+		s.enrichRunnerRecord(r.Context(), &list[i])
 	}
 	writeJSON(w, http.StatusOK, list)
 }

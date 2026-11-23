@@ -2,9 +2,12 @@ package runner
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -67,6 +70,11 @@ type Config struct {
 	DataDir          string // e.g. "~/.nex-runner"
 	WorkspaceDefault string
 	Version          string
+	BuildSHA         string
+	ProtocolVersion  int
+	Capabilities     []string
+	Elevated         bool
+	AutoUpdate       *bool
 	Tags             []string
 	HTTPClient       *http.Client
 
@@ -86,9 +94,11 @@ type activeSession struct {
 
 // Node is an autonomous Runner capable of both Server-connected execution and offline standalone execution.
 type Node struct {
-	cfg   Config
-	store *store.Store
-	hc    *http.Client
+	cfg          Config
+	store        *store.Store
+	hc           *http.Client
+	binarySHA256 string
+	isDev        bool
 
 	wsMu sync.RWMutex
 	ws   *websocket.Conn
@@ -119,9 +129,17 @@ func NewNode(cfg Config) (*Node, error) {
 	if cfg.Version == "" {
 		cfg.Version = "dev"
 	}
+	if cfg.ProtocolVersion <= 0 {
+		cfg.ProtocolVersion = protocol.ProtocolVersion
+	}
+	if len(cfg.Capabilities) == 0 {
+		cfg.Capabilities = append([]string(nil), protocol.DefaultRunnerCapabilities...)
+	}
 	if cfg.WorkspaceDefault == "" {
 		cfg.WorkspaceDefault, _ = os.Getwd()
 	}
+	binHash := computeExecutableSHA256()
+	isDev := protocol.IsDevVersion(cfg.Version)
 
 	st, err := store.Open(cfg.DataDir)
 	if err != nil {
@@ -151,6 +169,8 @@ func NewNode(cfg Config) (*Node, error) {
 		cfg:             cfg,
 		store:           st,
 		hc:              hc,
+		binarySHA256:    binHash,
+		isDev:           isDev,
 		activeSessions:  make(map[string]*activeSession),
 		pendingApproval: make(map[string]chan protocol.ApprovalResolvePayload),
 		pendingUI:       make(map[string]chan protocol.UIResolvePayload),
@@ -253,6 +273,12 @@ func (n *Node) connectOnce(ctx context.Context) error {
 		Arch:             runtime.GOARCH,
 		Shell:            tools.DefaultShellName(),
 		Version:          n.cfg.Version,
+		BuildSHA:         n.cfg.BuildSHA,
+		BinarySHA256:     n.binarySHA256,
+		ProtocolVersion:  n.cfg.ProtocolVersion,
+		Capabilities:     n.cfg.Capabilities,
+		IsDev:            n.isDev,
+		Elevated:         n.cfg.Elevated,
 		Tags:             n.cfg.Tags,
 		WorkspaceDefault: n.cfg.WorkspaceDefault,
 		SyncedConfigRev:  rev,
@@ -820,4 +846,21 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 			_ = n.sendEnvelope(ctx, reply)
 		}()
 	}
+}
+
+func computeExecutableSHA256() string {
+	exe, err := os.Executable()
+	if err != nil || exe == "" {
+		return ""
+	}
+	f, err := os.Open(exe)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
