@@ -1013,4 +1013,7 @@ export const zhCN = {
   "questionCard.yes": "是",
   "questionCard.no": "否",
   "questionCard.multiSelectHint": "可多选",
+  "runners.removeRunner": "移除设备",
+  "runners.removedRunner": "已移除设备「{name}」",
+  "runners.versionLabel": "v{version}",
 } satisfies Record<MessageKey, string>;

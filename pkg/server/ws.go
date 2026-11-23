@@ -72,10 +72,14 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		s.mu.Lock()
+		evicted := rc.evicted
 		if s.runners[hello.RunnerID] == rc {
 			delete(s.runners, hello.RunnerID)
 		}
 		s.mu.Unlock()
+		if evicted {
+			return
+		}
 		if rec, err := s.store.GetRunner(context.Background(), hello.RunnerID); err == nil {
 			rec.Status = "offline"
 			rec.LastSeenAt = time.Now().UnixMilli()

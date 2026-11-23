@@ -44,9 +44,10 @@ type Config struct {
 }
 
 type runnerConn struct {
-	id     string
-	ws     *websocket.Conn
-	sendMu sync.Mutex
+	id      string
+	ws      *websocket.Conn
+	sendMu  sync.Mutex
+	evicted bool
 }
 
 func (rc *runnerConn) sendJSON(ctx context.Context, env protocol.Envelope) error {

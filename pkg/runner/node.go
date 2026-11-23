@@ -117,7 +117,7 @@ func NewNode(cfg Config) (*Node, error) {
 		cfg.Name = cfg.RunnerID
 	}
 	if cfg.Version == "" {
-		cfg.Version = "0.3.0"
+		cfg.Version = "dev"
 	}
 	if cfg.WorkspaceDefault == "" {
 		cfg.WorkspaceDefault, _ = os.Getwd()

@@ -3390,4 +3390,166 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(progressHeader.className).toContain('pr-14');
     expect(progressHeader.textContent).toContain('5/5');
   });
+
+  it('displays runner badges per project in ProjectSidebar and supports runner version display & removal in Runners settings', async () => {
+    const origFetch = globalThis.fetch;
+    const deletedIds: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/v1/runners/') && init?.method === 'DELETE') {
+        const id = decodeURIComponent(url.split('/api/v1/runners/')[1]);
+        deletedIds.push(id);
+        return new Response(JSON.stringify({ deleted: id }), { status: 200 });
+      }
+      if (url.endsWith('/api/v1/runners')) {
+        const remaining = [
+          {
+            id: 'run_mac',
+            name: 'macM4',
+            hostname: 'MacMini.local',
+            os: 'darwin',
+            arch: 'arm64',
+            shell: '/bin/zsh',
+            version: '0.1.2',
+            tags: [],
+            status: 'online',
+            last_seen_at: 1000,
+            synced_config_rev: 146,
+            workspace_default: '/Users/tylinux',
+          },
+          {
+            id: 'run_win_stale',
+            name: 'WindowsT2',
+            hostname: 'WorkStation',
+            os: 'windows',
+            arch: 'amd64',
+            shell: 'bash.exe',
+            version: 'v0.1.1',
+            tags: [],
+            status: 'offline',
+            last_seen_at: 500,
+            synced_config_rev: 2,
+            workspace_default: 'C:\\Users\\tylinux',
+          },
+        ].filter((r) => !deletedIds.includes(r.id));
+        return new Response(JSON.stringify(remaining), { status: 200 });
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      useNexStore.setState({
+        serverConnectRequired: false,
+        authEnabled: false,
+        authenticated: true,
+        locale: 'zh-CN',
+        mainView: 'workspace',
+        sidebarVisible: true,
+        runners: [
+          {
+            id: 'run_mac',
+            name: 'macM4',
+            hostname: 'MacMini.local',
+            os: 'darwin',
+            arch: 'arm64',
+            shell: '/bin/zsh',
+            version: '0.1.2',
+            tags: [],
+            status: 'online',
+            last_seen_at: 1000,
+            synced_config_rev: 146,
+            workspace_default: '/Users/tylinux',
+          },
+          {
+            id: 'run_remote',
+            name: 'RemoteBuilder',
+            hostname: 'RemoteBuilder',
+            os: 'linux',
+            arch: 'amd64',
+            shell: '/bin/bash',
+            version: 'v0.1.2',
+            tags: [],
+            status: 'online',
+            last_seen_at: 1000,
+            synced_config_rev: 197,
+            workspace_default: '/home/tylinux/Developer',
+          },
+          {
+            id: 'run_win_stale',
+            name: 'WindowsT2',
+            hostname: 'WorkStation',
+            os: 'windows',
+            arch: 'amd64',
+            shell: 'bash.exe',
+            version: 'v0.1.1',
+            tags: [],
+            status: 'offline',
+            last_seen_at: 500,
+            synced_config_rev: 2,
+            workspace_default: 'C:\\Users\\tylinux',
+          },
+        ],
+        sessions: [
+          {
+            id: 'sess_mac_1',
+            runner_id: 'run_mac',
+            depth: 0,
+            title: 'Mac Task',
+            workspace_path: '/Users/tylinux/Projects/Nex-v3',
+            agent_profile_slug: 'main',
+            model_id: 'm1',
+            provider_id: 'p1',
+            permission_mode: 'interactive',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: 1000,
+            updated_at: 2000,
+            last_active_at: 2000,
+          },
+          {
+            id: 'sess_remote_1',
+            runner_id: 'run_remote',
+            depth: 0,
+            title: 'Remote Task',
+            workspace_path: '/home/tylinux/Developer/Nex-v3',
+            agent_profile_slug: 'main',
+            model_id: 'm1',
+            provider_id: 'p1',
+            permission_mode: 'interactive',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: 1000,
+            updated_at: 2000,
+            last_active_at: 2000,
+          },
+        ],
+      });
+
+      const { rerender } = render(<App />);
+
+      const macBadge = screen.getByTestId('project-runner-badge-run_mac::/Users/tylinux/Projects/Nex-v3');
+      const remoteBadge = screen.getByTestId('project-runner-badge-run_remote::/home/tylinux/Developer/Nex-v3');
+      expect(macBadge.textContent).toContain('macM4');
+      expect(remoteBadge.textContent).toContain('RemoteBuilder');
+
+      act(() => {
+        useNexStore.setState({ mainView: 'settings', settingsSection: 'runners' });
+      });
+      rerender(<App />);
+
+      expect(screen.getByTestId('runner-version-run_mac').textContent).toBe('v0.1.2');
+      expect(screen.getByTestId('runner-version-run_win_stale').textContent).toBe('v0.1.1');
+
+      const removeBtn = screen.getByTestId('remove-runner-run_win_stale');
+      await act(async () => {
+        fireEvent.click(removeBtn);
+      });
+
+      expect(deletedIds).toEqual(['run_win_stale']);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });

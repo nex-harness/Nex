@@ -36,6 +36,8 @@ const TASKS_PER_PROJECT = 8;
 interface ProjectGroup {
   key: string;
   runnerId: string;
+  runnerName: string;
+  runnerStatus?: 'online' | 'offline';
   workspacePath: string;
   name: string;
   sessions: SessionRecord[];
@@ -54,6 +56,7 @@ export function ProjectSidebar() {
   const locale = useNexStore((s) => s.locale);
   const mainView = useNexStore((s) => s.mainView);
   const settingsSection = useNexStore((s) => s.settingsSection);
+  const runners = useNexStore((s) => s.runners);
   const sessions = useNexStore((s) => s.sessions);
   const activeSessionId = useNexStore((s) => s.activeSessionId);
   const pinnedSessionIds = useNexStore((s) => s.pinnedSessionIds);
@@ -94,16 +97,27 @@ export function ProjectSidebar() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
 
+  const runnerById = useMemo(() => {
+    const map = new Map<string, { name: string; status: 'online' | 'offline' }>();
+    for (const r of runners) {
+      map.set(r.id, { name: r.name || r.hostname || r.id, status: r.status });
+    }
+    return map;
+  }, [runners]);
+
   const filteredSessions = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return sessions;
-    return sessions.filter(
-      (s) =>
+    return sessions.filter((s) => {
+      const rName = runnerById.get(s.runner_id)?.name || '';
+      return (
         s.title.toLowerCase().includes(q) ||
         (s.workspace_path || '').toLowerCase().includes(q) ||
-        s.runner_id.toLowerCase().includes(q),
-    );
-  }, [sessions, search]);
+        s.runner_id.toLowerCase().includes(q) ||
+        rName.toLowerCase().includes(q)
+      );
+    });
+  }, [sessions, search, runnerById]);
 
   const pinnedSessions = useMemo(
     () => filteredSessions.filter((s) => pinnedSessionIds[s.id]),
@@ -120,16 +134,21 @@ export function ProjectSidebar() {
         existing.sessions.push(sess);
         continue;
       }
+      const runnerMeta = runnerById.get(sess.runner_id);
       map.set(key, {
         key,
         runnerId: sess.runner_id,
+        runnerName: runnerMeta?.name || sess.runner_id || '',
+        runnerStatus: runnerMeta?.status,
         workspacePath: sess.workspace_path || '',
         name: projectLeaf(sess.workspace_path || '', sess.runner_id || 'Workspace'),
         sessions: [sess],
       });
     }
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [filteredSessions, pinnedSessionIds]);
+    return Array.from(map.values()).sort(
+      (a, b) => a.name.localeCompare(b.name) || a.runnerName.localeCompare(b.runnerName),
+    );
+  }, [filteredSessions, pinnedSessionIds, runnerById]);
 
   const commitRename = async (id: string) => {
     if (editingTitle.trim()) {
@@ -296,12 +315,29 @@ export function ProjectSidebar() {
     return (
       <div key={group.key} className="space-y-0.5">
         <div
-          className="group flex h-8 cursor-pointer items-center justify-between rounded-lg px-2 transition-colors hover:bg-hover"
+          data-testid={`project-group-${group.key}`}
+          className="group flex h-8 cursor-pointer items-center justify-between gap-1.5 rounded-lg px-2 transition-colors hover:bg-hover"
           onClick={() => setCollapsedGroups((p) => ({ ...p, [group.key]: !p[group.key] }))}
         >
-          <span className="flex min-w-0 items-center gap-2 text-ui-base text-foreground">
+          <span className="flex min-w-0 flex-1 items-center gap-2 text-ui-base text-foreground">
             <Folder className="size-4 shrink-0 text-foreground-subtle transition-transform duration-150 group-hover:scale-105" />
             <span className="truncate">{group.name}</span>
+            {group.runnerName && (
+              <span
+                data-testid={`project-runner-badge-${group.key}`}
+                title={group.workspacePath ? `${group.runnerName}: ${group.workspacePath}` : group.runnerName}
+                className="inline-flex max-w-[96px] shrink-0 items-center gap-1 rounded bg-tag px-1.5 py-0.5 text-[11px] leading-tight text-foreground-subtle"
+              >
+                {group.runnerStatus && (
+                  <span
+                    className={`size-1.5 shrink-0 rounded-full ${
+                      group.runnerStatus === 'online' ? 'bg-success' : 'bg-foreground-subtlest'
+                    }`}
+                  />
+                )}
+                <span className="truncate">{group.runnerName}</span>
+              </span>
+            )}
           </span>
           <button
             type="button"

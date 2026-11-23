@@ -467,10 +467,21 @@ func (s *Server) handleRunnerSubroutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if action == "" && r.Method == http.MethodDelete {
+		s.mu.Lock()
+		rc := s.runners[runnerID]
+		if rc != nil {
+			rc.evicted = true
+			delete(s.runners, runnerID)
+		}
+		s.mu.Unlock()
+		if rc != nil {
+			_ = rc.ws.Close(1000, "runner removed")
+		}
 		if err := s.store.DeleteResourceByName(r.Context(), "runners", "id", runnerID); err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
 		}
+		s.broadcastRunnerStatus(r.Context(), runnerID, "deleted")
 		writeJSON(w, http.StatusOK, map[string]any{"deleted": runnerID})
 		return
 	}

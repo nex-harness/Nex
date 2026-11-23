@@ -16,7 +16,13 @@ import (
 	"github.com/nex-harness/nex/pkg/runner"
 )
 
+var version = "dev"
+
 func main() {
+	if len(os.Args) >= 2 && (os.Args[1] == "-version" || os.Args[1] == "--version" || os.Args[1] == "version") {
+		fmt.Println(version)
+		return
+	}
 	// Support `nex-runner service install|uninstall|start|stop|restart` via kardianos/service
 	if len(os.Args) >= 3 && os.Args[1] == "service" {
 		action := os.Args[2]
@@ -60,6 +66,7 @@ func runDaemon(ctx context.Context, rawArgs []string) {
 		ServerWSURL:      *serverWS,
 		DataDir:          *dataDir,
 		WorkspaceDefault: *workspace,
+		Version:          version,
 	})
 	if err != nil {
 		log.Fatalf("failed to initialize nex-runner: %v", err)

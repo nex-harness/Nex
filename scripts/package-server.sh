@@ -45,9 +45,9 @@ for plat in "${RUNNER_PLATFORMS[@]}"; do
     ext=".exe"
   fi
   out_name="nex-runner-${os}-${arch}${ext}"
-  echo "==> Cross-compiling ${out_name} (CGO_ENABLED=0)..."
+  echo "==> Cross-compiling ${out_name} (CGO_ENABLED=0, version=${VERSION})..."
   CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-    go build -trimpath -o "${STAGE_DIR}/runners/${out_name}" ./cmd/nex-runner
+    go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "${STAGE_DIR}/runners/${out_name}" ./cmd/nex-runner
 done
 
 echo "==> Copying startup configs & installer..."

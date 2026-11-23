@@ -349,6 +349,24 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
     await refreshRegistries();
   };
 
+  const [removingRunnerIds, setRemovingRunnerIds] = useState<Record<string, boolean>>({});
+  const removeRunner = async (r: { id: string; name: string }) => {
+    setRemovingRunnerIds((prev) => ({ ...prev, [r.id]: true }));
+    try {
+      await apiFetch(`/api/v1/runners/${encodeURIComponent(r.id)}`, { method: 'DELETE' });
+      await refreshInitialData();
+      onFlash(formatMsg(locale, 'runners.removedRunner', { name: r.name || r.id }));
+    } catch (err) {
+      onFlash(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRemovingRunnerIds((prev) => {
+        const next = { ...prev };
+        delete next[r.id];
+        return next;
+      });
+    }
+  };
+
   const livePreview = `${form.username.trim() || 'user'}@${form.host.trim() || 'host'}:${form.port.trim() || '22'}`;
 
   return (
@@ -422,6 +440,16 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       {isOnline && (
                         <span className="rounded-md bg-success-surface px-1.5 py-0.5 text-[11px] font-medium text-success-surface-fg">
                           {formatMsg(locale, 'runners.runnerOnline')}
+                        </span>
+                      )}
+                      {matchedRunner?.version && (
+                        <span
+                          data-testid={`ssh-target-version-${t.id}`}
+                          className="rounded bg-surface px-1.5 py-0.5 font-mono text-[11px] text-foreground-subtle"
+                        >
+                          {matchedRunner.version.startsWith('v')
+                            ? matchedRunner.version
+                            : formatMsg(locale, 'runners.versionLabel', { version: matchedRunner.version })}
                         </span>
                       )}
                     </div>
@@ -548,42 +576,76 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
             {formatMsg(locale, 'runners.noRunnersConnectedYet')}
           </div>
         ) : (
-          runners.map((r) => (
-            <div
-              key={r.id}
-              className="grid grid-cols-1 items-center gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto]"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`size-2 shrink-0 rounded-full ${
-                      r.status === 'online' ? 'bg-success' : 'bg-foreground-subtlest'
-                    }`}
-                  />
-                  <span className="truncate text-ui-base font-medium text-foreground">{r.name}</span>
-                  <span
-                    className={`rounded-md px-1.5 py-0.5 text-ui-xs font-medium ${
-                      r.status === 'online'
-                        ? 'bg-success-surface text-success-surface-fg'
-                        : 'bg-tag text-foreground-subtle'
-                    }`}
-                  >
-                    {r.status}
+          runners.map((r) => {
+            const removing = Boolean(removingRunnerIds[r.id]);
+            const formattedVersion = r.version
+              ? r.version.startsWith('v')
+                ? r.version
+                : formatMsg(locale, 'runners.versionLabel', { version: r.version })
+              : '';
+            return (
+              <div
+                key={r.id}
+                data-testid={`connected-runner-${r.id}`}
+                className="grid grid-cols-1 items-center gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto]"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`size-2 shrink-0 rounded-full ${
+                        r.status === 'online' ? 'bg-success' : 'bg-foreground-subtlest'
+                      }`}
+                    />
+                    <span className="truncate text-ui-base font-medium text-foreground">{r.name}</span>
+                    <span
+                      className={`rounded-md px-1.5 py-0.5 text-ui-xs font-medium ${
+                        r.status === 'online'
+                          ? 'bg-success-surface text-success-surface-fg'
+                          : 'bg-tag text-foreground-subtle'
+                      }`}
+                    >
+                      {r.status}
+                    </span>
+                    {formattedVersion && (
+                      <span
+                        data-testid={`runner-version-${r.id}`}
+                        className="rounded-md border border-border bg-surface px-1.5 py-0.5 font-mono text-ui-xs text-foreground-subtle"
+                      >
+                        {formattedVersion}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-ui-xs text-foreground-subtle">
+                    <span className="rounded bg-surface px-1.5 py-0.5 font-mono">{r.os}</span>
+                    <span className="rounded bg-surface px-1.5 py-0.5 font-mono">{r.arch}</span>
+                    <span className="rounded bg-surface px-1.5 py-0.5 font-mono">{r.shell || 'default'}</span>
+                    {r.hostname ? <span className="font-mono">{r.hostname}</span> : null}
+                    {r.workspace_default ? <span className="truncate font-mono">{r.workspace_default}</span> : null}
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <span className="font-mono text-ui-xs tabular-nums text-foreground-subtlest">
+                    rev #{r.synced_config_rev}
                   </span>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-ui-xs text-foreground-subtle">
-                  <span className="rounded bg-surface px-1.5 py-0.5 font-mono">{r.os}</span>
-                  <span className="rounded bg-surface px-1.5 py-0.5 font-mono">{r.arch}</span>
-                  <span className="rounded bg-surface px-1.5 py-0.5 font-mono">{r.shell || 'default'}</span>
-                  {r.hostname ? <span className="font-mono">{r.hostname}</span> : null}
-                  {r.workspace_default ? <span className="truncate font-mono">{r.workspace_default}</span> : null}
+                  <button
+                    type="button"
+                    data-testid={`remove-runner-${r.id}`}
+                    disabled={removing}
+                    title={formatMsg(locale, 'runners.removeRunner')}
+                    aria-label={formatMsg(locale, 'runners.removeRunner')}
+                    onClick={() => void removeRunner(r)}
+                    className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg disabled:opacity-50"
+                  >
+                    {removing ? (
+                      <LoaderCircle className="size-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-3.5" />
+                    )}
+                  </button>
                 </div>
               </div>
-              <div className="font-mono text-ui-xs tabular-nums text-foreground-subtlest sm:text-right">
-                rev #{r.synced_config_rev}
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </SettingsGroupCard>
 

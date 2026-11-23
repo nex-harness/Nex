@@ -1011,6 +1011,9 @@ export const enUS = {
   "questionCard.yes": "Yes",
   "questionCard.no": "No",
   "questionCard.multiSelectHint": "Multiple choices allowed",
+  "runners.removeRunner": "Remove runner",
+  "runners.removedRunner": "Removed runner \"{name}\"",
+  "runners.versionLabel": "v{version}",
 } as const;
 
 export type MessageKey = keyof typeof enUS;
