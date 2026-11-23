@@ -573,6 +573,14 @@ export interface AppState {
   resolveBrowserHandoff: (sessionId: string, tabId: string, resumed: boolean) => void;
   probeRunnerBrowser: (runnerId: string) => Promise<BrowserProbeResult | null>;
   installRunnerBrowser: (runnerId: string, mirror?: string) => Promise<BrowserProbeResult | null>;
+  triggerRunnerUpdate: (
+    runnerId: string,
+    opts?: { mode?: 'when_idle' | 'immediate'; force?: boolean },
+  ) => Promise<{ ok: boolean; error?: string }>;
+  triggerAllRunnersUpdate: (opts?: {
+    mode?: 'when_idle' | 'immediate';
+    force?: boolean;
+  }) => Promise<{ ok: boolean; triggered?: number; skipped?: number; error?: string }>;
   clearRunnerBrowserData: (runnerId: string, mode: 'cache' | 'all') => Promise<boolean>;
 }
 
@@ -2871,6 +2879,45 @@ export const useNexStore = create<AppState>((set, get) => ({
       return true;
     } catch {
       return false;
+    }
+  },
+
+  triggerRunnerUpdate: async (runnerId, opts) => {
+    try {
+      await apiFetch(`/api/v1/runners/${encodeURIComponent(runnerId)}/update`, {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: opts?.mode,
+          force: opts?.force,
+        }),
+      });
+      await get().refreshInitialData();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  triggerAllRunnersUpdate: async (opts) => {
+    try {
+      const resp = await apiFetch<{
+        triggered?: Array<{ runner_id: string }>;
+        skipped?: Array<{ runner_id: string; reason: string }>;
+      }>('/api/v1/runners/update-all', {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: opts?.mode,
+          force: opts?.force,
+        }),
+      });
+      await get().refreshInitialData();
+      return {
+        ok: true,
+        triggered: resp?.triggered?.length ?? 0,
+        skipped: resp?.skipped?.length ?? 0,
+      };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
   },
 }));

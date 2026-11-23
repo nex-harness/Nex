@@ -11,6 +11,19 @@ export interface RunnerRecord {
   last_seen_at: number;
   synced_config_rev: number;
   workspace_default: string;
+  build_sha?: string;
+  binary_sha256?: string;
+  protocol_version?: number;
+  capabilities?: string[];
+  is_dev?: boolean;
+  elevated?: boolean;
+  update_status?: 'up_to_date' | 'update_available' | 'update_required' | string;
+  update_reason?: string;
+  target_version?: string;
+  update_phase?: string;
+  update_progress?: number;
+  update_error?: string;
+  incompatible?: boolean;
 }
 
 export interface ProviderRecord {
