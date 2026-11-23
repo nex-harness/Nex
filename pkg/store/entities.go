@@ -165,6 +165,7 @@ type SessionRecord struct {
 	AgentProfileSlug    string `json:"agent_profile_slug"`
 	ModelID             string `json:"model_id"`
 	ProviderID          string `json:"provider_id"`
+	ThinkingEffort      string `json:"thinking_effort,omitempty"`
 	PermissionMode      string `json:"permission_mode"`
 	Status              string `json:"status"`
 	LatestContextTokens int    `json:"latest_context_tokens"`
@@ -204,19 +205,20 @@ func (s *Store) CreateOrUpdateSession(ctx context.Context, sess SessionRecord) (
 	_, err := s.mainDB.ExecContext(ctx, `
 		INSERT INTO sessions (
 			id, runner_id, parent_session_id, parent_tool_call_id, depth, title, workspace_path,
-			agent_profile_slug, model_id, provider_id, permission_mode, status,
+			agent_profile_slug, model_id, provider_id, thinking_effort, permission_mode, status,
 			latest_context_tokens, context_window_limit, created_at, updated_at, last_active_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			title=excluded.title, status=excluded.status,
 			model_id=CASE WHEN excluded.model_id != '' THEN excluded.model_id ELSE sessions.model_id END,
 			provider_id=CASE WHEN excluded.provider_id != '' THEN excluded.provider_id ELSE sessions.provider_id END,
+			thinking_effort=CASE WHEN excluded.thinking_effort != '' THEN excluded.thinking_effort ELSE sessions.thinking_effort END,
 			permission_mode=excluded.permission_mode,
 			latest_context_tokens=CASE WHEN excluded.latest_context_tokens > 0 THEN excluded.latest_context_tokens ELSE sessions.latest_context_tokens END,
 			context_window_limit=CASE WHEN excluded.context_window_limit > 0 THEN excluded.context_window_limit ELSE sessions.context_window_limit END,
 			updated_at=excluded.updated_at, last_active_at=excluded.last_active_at
 	`, sess.ID, sess.RunnerID, sess.ParentSessionID, sess.ParentToolCallID, sess.Depth, sess.Title, sess.WorkspacePath,
-		sess.AgentProfileSlug, sess.ModelID, sess.ProviderID, sess.PermissionMode, sess.Status,
+		sess.AgentProfileSlug, sess.ModelID, sess.ProviderID, sess.ThinkingEffort, sess.PermissionMode, sess.Status,
 		sess.LatestContextTokens, sess.ContextWindowLimit, sess.CreatedAt, sess.UpdatedAt, sess.LastActiveAt)
 	return sess, err
 }
@@ -224,7 +226,7 @@ func (s *Store) CreateOrUpdateSession(ctx context.Context, sess SessionRecord) (
 func (s *Store) GetSession(ctx context.Context, id string) (*SessionRecord, error) {
 	return scanSessionRow(s.mainDB.QueryRowContext(ctx, `
 		SELECT id, runner_id, parent_session_id, parent_tool_call_id, depth, title, workspace_path,
-		       agent_profile_slug, model_id, provider_id, permission_mode, status,
+		       agent_profile_slug, model_id, provider_id, thinking_effort, permission_mode, status,
 		       latest_context_tokens, context_window_limit, created_at, updated_at, last_active_at
 		FROM sessions WHERE id = ?
 	`, id))
@@ -295,7 +297,7 @@ func (s *Store) DeleteResourceByName(ctx context.Context, table, keyCol, val str
 
 func (s *Store) ListSessions(ctx context.Context, runnerID string, includeChildren bool) ([]SessionRecord, error) {
 	q := `SELECT id, runner_id, parent_session_id, parent_tool_call_id, depth, title, workspace_path,
-	             agent_profile_slug, model_id, provider_id, permission_mode, status,
+	             agent_profile_slug, model_id, provider_id, thinking_effort, permission_mode, status,
 	             latest_context_tokens, context_window_limit, created_at, updated_at, last_active_at
 	      FROM sessions WHERE 1=1`
 	var args []any
@@ -316,7 +318,7 @@ func (s *Store) ListSessions(ctx context.Context, runnerID string, includeChildr
 	for rows.Next() {
 		var r SessionRecord
 		if err := rows.Scan(&r.ID, &r.RunnerID, &r.ParentSessionID, &r.ParentToolCallID, &r.Depth, &r.Title, &r.WorkspacePath,
-			&r.AgentProfileSlug, &r.ModelID, &r.ProviderID, &r.PermissionMode, &r.Status,
+			&r.AgentProfileSlug, &r.ModelID, &r.ProviderID, &r.ThinkingEffort, &r.PermissionMode, &r.Status,
 			&r.LatestContextTokens, &r.ContextWindowLimit, &r.CreatedAt, &r.UpdatedAt, &r.LastActiveAt); err != nil {
 			return nil, err
 		}
@@ -328,7 +330,7 @@ func (s *Store) ListSessions(ctx context.Context, runnerID string, includeChildr
 func scanSessionRow(row *sql.Row) (*SessionRecord, error) {
 	var r SessionRecord
 	err := row.Scan(&r.ID, &r.RunnerID, &r.ParentSessionID, &r.ParentToolCallID, &r.Depth, &r.Title, &r.WorkspacePath,
-		&r.AgentProfileSlug, &r.ModelID, &r.ProviderID, &r.PermissionMode, &r.Status,
+		&r.AgentProfileSlug, &r.ModelID, &r.ProviderID, &r.ThinkingEffort, &r.PermissionMode, &r.Status,
 		&r.LatestContextTokens, &r.ContextWindowLimit, &r.CreatedAt, &r.UpdatedAt, &r.LastActiveAt)
 	if err != nil {
 		return nil, err

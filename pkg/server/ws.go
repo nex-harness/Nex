@@ -484,6 +484,10 @@ func (s *Server) routeClientPrompt(ctx context.Context, cc *clientConn, env prot
 		title = "New Conversation"
 	}
 
+	effortToSave := strings.TrimSpace(string(p.ThinkingEffort))
+	if effortToSave == "" {
+		effortToSave = "off"
+	}
 	if existing, err := s.store.GetSession(ctx, p.SessionID); err != nil {
 		_, _ = s.store.CreateOrUpdateSession(ctx, store.SessionRecord{
 			ID:               p.SessionID,
@@ -493,6 +497,7 @@ func (s *Server) routeClientPrompt(ctx context.Context, cc *clientConn, env prot
 			AgentProfileSlug: p.AgentProfileSlug,
 			ProviderID:       p.ProviderID,
 			ModelID:          p.ModelID,
+			ThinkingEffort:   effortToSave,
 			PermissionMode:   p.PermissionMode,
 			Status:           "running",
 		})
@@ -501,6 +506,20 @@ func (s *Server) routeClientPrompt(ctx context.Context, cc *clientConn, env prot
 		if p.WorkspacePath == "" {
 			p.WorkspacePath = existing.WorkspacePath
 		}
+		if p.ProviderID != "" {
+			existing.ProviderID = p.ProviderID
+		}
+		if p.ModelID != "" {
+			existing.ModelID = p.ModelID
+		}
+		if p.PermissionMode != "" {
+			existing.PermissionMode = p.PermissionMode
+		}
+		existing.ThinkingEffort = effortToSave
+		existing.Status = "running"
+		existing.UpdatedAt = time.Now().UnixMilli()
+		existing.LastActiveAt = existing.UpdatedAt
+		_, _ = s.store.CreateOrUpdateSession(ctx, *existing)
 	}
 
 	cc.subMu.Lock()

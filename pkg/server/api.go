@@ -583,6 +583,9 @@ func (s *Server) handleSessionSubroutes(w http.ResponseWriter, r *http.Request) 
 			var patch struct {
 				Title          *string `json:"title"`
 				PermissionMode *string `json:"permission_mode"`
+				ProviderID     *string `json:"provider_id"`
+				ModelID        *string `json:"model_id"`
+				ThinkingEffort *string `json:"thinking_effort"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
 				writeErr(w, http.StatusBadRequest, err)
@@ -593,6 +596,15 @@ func (s *Server) handleSessionSubroutes(w http.ResponseWriter, r *http.Request) 
 			}
 			if patch.PermissionMode != nil && *patch.PermissionMode != "" {
 				sess.PermissionMode = *patch.PermissionMode
+			}
+			if patch.ProviderID != nil && *patch.ProviderID != "" {
+				sess.ProviderID = *patch.ProviderID
+			}
+			if patch.ModelID != nil && *patch.ModelID != "" {
+				sess.ModelID = *patch.ModelID
+			}
+			if patch.ThinkingEffort != nil && strings.TrimSpace(*patch.ThinkingEffort) != "" {
+				sess.ThinkingEffort = strings.TrimSpace(*patch.ThinkingEffort)
 			}
 			updated, err := s.store.CreateOrUpdateSession(r.Context(), *sess)
 			if err != nil {

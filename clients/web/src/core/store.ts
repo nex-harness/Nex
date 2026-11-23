@@ -55,6 +55,79 @@ const COMPOSER_DRAFTS_STORAGE_KEY = 'nex.composerDrafts';
 const COMPOSER_DRAFT_NEW_KEY = '__draft__';
 const MAX_CACHED_COMPOSER_DRAFTS = 48;
 const UNREAD_SESSIONS_STORAGE_KEY = 'nex.unread.sessions';
+const DRAFT_MODEL_STORAGE_KEY = 'nex.draftModel';
+const DRAFT_EFFORT_STORAGE_KEY = 'nex.draftThinkingEffort';
+const SESSION_EFFORTS_STORAGE_KEY = 'nex.sessionEfforts';
+const DEFAULT_NEW_SESSION_EFFORT: ThinkingEffort = 'high';
+
+function encodeStoredEffort(effort: ThinkingEffort): string {
+  return effort === '' ? 'off' : effort;
+}
+
+function decodeStoredEffort(raw?: string | null): ThinkingEffort | undefined {
+  if (raw == null || raw === '') return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  if (trimmed === 'off' || trimmed === 'none') return '';
+  return trimmed as ThinkingEffort;
+}
+
+function readStoredDraftModel(): { providerId: string; modelId: string } {
+  try {
+    const raw = safeStorageGet(DRAFT_MODEL_STORAGE_KEY);
+    if (!raw) return { providerId: '', modelId: '' };
+    const parsed = JSON.parse(raw) as { providerId?: string; modelId?: string };
+    return {
+      providerId: typeof parsed.providerId === 'string' ? parsed.providerId : '',
+      modelId: typeof parsed.modelId === 'string' ? parsed.modelId : '',
+    };
+  } catch {
+    return { providerId: '', modelId: '' };
+  }
+}
+
+function persistDraftModel(providerId: string, modelId: string): void {
+  safeStorageSet(DRAFT_MODEL_STORAGE_KEY, JSON.stringify({ providerId, modelId }));
+}
+
+function readStoredSessionEfforts(): Record<string, ThinkingEffort> {
+  try {
+    const raw = safeStorageGet(SESSION_EFFORTS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    if (!parsed || typeof parsed !== 'object') return {};
+    const out: Record<string, ThinkingEffort> = {};
+    for (const [sid, val] of Object.entries(parsed)) {
+      const dec = decodeStoredEffort(val);
+      if (dec !== undefined) out[sid] = dec;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function persistSessionEfforts(next: Record<string, ThinkingEffort>): void {
+  const encoded: Record<string, string> = {};
+  for (const [sid, eff] of Object.entries(next)) {
+    encoded[sid] = encodeStoredEffort(eff);
+  }
+  safeStorageSet(SESSION_EFFORTS_STORAGE_KEY, JSON.stringify(encoded));
+}
+
+function resolveSessionEffort(
+  sessionId: string,
+  sessionEfforts: Record<string, ThinkingEffort>,
+  meta?: SessionRecord,
+  fallback: ThinkingEffort = DEFAULT_NEW_SESSION_EFFORT,
+): ThinkingEffort {
+  if (Object.prototype.hasOwnProperty.call(sessionEfforts, sessionId)) {
+    return sessionEfforts[sessionId];
+  }
+  const fromMeta = decodeStoredEffort(meta?.thinking_effort);
+  if (fromMeta !== undefined) return fromMeta;
+  return fallback;
+}
 
 function persistUnreadSessions(next: Record<string, boolean>): void {
   safeStorageSet(UNREAD_SESSIONS_STORAGE_KEY, JSON.stringify(next));
@@ -352,7 +425,9 @@ export interface AppState {
   selectedModelId: string;
   draftProviderId: string;
   draftModelId: string;
+  draftThinkingEffort: ThinkingEffort;
   sessionModels: Record<string, { providerId: string; modelId: string }>;
+  sessionEfforts: Record<string, ThinkingEffort>;
   hiddenModelKeys: Record<string, boolean>;
   modelOrder: Record<string, string[]>;
   thinkingEffort: ThinkingEffort;
@@ -622,9 +697,14 @@ export const useNexStore = create<AppState>((set, get) => ({
   })(),
   selectedProviderId: '',
   selectedModelId: '',
-  draftProviderId: '',
-  draftModelId: '',
+  draftProviderId: readStoredDraftModel().providerId,
+  draftModelId: readStoredDraftModel().modelId,
+  draftThinkingEffort: (() => {
+    const saved = decodeStoredEffort(safeStorageGet(DRAFT_EFFORT_STORAGE_KEY));
+    return saved !== undefined ? saved : DEFAULT_NEW_SESSION_EFFORT;
+  })(),
   sessionModels: {},
+  sessionEfforts: readStoredSessionEfforts(),
   hiddenModelKeys: (() => {
     try {
       const raw = safeStorageGet('nex.hiddenModels');
@@ -642,11 +722,8 @@ export const useNexStore = create<AppState>((set, get) => ({
     }
   })(),
   thinkingEffort: (() => {
-    const saved = safeStorageGet('nex.thinkingEffort');
-    if (saved !== null) {
-      return saved as ThinkingEffort;
-    }
-    return 'medium';
+    const saved = decodeStoredEffort(safeStorageGet(DRAFT_EFFORT_STORAGE_KEY));
+    return saved !== undefined ? saved : DEFAULT_NEW_SESSION_EFFORT;
   })(),
   permissionMode: 'full_access',
   activeSessionId: '',
@@ -765,67 +842,81 @@ export const useNexStore = create<AppState>((set, get) => ({
     });
     void get().refreshGitSummary(false);
   },
-  setSelectedProvider: (providerId) =>
-    set((s) => {
-      const providerModels = s.models.filter(
-        (m) => m.provider_id === providerId && !s.hiddenModelKeys[`${m.provider_id}::${m.id}`],
-      );
-      const keepCurrent =
-        s.selectedProviderId === providerId && providerModels.some((m) => m.id === s.selectedModelId);
-      const fallbackAll = s.models.filter((m) => m.provider_id === providerId);
-      const nextModelId = keepCurrent
-        ? s.selectedModelId
-        : providerModels[0]?.id || fallbackAll[0]?.id || '';
-      if (!s.activeSessionId) {
-        return {
-          selectedProviderId: providerId,
-          selectedModelId: nextModelId,
-          draftProviderId: providerId,
-          draftModelId: nextModelId,
-        };
-      }
-      return {
+  setSelectedProvider: (providerId) => {
+    const cur = get();
+    const providerModels = cur.models.filter(
+      (m) => m.provider_id === providerId && !cur.hiddenModelKeys[`${m.provider_id}::${m.id}`],
+    );
+    const keepCurrent =
+      cur.selectedProviderId === providerId && providerModels.some((m) => m.id === cur.selectedModelId);
+    const fallbackAll = cur.models.filter((m) => m.provider_id === providerId);
+    const nextModelId = keepCurrent
+      ? cur.selectedModelId
+      : providerModels[0]?.id || fallbackAll[0]?.id || '';
+    if (!cur.activeSessionId) {
+      persistDraftModel(providerId, nextModelId);
+      set({
         selectedProviderId: providerId,
         selectedModelId: nextModelId,
-        sessionModels: {
-          ...s.sessionModels,
-          [s.activeSessionId]: { providerId, modelId: nextModelId },
-        },
-        sessions: s.sessions.some((sess) => sess.id === s.activeSessionId)
-          ? s.sessions.map((sess) =>
-              sess.id === s.activeSessionId
-                ? { ...sess, provider_id: providerId, model_id: nextModelId }
-                : sess,
-            )
-          : s.sessions,
-      };
-    }),
-  setSelectedModel: (providerId, modelId) =>
-    set((s) => {
-      if (!s.activeSessionId) {
-        return {
-          selectedProviderId: providerId,
-          selectedModelId: modelId,
-          draftProviderId: providerId,
-          draftModelId: modelId,
-        };
-      }
-      return {
+        draftProviderId: providerId,
+        draftModelId: nextModelId,
+      });
+      return;
+    }
+    const sid = cur.activeSessionId;
+    const hasSession = cur.sessions.some((sess) => sess.id === sid);
+    set((s) => ({
+      selectedProviderId: providerId,
+      selectedModelId: nextModelId,
+      sessionModels: {
+        ...s.sessionModels,
+        [sid]: { providerId, modelId: nextModelId },
+      },
+      sessions: hasSession
+        ? s.sessions.map((sess) =>
+            sess.id === sid ? { ...sess, provider_id: providerId, model_id: nextModelId } : sess,
+          )
+        : s.sessions,
+    }));
+    if (hasSession) {
+      void apiFetch(`/api/v1/sessions/${encodeURIComponent(sid)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ provider_id: providerId, model_id: nextModelId }),
+      }).catch(() => {});
+    }
+  },
+  setSelectedModel: (providerId, modelId) => {
+    const cur = get();
+    if (!cur.activeSessionId) {
+      persistDraftModel(providerId, modelId);
+      set({
         selectedProviderId: providerId,
         selectedModelId: modelId,
-        sessionModels: {
-          ...s.sessionModels,
-          [s.activeSessionId]: { providerId, modelId },
-        },
-        sessions: s.sessions.some((sess) => sess.id === s.activeSessionId)
-          ? s.sessions.map((sess) =>
-              sess.id === s.activeSessionId
-                ? { ...sess, provider_id: providerId, model_id: modelId }
-                : sess,
-            )
-          : s.sessions,
-      };
-    }),
+        draftProviderId: providerId,
+        draftModelId: modelId,
+      });
+      return;
+    }
+    const sid = cur.activeSessionId;
+    const hasSession = cur.sessions.some((sess) => sess.id === sid);
+    set((s) => ({
+      selectedProviderId: providerId,
+      selectedModelId: modelId,
+      sessionModels: {
+        ...s.sessionModels,
+        [sid]: { providerId, modelId },
+      },
+      sessions: hasSession
+        ? s.sessions.map((sess) => (sess.id === sid ? { ...sess, provider_id: providerId, model_id: modelId } : sess))
+        : s.sessions,
+    }));
+    if (hasSession) {
+      void apiFetch(`/api/v1/sessions/${encodeURIComponent(sid)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ provider_id: providerId, model_id: modelId }),
+      }).catch(() => {});
+    }
+  },
   toggleModelVisibility: (providerId, modelId) =>
     set((s) => {
       const key = `${providerId}::${modelId}`;
@@ -840,8 +931,32 @@ export const useNexStore = create<AppState>((set, get) => ({
       return { modelOrder: next };
     }),
   setThinkingEffort: (effort) => {
-    safeStorageSet('nex.thinkingEffort', effort);
-    set({ thinkingEffort: effort });
+    const cur = get();
+    const encoded = encodeStoredEffort(effort);
+    if (!cur.activeSessionId) {
+      safeStorageSet(DRAFT_EFFORT_STORAGE_KEY, encoded);
+      set({ thinkingEffort: effort, draftThinkingEffort: effort });
+      return;
+    }
+    const sid = cur.activeSessionId;
+    const hasSession = cur.sessions.some((sess) => sess.id === sid);
+    set((s) => {
+      const nextEfforts = { ...s.sessionEfforts, [sid]: effort };
+      persistSessionEfforts(nextEfforts);
+      return {
+        thinkingEffort: effort,
+        sessionEfforts: nextEfforts,
+        sessions: hasSession
+          ? s.sessions.map((sess) => (sess.id === sid ? { ...sess, thinking_effort: encoded } : sess))
+          : s.sessions,
+      };
+    });
+    if (hasSession) {
+      void apiFetch(`/api/v1/sessions/${encodeURIComponent(sid)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ thinking_effort: encoded }),
+      }).catch(() => {});
+    }
   },
   setPermissionMode: (mode) => set({ permissionMode: mode }),
 
@@ -1350,23 +1465,29 @@ export const useNexStore = create<AppState>((set, get) => ({
               },
             }));
             const stNow = get();
+            const sessMeta = stNow.sessions.find((it) => it.id === sid);
+            const boundModel = stNow.sessionModels[sid];
+            const targetProviderId = boundModel?.providerId ?? sessMeta?.provider_id ?? stNow.selectedProviderId;
+            const targetModelId = boundModel?.modelId ?? sessMeta?.model_id ?? stNow.selectedModelId;
             const activeModel = stNow.models.find(
-              (m) => m.provider_id === stNow.selectedProviderId && m.id === stNow.selectedModelId,
+              (m) => m.provider_id === targetProviderId && m.id === targetModelId,
             );
-            const effectiveThinkingEffort = resolveEffectiveEffort(activeModel, stNow.thinkingEffort);
+            const targetEffort = resolveSessionEffort(sid, stNow.sessionEfforts, sessMeta, stNow.thinkingEffort);
+            const effectiveThinkingEffort = resolveEffectiveEffort(activeModel, targetEffort);
+            const targetRunnerId = sessMeta?.runner_id || stNow.selectedRunnerId;
             wsClient.sendEnvelope(
               'session.prompt',
               {
                 session_id: sid,
-                runner_id: stNow.selectedRunnerId,
-                workspace_path: stNow.selectedWorkspacePath || undefined,
-                provider_id: stNow.selectedProviderId,
-                model_id: stNow.selectedModelId,
+                runner_id: targetRunnerId,
+                workspace_path: sessMeta?.workspace_path || stNow.selectedWorkspacePath || undefined,
+                provider_id: targetProviderId,
+                model_id: targetModelId,
                 thinking_effort: effectiveThinkingEffort,
                 permission_mode: stNow.permissionMode,
                 text: nextItem.text,
               },
-              { session_id: sid, runner_id: stNow.selectedRunnerId },
+              { session_id: sid, runner_id: targetRunnerId },
             );
           }
         }
@@ -1593,6 +1714,7 @@ export const useNexStore = create<AppState>((set, get) => ({
 
       let nextProviderId = resolvedDraft.providerId;
       let nextModelId = resolvedDraft.modelId;
+      let nextThinkingEffort = state.draftThinkingEffort;
       if (state.activeSessionId) {
         const bound = state.sessionModels[state.activeSessionId];
         const sessMeta = (sessions || []).find((s) => s.id === state.activeSessionId);
@@ -1601,6 +1723,12 @@ export const useNexStore = create<AppState>((set, get) => ({
         const resolvedSess = resolveCatalogModel(loadedModels, rawProv, rawMod);
         nextProviderId = resolvedSess.providerId;
         nextModelId = resolvedSess.modelId;
+        nextThinkingEffort = resolveSessionEffort(
+          state.activeSessionId,
+          state.sessionEfforts,
+          sessMeta,
+          state.thinkingEffort,
+        );
       }
 
       const fetchedSessions = sessions || [];
@@ -1625,6 +1753,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         draftModelId: resolvedDraft.modelId,
         selectedProviderId: nextProviderId,
         selectedModelId: nextModelId,
+        thinkingEffort: nextThinkingEffort,
       };
     });
   },
@@ -1670,12 +1799,14 @@ export const useNexStore = create<AppState>((set, get) => ({
         delete nextUnread[sessionId];
         persistUnreadSessions(nextUnread);
       }
+      const nextEffort = resolveSessionEffort(sessionId, s.sessionEfforts, metaBefore);
       return {
         mainView: preserveView ? s.mainView : 'workspace',
         activeSessionId: sessionId,
         composerText: readPersistedComposerDraft(sessionId),
         selectedProviderId: resolvedBefore.providerId,
         selectedModelId: resolvedBefore.modelId,
+        thinkingEffort: nextEffort,
         ...(nextUnread !== s.unreadSessionIds ? { unreadSessionIds: nextUnread } : {}),
       };
     });
@@ -1714,6 +1845,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         bound?.providerId ?? latestMeta?.provider_id,
         bound?.modelId ?? latestMeta?.model_id,
       );
+      const resolvedEffort = resolveSessionEffort(sessionId, s.sessionEfforts, latestMeta);
       return {
         selectedRunnerId: runnerId || s.selectedRunnerId,
         selectedWorkspacePath: latestMeta?.workspace_path || s.selectedWorkspacePath,
@@ -1721,6 +1853,7 @@ export const useNexStore = create<AppState>((set, get) => ({
           ? {
               selectedProviderId: resolvedModel.providerId,
               selectedModelId: resolvedModel.modelId,
+              thinkingEffort: resolvedEffort,
             }
           : {}),
         ...(latestMeta?.status === 'running' && !st.running && (evs || []).length > 0
@@ -1750,6 +1883,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         draftModelId: resolvedDraft.modelId,
         selectedProviderId: resolvedDraft.providerId,
         selectedModelId: resolvedDraft.modelId,
+        thinkingEffort: s.draftThinkingEffort,
       };
     });
   },
@@ -1777,6 +1911,12 @@ export const useNexStore = create<AppState>((set, get) => ({
         delete nextUnread[sessionId];
         persistUnreadSessions(nextUnread);
         updates.unreadSessionIds = nextUnread;
+      }
+      if (Object.prototype.hasOwnProperty.call(s.sessionEfforts, sessionId)) {
+        const nextEfforts = { ...s.sessionEfforts };
+        delete nextEfforts[sessionId];
+        persistSessionEfforts(nextEfforts);
+        updates.sessionEfforts = nextEfforts;
       }
       return updates;
     });
@@ -1849,10 +1989,15 @@ export const useNexStore = create<AppState>((set, get) => ({
       promptText = text.replace(/^\/plan\s*/i, '').trim() || text;
     }
 
+    const effectiveThinkingEffort = resolveEffectiveEffort(activeModel, s.thinkingEffort);
+    const storedEffort = encodeStoredEffort(effectiveThinkingEffort);
+
     if (!sessionId) {
       sessionId = `sess_${crypto.randomUUID()}`;
       persistActiveSessionId(sessionId);
       persistViewState('workspace', s.settingsSection);
+      persistDraftModel(activeModel.provider_id, activeModel.id);
+      safeStorageSet(DRAFT_EFFORT_STORAGE_KEY, encodeStoredEffort(s.thinkingEffort));
       const nowMs = Date.now();
       const runnerObj = s.runners.find((r) => r.id === s.selectedRunnerId);
       const optimisticTitle =
@@ -1866,6 +2011,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         agent_profile_slug: 'main',
         model_id: activeModel.id,
         provider_id: activeModel.provider_id,
+        thinking_effort: storedEffort,
         permission_mode: effectivePermMode,
         status: 'running',
         latest_context_tokens: 0,
@@ -1874,17 +2020,25 @@ export const useNexStore = create<AppState>((set, get) => ({
         updated_at: nowMs,
         last_active_at: nowMs,
       };
-      set((prev) => ({
-        mainView: 'workspace',
-        activeSessionId: sessionId,
-        permissionMode: effectivePermMode,
-        sessions: [optimisticSession, ...prev.sessions.filter((it) => it.id !== sessionId)],
-        sessionModels: {
-          ...prev.sessionModels,
-          [sessionId]: { providerId: activeModel.provider_id, modelId: activeModel.id },
-        },
-        streams: { ...prev.streams, [sessionId]: emptyStreamState() },
-      }));
+      set((prev) => {
+        const nextEfforts = { ...prev.sessionEfforts, [sessionId]: s.thinkingEffort };
+        persistSessionEfforts(nextEfforts);
+        return {
+          mainView: 'workspace',
+          activeSessionId: sessionId,
+          permissionMode: effectivePermMode,
+          draftProviderId: activeModel.provider_id,
+          draftModelId: activeModel.id,
+          draftThinkingEffort: s.thinkingEffort,
+          sessions: [optimisticSession, ...prev.sessions.filter((it) => it.id !== sessionId)],
+          sessionModels: {
+            ...prev.sessionModels,
+            [sessionId]: { providerId: activeModel.provider_id, modelId: activeModel.id },
+          },
+          sessionEfforts: nextEfforts,
+          streams: { ...prev.streams, [sessionId]: emptyStreamState() },
+        };
+      });
     } else {
       const nowMs = Date.now();
       set((prev) => {
@@ -1894,15 +2048,20 @@ export const useNexStore = create<AppState>((set, get) => ({
           delete nextUnread[sessionId];
           persistUnreadSessions(nextUnread);
         }
+        const nextEfforts = { ...prev.sessionEfforts, [sessionId]: s.thinkingEffort };
+        persistSessionEfforts(nextEfforts);
         return {
           permissionMode: effectivePermMode,
           sessions: prev.sessions.map((it) =>
-            it.id === sessionId ? { ...it, status: 'running', updated_at: nowMs, last_active_at: nowMs } : it,
+            it.id === sessionId
+              ? { ...it, status: 'running', thinking_effort: storedEffort, updated_at: nowMs, last_active_at: nowMs }
+              : it,
           ),
           sessionModels: {
             ...prev.sessionModels,
             [sessionId]: { providerId: activeModel.provider_id, modelId: activeModel.id },
           },
+          sessionEfforts: nextEfforts,
           ...(nextUnread !== prev.unreadSessionIds ? { unreadSessionIds: nextUnread } : {}),
         };
       });
@@ -1916,8 +2075,6 @@ export const useNexStore = create<AppState>((set, get) => ({
             data_b64: a.dataB64,
           }))
         : undefined;
-
-    const effectiveThinkingEffort = resolveEffectiveEffort(activeModel, s.thinkingEffort);
 
     set((prev) => ({
       streams: {
@@ -2029,6 +2186,12 @@ export const useNexStore = create<AppState>((set, get) => ({
         delete nextUnread[sessionId];
         persistUnreadSessions(nextUnread);
         updates.unreadSessionIds = nextUnread;
+      }
+      if (Object.prototype.hasOwnProperty.call(s.sessionEfforts, sessionId)) {
+        const nextEfforts = { ...s.sessionEfforts };
+        delete nextEfforts[sessionId];
+        persistSessionEfforts(nextEfforts);
+        updates.sessionEfforts = nextEfforts;
       }
       return updates;
     });

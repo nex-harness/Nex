@@ -1936,8 +1936,8 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       });
 
       render(<App />);
-      // Stale running status in DB does NOT show pulsing blue dot once stream finished
-      expect(document.querySelector('.bg-brand-blue.animate-pulse')).toBeNull();
+      // Stale running status in DB does NOT show running spinner once stream finished
+      expect(document.querySelector('.nex-running-dots')).toBeNull();
       // Ordinary foreground bash does NOT open status panel
       expect(screen.queryByTestId('conversation-status-panel')).toBeNull();
 
@@ -3875,14 +3875,14 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
 
     render(<App />);
 
-    // Running dot appears BEFORE the title element in DOM order (left side) and pulses blue
+    // Running spinner appears BEFORE the title element in DOM order (left side) as a 2x2 4-dot loader
     const runRow = screen.getByTestId('session-row-sess_run');
     const runDot = screen.getByTestId('session-status-dot-sess_run');
     const runTitle = Array.from(runRow.querySelectorAll('span')).find((el) => el.textContent === 'Running Task Title')!;
     expect(runTitle).toBeTruthy();
     expect(runDot.getAttribute('data-status')).toBe('running');
-    expect(runDot.className).toContain('bg-brand-blue');
-    expect(runDot.className).toContain('animate-pulse');
+    expect(runDot.className).toContain('nex-running-dots');
+    expect(runDot.children).toHaveLength(4);
     expect(runRow.contains(runDot)).toBe(true);
     expect(runDot.compareDocumentPosition(runTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
@@ -4016,7 +4016,8 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       expect(newRow.textContent).toContain('Check sidebar immediately');
       const newDot = screen.getByTestId(`session-status-dot-${createdId}`);
       expect(newDot.getAttribute('data-status')).toBe('running');
-      expect(newDot.className).toContain('animate-pulse');
+      expect(newDot.className).toContain('nex-running-dots');
+      expect(newDot.children).toHaveLength(4);
 
       // 3. Sidebar row has Pin / Rename / Archive (3 action buttons), and NO Delete button
       expect(newRow.querySelectorAll('button')).toHaveLength(3);
@@ -4045,6 +4046,137 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       wsClient.sendEnvelope = origSendEnvelope;
       globalThis.fetch = origFetch;
       useNexStore.setState({ unreadSessionIds: {} });
+    }
+  });
+
+  it('isolates thinkingEffort per conversation and preserves draft model + effort across switches', async () => {
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [],
+    }) as unknown as typeof fetch;
+
+    try {
+      useNexStore.setState({
+        serverConnectRequired: false,
+        authEnabled: false,
+        authenticated: true,
+        locale: 'en-US',
+        mainView: 'workspace',
+        activeSessionId: 'sess_iso_a',
+        selectedRunnerId: 'run_iso',
+        selectedProviderId: 'p1',
+        selectedModelId: 'model-a',
+        draftProviderId: 'p1',
+        draftModelId: 'model-b',
+        draftThinkingEffort: 'high',
+        thinkingEffort: 'medium',
+        sessionModels: {},
+        sessionEfforts: {},
+        models: [
+          {
+            id: 'model-a',
+            provider_id: 'p1',
+            display_name: 'Model Alpha',
+            source: 'custom',
+            context_window: 128000,
+            max_output_tokens: 4096,
+            supports_vision: false,
+            supports_pdf: false,
+            supports_tools: true,
+            supports_reasoning: true,
+            supports_caching: false,
+            reasoning_levels: ['off', 'low', 'medium', 'high'],
+            pricing: { input_per_1m: 0, output_per_1m: 0, cache_read_per_1m: 0, cache_write_per_1m: 0 },
+          },
+          {
+            id: 'model-b',
+            provider_id: 'p1',
+            display_name: 'Model Beta',
+            source: 'custom',
+            context_window: 128000,
+            max_output_tokens: 4096,
+            supports_vision: false,
+            supports_pdf: false,
+            supports_tools: true,
+            supports_reasoning: true,
+            supports_caching: false,
+            reasoning_levels: ['off', 'low', 'medium', 'high', 'max'],
+            pricing: { input_per_1m: 0, output_per_1m: 0, cache_read_per_1m: 0, cache_write_per_1m: 0 },
+          },
+        ],
+        sessions: [
+          {
+            id: 'sess_iso_a',
+            runner_id: 'run_iso',
+            depth: 0,
+            title: 'Conv A',
+            workspace_path: '/tmp/ws',
+            agent_profile_slug: 'main',
+            model_id: 'model-a',
+            provider_id: 'p1',
+            thinking_effort: 'medium',
+            permission_mode: 'interactive',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: 1000,
+            updated_at: 2000,
+            last_active_at: 2000,
+          },
+          {
+            id: 'sess_iso_b',
+            runner_id: 'run_iso',
+            depth: 0,
+            title: 'Conv B',
+            workspace_path: '/tmp/ws',
+            agent_profile_slug: 'main',
+            model_id: 'model-b',
+            provider_id: 'p1',
+            thinking_effort: 'max',
+            permission_mode: 'interactive',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: 1000,
+            updated_at: 3000,
+            last_active_at: 3000,
+          },
+        ],
+      });
+
+      render(<App />);
+
+      // Adjust Conv A effort to 'low' -> Conv B and draft effort MUST NOT change!
+      act(() => {
+        useNexStore.getState().setThinkingEffort('low');
+      });
+      expect(useNexStore.getState().thinkingEffort).toBe('low');
+      expect(useNexStore.getState().draftThinkingEffort).toBe('high');
+
+      // Switch to Conv B -> restores Conv B's own model-b and 'max' effort
+      await act(async () => {
+        await useNexStore.getState().selectSession('sess_iso_b');
+      });
+      expect(useNexStore.getState().selectedModelId).toBe('model-b');
+      expect(useNexStore.getState().thinkingEffort).toBe('max');
+
+      // Switch back to Conv A -> restores Conv A's 'low' effort
+      await act(async () => {
+        await useNexStore.getState().selectSession('sess_iso_a');
+      });
+      expect(useNexStore.getState().selectedModelId).toBe('model-a');
+      expect(useNexStore.getState().thinkingEffort).toBe('low');
+
+      // Start new session -> uses draft model-b and draft 'high' (unaffected by Conv A/B edits)
+      act(() => {
+        useNexStore.getState().startNewSession();
+      });
+      expect(useNexStore.getState().selectedModelId).toBe('model-b');
+      expect(useNexStore.getState().thinkingEffort).toBe('high');
+    } finally {
+      globalThis.fetch = origFetch;
+      useNexStore.setState({ sessionEfforts: {}, draftThinkingEffort: 'high' });
     }
   });
 });

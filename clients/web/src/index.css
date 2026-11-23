@@ -783,3 +783,50 @@ pre,
 .nex-titlebar-collapsed-header {
   padding-left: calc(var(--mygo-titlebar-inset-left, 0px) + 132px);
 }
+
+/* 2x2 four-dot clockwise chase spinner for running conversations */
+@keyframes nex-dot-chase {
+  0%, 100% {
+    opacity: 0.25;
+  }
+  25% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.5;
+  }
+}
+
+.nex-running-dots {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 3.5px);
+  grid-template-rows: repeat(2, 3.5px);
+  gap: 2px;
+  align-items: center;
+  justify-content: center;
+}
+
+.nex-running-dots > span {
+  display: block;
+  width: 3.5px;
+  height: 3.5px;
+  border-radius: 9999px;
+  background-color: currentColor;
+  animation: nex-dot-chase 1s infinite ease-in-out;
+}
+
+.nex-running-dots > span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.nex-running-dots > span:nth-child(2) {
+  animation-delay: 0.25s;
+}
+
+.nex-running-dots > span:nth-child(4) {
+  animation-delay: 0.5s;
+}
+
+.nex-running-dots > span:nth-child(3) {
+  animation-delay: 0.75s;
+}

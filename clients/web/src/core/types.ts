@@ -236,6 +236,7 @@ export interface SessionRecord {
   agent_profile_slug: string;
   model_id: string;
   provider_id: string;
+  thinking_effort?: string;
   permission_mode: 'full_access' | 'interactive' | 'autonomous' | 'read_only' | 'plan';
   status: string;
   latest_context_tokens: number;

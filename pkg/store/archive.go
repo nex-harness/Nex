@@ -41,11 +41,11 @@ func (s *Store) ArchiveSession(ctx context.Context, sessionID string) error {
 	res, err := tx.ExecContext(ctx, `
 		INSERT OR REPLACE INTO cold_archive.sessions (
 			id, runner_id, parent_session_id, parent_tool_call_id, depth, title, workspace_path,
-			agent_profile_slug, model_id, provider_id, permission_mode, status,
+			agent_profile_slug, model_id, provider_id, thinking_effort, permission_mode, status,
 			latest_context_tokens, context_window_limit, created_at, updated_at, last_active_at, archived_at
 		)
 		SELECT id, runner_id, parent_session_id, parent_tool_call_id, depth, title, workspace_path,
-		       agent_profile_slug, model_id, provider_id, permission_mode, 'archived',
+		       agent_profile_slug, model_id, provider_id, thinking_effort, permission_mode, 'archived',
 		       latest_context_tokens, context_window_limit, created_at, updated_at, last_active_at, ?
 		FROM main.sessions
 		WHERE id = ? OR parent_session_id = ?
@@ -121,11 +121,11 @@ func (s *Store) UnarchiveSession(ctx context.Context, sessionID string) error {
 	res, err := tx.ExecContext(ctx, `
 		INSERT OR REPLACE INTO main.sessions (
 			id, runner_id, parent_session_id, parent_tool_call_id, depth, title, workspace_path,
-			agent_profile_slug, model_id, provider_id, permission_mode, status,
+			agent_profile_slug, model_id, provider_id, thinking_effort, permission_mode, status,
 			latest_context_tokens, context_window_limit, created_at, updated_at, last_active_at
 		)
 		SELECT id, runner_id, parent_session_id, parent_tool_call_id, depth, title, workspace_path,
-		       agent_profile_slug, model_id, provider_id, permission_mode, 'idle',
+		       agent_profile_slug, model_id, provider_id, thinking_effort, permission_mode, 'idle',
 		       latest_context_tokens, context_window_limit, created_at, ?, ?
 		FROM cold_archive.sessions
 		WHERE id = ? OR parent_session_id = ?
@@ -179,7 +179,7 @@ func (s *Store) ListArchivedSessions(ctx context.Context, limit, offset int) ([]
 	}
 	rows, err := s.archiveDB.QueryContext(ctx, `
 		SELECT id, runner_id, parent_session_id, parent_tool_call_id, depth, title, workspace_path,
-		       agent_profile_slug, model_id, provider_id, permission_mode, status,
+		       agent_profile_slug, model_id, provider_id, thinking_effort, permission_mode, status,
 		       latest_context_tokens, context_window_limit, created_at, updated_at, last_active_at, archived_at
 		FROM sessions WHERE parent_session_id = '' ORDER BY archived_at DESC LIMIT ? OFFSET ?
 	`, limit, offset)
@@ -191,7 +191,7 @@ func (s *Store) ListArchivedSessions(ctx context.Context, limit, offset int) ([]
 	for rows.Next() {
 		var r ArchivedSessionRecord
 		if err := rows.Scan(&r.ID, &r.RunnerID, &r.ParentSessionID, &r.ParentToolCallID, &r.Depth, &r.Title, &r.WorkspacePath,
-			&r.AgentProfileSlug, &r.ModelID, &r.ProviderID, &r.PermissionMode, &r.Status,
+			&r.AgentProfileSlug, &r.ModelID, &r.ProviderID, &r.ThinkingEffort, &r.PermissionMode, &r.Status,
 			&r.LatestContextTokens, &r.ContextWindowLimit, &r.CreatedAt, &r.UpdatedAt, &r.LastActiveAt, &r.ArchivedAt); err != nil {
 			return nil, err
 		}

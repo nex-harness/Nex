@@ -353,3 +353,49 @@ func TestFileCheckpointRewindSearchAndExport(t *testing.T) {
 		t.Fatalf("unexpected markdown export:\n%s", md)
 	}
 }
+
+func TestSessionThinkingEffortPersistenceAndArchive(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open store: %v", err)
+	}
+	defer st.Close()
+
+	_, err = st.CreateOrUpdateSession(ctx, SessionRecord{
+		ID:             "sess_eff_1",
+		RunnerID:       "run_local",
+		Title:          "Effort Isolation",
+		ModelID:        "claude-opus-4-5",
+		ProviderID:     "anthropic",
+		ThinkingEffort: "low",
+	})
+	if err != nil {
+		t.Fatalf("CreateOrUpdateSession: %v", err)
+	}
+
+	got, err := st.GetSession(ctx, "sess_eff_1")
+	if err != nil || got.ThinkingEffort != "low" {
+		t.Fatalf("expected ThinkingEffort=low from GetSession, got %+v err=%v", got, err)
+	}
+
+	listed, err := st.ListSessions(ctx, "", false)
+	if err != nil || len(listed) != 1 || listed[0].ThinkingEffort != "low" {
+		t.Fatalf("expected ThinkingEffort=low in ListSessions, got %+v err=%v", listed, err)
+	}
+
+	if err := st.ArchiveSession(ctx, "sess_eff_1"); err != nil {
+		t.Fatalf("ArchiveSession: %v", err)
+	}
+	archived, err := st.ListArchivedSessions(ctx, 10, 0)
+	if err != nil || len(archived) != 1 || archived[0].ThinkingEffort != "low" {
+		t.Fatalf("expected ThinkingEffort=low in ListArchivedSessions, got %+v err=%v", archived, err)
+	}
+	if err := st.UnarchiveSession(ctx, "sess_eff_1"); err != nil {
+		t.Fatalf("UnarchiveSession: %v", err)
+	}
+	restored, err := st.GetSession(ctx, "sess_eff_1")
+	if err != nil || restored.ThinkingEffort != "low" {
+		t.Fatalf("expected ThinkingEffort=low after UnarchiveSession, got %+v err=%v", restored, err)
+	}
+}

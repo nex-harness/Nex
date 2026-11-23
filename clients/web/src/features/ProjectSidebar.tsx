@@ -68,14 +68,27 @@ function SessionStatusDot({
   const indicator = useSessionIndicator(sessionId, status);
   if (indicator === 'idle') return null;
 
+  if (indicator === 'running') {
+    return (
+      <span
+        data-testid={`session-status-dot-${sessionId}`}
+        data-status="running"
+        className={`nex-running-dots shrink-0 text-foreground-subtle ${className}`.trim()}
+      >
+        <span />
+        <span />
+        <span />
+        <span />
+      </span>
+    );
+  }
+
   const toneClass =
     indicator === 'awaiting'
       ? 'animate-pulse bg-amber-500'
-      : indicator === 'running'
-        ? 'animate-pulse bg-brand-blue'
-        : indicator === 'unread'
-          ? 'bg-brand-blue'
-          : 'bg-destructive';
+      : indicator === 'unread'
+        ? 'bg-brand-blue'
+        : 'bg-destructive';
 
   return (
     <span

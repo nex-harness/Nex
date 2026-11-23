@@ -67,6 +67,8 @@ func Open(dataDir string) (*Store, error) {
 	_, _ = mainDB.Exec(`ALTER TABLE mcp_servers ADD COLUMN last_status TEXT NOT NULL DEFAULT ''`)
 	_, _ = mainDB.Exec(`ALTER TABLE mcp_servers ADD COLUMN last_error TEXT NOT NULL DEFAULT ''`)
 	_, _ = mainDB.Exec(`ALTER TABLE mcp_servers ADD COLUMN last_checked_at INTEGER NOT NULL DEFAULT 0`)
+	_, _ = mainDB.Exec(`ALTER TABLE sessions ADD COLUMN thinking_effort TEXT NOT NULL DEFAULT ''`)
+	_, _ = archiveDB.Exec(`ALTER TABLE sessions ADD COLUMN thinking_effort TEXT NOT NULL DEFAULT ''`)
 
 	return &Store{
 		dataDir:     dataDir,
