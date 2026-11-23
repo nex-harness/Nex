@@ -55,6 +55,9 @@ type runnerConn struct {
 }
 
 func (rc *runnerConn) sendJSON(ctx context.Context, env protocol.Envelope) error {
+	if rc == nil || rc.ws == nil {
+		return nil
+	}
 	b, err := json.Marshal(env)
 	if err != nil {
 		return err

@@ -535,3 +535,61 @@ func TestGzipCompressionAndStaticAssetCacheHeaders(t *testing.T) {
 		t.Fatalf("expected no-cache on index.html, got %q", respIdx.Header.Get("Cache-Control"))
 	}
 }
+
+func TestSessionRenamePreservedAcrossRunnerSessionMetaReplay(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	srv, err := New(Config{Store: st})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. User has a session that was renamed on Server
+	_, err = st.CreateOrUpdateSession(ctx, store.SessionRecord{
+		ID:       "sess_rename_keep",
+		RunnerID: "run_1",
+		Title:    "My Custom Renamed Title",
+		Status:   "idle",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Runner sends agent_start with stale local SessionMeta carrying the old title
+	stalePayload, _ := json.Marshal(map[string]any{
+		"type": "agent_start",
+		"session_meta": store.SessionRecord{
+			ID:       "sess_rename_keep",
+			RunnerID: "run_1",
+			Title:    "Old Stale Runner Title",
+			Status:   "running",
+		},
+	})
+	rc := &runnerConn{id: "run_1"}
+	env, err := protocol.NewEnvelope(protocol.TypeSessionEvent, store.SessionEvent{
+		SessionID: "sess_rename_keep",
+		Seq:       1,
+		EventType: "agent_start",
+		Payload:   stalePayload,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.ingestRunnerSessionEvent(ctx, rc, env)
+
+	// 3. Server must preserve the renamed title while still updating status
+	got, err := st.GetSession(ctx, "sess_rename_keep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Title != "My Custom Renamed Title" {
+		t.Fatalf("expected renamed title to be preserved, got %q", got.Title)
+	}
+	if got.Status != "running" {
+		t.Fatalf("expected status to update to running, got %q", got.Status)
+	}
+}

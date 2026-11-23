@@ -309,7 +309,16 @@ func (s *Server) ingestRunnerSessionEvent(ctx context.Context, rc *runnerConn, e
 	_ = json.Unmarshal(ev.Payload, &evPayload)
 
 	if evPayload.SessionMeta != nil {
-		_, _ = s.store.CreateOrUpdateSession(ctx, *evPayload.SessionMeta)
+		meta := *evPayload.SessionMeta
+		if existing, err := s.store.GetSession(ctx, ev.SessionID); err == nil && existing != nil {
+			// Preserve Server's authoritative title (e.g. user-renamed via PATCH /api/v1/sessions/{id})
+			// so Runner's stale local SessionMeta on agent_start/outbox replay never overwrites it.
+			existingTitle := strings.TrimSpace(existing.Title)
+			if existingTitle != "" && existingTitle != "Runner Session" && existingTitle != "New Conversation" {
+				meta.Title = existing.Title
+			}
+		}
+		_, _ = s.store.CreateOrUpdateSession(ctx, meta)
 	} else if _, err := s.store.GetSession(ctx, ev.SessionID); err != nil {
 		_, _ = s.store.CreateOrUpdateSession(ctx, store.SessionRecord{
 			ID:       ev.SessionID,
