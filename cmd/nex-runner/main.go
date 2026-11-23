@@ -16,7 +16,10 @@ import (
 	"github.com/nex-harness/nex/pkg/runner"
 )
 
-var version = "dev"
+var (
+	version  = "dev"
+	buildSHA = ""
+)
 
 func main() {
 	if len(os.Args) >= 2 && (os.Args[1] == "-version" || os.Args[1] == "--version" || os.Args[1] == "version") {
@@ -57,6 +60,8 @@ func runDaemon(ctx context.Context, rawArgs []string) {
 	dataDir := fs.String("data-dir", defaultDir, "Local autonomous state & snapshot directory")
 	workspace := fs.String("workspace", cwd, "Default workspace directory")
 	oncePrompt := fs.String("prompt", "", "Optional standalone headless one-shot prompt (offline autonomous execution)")
+	autoUpdateDefault := os.Getenv("NEX_AUTO_UPDATE") != "false" && os.Getenv("NEX_AUTO_UPDATE") != "0"
+	autoUpdate := fs.Bool("auto-update", autoUpdateDefault, "Allow automatic self-updates for non-dev builds")
 	_ = fs.Parse(rawArgs)
 
 	node, err := runner.NewNode(runner.Config{
@@ -67,6 +72,8 @@ func runDaemon(ctx context.Context, rawArgs []string) {
 		DataDir:          *dataDir,
 		WorkspaceDefault: *workspace,
 		Version:          version,
+		BuildSHA:         buildSHA,
+		AutoUpdate:       autoUpdate,
 	})
 	if err != nil {
 		log.Fatalf("failed to initialize nex-runner: %v", err)

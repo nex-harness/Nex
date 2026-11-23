@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -291,6 +292,21 @@ func (n *Node) ExecutePrompt(
 	triggerSource string,
 	hasUI bool,
 ) (*ai.Message, error) {
+	n.mu.Lock()
+	if n.draining {
+		n.mu.Unlock()
+		return nil, errors.New("runner is draining for update")
+	}
+	n.activeTurns++
+	n.mu.Unlock()
+	defer func() {
+		n.mu.Lock()
+		if n.activeTurns > 0 {
+			n.activeTurns--
+		}
+		n.mu.Unlock()
+	}()
+
 	if p.SessionID == "" {
 		p.SessionID = "sess_" + uuid.NewString()
 	}
