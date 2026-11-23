@@ -231,7 +231,11 @@ func (p *SystemOneClassifierProvider) Classify(ctx context.Context, req *Classif
 	if err != nil {
 		return nil, err
 	}
-	endpoint := strings.TrimRight(p.cfg.BaseURL, "/") + "/systemone"
+	baseURL := normalizeV1BaseURL(p.cfg.BaseURL)
+	endpoint := baseURL + "/systemone"
+	if strings.HasSuffix(baseURL, "/systemone") {
+		endpoint = baseURL
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
 	if err != nil {
 		return nil, err

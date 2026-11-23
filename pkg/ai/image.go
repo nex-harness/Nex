@@ -105,7 +105,7 @@ func (p *OpenAIImagesProvider) GenerateImages(ctx context.Context, req *ImageReq
 		}, nil
 	}
 
-	baseURL := strings.TrimRight(p.cfg.BaseURL, "/")
+	baseURL := normalizeV1BaseURL(p.cfg.BaseURL)
 	var httpReq *http.Request
 	var err error
 
@@ -313,7 +313,7 @@ func (p *OpenRouterImagesProvider) GenerateImages(ctx context.Context, req *Imag
 		payload["image_config"] = map[string]any{"aspect_ratio": req.AspectRatio}
 	}
 	raw, _ := json.Marshal(payload)
-	baseURL := strings.TrimRight(p.cfg.BaseURL, "/")
+	baseURL := normalizeV1BaseURL(p.cfg.BaseURL)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
@@ -450,7 +450,7 @@ func (p *XAIImagesProvider) GenerateImages(ctx context.Context, req *ImageReques
 		body["aspect_ratio"] = req.AspectRatio
 	}
 	raw, _ := json.Marshal(body)
-	baseURL := strings.TrimRight(p.cfg.BaseURL, "/")
+	baseURL := normalizeV1BaseURL(p.cfg.BaseURL)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/images/generations", bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
@@ -578,7 +578,7 @@ func (p *MiniMaxImagesProvider) GenerateImages(ctx context.Context, req *ImageRe
 	}
 
 	raw, _ := json.Marshal(body)
-	baseURL := strings.TrimRight(p.cfg.BaseURL, "/")
+	baseURL := normalizeV1BaseURL(p.cfg.BaseURL)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/image_generation", bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
@@ -656,6 +656,26 @@ func (p *MiniMaxImagesProvider) GenerateImages(ctx context.Context, req *ImageRe
 		Output:     out,
 		StopReason: "stop",
 	}, nil
+}
+
+// normalizeV1BaseURL trims trailing slashes and appends "/v1" when the caller passed a bare origin
+// (e.g. "https://ai.tylinux.cn" -> "https://ai.tylinux.cn/v1"), while leaving explicit versioned
+// or custom paths (e.g. "/v1", "/api/v1", "/v1beta", "/systemone") untouched.
+func normalizeV1BaseURL(raw string) string {
+	base := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if base == "" {
+		return ""
+	}
+	// Find path portion after "scheme://host"
+	schemeIdx := strings.Index(base, "://")
+	if schemeIdx < 0 {
+		return base
+	}
+	rest := base[schemeIdx+3:]
+	if !strings.Contains(rest, "/") {
+		return base + "/v1"
+	}
+	return base
 }
 
 func splitImageInput(blocks []ContentBlock) (string, []ContentBlock) {

@@ -51,8 +51,8 @@ func TestOpenAIImagesProviderGenerateAndEdit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateImages err: %v", err)
 	}
-	if seenPath != "/images/generations" {
-		t.Fatalf("expected /images/generations, got %q", seenPath)
+	if seenPath != "/v1/images/generations" {
+		t.Fatalf("expected /v1/images/generations, got %q", seenPath)
 	}
 	if resp.StopReason != "stop" || len(resp.Output) != 2 {
 		t.Fatalf("unexpected response: %+v", resp)
@@ -73,8 +73,8 @@ func TestOpenAIImagesProviderGenerateAndEdit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateImages edit err: %v", err)
 	}
-	if seenPath != "/images/edits" || !strings.HasPrefix(seenContentType, "multipart/form-data") {
-		t.Fatalf("expected multipart /images/edits, got path=%q ct=%q", seenPath, seenContentType)
+	if seenPath != "/v1/images/edits" || !strings.HasPrefix(seenContentType, "multipart/form-data") {
+		t.Fatalf("expected multipart /v1/images/edits, got path=%q ct=%q", seenPath, seenContentType)
 	}
 	if resp2.StopReason != "stop" {
 		t.Fatalf("expected stop, got %+v", resp2)
@@ -132,8 +132,8 @@ func TestSystemOneClassifierProvider(t *testing.T) {
 	var seenWireType string
 	var seenDangerHeader string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/systemone" {
-			t.Errorf("expected /systemone, got %q", r.URL.Path)
+		if r.URL.Path != "/v1/systemone" {
+			t.Errorf("expected /v1/systemone, got %q", r.URL.Path)
 		}
 		seenDangerHeader = r.Header.Get("TypeSafe-Danger-Zone-Images")
 		var body struct {
@@ -227,7 +227,7 @@ func TestXAIAndMiniMaxImagesProviders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("xai err: %v", err)
 	}
-	if xaiPath != "/images/generations" || xResp.StopReason != "stop" || len(xResp.Output) != 2 {
+	if xaiPath != "/v1/images/generations" || xResp.StopReason != "stop" || len(xResp.Output) != 2 {
 		t.Fatalf("unexpected xai resp: path=%q resp=%+v", xaiPath, xResp)
 	}
 
@@ -249,7 +249,7 @@ func TestXAIAndMiniMaxImagesProviders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("minimax err: %v", err)
 	}
-	if mmPath != "/image_generation" || mResp.StopReason != "stop" || len(mResp.Output) != 1 {
+	if mmPath != "/v1/image_generation" || mResp.StopReason != "stop" || len(mResp.Output) != 1 {
 		t.Fatalf("unexpected minimax resp: path=%q resp=%+v", mmPath, mResp)
 	}
 }
