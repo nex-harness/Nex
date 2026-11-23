@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-23
+
+### Fixed
+- Desktop builds are split by runner: macOS `.dmg` now builds on `macos-latest`, Linux/Windows on `ubuntu-latest`, and Android APK/AAB on a runner with JDK 21 + Android SDK.
+- App bundles (`mygo.json` / `clients/web/package.json`) now inherit the release version via `scripts/set-app-version.sh` instead of a hardcoded `0.3.0`.
+
+### Added
+- iOS Simulator `.app` is published as `nex-ios-simulator.app.zip`; a signed device IPA will be added once Apple signing credentials are available.
+- `scripts/build-clients.sh` now supports per-platform targets (`desktop-macos`, `desktop-linux`, `desktop-windows`).
+- Release job aggregates every build job's artifacts and publishes `latest.json` + `SHA256SUMS.txt` alongside them.
+
 ## [0.1.1] - 2026-11-23
 
 ### Added

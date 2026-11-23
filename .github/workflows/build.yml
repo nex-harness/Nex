@@ -12,8 +12,29 @@ permissions:
   contents: write
   packages: write
 
+env:
+  # Fallback app version for non-tag builds; tag builds use the tag name.
+  APP_VERSION_FALLBACK: "0.1.2"
+
 jobs:
-  test-and-build:
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Resolve Version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF#refs/tags/v}"
+          else
+            VER="${APP_VERSION_FALLBACK}-dev+${GITHUB_SHA::7}"
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VER}"
+
+  server-artifacts:
+    needs: resolve-version
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -31,17 +52,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Resolve Version
-        id: version
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VER="${GITHUB_REF#refs/tags/}"
-          else
-            VER="0.1.0-dev+${GITHUB_SHA::7}"
-          fi
-          echo "version=${VER}" >> "$GITHUB_OUTPUT"
-          echo "Resolved version: ${VER}"
-
       - name: Build & Test Web UI
         run: |
           npm --prefix clients/web ci
@@ -53,7 +63,7 @@ jobs:
 
       - name: Build Multi-Platform Server, Runner & Relay Artifacts
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.resolve-version.outputs.version }}
         run: |
           mkdir -p dist/artifacts
 
@@ -77,48 +87,14 @@ jobs:
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-relay-darwin-arm64 ./cmd/nex-relay
           CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-relay-darwin-amd64 ./cmd/nex-relay
 
-          # Generate update manifest (latest.json) for in-app update checks
-          cat > dist/artifacts/latest.json <<EOF
-          {
-            "version": "${VERSION}",
-            "published_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "repo": "${GITHUB_REPOSITORY}"
-          }
-          EOF
-
-      - name: Build Desktop Clients (Linux, Windows, macOS)
-        run: |
-          ./scripts/build-clients.sh desktop
-          if [ -d dist/clients ]; then
-            find dist/clients -maxdepth 3 -type f \( -name '*.dmg' -o -name '*.app' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.tar.gz' -o -name '*.zip' \) -exec cp {} dist/artifacts/ \; || true
-          fi
-
-      - name: Build Android APK
-        run: |
-          ./scripts/build-clients.sh android || echo "::warning::Android APK build failed or SDK missing on runner"
-          if [ -d dist/clients ]; then
-            find dist/clients -maxdepth 3 -type f \( -name '*.apk' -o -name '*.aab' \) -exec cp {} dist/artifacts/ \; || true
-          fi
-
-      - name: Generate Checksums
-        run: |
-          (cd dist/artifacts && sha256sum * > SHA256SUMS.txt)
-          ls -lh dist/artifacts/
-
-      - name: Upload Build Artifacts
+      - name: Upload Server Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nex-v3-artifacts
+          name: server-artifacts
           path: dist/artifacts/*
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/artifacts/*
-          generate_release_notes: true
-
-  build-ios:
+  desktop-macos:
+    needs: resolve-version
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -136,26 +112,169 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Build Web UI & iOS IPA (unsigned / simulator)
+      - name: Sync App Version
+        run: |
+          chmod +x scripts/set-app-version.sh
+          ./scripts/set-app-version.sh "${{ needs.resolve-version.outputs.version }}"
+
+      - name: Build macOS Desktop Client (.app / .dmg)
         run: |
           npm --prefix clients/web ci
           npm --prefix clients/web run build
-          ./scripts/build-clients.sh ios || ./scripts/build-clients.sh ios-sim || echo "::warning::iOS build skipped (signing certs required for .ipa)"
-          mkdir -p dist/ios-artifacts
-          if [ -d dist/clients ]; then
-            find dist/clients -maxdepth 3 -type f -name '*.ipa' -exec cp {} dist/ios-artifacts/ \; || true
-          fi
+          ./scripts/build-clients.sh desktop-macos
 
-      - name: Upload iOS Artifacts
-        if: always()
+      - name: Build iOS Simulator App
+        run: ./scripts/build-clients.sh ios-sim
+
+      - name: Package iOS Simulator Bundle
+        run: |
+          mkdir -p dist/artifacts
+          if [ -d dist/clients/ios-simulator/Nex.app ]; then
+            ditto -c -k --sequesterRsrc --keepParent dist/clients/ios-simulator/Nex.app dist/artifacts/nex-ios-simulator.app.zip
+          fi
+          find dist/clients -maxdepth 3 -type f -name '*.dmg' -exec cp {} dist/artifacts/ \; || true
+          ls -lh dist/artifacts/
+
+      - name: Upload macOS / iOS Simulator Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nex-v3-ios
-          path: dist/ios-artifacts/*
-          if-no-files-found: ignore
+          name: macos-artifacts
+          path: dist/artifacts/*
+          if-no-files-found: warn
+
+  desktop-linux-windows:
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Sync App Version
+        run: |
+          chmod +x scripts/set-app-version.sh
+          ./scripts/set-app-version.sh "${{ needs.resolve-version.outputs.version }}"
+
+      - name: Build Linux & Windows Desktop Clients
+        run: |
+          npm --prefix clients/web ci
+          npm --prefix clients/web run build
+          ./scripts/build-clients.sh desktop-windows
+          ./scripts/build-clients.sh desktop-linux
+
+      - name: Collect Desktop Artifacts
+        run: |
+          mkdir -p dist/artifacts
+          find dist/clients -maxdepth 3 -type f \( -name '*.exe' -o -name '*.deb' -o -name '*.rpm' -o -name 'nex-*-linux-*.tar.gz' -o -name 'PKGBUILD' \) -exec cp {} dist/artifacts/ \; || true
+          ls -lh dist/artifacts/
+
+      - name: Upload Linux / Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-windows-artifacts
+          path: dist/artifacts/*
+          if-no-files-found: warn
+
+  android:
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Sync App Version
+        run: |
+          chmod +x scripts/set-app-version.sh
+          ./scripts/set-app-version.sh "${{ needs.resolve-version.outputs.version }}"
+
+      - name: Build Android APK / AAB
+        run: |
+          npm --prefix clients/web ci
+          npm --prefix clients/web run build
+          ./scripts/build-clients.sh android
+
+      - name: Collect Android Artifacts
+        run: |
+          mkdir -p dist/artifacts
+          find dist/clients -maxdepth 3 -type f \( -name '*.apk' -o -name '*.aab' \) -exec cp {} dist/artifacts/ \; || true
+          ls -lh dist/artifacts/
+
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-artifacts
+          path: dist/artifacts/*
+          if-no-files-found: warn
+
+  release:
+    needs: [resolve-version, server-artifacts, desktop-macos, desktop-linux-windows, android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/artifacts
+          pattern: "*-artifacts"
+          merge-multiple: true
+
+      - name: Generate Update Manifest & Checksums
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd dist/artifacts
+          cat > latest.json <<EOF
+          {
+            "version": "${VERSION}",
+            "published_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "tag": "${GITHUB_REF_NAME}",
+            "repo": "${GITHUB_REPOSITORY}"
+          }
+          EOF
+          sha256sum * > SHA256SUMS.txt
+          ls -lh
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/artifacts/*
+          generate_release_notes: true
 
   docker-images:
-    needs: test-and-build
+    needs: server-artifacts
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     steps:

@@ -25,6 +25,26 @@ build_desktop() {
   "${MYGO_CMD[@]}" build -skip-build-command "${extra_flags[@]}" -platform darwin/arm64,linux/amd64,windows/amd64
 }
 
+build_desktop_macos() {
+  echo "==> Building mygo Desktop client for macOS (darwin/arm64)..."
+  "${MYGO_CMD[@]}" build -skip-build-command -platform darwin/arm64
+}
+
+build_desktop_linux() {
+  echo "==> Building mygo Desktop client for Linux (linux/amd64)..."
+  "${MYGO_CMD[@]}" build -skip-build-command -platform linux/amd64
+}
+
+build_desktop_windows() {
+  local extra_flags=()
+  if ! command -v makensis >/dev/null 2>&1; then
+    echo "==> makensis not found; passing -skip-installer for Windows target"
+    extra_flags+=("-skip-installer")
+  fi
+  echo "==> Building mygo Desktop client for Windows (windows/amd64)..."
+  "${MYGO_CMD[@]}" build -skip-build-command "${extra_flags[@]}" -platform windows/amd64
+}
+
 build_ios_sim() {
   echo "==> Building mygo iOS Simulator app..."
   "${MYGO_CMD[@]}" build -skip-build-command -platform ios/simulator
@@ -44,6 +64,18 @@ case "$TARGET" in
   desktop)
     ensure_web_dist
     build_desktop
+    ;;
+  desktop-macos)
+    ensure_web_dist
+    build_desktop_macos
+    ;;
+  desktop-linux)
+    ensure_web_dist
+    build_desktop_linux
+    ;;
+  desktop-windows)
+    ensure_web_dist
+    build_desktop_windows
     ;;
   ios-sim)
     ensure_web_dist
@@ -66,7 +98,7 @@ case "$TARGET" in
     build_android
     ;;
   *)
-    echo "Usage: $0 [desktop|ios-sim|ios|android|all]" >&2
+    echo "Usage: $0 [desktop|desktop-macos|desktop-linux|desktop-windows|ios-sim|ios|android|all]" >&2
     exit 1
     ;;
 esac
