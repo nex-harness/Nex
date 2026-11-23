@@ -1,0 +1,81 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main, feat/nex-v3]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build & Test Web UI
+        run: |
+          npm --prefix clients/web ci
+          npm --prefix clients/web test
+          npm --prefix clients/web run build
+
+      - name: Run Go Unit Tests (CGO_ENABLED=0)
+        run: CGO_ENABLED=0 go test ./...
+
+      - name: Build Multi-Platform Artifacts (CGO_ENABLED=0)
+        run: |
+          mkdir -p dist/artifacts
+
+          # Package server distributions (each includes bundled multi-platform runners)
+          SKIP_WEB=1 ./scripts/package-server.sh linux amd64
+          SKIP_WEB=1 ./scripts/package-server.sh linux arm64
+          SKIP_WEB=1 ./scripts/package-server.sh darwin arm64
+          SKIP_WEB=1 ./scripts/package-server.sh darwin amd64
+          cp dist/nex-server-*.tar.gz dist/artifacts/
+
+          # Standalone nex-runner binaries
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/artifacts/nex-runner-linux-amd64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/artifacts/nex-runner-linux-arm64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o dist/artifacts/nex-runner-darwin-arm64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -o dist/artifacts/nex-runner-darwin-amd64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o dist/artifacts/nex-runner-windows-amd64.exe ./cmd/nex-runner
+
+          # Standalone nex-relay binaries
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/artifacts/nex-relay-linux-amd64 ./cmd/nex-relay
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/artifacts/nex-relay-linux-arm64 ./cmd/nex-relay
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o dist/artifacts/nex-relay-darwin-arm64 ./cmd/nex-relay
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -o dist/artifacts/nex-relay-darwin-amd64 ./cmd/nex-relay
+
+          # Checksums
+          (cd dist/artifacts && sha256sum * > SHA256SUMS.txt)
+          ls -lh dist/artifacts/
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nex-v3-artifacts
+          path: dist/artifacts/*
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/artifacts/*
+          generate_release_notes: true

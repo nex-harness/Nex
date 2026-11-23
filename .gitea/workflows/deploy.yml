@@ -48,15 +48,15 @@ jobs:
           SKIP_WEB=1 ./scripts/package-server.sh linux amd64
           ls -lh dist/nex-server dist/nex-runner dist/runners/
 
-      - name: Deploy to RemoteBuilder (nex.tylinux.cn)
+      - name: Deploy to RemoteBuilder
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           set -euo pipefail
-          HOST="${DEPLOY_HOST:-192.168.123.42}"
-          USER="${DEPLOY_USER:-tylinux}"
+          HOST="${DEPLOY_HOST:?DEPLOY_HOST secret is required}"
+          USER="${DEPLOY_USER:?DEPLOY_USER secret is required}"
 
           TMP_KEY="$(mktemp)"
           trap 'rm -f "$TMP_KEY"' EXIT
@@ -91,12 +91,18 @@ jobs:
             sudo systemctl is-active nex-v3-server.service nex-v3-runner.service
           '
 
-      - name: Verify Public Endpoint (https://nex.tylinux.cn)
+      - name: Verify Public Endpoint
+        env:
+          DEPLOY_PUBLIC_URL: ${{ vars.DEPLOY_PUBLIC_URL }}
         run: |
           set -euo pipefail
+          if [ -z "${DEPLOY_PUBLIC_URL:-}" ]; then
+            echo "DEPLOY_PUBLIC_URL not set, skipping public endpoint verification"
+            exit 0
+          fi
           sleep 2
-          curl -fsSI https://nex.tylinux.cn | head -n 5
-          curl -fsS https://nex.tylinux.cn/api/v1/health
+          curl -fsSI "$DEPLOY_PUBLIC_URL" | head -n 5
+          curl -fsS "${DEPLOY_PUBLIC_URL}/api/v1/health"
           echo ""
-          curl -fsS https://nex.tylinux.cn/api/v1/auth/status
+          curl -fsS "${DEPLOY_PUBLIC_URL}/api/v1/auth/status"
           echo ""
