@@ -1087,6 +1087,8 @@ export const enUS = {
   "settings.multimodalTestFailed": "Failed: {error}",
   "settings.multimodalDeleteProvider": "Delete Provider",
   "settings.multimodalJevBehavior": "Jev Automation",
+  "chat.imagePreview.rotateLeft": "Rotate left 90°",
+  "chat.imagePreview.rotateRight": "Rotate right 90°",
   "settings.imageProvider": "Image Generation Provider",
   "settings.imageProviderDesc": "Supports OpenRouter (Gemini Image / Flux) or OpenAI (gpt-image-1)",
   "settings.imageProviderAuto": "Auto (OpenRouter → OpenAI)",

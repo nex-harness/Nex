@@ -399,7 +399,7 @@ export interface AppState {
   sidePaneVisible: boolean;
   showBottomPanel: boolean;
   quickSearchOpen: boolean;
-  previewImage: { src: string; alt?: string } | null;
+  previewImage: { src: string; alt?: string; kind?: 'image' | 'pdf' } | null;
   pinnedSessionIds: Record<string, boolean>;
   unreadSessionIds: Record<string, boolean>;
 
@@ -458,7 +458,7 @@ export interface AppState {
   toggleSidePane: () => void;
   toggleBottomPanel: () => void;
   setQuickSearchOpen: (open: boolean) => void;
-  openImagePreview: (img: { src: string; alt?: string }) => void;
+  openImagePreview: (img: { src: string; alt?: string; kind?: 'image' | 'pdf' }) => void;
   closeImagePreview: () => void;
 
   setComposerText: (text: string) => void;
@@ -2328,8 +2328,51 @@ export const useNexStore = create<AppState>((set, get) => ({
   setActiveRightTab: (tabId) => set({ activeRightTabId: tabId }),
 
   openFileInPreviewTab: async (relPath, line) => {
-    const wasOpen = get().sidePaneVisible;
     const cleanRel = relPath.replace(/^\.\//, '');
+    const isMediaModalPath = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif|pdf)$/i.test(cleanRel);
+
+    if (isMediaModalPath) {
+      const resp = await wsClient.requestRPC<
+        { action: string; rel_path: string; workspace_path?: string },
+        FilePreview
+      >(
+        'workspace.req',
+        {
+          action: 'fs_read_preview',
+          rel_path: cleanRel,
+          workspace_path: get().selectedWorkspacePath || undefined,
+        },
+        { runner_id: get().selectedRunnerId },
+      );
+      const preview = resp.payload;
+      if (!preview) return;
+      const mime = preview.mime_type || (cleanRel.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/png');
+      const rawContent = preview.content || '';
+      if (preview.preview_as === 'image' || mime.startsWith('image/')) {
+        const src = rawContent
+          ? rawContent.startsWith('data:')
+            ? rawContent
+            : `data:${mime};base64,${rawContent}`
+          : '';
+        if (src) {
+          set({ previewImage: { src, alt: preview.name || cleanRel, kind: 'image' } });
+          return;
+        }
+      }
+      if (mime === 'application/pdf' || cleanRel.toLowerCase().endsWith('.pdf')) {
+        const src = rawContent
+          ? rawContent.startsWith('data:')
+            ? rawContent
+            : `data:application/pdf;base64,${rawContent}`
+          : '';
+        if (src) {
+          set({ previewImage: { src, alt: preview.name || cleanRel, kind: 'pdf' } });
+          return;
+        }
+      }
+    }
+
+    const wasOpen = get().sidePaneVisible;
     const existing = get().rightTabs.find((t) => t.kind === 'file_preview' && t.relPath === cleanRel);
     if (existing) {
       set((s) => ({
@@ -2356,6 +2399,15 @@ export const useNexStore = create<AppState>((set, get) => ({
     );
     const preview = resp.payload;
     if (!preview) return;
+    if (preview.preview_as === 'image' && preview.content) {
+      const mime = preview.mime_type || 'image/png';
+      const src = preview.content.startsWith('data:') ? preview.content : `data:${mime};base64,${preview.content}`;
+      set({
+        sidePaneVisible: wasOpen,
+        previewImage: { src, alt: preview.name || cleanRel, kind: 'image' },
+      });
+      return;
+    }
     const id = `prev_${crypto.randomUUID().slice(0, 8)}`;
     const tab: WorkbenchTab = {
       id,

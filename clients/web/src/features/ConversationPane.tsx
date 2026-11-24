@@ -3196,7 +3196,7 @@ export function ConversationPane() {
             sidebarVisible ? 'pl-4' : collapsedHeaderPad
           }`}
         >
-          <div className="nex-no-drag flex min-w-0 items-center gap-1.5">
+          <div className="nex-no-drag flex min-w-0 flex-1 items-center gap-1.5">
             {sidebarVisible && (
               <button
                 type="button"
@@ -3208,7 +3208,64 @@ export function ConversationPane() {
                 <PanelLeft className="size-4" />
               </button>
             )}
-            <h1 className="max-w-md truncate text-ui-base font-semibold text-foreground">{sessionTitle}</h1>
+            {renaming ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void commitRename();
+                }}
+                className="flex min-w-0 flex-1 max-w-xl items-center gap-1"
+              >
+                <input
+                  autoFocus
+                  data-testid="session-inline-rename-input"
+                  value={renameDraft}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setRenaming(false);
+                    }
+                  }}
+                  onBlur={() => {
+                    // Delay slightly so clicking the Check/X buttons still fires before blur
+                    window.setTimeout(() => {
+                      setRenaming((cur) => (cur ? false : cur));
+                    }, 120);
+                  }}
+                  className="h-8 min-w-0 flex-1 rounded-lg border border-primary/50 bg-input px-2.5 text-ui-base font-semibold text-foreground outline-none focus:border-primary"
+                />
+                <button
+                  type="submit"
+                  onMouseDown={(e) => e.preventDefault()}
+                  title={formatMsg(locale, 'common.confirm')}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-lg text-success hover:bg-hover"
+                >
+                  <Check className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setRenaming(false)}
+                  title={formatMsg(locale, 'common.cancel')}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-lg text-foreground-subtle hover:bg-hover"
+                >
+                  <X className="size-4" />
+                </button>
+              </form>
+            ) : (
+              <h1
+                onDoubleClick={() => {
+                  if (!activeSessionId) return;
+                  setRenameDraft(sessionTitle);
+                  setHeaderMenu(null);
+                  setRenaming(true);
+                }}
+                title={sessionTitle}
+                className="max-w-md cursor-text truncate text-ui-base font-semibold text-foreground"
+              >
+                {sessionTitle}
+              </h1>
+            )}
 
             <div className="relative" ref={headerMenuRef}>
               <button
@@ -3225,39 +3282,6 @@ export function ConversationPane() {
 
               {headerMenu === 'session' && (
                 <div className="zcode-popover-down absolute left-0 top-8 z-50 w-52 rounded-xl border border-border bg-popover p-1 shadow-md">
-                  {renaming ? (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        void commitRename();
-                      }}
-                      className="flex items-center gap-1 p-1"
-                    >
-                      <input
-                        autoFocus
-                        value={renameDraft}
-                        onChange={(e) => setRenameDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Escape') setRenaming(false);
-                        }}
-                        className="h-7 min-w-0 flex-1 rounded-md border border-border bg-input px-2 text-ui-sm text-foreground"
-                      />
-                      <button
-                        type="submit"
-                        className="flex size-7 shrink-0 items-center justify-center rounded-md text-success hover:bg-hover"
-                      >
-                        <Check className="size-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRenaming(false)}
-                        className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtle hover:bg-hover"
-                      >
-                        <X className="size-3.5" />
-                      </button>
-                    </form>
-                  ) : (
-                    <>
                       <button
                         type="button"
                         onClick={() => {
@@ -3277,6 +3301,7 @@ export function ConversationPane() {
                         type="button"
                         onClick={() => {
                           setRenameDraft(sessionTitle);
+                          setHeaderMenu(null);
                           setRenaming(true);
                         }}
                         className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-ui-sm text-foreground hover:bg-menu-hover"
@@ -3324,8 +3349,6 @@ export function ConversationPane() {
                             : formatMsg(locale, 'chat.copySessionId')}
                         </span>
                       </button>
-                    </>
-                  )}
                 </div>
               )}
             </div>

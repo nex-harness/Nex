@@ -1089,6 +1089,8 @@ export const zhCN = {
   "settings.multimodalTestFailed": "连接失败：{error}",
   "settings.multimodalDeleteProvider": "删除提供商",
   "settings.multimodalJevBehavior": "Jev 自动化开关",
+  "chat.imagePreview.rotateLeft": "向左旋转 90°",
+  "chat.imagePreview.rotateRight": "向右旋转 90°",
   "settings.imageProvider": "图片生成 Provider",
   "settings.imageProviderDesc": "支持 OpenRouter（推荐，支持 Gemini Image / Flux）或 OpenAI（gpt-image-1）",
   "settings.imageProviderAuto": "自动选择（优先 OpenRouter → OpenAI）",
