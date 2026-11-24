@@ -4881,9 +4881,13 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
           cache_hit_rate_pct: 0,
           estimated_cost_usd: 0,
           cache_saved_usd: 0,
-          breakdown: [],
-          system_prompt_blob_hash: '',
-          raw_trace_blob_hash: '',
+          breakdown: [
+            { category: 'messages', bytes: 2000000, tokens: 1056000, pct: 99.7, blob_hash: 'hash_old_msgs' },
+            { category: 'system_tools', bytes: 20000, tokens: 3000, pct: 0.3, blob_hash: 'hash_tools' },
+            { category: 'system_prompt', bytes: 2000, tokens: 442, pct: 0.0, blob_hash: 'hash_sysprompt' },
+          ],
+          system_prompt_blob_hash: 'hash_sysprompt',
+          raw_trace_blob_hash: 'hash_old_trace',
           ttft_ms: 0,
           duration_ms: 0,
           recorded_at: 1000,
@@ -4942,6 +4946,8 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     const { rerender } = render(<App />);
     expect(screen.getByTestId('compaction-divider').getAttribute('data-status')).toBe('compacting');
     expect(screen.getByTestId('compaction-divider').textContent).toContain('正在压缩上下文');
+    // Working spinner does NOT appear concurrently with "正在压缩上下文…"
+    expect(screen.queryByText(/工作中/)).toBeNull();
 
     // Finish compaction: updates same divider item in place, collapses summary, and refreshes context meter!
     stream = applySessionEvent(stream, 'run_mac', {
@@ -4973,7 +4979,8 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     });
 
     expect(stream.items).toHaveLength(1);
-    expect(stream.latestTelemetry?.total_context_tokens).toBe(1166);
+    // Preserves system_tools (3000) + system_prompt (442) alongside compacted messages (~724 -> total 4166)
+    expect(stream.latestTelemetry?.total_context_tokens).toBe(4166);
 
     useNexStore.setState({ streams: { [sid]: stream } });
     rerender(<App />);
@@ -4986,5 +4993,15 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
 
     fireEvent.click(screen.getByTestId('compaction-toggle-summary'));
     expect(screen.getByTestId('compaction-summary-panel').textContent).toContain('Auth refactor summary');
+
+    // Context popover keeps non-message percentages & clickability, and opens inline compacted messages summary
+    fireEvent.click(screen.getByTestId('context-ring-btn'));
+    expect(screen.getByTestId('context-cat-messages').textContent).not.toContain('100.0%');
+    expect(screen.getByTestId('context-cat-system_tools').hasAttribute('disabled')).toBe(false);
+    expect(screen.getByTestId('context-cat-system_prompt').hasAttribute('disabled')).toBe(false);
+    expect(screen.getByTestId('context-cat-messages').hasAttribute('disabled')).toBe(false);
+
+    fireEvent.click(screen.getByTestId('context-cat-messages'));
+    expect(screen.getAllByText(/Auth refactor summary/).length).toBeGreaterThanOrEqual(2);
   });
 });

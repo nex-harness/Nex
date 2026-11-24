@@ -3083,6 +3083,15 @@ export function ConversationPane() {
     () => computeTurnTickLayout(items, activeTurnId, railBudgetPx),
     [items, activeTurnId, railBudgetPx],
   );
+  const isCompacting = items.some((it) => it.role === 'compaction' && it.compaction?.status === 'compacting');
+  const lastCompactionIdx = useMemo(() => {
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (items[i].role === 'compaction' && items[i].compaction?.status === 'completed') {
+        return i;
+      }
+    }
+    return -1;
+  }, [items]);
 
   const hiddenTurnCount = items.length > visibleTurnLimit ? items.length - visibleTurnLimit : 0;
   const visibleItems = useMemo(
@@ -3694,7 +3703,7 @@ export function ConversationPane() {
                 />
               ))}
               <ChatLoading
-                loading={Boolean(currentStream.running && !currentStream.pendingApproval && !currentStream.pendingUIPrompt)}
+                loading={Boolean(currentStream.running && !isCompacting && !currentStream.pendingApproval && !currentStream.pendingUIPrompt)}
                 startedAt={currentStream.runStartedAt}
                 locale={locale}
                 className="pt-0.5"
@@ -3725,6 +3734,7 @@ export function ConversationPane() {
           >
             {tickLayout.entries.map(({ item, idx }) => {
               const isActive = activeTurnId ? activeTurnId === item.id : idx === items.length - 1;
+              const isPreCompaction = lastCompactionIdx >= 0 && idx < lastCompactionIdx;
               const rawPreview =
                 item.role === 'user'
                   ? cleanUserDisplayText(item.text)
@@ -3744,19 +3754,24 @@ export function ConversationPane() {
                   key={item.id}
                   type="button"
                   data-testid={`turn-tick-${idx}`}
+                  data-pre-compaction={isPreCompaction ? 'true' : undefined}
                   title={label}
                   aria-label={label}
                   onClick={() => jumpToTurn(item.id)}
                   style={{ height: `${tickLayout.slotHeightPx}px` }}
-                  className="group/tick relative flex cursor-pointer items-center px-1.5 focus:outline-none"
+                  className={`group/tick relative flex cursor-pointer items-center px-1.5 transition-opacity focus:outline-none ${
+                    isPreCompaction ? 'opacity-35 hover:opacity-80' : ''
+                  }`}
                 >
                   <span
                     className={`block ${tickLayout.slotHeightPx <= 5 ? 'h-[1.5px]' : 'h-[2px]'} rounded-full transition-all duration-150 ${
                       isActive
                         ? 'w-4 bg-brand-blue'
-                        : item.role === 'user'
-                          ? 'w-3 bg-foreground/35 group-hover/tick:w-5 group-hover/tick:bg-foreground'
-                          : 'w-2 bg-foreground/20 group-hover/tick:w-4 group-hover/tick:bg-foreground/80'
+                        : item.role === 'compaction'
+                          ? 'w-4 bg-success/70'
+                          : item.role === 'user'
+                            ? 'w-3 bg-foreground/35 group-hover/tick:w-5 group-hover/tick:bg-foreground'
+                            : 'w-2 bg-foreground/20 group-hover/tick:w-4 group-hover/tick:bg-foreground/80'
                     }`}
                   />
                   <span className="pointer-events-none absolute left-full top-1/2 z-30 ml-1.5 hidden max-w-[200px] -translate-y-1/2 truncate whitespace-nowrap rounded-md border border-border bg-popover px-2 py-0.5 text-ui-xs text-foreground shadow-md group-hover/tick:block">

@@ -2,6 +2,7 @@ import {
   BackgroundTaskItem,
   ChatTurnItem,
   CompactionCard,
+  ContextCategoryItem,
   GoalEntry,
   PendingApproval,
   PendingUIPrompt,
@@ -147,6 +148,99 @@ export function sealRunningItems(items: ChatTurnItem[]): ChatTurnItem[] {
         : it.toolCalls,
     };
   });
+}
+
+export function mergeCompactedTelemetry(
+  baseTelemetry: TurnTelemetry | null,
+  afterTokens: number,
+  options: {
+    id: string;
+    sessionId: string;
+    turnIdx: number;
+    runnerId: string;
+    recordedAtSec: number;
+    inlineMessages?: string;
+  },
+): TurnTelemetry {
+  const prevWin = baseTelemetry?.context_window || 200000;
+  const baseBreakdown = baseTelemetry?.breakdown || [];
+  const nonMsgItems = baseBreakdown.filter((b) => b.category !== 'messages');
+  const nonMsgTokens = nonMsgItems.reduce((acc, b) => acc + (b.tokens || 0), 0);
+  const sectionTokens = nonMsgItems
+    .filter((b) => b.category === 'system_prompt' || b.category === 'skills' || b.category === 'meta_context')
+    .reduce((acc, b) => acc + (b.tokens || 0), 0);
+
+  const messagesTokens =
+    baseBreakdown.length > 0 && afterTokens > sectionTokens ? afterTokens - sectionTokens : afterTokens;
+  const totalTokens = messagesTokens + nonMsgTokens;
+  const pct = prevWin > 0 ? Math.min(100, Number(((totalTokens * 100) / prevWin).toFixed(1))) : 0;
+  const pctFor = (tokens: number): number =>
+    totalTokens > 0 ? Number(((tokens * 100) / totalTokens).toFixed(1)) : 0;
+
+  const nextBreakdown: ContextCategoryItem[] =
+    baseBreakdown.length > 0
+      ? baseBreakdown.map((b) =>
+          b.category === 'messages'
+            ? {
+                ...b,
+                tokens: messagesTokens,
+                pct: pctFor(messagesTokens),
+                blob_hash: '',
+                inline_content: options.inlineMessages ?? b.inline_content,
+              }
+            : { ...b, pct: pctFor(b.tokens) },
+        )
+      : [
+          {
+            category: 'messages' as const,
+            bytes: 0,
+            tokens: messagesTokens,
+            pct: 100,
+            blob_hash: '',
+            inline_content: options.inlineMessages,
+          },
+        ];
+
+  return baseTelemetry
+    ? {
+        ...baseTelemetry,
+        id: options.id,
+        total_context_tokens: totalTokens,
+        window_utilization_pct: pct,
+        input_tokens: totalTokens,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        output_tokens: 0,
+        raw_trace_blob_hash: '',
+        breakdown: nextBreakdown,
+        recorded_at: options.recordedAtSec,
+      }
+    : {
+        id: options.id,
+        session_id: options.sessionId,
+        turn_idx: options.turnIdx,
+        runner_id: options.runnerId,
+        provider_id: '',
+        model_id: '',
+        trigger_source: 'chat',
+        context_window: prevWin,
+        total_context_tokens: totalTokens,
+        window_utilization_pct: pct,
+        input_tokens: totalTokens,
+        output_tokens: 0,
+        reasoning_tokens: 0,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        cache_hit_rate_pct: 0,
+        estimated_cost_usd: 0,
+        cache_saved_usd: 0,
+        breakdown: nextBreakdown,
+        system_prompt_blob_hash: '',
+        raw_trace_blob_hash: '',
+        ttft_ms: 0,
+        duration_ms: 0,
+        recorded_at: options.recordedAtSec,
+      };
 }
 
 export interface RawSessionEventRow {
@@ -693,56 +787,14 @@ export function applySessionEvent(
       };
 
       if (status === 'completed' && typeof afterTokens === 'number' && afterTokens > 0) {
-        const prevWin = latestTelemetry?.context_window || 200000;
-        const pct = prevWin > 0 ? Math.min(100, Number(((afterTokens * 100) / prevWin).toFixed(1))) : 0;
-        const baseBreakdown = latestTelemetry?.breakdown || [];
-        const nextBreakdown =
-          baseBreakdown.length > 0
-            ? baseBreakdown.map((b) =>
-                b.category === 'messages'
-                  ? { ...b, tokens: afterTokens, pct: 100 }
-                  : { ...b, tokens: 0, pct: 0 },
-              )
-            : [{ category: 'messages' as const, bytes: 0, tokens: afterTokens, pct: 100, blob_hash: '' }];
-        latestTelemetry = latestTelemetry
-          ? {
-              ...latestTelemetry,
-              id: `cmp_${ev.seq || Date.now()}`,
-              total_context_tokens: afterTokens,
-              window_utilization_pct: pct,
-              input_tokens: afterTokens,
-              cache_read_tokens: 0,
-              cache_write_tokens: 0,
-              output_tokens: 0,
-              breakdown: nextBreakdown,
-              recorded_at: Math.floor(eventTimestamp() / 1000),
-            }
-          : {
-              id: `cmp_${ev.seq || Date.now()}`,
-              session_id: ev.session_id,
-              turn_idx: ev.turn_idx,
-              runner_id: runnerId,
-              provider_id: '',
-              model_id: '',
-              trigger_source: 'chat',
-              context_window: prevWin,
-              total_context_tokens: afterTokens,
-              window_utilization_pct: pct,
-              input_tokens: afterTokens,
-              output_tokens: 0,
-              reasoning_tokens: 0,
-              cache_read_tokens: 0,
-              cache_write_tokens: 0,
-              cache_hit_rate_pct: 0,
-              estimated_cost_usd: 0,
-              cache_saved_usd: 0,
-              breakdown: nextBreakdown,
-              system_prompt_blob_hash: '',
-              raw_trace_blob_hash: '',
-              ttft_ms: 0,
-              duration_ms: 0,
-              recorded_at: Math.floor(eventTimestamp() / 1000),
-            };
+        latestTelemetry = mergeCompactedTelemetry(latestTelemetry, afterTokens, {
+          id: `cmp_${ev.seq || Date.now()}`,
+          sessionId: ev.session_id,
+          turnIdx: ev.turn_idx,
+          runnerId,
+          recordedAtSec: Math.floor(eventTimestamp() / 1000),
+          inlineMessages: summary,
+        });
       }
       break;
     }

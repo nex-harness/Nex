@@ -11,7 +11,7 @@ import {
   setRuntimeAuthToken,
   setRuntimeServerUrl,
 } from './protocol';
-import { applySessionEvent, emptyStreamState, RawSessionEventRow, sealRunningItems, SessionStreamState } from './reducer';
+import { applySessionEvent, emptyStreamState, mergeCompactedTelemetry, RawSessionEventRow, sealRunningItems, SessionStreamState } from './reducer';
 import {
   AgentProfile,
   BrowseDirsResult,
@@ -1891,7 +1891,20 @@ export const useNexStore = create<AppState>((set, get) => ({
       const keepSyntheticCompaction =
         st.latestTelemetry?.id?.startsWith('cmp_') &&
         (latestFromTels.recorded_at || 0) <= (st.latestTelemetry.recorded_at || 0);
-      if (!keepSyntheticCompaction && (!st.latestTelemetry || (latestFromTels.recorded_at || 0) >= (st.latestTelemetry.recorded_at || 0))) {
+      if (keepSyntheticCompaction && st.latestTelemetry) {
+        const hasNonMsg = st.latestTelemetry.breakdown?.some((b) => b.category !== 'messages');
+        if (!hasNonMsg && latestFromTels.breakdown?.some((b) => b.category !== 'messages')) {
+          const inlineMsg = st.latestTelemetry.breakdown?.find((b) => b.category === 'messages')?.inline_content;
+          st.latestTelemetry = mergeCompactedTelemetry(latestFromTels, st.latestTelemetry.total_context_tokens, {
+            id: st.latestTelemetry.id,
+            sessionId,
+            turnIdx: st.latestTelemetry.turn_idx,
+            runnerId,
+            recordedAtSec: st.latestTelemetry.recorded_at,
+            inlineMessages: inlineMsg,
+          });
+        }
+      } else if (!st.latestTelemetry || (latestFromTels.recorded_at || 0) >= (st.latestTelemetry.recorded_at || 0)) {
         st.latestTelemetry = latestFromTels;
       }
       if (sortedTels.length >= st.turnTelemetries.length) {

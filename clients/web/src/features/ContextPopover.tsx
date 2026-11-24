@@ -80,7 +80,13 @@ export function ContextWindowsButton({
     tokens: number | undefined,
     hash?: string,
     fallbackTraceHash?: string,
+    inlineContent?: string,
   ) => {
+    if (inlineContent) {
+      setOpen(false);
+      setInspectorModal({ category, title, colorVar, tokens, content: inlineContent });
+      return;
+    }
     const targetHash = hash || fallbackTraceHash;
     if (!targetHash) return;
     setOpen(false);
@@ -177,10 +183,11 @@ export function ContextWindowsButton({
             {CATEGORY_META.map(({ key, meta }) => {
               const found = telemetry?.breakdown?.find((b) => b.category === key);
               const itemPct = found ? found.pct : 0;
+              const inlineContent = found?.inline_content;
               const blobHash =
                 found?.blob_hash || (key === 'system_prompt' ? telemetry?.system_prompt_blob_hash : undefined);
               const fallbackTrace = key === 'messages' ? telemetry?.raw_trace_blob_hash : undefined;
-              const clickable = Boolean(blobHash || fallbackTrace);
+              const clickable = Boolean(inlineContent || blobHash || fallbackTrace);
               const label = formatMsg(locale, meta.labelKey);
               return (
                 <button
@@ -189,7 +196,8 @@ export function ContextWindowsButton({
                   disabled={!clickable || loadingBlob}
                   data-testid={`context-cat-${key}`}
                   onClick={() =>
-                    clickable && void inspectCategory(key, label, meta.colorVar, found?.tokens, blobHash, fallbackTrace)
+                    clickable &&
+                    void inspectCategory(key, label, meta.colorVar, found?.tokens, blobHash, fallbackTrace, inlineContent)
                   }
                   title={
                     found?.tokens

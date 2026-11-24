@@ -327,6 +327,7 @@ export interface ContextCategoryItem {
   tokens: number;
   pct: number;
   blob_hash?: string;
+  inline_content?: string;
 }
 
 export interface TurnTelemetry {
