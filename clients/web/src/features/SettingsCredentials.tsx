@@ -17,6 +17,7 @@ import {
 import { useMemo, useState } from 'react';
 import { apiFetch } from '../core/protocol';
 import { useNexStore } from '../core/store';
+import { formatMsg } from '../i18n';
 import type {
   CredentialEntry,
   CredentialProbeResult,
@@ -141,7 +142,6 @@ const EMPTY_FORM: CredentialFormState = {
 
 export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string) => void }) {
   const { locale, credentials, runners, selectedWorkspacePath, refreshRegistries } = useNexStore();
-  const isZh = locale === 'zh-CN';
 
   const [scopeFilter, setScopeFilter] = useState<'all' | 'global' | 'workspace' | 'runner'>('all');
   const [runnerFilter, setRunnerFilter] = useState<string>('');
@@ -245,7 +245,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
   const saveForm = async () => {
     setFormError('');
     if (!form.name.trim()) {
-      setFormError(isZh ? '请填写凭证分组名称' : 'Credential group name is required');
+      setFormError(formatMsg(locale, 'settings.credentials.errGroupName'));
       return;
     }
     const entries: CredentialEntry[] = form.entries
@@ -257,7 +257,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
       }))
       .filter((e) => e.key !== '');
     if (entries.length === 0) {
-      setFormError(isZh ? '请至少添加一个环境变量 Key' : 'Add at least one environment variable key');
+      setFormError(formatMsg(locale, 'settings.credentials.errEnvKey'));
       return;
     }
 
@@ -282,7 +282,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
       });
       await refreshRegistries();
       setEditorOpen(false);
-      onFlash(isZh ? '凭证已加密保存并同步至目标 Runner' : 'Credentials encrypted and synced to target runners');
+      onFlash(formatMsg(locale, 'settings.credentials.savedFlash'));
     } catch (err) {
       setFormError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -298,25 +298,21 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
     await refreshRegistries();
     onFlash(
       nextEnabled
-        ? isZh
-          ? `已启用「${c.name}」`
-          : `Enabled "${c.name}"`
-        : isZh
-          ? `已停用「${c.name}」`
-          : `Disabled "${c.name}"`,
+        ? formatMsg(locale, 'settings.credentials.enabledFlash')
+        : formatMsg(locale, 'settings.credentials.disabledFlash'),
     );
   };
 
   const removeCredential = async (c: CredentialRecord) => {
     await apiFetch(`/api/v1/credentials/${encodeURIComponent(c.id)}`, { method: 'DELETE' });
     await refreshRegistries();
-    onFlash(isZh ? `已删除「${c.name}」` : `Deleted "${c.name}"`);
+    onFlash(formatMsg(locale, 'settings.credentials.deletedFlash', { name: c.name }));
   };
 
   const runImportEnv = async () => {
     setImportError('');
     if (!importRaw.trim()) {
-      setImportError(isZh ? '请粘贴 .env 内容' : 'Paste .env content first');
+      setImportError(formatMsg(locale, 'settings.credentials.errPasteEnv'));
       return;
     }
     setImporting(true);
@@ -337,11 +333,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
       setImportOpen(false);
       setImportRaw('');
       setImportName('');
-      onFlash(
-        isZh
-          ? `已加密导入 ${res.imported_count} 个环境变量`
-          : `Encrypted & imported ${res.imported_count} variables`,
-      );
+      onFlash(formatMsg(locale, 'settings.credentials.importedFlash', { count: res.imported_count }));
     } catch (err) {
       setImportError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -364,11 +356,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
         body: JSON.stringify({ runner_id: runnerId, values: filtered }),
       });
       setLocalValuesDraft((prev) => ({ ...prev, [key]: {} }));
-      onFlash(
-        isZh
-          ? `已直接写入 ${runnerId} 本地加密库（未落 Server 磁盘）`
-          : `Written directly to ${runnerId} local encrypted vault`,
-      );
+      onFlash(formatMsg(locale, 'settings.credentials.pushedFlash', { runnerId }));
     } catch (err) {
       onFlash(err instanceof Error ? err.message : String(err));
     } finally {
@@ -408,19 +396,15 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
   };
 
   const policyLabel = (p: CredentialUsagePolicy) => {
-    if (p === 'chat_only') return isZh ? '仅交互对话' : 'Chat only';
-    if (p === 'cron_explicit') return isZh ? '仅定时任务显式授权' : 'Cron explicit';
-    return isZh ? '对话 + 定时任务' : 'Chat + Cron';
+    if (p === 'chat_only') return formatMsg(locale, 'settings.credentials.policy.chatOnly');
+    if (p === 'cron_explicit') return formatMsg(locale, 'settings.credentials.policy.cronExplicit');
+    return formatMsg(locale, 'settings.credentials.policy.chatAndCron');
   };
 
   const storageLabel = (m: CredentialStorageMode) =>
     m === 'runner_local'
-      ? isZh
-        ? 'Runner 本地直存'
-        : 'Runner-local only'
-      : isZh
-        ? 'Server 加密同步'
-        : 'Server encrypted sync';
+      ? formatMsg(locale, 'settings.credentials.storage.runnerLocal')
+      : formatMsg(locale, 'settings.credentials.storage.serverSynced');
 
   return (
     <div className="space-y-6" data-testid="settings-credentials-section">
@@ -439,20 +423,12 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
               }`}
             >
               {sc === 'all'
-                ? isZh
-                  ? '全部'
-                  : 'All'
+                ? formatMsg(locale, 'settings.credentials.filter.all')
                 : sc === 'global'
-                  ? isZh
-                    ? '全局'
-                    : 'Global'
+                  ? formatMsg(locale, 'settings.credentials.filter.global')
                   : sc === 'workspace'
-                    ? isZh
-                      ? '工作区'
-                      : 'Workspace'
-                    : isZh
-                      ? '指定 Runner'
-                      : 'Per-Runner'}
+                    ? formatMsg(locale, 'settings.credentials.filter.workspace')
+                    : formatMsg(locale, 'settings.credentials.filter.runner')}
             </button>
           ))}
 
@@ -462,7 +438,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
               onChange={(e) => setRunnerFilter(e.target.value)}
               className="h-8 rounded-lg border border-border bg-input px-2.5 text-ui-xs text-foreground"
             >
-              <option value="">{isZh ? '所有 Runner 节点' : 'All Runners'}</option>
+              <option value="">{formatMsg(locale, 'settings.credentials.filter.allRunners')}</option>
               {runners.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name || r.id} ({r.status})
@@ -483,7 +459,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
             className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover"
           >
             <FileCode2 className="size-3.5" />
-            <span>{isZh ? '粘贴 .env 导入' : 'Paste .env'}</span>
+            <span>{formatMsg(locale, 'settings.credentials.btn.pasteEnv')}</span>
           </button>
           <button
             type="button"
@@ -492,7 +468,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
             className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-ui-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             <Plus className="size-3.5" />
-            <span>{isZh ? '新建凭证分组' : 'New Credential'}</span>
+            <span>{formatMsg(locale, 'settings.credentials.btn.newCredential')}</span>
           </button>
         </div>
       </div>
@@ -502,7 +478,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
         <div className="px-5 py-3.5">
           <div className="flex items-center gap-1.5 text-ui-xs font-medium text-foreground-subtle">
             <Sparkles className="size-3.5 text-brand-blue" />
-            <span>{isZh ? '常用 CLI 预设模板（含只读鉴权验活探针）' : 'CLI Presets (with read-only auth probe)'}</span>
+            <span>{formatMsg(locale, 'settings.credentials.presetsTitle')}</span>
           </div>
           <div className="mt-2.5 flex flex-wrap gap-2">
             {CLI_PRESETS.map((preset) => (
@@ -526,7 +502,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
           <div className="space-y-4 px-5 py-4">
             <div className="flex items-center justify-between">
               <div className="text-ui-base font-medium text-foreground">
-                {isZh ? '批量粘贴 .env 导入' : 'Bulk Paste .env Import'}
+                {formatMsg(locale, 'settings.credentials.import.title')}
               </div>
               <button
                 type="button"
@@ -538,7 +514,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <label className="space-y-1">
-                <span className="text-ui-xs text-foreground-subtle">{isZh ? '分组名称' : 'Group Name'}</span>
+                <span className="text-ui-xs text-foreground-subtle">{formatMsg(locale, 'settings.credentials.import.groupName')}</span>
                 <input
                   value={importName}
                   onChange={(e) => setImportName(e.target.value)}
@@ -547,18 +523,18 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                 />
               </label>
               <label className="space-y-1">
-                <span className="text-ui-xs text-foreground-subtle">{isZh ? '作用域' : 'Scope'}</span>
+                <span className="text-ui-xs text-foreground-subtle">{formatMsg(locale, 'settings.credentials.import.scope')}</span>
                 <select
                   value={importScope}
                   onChange={(e) => setImportScope(e.target.value as CredentialScope)}
                   className={settingsSelectClass}
                 >
-                  <option value="global">{isZh ? '全局' : 'Global'}</option>
-                  <option value="workspace">{isZh ? '指定工作区' : 'Workspace'}</option>
+                  <option value="global">{formatMsg(locale, 'settings.credentials.scope.global')}</option>
+                  <option value="workspace">{formatMsg(locale, 'settings.credentials.scope.workspace')}</option>
                 </select>
               </label>
               <label className="space-y-1">
-                <span className="text-ui-xs text-foreground-subtle">{isZh ? '使用策略' : 'Usage Policy'}</span>
+                <span className="text-ui-xs text-foreground-subtle">{formatMsg(locale, 'settings.credentials.import.usagePolicy')}</span>
                 <select
                   value={importPolicy}
                   onChange={(e) => setImportPolicy(e.target.value as CredentialUsagePolicy)}
@@ -572,7 +548,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
             </div>
             {importScope === 'workspace' && (
               <label className="block space-y-1">
-                <span className="text-ui-xs text-foreground-subtle">{isZh ? '工作区路径' : 'Workspace Path'}</span>
+                <span className="text-ui-xs text-foreground-subtle">{formatMsg(locale, 'settings.credentials.import.workspacePath')}</span>
                 <input
                   value={importWorkspace}
                   onChange={(e) => setImportWorkspace(e.target.value)}
@@ -596,7 +572,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                   checked={importMerge}
                   onChange={(e) => setImportMerge(e.target.checked)}
                 />
-                <span>{isZh ? '若同名分组已存在则合并覆盖' : 'Merge into existing group with same name'}</span>
+                <span>{formatMsg(locale, 'settings.credentials.import.merge')}</span>
               </label>
               <button
                 type="button"
@@ -604,7 +580,9 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                 onClick={() => void runImportEnv()}
                 className="h-8 rounded-lg bg-primary px-3.5 text-ui-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
               >
-                {importing ? (isZh ? '导入中...' : 'Importing...') : isZh ? '加密导入' : 'Encrypt & Import'}
+                {importing
+                  ? formatMsg(locale, 'settings.credentials.import.importing')
+                  : formatMsg(locale, 'settings.credentials.import.submit')}
               </button>
             </div>
           </div>
@@ -618,12 +596,8 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
             <div className="flex items-center justify-between">
               <div className="text-ui-base font-medium text-foreground">
                 {form.id
-                  ? isZh
-                    ? `编辑凭证分组：${form.name}`
-                    : `Edit Credential Group: ${form.name}`
-                  : isZh
-                    ? '新建凭证分组'
-                    : 'New Credential Group'}
+                  ? formatMsg(locale, 'settings.credentials.editor.editTitle')
+                  : formatMsg(locale, 'settings.credentials.editor.newTitle')}
               </div>
               <button
                 type="button"
@@ -636,7 +610,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="space-y-1">
-                <span className="text-ui-xs text-foreground-subtle">{isZh ? '分组名称' : 'Name'}</span>
+                <span className="text-ui-xs text-foreground-subtle">{formatMsg(locale, 'settings.credentials.editor.name')}</span>
                 <input
                   data-testid="cred-form-name"
                   value={form.name}
@@ -646,11 +620,11 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                 />
               </label>
               <label className="space-y-1">
-                <span className="text-ui-xs text-foreground-subtle">{isZh ? '备注说明' : 'Description'}</span>
+                <span className="text-ui-xs text-foreground-subtle">{formatMsg(locale, 'settings.credentials.editor.description')}</span>
                 <input
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder={isZh ? '可选用途说明' : 'Optional description'}
+                  placeholder={formatMsg(locale, 'settings.credentials.editor.descPlaceholder')}
                   className={settingsInputClass}
                 />
               </label>
@@ -658,7 +632,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <label className="space-y-1">
-                <span className="text-ui-xs text-foreground-subtle">{isZh ? '存储与同步模式' : 'Storage Mode'}</span>
+                <span className="text-ui-xs text-foreground-subtle">{formatMsg(locale, 'settings.credentials.editor.storageMode')}</span>
                 <select
                   value={form.storage_mode}
                   onChange={(e) => setForm({ ...form, storage_mode: e.target.value as CredentialStorageMode })}
@@ -669,7 +643,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                 </select>
               </label>
               <label className="space-y-1">
-                <span className="text-ui-xs text-foreground-subtle">{isZh ? '执行场景策略' : 'Usage Policy'}</span>
+                <span className="text-ui-xs text-foreground-subtle">{formatMsg(locale, 'settings.credentials.editor.usagePolicy')}</span>
                 <select
                   value={form.usage_policy}
                   onChange={(e) => setForm({ ...form, usage_policy: e.target.value as CredentialUsagePolicy })}
@@ -681,22 +655,22 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                 </select>
               </label>
               <label className="space-y-1">
-                <span className="text-ui-xs text-foreground-subtle">{isZh ? '作用域' : 'Scope'}</span>
+                <span className="text-ui-xs text-foreground-subtle">{formatMsg(locale, 'settings.credentials.editor.scope')}</span>
                 <select
                   value={form.scope}
                   onChange={(e) => setForm({ ...form, scope: e.target.value as CredentialScope })}
                   className={settingsSelectClass}
                 >
-                  <option value="global">{isZh ? '全局' : 'Global'}</option>
-                  <option value="workspace">{isZh ? '指定工作区' : 'Workspace'}</option>
-                  <option value="runner">{isZh ? '指定 Runner' : 'Specific Runners'}</option>
+                  <option value="global">{formatMsg(locale, 'settings.credentials.scope.global')}</option>
+                  <option value="workspace">{formatMsg(locale, 'settings.credentials.scope.workspace')}</option>
+                  <option value="runner">{formatMsg(locale, 'settings.credentials.scope.runner')}</option>
                 </select>
               </label>
             </div>
 
             {form.scope === 'workspace' && (
               <label className="block space-y-1">
-                <span className="text-ui-xs text-foreground-subtle">{isZh ? '绑定工作区路径' : 'Workspace Path'}</span>
+                <span className="text-ui-xs text-foreground-subtle">{formatMsg(locale, 'settings.credentials.editor.workspacePath')}</span>
                 <input
                   value={form.workspace_path}
                   onChange={(e) => setForm({ ...form, workspace_path: e.target.value })}
@@ -709,9 +683,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
             {runners.length > 0 && (
               <div className="space-y-1.5">
                 <span className="text-ui-xs text-foreground-subtle">
-                  {isZh
-                    ? '目标 Runner（留空则对全部节点生效；指定节点时仅定向下发给选中节点）'
-                    : 'Target Runners (leave empty for all runners)'}
+                  {formatMsg(locale, 'settings.credentials.editor.targetRunners')}
                 </span>
                 <div className="flex flex-wrap gap-2">
                   {runners.map((r) => {
@@ -739,9 +711,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-ui-xs font-medium text-foreground-subtle">
-                  {isZh
-                    ? '环境变量列表（保存后不可回读明文；编辑时留空则保留原值）'
-                    : 'Environment Variables (write-only; leave blank on edit to keep existing secret)'}
+                  {formatMsg(locale, 'settings.credentials.editor.envVars')}
                 </span>
                 <button
                   type="button"
@@ -754,7 +724,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                   className="inline-flex items-center gap-1 text-ui-xs font-medium text-brand-blue hover:underline"
                 >
                   <Plus className="size-3" />
-                  <span>{isZh ? '添加变量' : 'Add Variable'}</span>
+                  <span>{formatMsg(locale, 'settings.credentials.editor.addVariable')}</span>
                 </button>
               </div>
               {form.entries.map((entry, idx) => (
@@ -780,14 +750,12 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                     }}
                     placeholder={
                       form.storage_mode === 'runner_local'
-                        ? isZh
-                          ? '保存后在下方按 Runner 直写'
-                          : 'Set per-runner below after saving'
+                        ? formatMsg(locale, 'settings.credentials.editor.valueRunnerLocal')
                         : entry.has_value
-                          ? `${entry.value_hint || '••••••••'} (${isZh ? '留空保留' : 'keep'})`
-                          : isZh
-                            ? '输入密钥值'
-                            : 'Secret value'
+                          ? formatMsg(locale, 'settings.credentials.editor.valueKeepHint', {
+                              hint: entry.value_hint || '••••••••',
+                            })
+                          : formatMsg(locale, 'settings.credentials.editor.valuePlaceholder')
                     }
                     className={settingsMonoInputClass}
                   />
@@ -798,7 +766,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                       next[idx] = { ...next[idx], note: e.target.value };
                       setForm({ ...form, entries: next });
                     }}
-                    placeholder={isZh ? '备注（可选）' : 'Note (optional)'}
+                    placeholder={formatMsg(locale, 'settings.credentials.editor.notePlaceholder')}
                     className={settingsInputClass}
                   />
                   <button
@@ -819,7 +787,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
 
             <label className="block space-y-1">
               <span className="text-ui-xs text-foreground-subtle">
-                {isZh ? '只读验活探针命令（可选，用于跨 Runner 一键测试鉴权）' : 'Read-only Probe Command (optional)'}
+                {formatMsg(locale, 'settings.credentials.editor.probeCommand')}
               </span>
               <input
                 value={form.probe_command}
@@ -837,7 +805,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                 onClick={() => setEditorOpen(false)}
                 className="h-8 rounded-lg border border-border px-3 text-ui-xs font-medium text-foreground-subtle hover:bg-hover"
               >
-                {isZh ? '取消' : 'Cancel'}
+                {formatMsg(locale, 'settings.credentials.editor.cancel')}
               </button>
               <button
                 type="button"
@@ -846,7 +814,9 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                 onClick={() => void saveForm()}
                 className="h-8 rounded-lg bg-primary px-3.5 text-ui-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
               >
-                {saving ? (isZh ? '保存中...' : 'Saving...') : isZh ? '加密保存' : 'Encrypt & Save'}
+                {saving
+                  ? formatMsg(locale, 'settings.credentials.editor.saving')
+                  : formatMsg(locale, 'settings.credentials.editor.save')}
               </button>
             </div>
           </div>
@@ -855,20 +825,14 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
 
       {/* Credential groups list */}
       <SectionHeading
-        title={isZh ? `已配置凭证分组 (${visibleCredentials.length})` : `Configured Credentials (${visibleCredentials.length})`}
-        description={
-          isZh
-            ? '所有注入的密钥值都会自动从工具输出、流式日志与落盘文件中脱敏，LLM 仅可见变量名。'
-            : 'All injected secret values are automatically redacted from tool outputs, streams, and logs.'
-        }
+        title={formatMsg(locale, 'settings.credentials.list.title', { count: visibleCredentials.length })}
+        description={formatMsg(locale, 'settings.credentials.list.desc')}
       />
 
       <SettingsGroupCard>
         {visibleCredentials.length === 0 ? (
           <div className="px-5 py-10 text-center text-ui-sm text-foreground-subtlest">
-            {isZh
-              ? '暂无凭证分组。可点击上方 CLI 预设快速创建，或直接粘贴现有 .env 文件批量导入。'
-              : 'No credential groups yet. Use a CLI preset or paste an existing .env file to get started.'}
+            {formatMsg(locale, 'settings.credentials.list.empty')}
           </div>
         ) : (
           visibleCredentials.map((c) => {
@@ -900,7 +864,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                           {policyLabel(c.usage_policy)}
                         </span>
                         <span className="rounded-md border border-border bg-surface px-1.5 py-0.5 font-mono text-ui-xs text-foreground-subtle">
-                          {c.entries.length} {isZh ? '项' : 'vars'}
+                          {formatMsg(locale, 'settings.credentials.list.varsCount', { count: c.entries.length })}
                         </span>
                       </div>
                       {c.description && (
@@ -947,14 +911,10 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                           </div>
                           <span className="font-mono text-foreground-subtle">
                             {c.storage_mode === 'runner_local'
-                              ? isZh
-                                ? '仅保存在目标 Runner 本地'
-                                : 'Stored on Runner'
+                              ? formatMsg(locale, 'settings.credentials.list.localOnly')
                               : e.has_value
                                 ? e.value_hint || '••••••••'
-                                : isZh
-                                  ? '未设置值'
-                                  : 'Unset'}
+                                : formatMsg(locale, 'settings.credentials.list.encrypted')}
                           </span>
                         </div>
                       ))}
@@ -965,7 +925,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                       <div className="space-y-2">
                         <div className="flex items-center gap-1.5 text-ui-xs font-medium text-foreground-subtle">
                           <Shield className="size-3.5" />
-                          <span>{isZh ? '多 Runner 节点状态与验证' : 'Runner Node Status & Probe'}</span>
+                          <span>{formatMsg(locale, 'settings.credentials.list.runnerStatusTitle')}</span>
                         </div>
                         {targetRunners.map((r) => {
                           const rk = `${c.id}::${r.id}`;
@@ -995,7 +955,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                                     ) : (
                                       <Play className="size-3" />
                                     )}
-                                    <span>{isZh ? '验证鉴权' : 'Probe'}</span>
+                                    <span>{formatMsg(locale, 'settings.credentials.list.probe')}</span>
                                   </button>
                                 )}
                               </div>
@@ -1017,7 +977,7 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                                             [rk]: { ...(prev[rk] || {}), [e.key]: ev.target.value },
                                           }))
                                         }
-                                        placeholder={isZh ? '直接写入此 Runner 本地加密库' : 'Write directly to runner vault'}
+                                        placeholder={formatMsg(locale, 'settings.credentials.list.runnerVaultPlaceholder')}
                                         className="h-7 min-w-0 flex-1 rounded-md border border-border bg-input px-2 font-mono text-ui-xs text-foreground"
                                       />
                                     </div>
@@ -1030,12 +990,8 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                                       className="h-7 rounded-md bg-foreground px-2.5 text-ui-xs font-medium text-background hover:opacity-90 disabled:opacity-45"
                                     >
                                       {localBusyKey === rk
-                                        ? isZh
-                                          ? '写入中...'
-                                          : 'Writing...'
-                                        : isZh
-                                          ? '直写到该 Runner'
-                                          : 'Push to Runner'}
+                                        ? formatMsg(locale, 'settings.credentials.list.savingShort')
+                                        : formatMsg(locale, 'settings.credentials.list.saveLocal')}
                                     </button>
                                   </div>
                                 </div>
@@ -1057,12 +1013,8 @@ export function SettingsCredentialsSection({ onFlash }: { onFlash: (msg: string)
                                     )}
                                     <span>
                                       {probe.ok
-                                        ? isZh
-                                          ? `鉴权通过 (${probe.latency_ms}ms)`
-                                          : `Auth OK (${probe.latency_ms}ms)`
-                                        : isZh
-                                          ? `鉴权失败 (exit ${probe.exit_code})`
-                                          : `Auth failed (exit ${probe.exit_code})`}
+                                        ? formatMsg(locale, 'settings.credentials.list.probeOk')
+                                        : formatMsg(locale, 'settings.credentials.list.probeFailed')}
                                     </span>
                                   </div>
                                   {(probe.output || probe.error) && (

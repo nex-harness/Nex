@@ -703,7 +703,6 @@ export function SkillsAndPluginsSection({
 
 export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void }) {
   const { locale, runners, cronJobs, credentials, selectedRunnerId, refreshRegistries } = useNexStore();
-  const isZh = locale === 'zh-CN';
 
   const [runnerId, setRunnerId] = useState(selectedRunnerId || runners[0]?.id || '');
   const [title, setTitle] = useState(
@@ -807,12 +806,8 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
           </Field>
           {eligibleCronCreds.length > 0 && (
             <Field
-              label={isZh ? '授权凭证分组（可选）' : 'Authorized Credential Groups (optional)'}
-              description={
-                isZh
-                  ? '已自动过滤「仅交互对话」凭证；勾选「仅定时任务显式授权」的分组以在此任务中注入。'
-                  : 'Chat-only credentials are excluded; select cron-explicit groups to grant them to this schedule.'
-              }
+              label={formatMsg(locale, 'automations.credentialGroups.label')}
+              description={formatMsg(locale, 'automations.credentialGroups.desc')}
             >
               <div className="flex flex-wrap gap-2">
                 {eligibleCronCreds.map((c) => {
@@ -829,7 +824,9 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
                       }`}
                     >
                       {c.name}
-                      {c.usage_policy === 'cron_explicit' ? (isZh ? ' (显式)' : ' (explicit)') : ''}
+                      {c.usage_policy === 'cron_explicit'
+                        ? formatMsg(locale, 'automations.credentialGroups.explicitSuffix')
+                        : ''}
                     </button>
                   );
                 })}
