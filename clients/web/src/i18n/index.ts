@@ -103,7 +103,7 @@ export function formatRelativeTimeShort(ts: number, locale: LocaleCode): string 
   return `${Math.floor(diffSec / 86400)}d`;
 }
 
-/** Formats running task duration with tenth-of-a-second precision (ZCode parity). */
+/** Formats running task duration with tenth-of-a-second precision (Nex parity). */
 export function formatRunningWorkDuration(durationMs: number, locale: LocaleCode): string {
   const tenths = Math.max(0, Math.round(durationMs / 100));
   const hours = Math.floor(tenths / 36000);

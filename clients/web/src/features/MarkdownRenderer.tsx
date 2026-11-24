@@ -458,7 +458,7 @@ function CodeBlock({ lang, code, streaming = false }: { lang: string; code: stri
             wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
           }`}
         >
-          {/* ZCode Streaming Markdown Rule: disable expensive regex syntax highlighting while actively streaming! */}
+          {/* Nex Streaming Markdown Rule: disable expensive regex syntax highlighting while actively streaming! */}
           <code>{streaming || code.length > 24000 ? code : highlightCode(code, language)}</code>
         </pre>
       </div>
@@ -738,7 +738,7 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
         continue;
       }
 
-      // GFM Table block (`| col1 | col2 |` followed by `|---|---|`) — borderless ZCode/nex-m4 style
+      // GFM Table block (`| col1 | col2 |` followed by `|---|---|`) — borderless Nex style
       if (trimmed.includes('|') && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
         const headers = splitTableCells(trimmed);
         i += 2;
@@ -909,7 +909,7 @@ export const MarkdownRenderer = memo(function MarkdownRendererImpl({
 
   if (lastIndex < content.length) {
     const tail = content.slice(lastIndex);
-    // Tolerate unclosed fenced code blocks mid-stream (ZCode incomplete-markdown rule)
+    // Tolerate unclosed fenced code blocks mid-stream (Nex incomplete-markdown rule)
     const unclosedFence = /^([\s\S]*?)```([a-zA-Z0-9_-]*)\n([\s\S]*)$/.exec(tail);
     if (unclosedFence) {
       if (unclosedFence[1]) renderProseSegment(unclosedFence[1]);

@@ -47,7 +47,7 @@ func GoalDisplaySummary(objective string) string {
 	return string(runes[:maxRunes]) + "..."
 }
 
-// FormatGoalTurnPrompt wraps a goal objective in the ZCode structured goal
+// FormatGoalTurnPrompt wraps a goal objective in the structured goal
 // framing. This is the model-facing text; the user's raw "/goal ..." input is
 // never shown to the model in this form.
 //

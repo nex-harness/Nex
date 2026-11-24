@@ -559,7 +559,7 @@ export function AgentsSettingsSection({ onFlash }: { onFlash: (msg: string) => v
 }
 
 /* -------------------------------------------------------------------------- */
-/* MCP servers (ZCode + Pi style install, exposure & workspace visibility)    */
+/* MCP servers (Nex + Pi style install, exposure & workspace visibility)    */
 /* -------------------------------------------------------------------------- */
 
 export function MCPSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {

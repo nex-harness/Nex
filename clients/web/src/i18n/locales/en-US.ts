@@ -807,7 +807,7 @@ export const enUS = {
   "mcp.modal.envJson": "Environment variables (JSON, optional)",
   "mcp.modal.headersJson": "HTTP Headers (JSON, optional)",
   "mcp.modal.envHint": "Supports ${ENV_VAR} references resolved on the runner/server.",
-  "mcp.modal.jsonHint": "Paste {\"mcpServers\": {...}} (Claude Desktop / Cursor / Pi / ZCode) or {\"servers\": {...}} (VS Code).",
+  "mcp.modal.jsonHint": "Paste {\"mcpServers\": {...}} (Claude Desktop / Cursor / Pi) or {\"servers\": {...}} (VS Code).",
   "mcp.modal.importBtn": "Import & Install",
   "mcp.modal.installSubmit": "Install Server",
   "mcp.modal.saveSubmit": "Save Changes",

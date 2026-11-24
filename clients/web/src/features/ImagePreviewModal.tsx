@@ -59,7 +59,7 @@ export function ImagePreviewModal() {
       aria-modal="true"
       aria-label={previewImage.alt || (isPdf ? 'PDF preview' : 'Image preview')}
       onClick={closeImagePreview}
-      className="zcode-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6 backdrop-blur-sm"
+      className="nex-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6 backdrop-blur-sm"
     >
       {/* Top-right close button */}
       <button
@@ -80,7 +80,7 @@ export function ImagePreviewModal() {
       {isPdf ? (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="zcode-dialog-content flex h-[84vh] w-[88vw] max-w-5xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-surface shadow-2xl"
+          className="nex-dialog-content flex h-[84vh] w-[88vw] max-w-5xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-surface shadow-2xl"
         >
           {previewImage.alt ? (
             <div className="shrink-0 truncate border-b border-border bg-card px-4 py-2 text-ui-sm font-medium text-foreground">
@@ -96,7 +96,7 @@ export function ImagePreviewModal() {
       ) : (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="zcode-dialog-content flex items-center justify-center"
+          className="nex-dialog-content flex items-center justify-center"
         >
           <img
             data-testid="image-preview-img"

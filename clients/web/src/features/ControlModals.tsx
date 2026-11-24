@@ -21,8 +21,8 @@ export function ApprovalModal({ approval }: { approval: PendingApproval }) {
   const argsPreview = approval.argsJson || '{}';
 
   return (
-    <div className="zcode-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-[1px]">
-      <div className="zcode-dialog-content w-full max-w-lg rounded-2xl border border-border bg-popover p-5 text-foreground shadow-lg">
+    <div className="nex-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-[1px]">
+      <div className="nex-dialog-content w-full max-w-lg rounded-2xl border border-border bg-popover p-5 text-foreground shadow-lg">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-warning-surface text-warning-surface-fg">
@@ -395,7 +395,7 @@ export function InlineQuestionCard({ prompt }: { prompt: PendingUIPrompt }) {
       tabIndex={-1}
       data-testid="inline-question-card"
       onKeyDown={handleCardKeyDown}
-      className="zcode-bottom-dock mx-auto w-full max-w-4xl rounded-2xl border border-border bg-card px-5 py-4 text-foreground outline-none composer-shadow"
+      className="nex-bottom-dock mx-auto w-full max-w-4xl rounded-2xl border border-border bg-card px-5 py-4 text-foreground outline-none composer-shadow"
     >
       {/* Header row: optional tag pill + question + < 1 / N > pager */}
       <div className="flex items-start justify-between gap-3">
@@ -564,7 +564,7 @@ export function InlineQuestionCard({ prompt }: { prompt: PendingUIPrompt }) {
 
 export function UIPromptModal({ prompt }: { prompt: PendingUIPrompt }) {
   return (
-    <div className="zcode-dialog-overlay fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 backdrop-blur-[1px] sm:items-center">
+    <div className="nex-dialog-overlay fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 backdrop-blur-[1px] sm:items-center">
       <div className="w-full max-w-3xl">
         <InlineQuestionCard prompt={prompt} />
       </div>

@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* === ZCode-Inspired Semantic Design System (Zai Light & Zai Dark) === */
+/* === Nex Semantic Design System (Light & Dark) === */
 
 :root {
   --ui-font-size: 14px;
@@ -8,7 +8,7 @@
   --nex-font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --nex-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", monospace;
 
-  /* Zai Light Foundation (Default Light) */
+  /* Light foundation (default) */
   --shadow-composer-soft: 0 1px 3px rgb(0 0 0 / 4%), 0 6px 18px rgb(0 0 0 / 4%);
   --color-background-shell: #ececee;
   --color-background: #f8f8f8;
@@ -73,7 +73,7 @@
 }
 
 .dark {
-  /* Zai Dark Foundation */
+  /* Dark foundation */
   --shadow-composer-soft: 0 2px 10px rgb(0 0 0 / 28%);
   --color-background-shell: #161616;
   --color-background: #161616;
@@ -139,7 +139,7 @@
   --font-sans: var(--nex-font-sans);
   --font-mono: var(--nex-font-mono);
 
-  /* ZCode Dedicated UI Typography Scale (follows --ui-font-size without mutating rem geometry) */
+  /* Nex UI typography scale (follows --ui-font-size without mutating rem geometry) */
   --text-ui-settings-title: calc(var(--ui-font-size) + 10px);
   --text-ui-xl: calc(var(--ui-font-size) + 4px);
   --text-ui-lg: calc(var(--ui-font-size) + 2px);
@@ -229,11 +229,10 @@ pre,
 }
 
 /* ============================================================================
- * ZCode Motion & Micro-Interaction System
- * Aligned with /Users/tylinux/Developer/Projects/Zcode
+ * Nex Motion & Micro-Interaction System
  * ============================================================================ */
 
-/* 1. Effort / Thought Level Slider (exact ZCode composer-thought-slider.css) */
+/* 1. Effort / Thought Level Slider (.composer-thought-slider) */
 .composer-thought-slider {
   --composer-thought-slider-thumb: #ffffff;
   --composer-thought-max-accent: #3b82f6;
@@ -358,8 +357,8 @@ pre,
   background: transparent;
 }
 
-/* 2. Rolling Toolbar Label (ZCode RollingToolbarLabel.tsx) */
-@keyframes zcode-label-roll-in {
+/* 2. Rolling Toolbar Label (RollingToolbarLabel) */
+@keyframes nex-label-roll-in {
   from {
     transform: translateY(0.75em);
     opacity: 0;
@@ -370,12 +369,12 @@ pre,
   }
 }
 
-.zcode-label-roll {
-  animation: zcode-label-roll-in 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+.nex-label-roll {
+  animation: nex-label-roll-in 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-/* 3. Popovers, Dropdowns & Submenus (ZCode dropdown-menu.tsx & popover.tsx) */
-@keyframes zcode-popover-up {
+/* 3. Popovers, Dropdowns & Submenus (dropdown menu & popover) */
+@keyframes nex-popover-up {
   from {
     opacity: 0;
     transform: translateY(6px) scale(0.96);
@@ -386,7 +385,7 @@ pre,
   }
 }
 
-@keyframes zcode-popover-down {
+@keyframes nex-popover-down {
   from {
     opacity: 0;
     transform: translateY(-6px) scale(0.96);
@@ -397,7 +396,7 @@ pre,
   }
 }
 
-@keyframes zcode-submenu-left {
+@keyframes nex-submenu-left {
   from {
     opacity: 0;
     transform: translateX(6px) scale(0.97);
@@ -408,7 +407,7 @@ pre,
   }
 }
 
-@keyframes zcode-submenu-right {
+@keyframes nex-submenu-right {
   from {
     opacity: 0;
     transform: translateX(-6px) scale(0.97);
@@ -419,28 +418,28 @@ pre,
   }
 }
 
-.zcode-popover-up {
+.nex-popover-up {
   transform-origin: bottom center;
-  animation: zcode-popover-up 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: nex-popover-up 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.zcode-popover-down {
+.nex-popover-down {
   transform-origin: top center;
-  animation: zcode-popover-down 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: nex-popover-down 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.zcode-submenu-left {
+.nex-submenu-left {
   transform-origin: top right;
-  animation: zcode-submenu-left 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: nex-submenu-left 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.zcode-submenu-right {
+.nex-submenu-right {
   transform-origin: top left;
-  animation: zcode-submenu-right 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: nex-submenu-right 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* 4. Dialogs & Modals (ZCode dialog.tsx) */
-@keyframes zcode-overlay-in {
+/* 4. Dialogs & Modals (dialog) */
+@keyframes nex-overlay-in {
   from {
     opacity: 0;
   }
@@ -449,7 +448,7 @@ pre,
   }
 }
 
-@keyframes zcode-dialog-in {
+@keyframes nex-dialog-in {
   from {
     opacity: 0;
     transform: scale(0.96) translateY(4px);
@@ -460,16 +459,16 @@ pre,
   }
 }
 
-.zcode-dialog-overlay {
-  animation: zcode-overlay-in 140ms ease-out both;
+.nex-dialog-overlay {
+  animation: nex-overlay-in 140ms ease-out both;
 }
 
-.zcode-dialog-content {
-  animation: zcode-dialog-in 170ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.nex-dialog-content {
+  animation: nex-dialog-in 170ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* 5. Draft Screen Hero, Suggested Prompt Waterfall & Bottom Dock (ZCode styles.css & ConversationBottomDockTransition.tsx) */
-@keyframes zcode-draft-prompt-waterfall {
+/* 5. Draft Screen Hero, Suggested Prompt Waterfall & Bottom Dock (ConversationBottomDockTransition) */
+@keyframes nex-draft-prompt-waterfall {
   from {
     opacity: 0;
     clip-path: inset(0 0 100% 0);
@@ -482,12 +481,12 @@ pre,
   }
 }
 
-.zcode-draft-prompt-waterfall {
-  animation: zcode-draft-prompt-waterfall 260ms cubic-bezier(0.22, 1, 0.36, 1)
-    var(--zcode-draft-prompt-waterfall-delay, 0ms) both;
+.nex-draft-prompt-waterfall {
+  animation: nex-draft-prompt-waterfall 260ms cubic-bezier(0.22, 1, 0.36, 1)
+    var(--nex-draft-prompt-waterfall-delay, 0ms) both;
 }
 
-@keyframes zcode-draft-hero-in {
+@keyframes nex-draft-hero-in {
   from {
     opacity: 0;
     transform: translateY(10px);
@@ -498,11 +497,11 @@ pre,
   }
 }
 
-.zcode-draft-hero {
-  animation: zcode-draft-hero-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.nex-draft-hero {
+  animation: nex-draft-hero-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-@keyframes zcode-bottom-dock-in {
+@keyframes nex-bottom-dock-in {
   from {
     opacity: 0;
     transform: translate3d(0, 22px, 0) scale(0.97);
@@ -513,13 +512,13 @@ pre,
   }
 }
 
-.zcode-bottom-dock {
+.nex-bottom-dock {
   transform-origin: bottom center;
-  animation: zcode-bottom-dock-in 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: nex-bottom-dock-in 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-/* 6. Streaming Text, Shimmer & Indeterminate Tool Progress (ZCode styles.css) */
-@keyframes zcode-gradient-flow {
+/* 6. Streaming Text, Shimmer & Indeterminate Tool Progress */
+@keyframes nex-gradient-flow {
   0% {
     background-position: 100% 50%;
   }
@@ -540,10 +539,10 @@ pre,
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: zcode-gradient-flow 2.4s linear infinite;
+  animation: nex-gradient-flow 2.4s linear infinite;
 }
 
-@keyframes zcode-stream-text-in {
+@keyframes nex-stream-text-in {
   0% {
     opacity: 0;
   }
@@ -552,8 +551,8 @@ pre,
   }
 }
 
-.zcode-stream-in {
-  animation: zcode-stream-text-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+.nex-stream-in {
+  animation: nex-stream-text-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes tool-call-progress-indeterminate {
@@ -570,7 +569,7 @@ pre,
 }
 
 /* 7. Smooth Collapsible Height + Fade (Grid 0fr <-> 1fr) */
-.zcode-collapsible {
+.nex-collapsible {
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
@@ -579,18 +578,18 @@ pre,
     opacity 180ms ease-out;
 }
 
-.zcode-collapsible[data-open="true"] {
+.nex-collapsible[data-open="true"] {
   grid-template-rows: 1fr;
   opacity: 1;
 }
 
-.zcode-collapsible > .zcode-collapsible-inner {
+.nex-collapsible > .nex-collapsible-inner {
   overflow: hidden;
   min-height: 0;
 }
 
 /* 8. Reaction Pop (Copy / Checkmark micro-feedback) & Toast & View Enter */
-@keyframes zcode-reaction-pop {
+@keyframes nex-reaction-pop {
   0% {
     transform: scale(0.4);
   }
@@ -605,11 +604,11 @@ pre,
   }
 }
 
-.zcode-reaction-pop {
-  animation: zcode-reaction-pop 340ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+.nex-reaction-pop {
+  animation: nex-reaction-pop 340ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-@keyframes zcode-view-enter {
+@keyframes nex-view-enter {
   from {
     opacity: 0;
     transform: translateY(4px);
@@ -620,11 +619,11 @@ pre,
   }
 }
 
-.zcode-view-enter {
-  animation: zcode-view-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.nex-view-enter {
+  animation: nex-view-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-@keyframes zcode-toast-in {
+@keyframes nex-toast-in {
   from {
     opacity: 0;
     transform: translateY(-8px) scale(0.97);
@@ -635,12 +634,12 @@ pre,
   }
 }
 
-.zcode-toast-in {
-  animation: zcode-toast-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.nex-toast-in {
+  animation: nex-toast-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* 9. ChatLoading Pixel Orbit & Shimmer (ZCode styles.css) */
-@keyframes zcode-loading-pixel-on {
+/* 9. ChatLoading Pixel Orbit & Shimmer */
+@keyframes nex-loading-pixel-on {
   0%,
   100% {
     opacity: 0.15;
@@ -652,15 +651,15 @@ pre,
   }
 }
 
-.dark .zcode-loading-pixel {
+.dark .nex-loading-pixel {
   --loading-pixel-peak: 1;
 }
 
-.zcode-loading-pixel {
-  animation: zcode-loading-pixel-on 650ms ease-in-out infinite;
+.nex-loading-pixel {
+  animation: nex-loading-pixel-on 650ms ease-in-out infinite;
 }
 
-@keyframes zcode-loading-shimmer {
+@keyframes nex-loading-shimmer {
   from {
     background-position: 200% 0;
   }
@@ -669,7 +668,7 @@ pre,
   }
 }
 
-.zcode-loading-label {
+.nex-loading-label {
   display: inline-block;
   font-weight: 500;
   background-image: linear-gradient(
@@ -684,7 +683,7 @@ pre,
   -webkit-background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  animation: zcode-loading-shimmer 1.4s linear infinite;
+  animation: nex-loading-shimmer 1.4s linear infinite;
 }
 
 .summary-hover-text:hover {
@@ -696,31 +695,31 @@ pre,
     display: none;
   }
   .composer-thought-bubble,
-  .zcode-label-roll,
-  .zcode-popover-up,
-  .zcode-popover-down,
-  .zcode-submenu-left,
-  .zcode-submenu-right,
-  .zcode-dialog-overlay,
-  .zcode-dialog-content,
-  .zcode-draft-prompt-waterfall,
-  .zcode-draft-hero,
-  .zcode-bottom-dock,
+  .nex-label-roll,
+  .nex-popover-up,
+  .nex-popover-down,
+  .nex-submenu-left,
+  .nex-submenu-right,
+  .nex-dialog-overlay,
+  .nex-dialog-content,
+  .nex-draft-prompt-waterfall,
+  .nex-draft-hero,
+  .nex-bottom-dock,
   .animated-gradient-text,
-  .zcode-stream-in,
+  .nex-stream-in,
   .tool-call-progress-indeterminate,
-  .zcode-reaction-pop,
-  .zcode-view-enter,
-  .zcode-toast-in,
-  .zcode-loading-pixel,
-  .zcode-loading-label {
+  .nex-reaction-pop,
+  .nex-view-enter,
+  .nex-toast-in,
+  .nex-loading-pixel,
+  .nex-loading-label {
     animation: none !important;
   }
   .composer-thought-slider-stop,
   .composer-thought-slider-thumb,
   .composer-thought-slider-fill,
   .composer-thought-slider-fill::before,
-  .zcode-collapsible {
+  .nex-collapsible {
     transition: none !important;
   }
 }

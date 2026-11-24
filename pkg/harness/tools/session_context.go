@@ -14,7 +14,7 @@ import (
 var sessionReferencePattern = regexp.MustCompile(`#((?:sess|session)_[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)`)
 
 // ExtractSessionReferences extracts unique referenced session IDs (e.g. `#sess_abc`)
-// from user prompt text in order of appearance, matching ZCode's `#` reference contract.
+// from user prompt text in order of appearance, following the `#` reference contract.
 func ExtractSessionReferences(input string) []string {
 	matches := sessionReferencePattern.FindAllStringSubmatch(input, -1)
 	if len(matches) == 0 {

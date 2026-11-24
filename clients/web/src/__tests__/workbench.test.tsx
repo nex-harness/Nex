@@ -38,7 +38,7 @@ afterAll(() => {
   }
 });
 
-describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () => {
+describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
   it('encodes and decodes binary PTY frames matching Go protocol', () => {
     const ptyId = 'b9777673-535b-4d67-a726-b390c39ed46d';
     const frame = encodePTYBinaryFrame(PTY_BINARY_STDOUT, ptyId, 'hello ghostty');
@@ -113,7 +113,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(st.latestTelemetry?.breakdown).toHaveLength(6);
   });
 
-  it('starts with Side Pane closed by default, opens New Tab launcher on demand, and navigates ZCode Settings', () => {
+  it('starts with Side Pane closed by default, opens New Tab launcher on demand, and navigates Settings Center', () => {
     useNexStore.setState({ locale: 'zh-CN' });
     render(<App />);
     expect(screen.getByTestId('project-sidebar')).toBeTruthy();
@@ -126,7 +126,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(screen.getByTestId('workbench-plus-btn')).toBeTruthy();
     expect(screen.queryByTestId('side-pane-toggle')).toBeNull();
 
-    // Close Side Pane again via its tab-strip close button (smooth ZCode animated collapse keeps container mounted with data-state="closed")
+    // Close Side Pane again via its tab-strip close button (smooth animated collapse keeps container mounted with data-state="closed")
     fireEvent.click(screen.getByTestId('side-pane-close'));
     expect(screen.getByTestId('side-pane-container').getAttribute('data-state')).toBe('closed');
     expect(screen.getByTestId('side-pane-toggle')).toBeTruthy();
@@ -136,7 +136,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(screen.getByTestId('context-popover')).toBeTruthy();
     expect(screen.getByText('上下文容量')).toBeTruthy();
 
-    // Navigate to full-page Settings Center and switch ZCode-named sections
+    // Navigate to full-page Settings Center and switch Settings Center sections
     fireEvent.click(screen.getByTestId('sidebar-settings-btn'));
     expect(screen.getByTestId('settings-page')).toBeTruthy();
 
@@ -154,7 +154,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(screen.getByTestId('chat-stream')).toBeTruthy();
   });
 
-  it('preserves frozen history item object references across high-frequency streaming deltas (ZCode O(tail) rule)', () => {
+  it('preserves frozen history item object references across high-frequency streaming deltas (O(tail) rule)', () => {
     let st = emptyStreamState();
     st = applySessionEvent(st, 'run_1', {
       session_id: 's1',
@@ -514,7 +514,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       home_path: '/Users/dev',
       entries: [
         { name: 'Nex-v3', path: '/Users/dev/Projects/Nex-v3' },
-        { name: 'Zcode', path: '/Users/dev/Projects/Zcode' },
+        { name: 'DemoApp', path: '/Users/dev/Projects/DemoApp' },
       ],
     });
 
@@ -554,12 +554,12 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(screen.getByTestId('directory-browser-modal')).toBeTruthy();
 
     await waitFor(() => {
-      expect(screen.getByTestId('dir-entry-Zcode')).toBeTruthy();
+      expect(screen.getByTestId('dir-entry-DemoApp')).toBeTruthy();
     });
 
-    // Quick-select Zcode directory
-    fireEvent.click(screen.getByTestId('dir-pick-Zcode'));
-    expect(useNexStore.getState().selectedWorkspacePath).toBe('/Users/dev/Projects/Zcode');
+    // Quick-select DemoApp directory
+    fireEvent.click(screen.getByTestId('dir-pick-DemoApp'));
+    expect(useNexStore.getState().selectedWorkspacePath).toBe('/Users/dev/Projects/DemoApp');
     expect(screen.queryByTestId('directory-browser-modal')).toBeNull();
   });
 
@@ -997,12 +997,12 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
 
     useNexStore.setState({ settingsSection: 'skills' });
     rerender(<App />);
-    // Skills page is now a ZCode-style discovery & workspace-visibility manager (no inline skill creation editor)
+    // Skills page is now a discovery & workspace-visibility manager (no inline skill creation editor)
     expect(screen.getByTestId('skills-manager-section')).toBeTruthy();
     expect(screen.getByTestId('skills-workspace-select')).toBeTruthy();
     expect(screen.queryByTestId('skill-md-editor')).toBeNull();
 
-    // 5. MCP section exposes ZCode/Pi install modal (Presets/Form/JSON), exposure policy, and workspace visibility
+    // 5. MCP section exposes install modal (Presets/Form/JSON), exposure policy, and workspace visibility
     useNexStore.setState({
       settingsSection: 'mcp',
       mcpServers: [
@@ -1344,7 +1344,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     persistActiveSessionId('');
     expect(window.location.search).not.toContain('session=');
 
-    // 2. Smart SSH paste parser (ZCode RDUX-27)
+    // 2. Smart SSH paste parser (RDUX-27)
     expect(parsePastedSSHTarget('ssh tylinux@192.168.123.42 -p 2222')).toEqual({
       host: '192.168.123.42',
       username: 'tylinux',
@@ -1386,7 +1386,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       expect(screen.getByTestId('web-password-new')).toBeTruthy();
       expect(screen.getByTestId('web-logout-btn')).toBeTruthy();
 
-      // 5. Remote Devices (Runners) Settings exposes SSH targets + ZCode-style Add SSH modal (SCP & Remote Install)
+      // 5. Remote Devices (Runners) Settings exposes SSH targets + Add SSH modal (SCP & Remote Install)
       useNexStore.setState({
         settingsSection: 'runners',
         sshTargets: [
@@ -1519,7 +1519,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     expect(chatStream.className).not.toContain('pr-[22rem]');
   });
 
-  it('shows optimistic user message and ZCode ChatLoading Working indicator immediately upon send, deduplicates on user echo, and clears on approval/end', () => {
+  it('shows optimistic user message and ChatLoading Working indicator immediately upon send, deduplicates on user echo, and clears on approval/end', () => {
     const sendSpy = vi.spyOn(wsClient, 'sendEnvelope').mockReturnValue('cli_test_prompt');
     try {
       useNexStore.setState({
@@ -1780,7 +1780,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       fireEvent.click(screen.getByTestId('markdown-image-btn'));
       expect(screen.getByTestId('image-preview-modal')).toBeTruthy();
       const previewImg = screen.getByTestId('image-preview-img');
-      expect(previewImg.className).not.toContain('zcode-dialog-content');
+      expect(previewImg.className).not.toContain('nex-dialog-content');
       expect(previewImg.style.transform).toBe('scale(1) rotate(0deg)');
 
       fireEvent.click(screen.getByLabelText(/Zoom in|放大/i));
@@ -3151,7 +3151,7 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
     }
   });
 
-  it('renders ZCode-style inline Question Card without modal overlay and supports pager + custom answer + keyboard nav', () => {
+  it('renders inline Question Card without modal overlay and supports pager + custom answer + keyboard nav', () => {
     const origResolve = useNexStore.getState().resolveUIPrompt;
     const resolveSpy = vi.fn();
 
@@ -3237,8 +3237,8 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
 
       const card = screen.getByTestId('inline-question-card');
       expect(card).toBeTruthy();
-      expect(card.closest('.zcode-dialog-overlay')).toBeNull();
-      expect(document.querySelector('.zcode-dialog-overlay')).toBeNull();
+      expect(card.closest('.nex-dialog-overlay')).toBeNull();
+      expect(document.querySelector('.nex-dialog-overlay')).toBeNull();
       expect(screen.getByTestId('question-card-header').textContent).toBe('Testing');
       expect(screen.getByTestId('question-card-title').textContent).toBe('How do you prefer to work?');
       expect(screen.getByTestId('question-pager-indicator').textContent).toBe('1 / 2');

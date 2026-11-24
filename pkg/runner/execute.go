@@ -110,7 +110,7 @@ func (n *Node) EmitUIStatus(ctx context.Context, sessionID, key, badge string, w
 }
 
 func (n *Node) recordAndEmitSessionEvent(ctx context.Context, sessionID string, turnIdx int, evType string, payload json.RawMessage, blobHashes []string) {
-	// ZCode Persistence Rule: transient streaming deltas are emitted live over WS only, never stored in SQLite/Outbox!
+	// Persistence rule: transient streaming deltas are emitted live over WS only, never stored in SQLite/Outbox!
 	if evType == string(agent.EventMessageUpdate) || evType == string(agent.EventToolExecutionUpdate) {
 		if !n.IsOnline() {
 			return
@@ -416,7 +416,7 @@ func (n *Node) ExecutePrompt(
 	runCtx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
-	// ZCode 30ms Frame Coalescer: first streaming delta flushes eagerly for snappy TTFT;
+	// 30ms frame coalescer: first streaming delta flushes eagerly for snappy TTFT;
 	// subsequent adjacent deltas coalesce within 30ms windows; any lifecycle/control event flushes pending first!
 	var coalMu sync.Mutex
 	var pendingEv *agent.Event

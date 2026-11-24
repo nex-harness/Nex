@@ -191,8 +191,8 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
           {chevron()}
         </button>
         {open && output && (
-          <div className="zcode-collapsible" data-open={true}>
-            <div className="zcode-collapsible-inner">
+          <div className="nex-collapsible" data-open={true}>
+            <div className="nex-collapsible-inner">
               <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 font-mono text-ui-sm whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </div>
@@ -231,8 +231,8 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
           </button>
         </div>
         {open && Boolean(tc.diff || output) && (
-          <div className="zcode-collapsible" data-open={true}>
-            <div className="zcode-collapsible-inner">
+          <div className="nex-collapsible" data-open={true}>
+            <div className="nex-collapsible-inner">
               <div
                 className="mb-2 mt-1.5 max-h-60 overflow-auto rounded-xl border border-border bg-card font-mono text-[12px] leading-5"
                 style={{
@@ -272,8 +272,8 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
         </button>
         <ToolIndeterminateBar active={running} />
         {open && (
-          <div className="zcode-collapsible" data-open={true}>
-            <div className="zcode-collapsible-inner">
+          <div className="nex-collapsible" data-open={true}>
+            <div className="nex-collapsible-inner">
               <div className="mb-2 mt-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 font-mono text-ui-sm">
                 <div className="truncate text-foreground-subtle">
                   <span className="text-foreground-subtlest">$ </span>
@@ -346,8 +346,8 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
           </div>
         )}
         {open && output && (
-          <div className="zcode-collapsible" data-open={true}>
-            <div className="zcode-collapsible-inner">
+          <div className="nex-collapsible" data-open={true}>
+            <div className="nex-collapsible-inner">
               <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 font-mono text-ui-sm whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </div>
@@ -376,8 +376,8 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
         </button>
         <ToolIndeterminateBar active={running} />
         {open && output && (
-          <div className="zcode-collapsible" data-open={true}>
-            <div className="zcode-collapsible-inner">
+          <div className="nex-collapsible" data-open={true}>
+            <div className="nex-collapsible-inner">
               <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 font-mono text-ui-sm whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </div>
@@ -408,8 +408,8 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
           {chevron()}
         </button>
         {open && output && (
-          <div className="zcode-collapsible" data-open={true}>
-            <div className="zcode-collapsible-inner">
+          <div className="nex-collapsible" data-open={true}>
+            <div className="nex-collapsible-inner">
               <div className="ml-2 mt-1 max-h-40 overflow-auto border-l border-border pl-3.5 text-ui-sm whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </div>
@@ -441,8 +441,8 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
           {chevron()}
         </button>
         {open && output && (
-          <div className="zcode-collapsible" data-open={true}>
-            <div className="zcode-collapsible-inner">
+          <div className="nex-collapsible" data-open={true}>
+            <div className="nex-collapsible-inner">
               <pre className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 font-mono text-ui-sm whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </pre>
@@ -470,8 +470,8 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
         </button>
         <ToolIndeterminateBar active={running} />
         {open && output && (
-          <div className="zcode-collapsible" data-open={true}>
-            <div className="zcode-collapsible-inner">
+          <div className="nex-collapsible" data-open={true}>
+            <div className="nex-collapsible-inner">
               <div className="mb-2 mt-1.5 max-h-60 overflow-auto rounded-xl border border-border bg-card p-2.5 font-mono text-[12px] leading-5 whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </div>
@@ -500,8 +500,8 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
         </button>
         <ToolIndeterminateBar active={running} />
         {open && output && (
-          <div className="zcode-collapsible" data-open={true}>
-            <div className="zcode-collapsible-inner">
+          <div className="nex-collapsible" data-open={true}>
+            <div className="nex-collapsible-inner">
               <div className="ml-2 mt-1 max-h-60 overflow-auto border-l border-border pl-3.5 text-ui-sm whitespace-pre-wrap text-foreground-subtle">
                 {output}
               </div>
@@ -617,8 +617,8 @@ function ChangeSummaryCard({ item }: { item: ChatTurnItem }) {
         </div>
       </div>
       {open && (
-        <div className="zcode-collapsible" data-open={true}>
-          <div className="zcode-collapsible-inner">
+        <div className="nex-collapsible" data-open={true}>
+          <div className="nex-collapsible-inner">
             <div className="border-t border-border py-1">
               {files.map((f) => (
                 <button
@@ -756,7 +756,7 @@ function UserBubble({
           title={formatMsg(locale, 'common.copy')}
           className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground"
         >
-          {copied ? <Check className="zcode-reaction-pop size-3 text-success" /> : <Copy className="size-3" />}
+          {copied ? <Check className="nex-reaction-pop size-3 text-success" /> : <Copy className="size-3" />}
           <span>{copied ? (formatMsg(locale, 'common.copied')) : formatMsg(locale, 'common.copy')}</span>
         </button>
         <button
@@ -852,8 +852,8 @@ function WorkGroup({
       </button>
 
       {open && (
-        <div className="zcode-collapsible" data-open={true}>
-          <div className="zcode-collapsible-inner">
+        <div className="nex-collapsible" data-open={true}>
+          <div className="nex-collapsible-inner">
             <div className="ml-1.5 mb-3 mt-2 space-y-2 border-l border-border pl-3.5">
               {hasThinking && (
                 <div className="space-y-1">
@@ -908,7 +908,7 @@ function isGlmHighspeedModel(name: string): boolean {
   return /glm/i.test(name) && /highspeed|flashx/i.test(name);
 }
 
-// Fixed seeds matching ZCode ComposerModelMenu.tsx so bubbles flow smoothly without re-randomizing.
+// Fixed seeds matching Nex ComposerModelMenu so bubbles flow smoothly without re-randomizing.
 const EFFORT_BUBBLES = [
   { top: 4, size: 2, duration: 2.6, delay: -0.4 },
   { top: 14, size: 3, duration: 3.2, delay: -2.1 },
@@ -933,7 +933,7 @@ const HIGHSPEED_BUBBLES = Array.from({ length: 32 }, (_, index) => ({
 function RollingLabel({ text, className = '' }: { text: string; className?: string }) {
   return (
     <span className={`relative inline-flex h-[1.3em] items-center overflow-hidden ${className}`}>
-      <span key={text} className="zcode-label-roll inline-flex whitespace-nowrap leading-[1.25]">
+      <span key={text} className="nex-label-roll inline-flex whitespace-nowrap leading-[1.25]">
         {text}
       </span>
     </span>
@@ -997,7 +997,7 @@ function detectAutocomplete(text: string, cursor: number): AutocompleteTrigger |
     };
   }
 
-  // Inline `#session` conversation reference autocomplete (ZCode `#` parity)
+  // Inline `#session` conversation reference autocomplete (Nex `#` parity)
   const sessionMatch = /(?:^|\s)#([^\s#]*)$/.exec(before);
   if (sessionMatch) {
     const query = sessionMatch[1] || '';
@@ -1205,7 +1205,7 @@ function Composer({
   const isMaxEffort = sliderFilled && currentEffortIdx === effortLevels.length - 1;
   const isHighspeed = isGlmHighspeedModel(activeModel?.display_name || activeModel?.id || '');
 
-  // Bind Ctrl+T (^T) globally to cycle thinking effort level smoothly (ZCode parity)
+  // Bind Ctrl+T (^T) globally to cycle thinking effort level smoothly (Nex parity)
   useEffect(() => {
     if (!effortSupported) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1593,7 +1593,7 @@ function Composer({
             ? 'composer-session-menu'
             : 'composer-mention-menu'
       }
-      className="zcode-popover-up absolute bottom-full left-0 right-0 z-50 mb-2 max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
+      className="nex-popover-up absolute bottom-full left-0 right-0 z-50 mb-2 max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
     >
       <div className="flex items-center justify-between px-2 py-1 text-[11px] font-medium text-foreground-subtlest">
         <span>
@@ -1868,7 +1868,7 @@ function Composer({
         </button>
 
         {openMenu === 'plus' && (
-          <div className="zcode-popover-up absolute bottom-9 left-0 z-40 w-72 rounded-xl border border-border bg-popover p-1.5 shadow-md">
+          <div className="nex-popover-up absolute bottom-9 left-0 z-40 w-72 rounded-xl border border-border bg-popover p-1.5 shadow-md">
             {templates.map((tpl) => (
               <button
                 key={tpl}
@@ -1952,7 +1952,7 @@ function Composer({
         </button>
 
         {openMenu === 'perm' && (
-          <div className="zcode-popover-up absolute bottom-9 left-0 z-40 w-72 rounded-xl border border-border bg-popover p-1.5 shadow-md">
+          <div className="nex-popover-up absolute bottom-9 left-0 z-40 w-72 rounded-xl border border-border bg-popover p-1.5 shadow-md">
             {PERMISSION_OPTIONS.map((opt) => {
               const Icon = opt.icon;
               const active = opt.value === permissionMode;
@@ -2024,7 +2024,7 @@ function Composer({
           {openMenu === 'model' && (
             <div
               ref={modelPopoverRef}
-              className="zcode-popover-up absolute bottom-12 right-2 z-50 w-80 max-w-[calc(100%-1rem)] rounded-2xl border border-border bg-popover shadow-xl"
+              className="nex-popover-up absolute bottom-12 right-2 z-50 w-80 max-w-[calc(100%-1rem)] rounded-2xl border border-border bg-popover shadow-xl"
             >
               {/* Provider Selector Trigger Row (click selects/switches provider via submenu — NEVER jumps straight to Settings!) */}
               <div className="relative">
@@ -2067,7 +2067,7 @@ function Composer({
                 {providerMenuOpen && providerSubmenuSide === 'side' && (
                   <div
                     data-testid="composer-provider-submenu"
-                    className="zcode-submenu-left absolute right-full top-0 z-50 mr-1.5 w-64 overflow-hidden rounded-xl border border-border bg-popover shadow-xl"
+                    className="nex-submenu-left absolute right-full top-0 z-50 mr-1.5 w-64 overflow-hidden rounded-xl border border-border bg-popover shadow-xl"
                   >
                     <div className="border-b border-border px-3 py-2 text-ui-xs font-medium text-foreground-subtlest">
                       {formatMsg(locale, 'chat.model.providers')}
@@ -2148,7 +2148,7 @@ function Composer({
                   )}
                 </div>
 
-                {/* ZCode Effort Slider (strictly ordered per-model levels; hidden/disabled for non-reasoning models) */}
+                {/* Nex Effort Slider (strictly ordered per-model levels; hidden/disabled for non-reasoning models) */}
                 {effortSupported ? (
                   <div className="border-t border-border px-3.5 py-3">
                     <div className="mb-2 flex items-center justify-between">
@@ -2412,7 +2412,7 @@ function Composer({
 
   if (isDraft) {
     return (
-      <div ref={rootRef} className="zcode-bottom-dock relative z-30 mx-auto w-full max-w-4xl">
+      <div ref={rootRef} className="nex-bottom-dock relative z-30 mx-auto w-full max-w-4xl">
         {incompatibleRunnerBanner}
         <div className="w-full rounded-2xl bg-black/[0.035] p-1.5 dark:bg-white/[0.04]">
           <div className="relative flex items-center px-2.5 py-1.5">
@@ -2435,7 +2435,7 @@ function Composer({
             {openMenu === 'runner' && (
               <div
                 data-testid="composer-project-menu"
-                className="zcode-popover-up absolute bottom-9 left-1.5 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-lg"
+                className="nex-popover-up absolute bottom-9 left-1.5 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-lg"
               >
                 {/* Search Projects */}
                 <div className="flex items-center gap-2 border-b border-border px-3 py-2">
@@ -2567,7 +2567,7 @@ function Composer({
   }
 
   return (
-    <div ref={rootRef} className="zcode-bottom-dock mx-auto w-full max-w-4xl">
+    <div ref={rootRef} className="nex-bottom-dock mx-auto w-full max-w-4xl">
       {incompatibleRunnerBanner}
       {card}
     </div>
@@ -2619,7 +2619,7 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
       {item.role === 'user' ? (
         <UserBubble text={item.text} images={item.images} seq={item.seq} />
       ) : (
-        <div className={`group/assistant min-w-0 w-full space-y-4 ${item.streaming ? 'zcode-stream-in' : ''}`}>
+        <div className={`group/assistant min-w-0 w-full space-y-4 ${item.streaming ? 'nex-stream-in' : ''}`}>
           {(item.thinking || item.toolCalls.length > 0) && (
             <WorkGroup
               item={item}
@@ -2683,7 +2683,7 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
                   }}
                   className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
                 >
-                  {copiedReply ? <Check className="zcode-reaction-pop size-3 text-success" /> : <Copy className="size-3" />}
+                  {copiedReply ? <Check className="nex-reaction-pop size-3 text-success" /> : <Copy className="size-3" />}
                   <span>{copiedReply ? (formatMsg(locale, 'common.copied')) : formatMsg(locale, 'common.copy')}</span>
                 </button>
               )}
@@ -3032,7 +3032,7 @@ export function ConversationPane() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [activeSessionId]);
 
-  // ZCode ResizeObserver Scroll Anchor: tokens never drive scroll directly; ResizeObserver sticks cleanly when height grows!
+  // Nex ResizeObserver Scroll Anchor: tokens never drive scroll directly; ResizeObserver sticks cleanly when height grows!
   useEffect(() => {
     const contentEl = contentRef.current;
     const scrollEl = scrollRef.current;
@@ -3090,7 +3090,7 @@ export function ConversationPane() {
           <CircleHelp className="size-4" />
         </button>
         {headerMenu === 'help' && (
-          <div className="zcode-popover-down absolute right-0 top-8 z-50 w-64 rounded-xl border border-border bg-popover p-2 shadow-md">
+          <div className="nex-popover-down absolute right-0 top-8 z-50 w-64 rounded-xl border border-border bg-popover p-2 shadow-md">
             <div className="px-1 pb-1.5 text-ui-sm font-medium text-foreground">{formatMsg(locale, 'header.help')}</div>
             <div className="space-y-1 px-1 text-ui-sm text-foreground-subtle">
               <div className="flex items-center justify-between gap-3">
@@ -3281,7 +3281,7 @@ export function ConversationPane() {
               </button>
 
               {headerMenu === 'session' && (
-                <div className="zcode-popover-down absolute left-0 top-8 z-50 w-52 rounded-xl border border-border bg-popover p-1 shadow-md">
+                <div className="nex-popover-down absolute left-0 top-8 z-50 w-52 rounded-xl border border-border bg-popover p-1 shadow-md">
                       <button
                         type="button"
                         onClick={() => {
@@ -3407,7 +3407,7 @@ export function ConversationPane() {
         >
           {isDraft ? (
             <div className="flex h-full flex-col items-center justify-center pb-10">
-              <div className="zcode-draft-hero flex flex-col items-center">
+              <div className="nex-draft-hero flex flex-col items-center">
                 <h1 className="mb-7 text-center text-[26px] font-semibold tracking-tight text-foreground">
                   {formatMsg(locale, getGreetingKey(new Date().getHours()))}
                 </h1>
@@ -3450,11 +3450,11 @@ export function ConversationPane() {
                     <button
                       key={chip.labelKey}
                       type="button"
-                      style={{ '--zcode-draft-prompt-waterfall-delay': `${index * 45}ms` } as CSSProperties}
+                      style={{ '--nex-draft-prompt-waterfall-delay': `${index * 45}ms` } as CSSProperties}
                       onClick={() => {
                         setComposerText(chipPrompt);
                       }}
-                      className="zcode-draft-prompt-waterfall flex h-8 items-center gap-2 rounded-xl border border-border bg-card px-3.5 text-ui-sm text-foreground-subtle shadow-2xs transition-all duration-150 hover:-translate-y-px hover:border-border-hover hover:text-foreground hover:shadow-xs active:translate-y-0"
+                      className="nex-draft-prompt-waterfall flex h-8 items-center gap-2 rounded-xl border border-border bg-card px-3.5 text-ui-sm text-foreground-subtle shadow-2xs transition-all duration-150 hover:-translate-y-px hover:border-border-hover hover:text-foreground hover:shadow-xs active:translate-y-0"
                     >
                       <Icon className="size-3.5 shrink-0" />
                       <span>{chipLabel}</span>
@@ -3563,7 +3563,7 @@ export function ConversationPane() {
             type="button"
             onClick={() => scrollToBottom('smooth')}
             title={formatMsg(locale, 'chat.scrollToBottom')}
-            className="zcode-popover-up absolute bottom-3 left-1/2 z-20 flex size-7 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-card text-foreground-subtle shadow-sm transition-all hover:scale-105 hover:text-foreground active:scale-95"
+            className="nex-popover-up absolute bottom-3 left-1/2 z-20 flex size-7 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-card text-foreground-subtle shadow-sm transition-all hover:scale-105 hover:text-foreground active:scale-95"
           >
             <ChevronDown className="size-4" />
           </button>

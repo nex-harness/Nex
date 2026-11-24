@@ -873,7 +873,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
         )}
       </SettingsGroupCard>
 
-      {/* ZCode-Aligned New / Edit SSH Connection Modal */}
+      {/* Nex-Aligned New / Edit SSH Connection Modal */}
       {modalOpen && (
         <div
           data-testid="ssh-server-modal-backdrop"
@@ -909,7 +909,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
             </div>
 
             <div className="max-h-[70vh] space-y-4 overflow-y-auto px-5 py-4">
-              {/* Top row: Import from ~/.ssh/config (ZCode pattern) */}
+              {/* Top row: Import from ~/.ssh/config (Nex pattern) */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="inline-flex items-center gap-1.5 rounded-lg border border-brand-blue/30 bg-brand-blue/10 px-2.5 py-1 text-ui-xs font-medium text-brand-blue">
@@ -990,7 +990,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                 </div>
               )}
 
-              {/* Host + Port side-by-side (ZCode RDUX-27 layout) */}
+              {/* Host + Port side-by-side (Nex RDUX-27 layout) */}
               <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3">
                 <label className="block space-y-1">
                   <span className="text-ui-sm text-foreground-subtle">{formatMsg(locale, 'runners.host')}</span>

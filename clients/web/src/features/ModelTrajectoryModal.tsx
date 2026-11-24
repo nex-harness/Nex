@@ -321,7 +321,7 @@ function ToolDefinitionCard({
   );
 }
 
-// ---------- Expandable Trajectory / Message Row (ZCode ModelTrajectoryExpandableMessage style) ----------
+// ---------- Expandable Trajectory / Message Row (Nex ModelTrajectoryExpandableMessage style) ----------
 
 interface TrajectoryRowEntry {
   id: string;
@@ -609,9 +609,9 @@ export function ContextInspectorModal({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="zcode-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px] sm:p-6"
+      className="nex-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px] sm:p-6"
     >
-      <div className="zcode-dialog-content flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl">
+      <div className="nex-dialog-content flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -754,7 +754,7 @@ export function ContextInspectorModal({
   );
 }
 
-// ---------- 2. ZCode-Aligned Model Trajectory Modal ----------
+// ---------- 2. Nex-Aligned Model Trajectory Modal ----------
 
 interface LoadedCallRecord {
   telemetry: TurnTelemetry;
@@ -888,10 +888,10 @@ export function ModelTrajectoryModal({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="zcode-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-3 backdrop-blur-[2px] sm:p-5"
+      className="nex-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-3 backdrop-blur-[2px] sm:p-5"
     >
-      <div className="zcode-dialog-content flex h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
-        {/* ZCode ModelTrajectoryPane-style Header */}
+      <div className="nex-dialog-content flex h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+        {/* Nex ModelTrajectoryPane-style Header */}
         <header className="shrink-0 border-b border-border bg-popover/95 px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -1104,7 +1104,7 @@ export function ModelTrajectoryModal({
 
                 return (
                   <article key={idx} className="bg-background">
-                    {/* Sticky Call Card Header (matching ZCode CallCard) */}
+                    {/* Sticky Call Card Header (matching Nex CallCard) */}
                     <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-border/60 bg-surface/95 px-4 py-2 backdrop-blur-sm">
                       <span className="flex size-5 shrink-0 items-center justify-center rounded font-mono text-ui-xs font-semibold text-foreground-subtlest">
                         {String(idx + 1).padStart(2, '0')}

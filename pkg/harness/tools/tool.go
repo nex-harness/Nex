@@ -42,7 +42,7 @@ func ResolvePath(workDir, targetPath string) string {
 	return filepath.Clean(filepath.Join(workDir, targetPath))
 }
 
-// DefaultCodingTools returns the core orthogonal coding tools inspired by pi-agent and ZCode
+// DefaultCodingTools returns the core orthogonal coding tools inspired by pi-agent
 // (including per-session FileStateTracker, BackgroundTaskManager, TodoStore, and WebFetch).
 func DefaultCodingTools() []Tool {
 	list, _ := DefaultCodingToolsWithCleanup()

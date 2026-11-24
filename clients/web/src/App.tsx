@@ -164,7 +164,7 @@ export function App() {
 
   if (mainView === 'settings') {
     return (
-      <div className="zcode-view-enter nex-safe-top nex-safe-bottom h-dvh w-screen overflow-hidden">
+      <div className="nex-view-enter nex-safe-top nex-safe-bottom h-dvh w-screen overflow-hidden">
         <SettingsPage />
         <CommandPaletteModal />
         <ImagePreviewModal />
@@ -188,7 +188,7 @@ export function App() {
         />
       )}
 
-      {/* Smooth ZCode Animated Full-Height Left Sidebar (Drawer on Mobile) */}
+      {/* Smooth Nex Animated Full-Height Left Sidebar (Drawer on Mobile) */}
       <div
         data-testid="sidebar-panel"
         data-state={sidebarVisible ? 'open' : 'closed'}
@@ -293,7 +293,7 @@ export function App() {
         )}
       </div>
 
-      {/* Smooth ZCode Animated Right Side Pane (Full-screen overlay sheet on Mobile) */}
+      {/* Smooth Nex Animated Right Side Pane (Full-screen overlay sheet on Mobile) */}
       {shouldMountSidePane && (
         <div
           data-testid="side-pane-container"

@@ -809,7 +809,7 @@ export const zhCN = {
   "mcp.modal.envJson": "环境变量（JSON，可选）",
   "mcp.modal.headersJson": "HTTP 请求头（JSON，可选）",
   "mcp.modal.envHint": "支持 ${ENV_VAR} 环境变量引用，在 Runner / Server 运行时展开。",
-  "mcp.modal.jsonHint": "支持直接粘贴 Claude Desktop / Cursor / Pi / ZCode 的 {\"mcpServers\": {...}} 或 VS Code 的 {\"servers\": {...}}。",
+  "mcp.modal.jsonHint": "支持直接粘贴 Claude Desktop / Cursor / Pi 的 {\"mcpServers\": {...}} 或 VS Code 的 {\"servers\": {...}}。",
   "mcp.modal.importBtn": "解析并安装",
   "mcp.modal.installSubmit": "安装服务",
   "mcp.modal.saveSubmit": "保存修改",

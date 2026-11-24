@@ -131,7 +131,7 @@ func (s *Server) handleSkillVisibility(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleMCPImport parses Claude Desktop / Cursor / Pi / ZCode / VS Code MCP JSON definitions
+// handleMCPImport parses Claude Desktop / Cursor / Pi / VS Code and generic MCP JSON definitions
 // and installs/updates them in bulk.
 func (s *Server) handleMCPImport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

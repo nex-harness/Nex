@@ -122,7 +122,7 @@ export function WorkbenchSidebar() {
                 <div className="fixed inset-0 z-40" onClick={() => setPlusMenuOpen(false)} />
                 <div
                   data-testid="workbench-plus-menu"
-                  className="zcode-popover-down absolute right-0 top-8 z-50 w-52 max-w-[calc(100vw-24px)] space-y-0.5 rounded-xl border border-border bg-menu p-1 shadow-lg"
+                  className="nex-popover-down absolute right-0 top-8 z-50 w-52 max-w-[calc(100vw-24px)] space-y-0.5 rounded-xl border border-border bg-menu p-1 shadow-lg"
                 >
                   {menuItems.map((m) => (
                     <button
@@ -203,7 +203,7 @@ export function WorkbenchSidebar() {
         {activeTab?.kind === 'browser' && <BrowserTabPanel />}
 
         {activeTab?.kind === 'subagent' && activeTab.subagent && (
-          <div className="zcode-view-enter flex h-full flex-col overflow-y-auto p-4 text-ui-base">
+          <div className="nex-view-enter flex h-full flex-col overflow-y-auto p-4 text-ui-base">
             <div className="flex items-center gap-2 border-b border-border pb-3">
               <Bot className={`size-4 shrink-0 ${activeTab.subagent.status === 'running' ? 'animate-pulse text-success' : 'text-foreground-subtle'}`} />
               <div className="min-w-0 flex-1">
@@ -891,7 +891,7 @@ const GitReviewPanel = memo(function GitReviewPanelImpl({
         </div>
 
         {branchMenuOpen && (
-          <div className="zcode-popover-down absolute left-3 top-10 z-40 w-64 rounded-xl border border-border bg-popover p-1.5 shadow-xl">
+          <div className="nex-popover-down absolute left-3 top-10 z-40 w-64 rounded-xl border border-border bg-popover p-1.5 shadow-xl">
             <div className="mb-1 flex items-center gap-1 px-1">
               <input
                 value={newBranchName}

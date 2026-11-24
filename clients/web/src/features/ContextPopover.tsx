@@ -151,7 +151,7 @@ export function ContextWindowsButton({
       {open && (
         <div
           data-testid="context-popover"
-          className="zcode-popover-up absolute bottom-9 right-0 z-40 w-80 rounded-xl border border-border bg-popover p-3.5 text-foreground shadow-lg"
+          className="nex-popover-up absolute bottom-9 right-0 z-40 w-80 rounded-xl border border-border bg-popover p-3.5 text-foreground shadow-lg"
         >
           <div className="flex items-center justify-between text-ui-sm">
             <span className="font-semibold text-foreground">{formatMsg(locale, 'chat.contextUsage.title')}</span>

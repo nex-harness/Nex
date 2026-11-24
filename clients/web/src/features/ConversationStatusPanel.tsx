@@ -345,7 +345,7 @@ export function ConversationStatusPanel({
           mode === 'mini'
             ? 'inline-flex max-h-8.5 w-max max-w-[min(20rem,calc(100cqw-2rem))]'
             : mode === 'panel'
-              ? 'zcode-popover-down flex max-h-[min(74dvh,38rem)] w-80 max-w-[calc(100cqw-2rem)]'
+              ? 'nex-popover-down flex max-h-[min(74dvh,38rem)] w-80 max-w-[calc(100cqw-2rem)]'
               : 'inline-flex max-h-8.5 w-max max-w-[min(20rem,calc(100cqw-2rem))] @min-[1280px]/conversation:flex @min-[1280px]/conversation:max-h-[min(74dvh,38rem)] @min-[1280px]/conversation:w-80'
         }`}
       >
@@ -416,7 +416,7 @@ export function ConversationStatusPanel({
               </button>
 
               {menuOpen && (
-                <div className="zcode-popover-down absolute right-0 top-7 z-30 w-44 rounded-lg border border-border bg-menu p-1 shadow-md">
+                <div className="nex-popover-down absolute right-0 top-7 z-30 w-44 rounded-lg border border-border bg-menu p-1 shadow-md">
                   <button
                     type="button"
                     onClick={() => {
@@ -521,8 +521,8 @@ export function ConversationStatusPanel({
                     )}
                   </button>
 
-                  <div className="zcode-collapsible" data-open={commitOpen}>
-                    <div className="zcode-collapsible-inner">
+                  <div className="nex-collapsible" data-open={commitOpen}>
+                    <div className="nex-collapsible-inner">
                       <div className="rounded-lg border border-border bg-surface p-2">
                         <textarea
                           rows={3}
@@ -725,8 +725,8 @@ export function ConversationStatusPanel({
                         </span>
                       </button>
 
-                      <div className="zcode-collapsible" data-open={endedOpen}>
-                        <div className="zcode-collapsible-inner">
+                      <div className="nex-collapsible" data-open={endedOpen}>
+                        <div className="nex-collapsible-inner">
                           <div className="space-y-1 pb-1 pl-6 pr-1">
                             {endedSubagents.map(({ tc, summary }) => {
                               const args = parseToolArgs(tc);

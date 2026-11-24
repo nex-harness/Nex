@@ -3,7 +3,7 @@ import { formatMsg, formatRunningWorkDuration, type LocaleCode } from '../i18n/m
 
 const ORBIT_ORDER = [0, 1, 2, 5, 8, 7, 6, 3];
 
-/** 3x3 orbiting pixel indicator matching ZCode's ChatLoadingPixels. */
+/** 3x3 orbiting pixel indicator matching Nex's ChatLoadingPixels. */
 export function ChatLoadingPixels() {
   return (
     <span
@@ -13,7 +13,7 @@ export function ChatLoadingPixels() {
       {Array.from({ length: 9 }, (_, index) => (
         <span
           key={index}
-          className="zcode-loading-pixel size-full rounded-[1px] bg-current"
+          className="nex-loading-pixel size-full rounded-[1px] bg-current"
           style={{
             opacity: index === 4 ? 0.07 : 0.15,
             animationName: index === 4 ? 'none' : undefined,
@@ -34,7 +34,7 @@ export interface ChatLoadingProps {
 }
 
 /**
- * ZCode-aligned turn-tail working indicator: 3x3 pixel spinner, shimmering label,
+ * Nex-aligned turn-tail working indicator: 3x3 pixel spinner, shimmering label,
  * and self-ticking 100ms elapsed timer (keeps history turn rows from re-rendering).
  */
 export function ChatLoading({ loading, startedAt, locale, className = '' }: ChatLoadingProps) {
@@ -61,10 +61,10 @@ export function ChatLoading({ loading, startedAt, locale, className = '' }: Chat
       role="status"
       data-testid="chat-loading"
       aria-label={formatMsg(locale, 'chat.loading.label')}
-      className={`zcode-stream-in inline-flex w-fit items-center gap-2.5 ${className}`.trim()}
+      className={`nex-stream-in inline-flex w-fit items-center gap-2.5 ${className}`.trim()}
     >
       <ChatLoadingPixels />
-      <span className="zcode-loading-label text-ui-base font-medium">
+      <span className="nex-loading-label text-ui-base font-medium">
         {formatMsg(locale, 'chat.loading.working')}
       </span>
       <span

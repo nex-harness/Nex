@@ -1,4 +1,4 @@
-// Package prompts assembles the ZCode-grade System Prompt and meta context for Nex
+// Package prompts assembles the Nex System Prompt and meta context for Nex
 // sessions. The cache-critical "system_prompt" section is a pure function of the
 // session role: it contains no timestamps, git output, or workspace state, so it is
 // byte-identical across turns and stays warm in Anthropic ephemeral / OpenAI

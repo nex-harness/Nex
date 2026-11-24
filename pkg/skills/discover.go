@@ -11,7 +11,7 @@ import (
 )
 
 // DiscoveredSkill represents a skill found on disk (workspace/user) or in the registry,
-// annotated with ZCode-style scope, bundled resources, and per-workspace visibility state.
+// annotated with scope, bundled resources, and per-workspace visibility state.
 type DiscoveredSkill struct {
 	Name                   string          `json:"name"`
 	Description            string          `json:"description"`
@@ -51,7 +51,7 @@ type scanRoot struct {
 	workspacePath string
 }
 
-// Discover scans workspace, user, and registry skill sources in ZCode/Pi precedence order
+// Discover scans workspace, user, and registry skill sources in precedence order
 // (workspace > user > registry) and merges persisted visibility rules.
 func Discover(opts DiscoverOptions) []DiscoveredSkill {
 	home := strings.TrimSpace(opts.HomeDir)

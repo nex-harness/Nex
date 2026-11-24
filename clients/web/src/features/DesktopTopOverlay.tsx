@@ -3,7 +3,7 @@ import { useNexStore } from '../core/store';
 import { formatMsg } from '../i18n/messages';
 
 /**
- * ZCode DesktopTopOverlay: floating controls shown at the top-left of the window
+ * Nex DesktopTopOverlay: floating controls shown at the top-left of the window
  * whenever the left project sidebar is collapsed. The outer layer is
  * pointer-events-none so the conversation canvas stays draggable/clickable,
  * while the compact control row re-enables pointer events.
@@ -18,7 +18,7 @@ export function DesktopTopOverlay() {
 
   return (
     <div
-      className="zcode-view-enter nex-safe-top nex-titlebar-overlay-left pointer-events-none absolute top-2.5 z-30 flex items-center"
+      className="nex-view-enter nex-safe-top nex-titlebar-overlay-left pointer-events-none absolute top-2.5 z-30 flex items-center"
     >
       <div className="nex-no-drag pointer-events-auto flex items-center gap-0.5">
         <button

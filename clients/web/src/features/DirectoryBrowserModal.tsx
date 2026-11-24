@@ -191,12 +191,12 @@ export function DirectoryBrowserModal({
   const modalNode = (
     <div
       data-testid="directory-browser-modal"
-      className="zcode-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
+      className="nex-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="zcode-dialog-content flex max-h-[82vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-border bg-popover text-foreground shadow-xl">
+      <div className="nex-dialog-content flex max-h-[82vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-border bg-popover text-foreground shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
           <div className="flex min-w-0 items-center gap-2">

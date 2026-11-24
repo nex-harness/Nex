@@ -270,7 +270,7 @@ func (s *Server) ingestRunnerSessionEvent(ctx context.Context, rc *runnerConn, e
 		return
 	}
 
-	// ZCode Persistence Rule: transient streaming deltas (message_update / tool_execution_update)
+	// Persistence rule: transient streaming deltas (message_update / tool_execution_update)
 	// are broadcast live in memory ONLY and never persisted as 1-char rows in SQLite!
 	if ev.EventType == "message_update" || ev.EventType == "tool_execution_update" {
 		if ev.CreatedAt == 0 {

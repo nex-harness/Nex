@@ -405,8 +405,8 @@ export function ProjectSidebar() {
           </button>
         </div>
 
-        <div className="zcode-collapsible" data-open={!collapsed}>
-          <div className="zcode-collapsible-inner">
+        <div className="nex-collapsible" data-open={!collapsed}>
+          <div className="nex-collapsible-inner">
             <div className="space-y-0.5">
               {group.sessions.length === 0 ? (
                 <button
@@ -558,7 +558,7 @@ export function ProjectSidebar() {
       </div>
 
       {searchOpen && (
-        <div className="zcode-popover-down mx-3 mb-1 flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2">
+        <div className="nex-popover-down mx-3 mb-1 flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2">
           <Search className="size-3 shrink-0 text-foreground-subtlest" />
           <input
             autoFocus

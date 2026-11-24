@@ -1399,7 +1399,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         }
       });
 
-      // ZCode-style per-frame event coalescing buffer: at most ONE Zustand commit per animation frame!
+      // Per-frame event coalescing buffer (Nex style): at most ONE Zustand commit per animation frame!
       const pendingEvents = new Map<string, { runnerId: string; rows: RawSessionEventRow[] }>();
       let flushScheduled = false;
 

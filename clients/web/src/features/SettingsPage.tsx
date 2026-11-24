@@ -333,7 +333,7 @@ export function SettingsPage() {
           </header>
 
           {flashMsg ? (
-            <div className="zcode-toast-in fixed right-6 top-6 z-50 rounded-xl border border-border bg-card px-4 py-2.5 text-ui-sm font-medium text-foreground shadow-lg">
+            <div className="nex-toast-in fixed right-6 top-6 z-50 rounded-xl border border-border bg-card px-4 py-2.5 text-ui-sm font-medium text-foreground shadow-lg">
               {flashMsg}
             </div>
           ) : null}
@@ -1896,8 +1896,8 @@ function ProvidersAndModelsSection({
                 </div>
 
                 {fetchRemoteOpen && (
-                  <div className="zcode-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]">
-                    <div className="zcode-dialog-content flex max-h-[82vh] w-full max-w-lg flex-col rounded-2xl border border-border bg-card p-5 shadow-xl">
+                  <div className="nex-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]">
+                    <div className="nex-dialog-content flex max-h-[82vh] w-full max-w-lg flex-col rounded-2xl border border-border bg-card p-5 shadow-xl">
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <h3 className="text-ui-lg font-semibold text-foreground">
@@ -2006,8 +2006,8 @@ function ProvidersAndModelsSection({
                 )}
 
                 {showAddModel && (
-                  <div className="zcode-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]">
-                    <div className="zcode-dialog-content w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-xl">
+                  <div className="nex-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]">
+                    <div className="nex-dialog-content w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-xl">
                       <div className="flex items-center justify-between">
                         <h3 className="text-ui-lg font-semibold text-foreground">
                           {formatMsg(locale, 'settings.addModelManually')}
