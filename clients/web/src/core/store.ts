@@ -513,6 +513,7 @@ export interface AppState {
     modelId?: string;
   }) => Promise<{ before_count: number; after_count: number; summary: string; memories: MemoryRecord[] } | null>;
   sendPromptOrSteer: (overrideText?: string, mode?: 'follow_up' | 'steer') => void;
+  editAndResendMessage: (sessionId: string, fromSeq: number, newText: string) => Promise<void>;
   queueFollowUp: (text: string) => void;
   removeFollowUp: (sessionId: string, id: string) => void;
   promoteFollowUpToSteer: (sessionId: string, id: string) => void;
@@ -1952,6 +1953,23 @@ export const useNexStore = create<AppState>((set, get) => ({
       set({ composerText: opts.prefillText });
     }
     return forked.id;
+  },
+
+  editAndResendMessage: async (sessionId, fromSeq, newText) => {
+    const trimmed = newText.trim();
+    if (!sessionId || !trimmed) return;
+    if (fromSeq > 0) {
+      try {
+        await apiFetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/truncate`, {
+          method: 'POST',
+          body: JSON.stringify({ from_seq: fromSeq }),
+        });
+      } catch {
+        // Fallback: still reload session state
+      }
+      await get().selectSession(sessionId);
+    }
+    get().sendPromptOrSteer(trimmed, 'follow_up');
   },
 
   sendPromptOrSteer: (overrideText, mode = 'follow_up') => {

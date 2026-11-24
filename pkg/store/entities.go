@@ -439,6 +439,21 @@ func (s *Store) ListSessionEventsAfter(ctx context.Context, sessionID string, af
 	return queryEventsFromDB(ctx, s.mainDB, sessionID, afterSeq)
 }
 
+// TruncateSessionEventsFrom deletes all session_events with seq >= fromSeq (and resets updated_at)
+// so a user can edit a previously sent message in-place and re-run from that point.
+func (s *Store) TruncateSessionEventsFrom(ctx context.Context, sessionID string, fromSeq uint64) (int64, error) {
+	if fromSeq == 0 {
+		return 0, nil
+	}
+	res, err := s.mainDB.ExecContext(ctx, `DELETE FROM session_events WHERE session_id = ? AND seq >= ?`, sessionID, fromSeq)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	_, _ = s.mainDB.ExecContext(ctx, `UPDATE sessions SET updated_at = ? WHERE id = ?`, time.Now().UnixMilli(), sessionID)
+	return n, nil
+}
+
 // ForkSession creates a new session copying events from sourceSessionID up to upToSeq
 // (if upToSeq == 0, copies all events; if excludeAll is true, copies 0 events).
 func (s *Store) ForkSession(ctx context.Context, sourceSessionID string, upToSeq uint64, excludeAll bool, newTitle string) (SessionRecord, []SessionEvent, error) {

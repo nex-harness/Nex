@@ -51,13 +51,14 @@ type Loop struct {
 	toolMap  map[string]tools.Tool
 	toolDefs []ai.ToolDefinition
 
-	mu        sync.Mutex
-	emitMu    sync.Mutex
-	messages  []ai.Message
-	steerQ    []ai.Message
-	followUpQ []ai.Message
-	turnIdx   int
-	running   bool
+	mu               sync.Mutex
+	emitMu           sync.Mutex
+	messages         []ai.Message
+	steerQ           []ai.Message
+	followUpQ        []ai.Message
+	turnIdx          int
+	running          bool
+	cancelActiveTurn context.CancelFunc
 }
 
 // NewLoop constructs an Agent Loop from cfg and optional initial conversation history.
@@ -94,11 +95,22 @@ func NewLoop(cfg LoopConfig, history []ai.Message) *Loop {
 	}
 }
 
-// Steer enqueues an immediate steering message that interrupts remaining queued tool calls in the current turn.
+// Steer enqueues an immediate steering message, interrupting any active LLM stream
+// as well as remaining queued tool calls in the current turn.
 func (l *Loop) Steer(msg ai.Message) {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	l.steerQ = append(l.steerQ, msg)
+	cancel := l.cancelActiveTurn
+	l.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+func (l *Loop) hasPendingSteer() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.steerQ) > 0
 }
 
 // FollowUp enqueues a follow-up user message processed automatically when the agent finishes its current response.
@@ -229,6 +241,7 @@ func (l *Loop) Run(ctx context.Context, promptMsg *ai.Message) (*ai.Message, err
 		var startTS, firstTokenTS time.Time
 		var req *ai.StreamRequest
 		compactedOnOverflow := false
+		steeredMidStream := false
 
 	attemptTurn:
 		for retryAttempt := 0; ; {
@@ -274,8 +287,14 @@ func (l *Loop) Run(ctx context.Context, promptMsg *ai.Message) (*ai.Message, err
 			turnUsage = ai.Usage{}
 			streamErr = nil
 			emittedAnyDelta := false
+			var partialText strings.Builder
 
-			streamCh, err := l.cfg.Provider.Stream(ctx, req)
+			turnCtx, turnCancel := context.WithCancel(ctx)
+			l.mu.Lock()
+			l.cancelActiveTurn = turnCancel
+			l.mu.Unlock()
+
+			streamCh, err := l.cfg.Provider.Stream(turnCtx, req)
 			if err != nil {
 				streamErr = err
 			} else {
@@ -287,6 +306,7 @@ func (l *Loop) Run(ctx context.Context, promptMsg *ai.Message) (*ai.Message, err
 					switch sev.Type {
 					case ai.StreamEventTextDelta:
 						emittedAnyDelta = true
+						partialText.WriteString(sev.TextDelta)
 						l.emit(Event{Type: EventMessageUpdate, TurnIdx: turnNo, DeltaKind: "text", Delta: sev.TextDelta})
 					case ai.StreamEventThinkingDelta:
 						emittedAnyDelta = true
@@ -301,6 +321,29 @@ func (l *Loop) Run(ctx context.Context, promptMsg *ai.Message) (*ai.Message, err
 						streamErr = sev.Err
 					}
 				}
+			}
+
+			l.mu.Lock()
+			l.cancelActiveTurn = nil
+			l.mu.Unlock()
+			turnCancel()
+
+			// If the active LLM stream was interrupted by a live Steer() call (and the parent ctx is still alive),
+			// gracefully finalize the partial turn and pivot immediately to the steering message!
+			if streamErr != nil && ctx.Err() == nil && l.hasPendingSteer() {
+				if partial := strings.TrimSpace(partialText.String()); partial != "" {
+					partialMsg := ai.Message{
+						Role:      ai.RoleAssistant,
+						Content:   []ai.ContentBlock{ai.TextBlock(partial)},
+						Timestamp: time.Now().UnixMilli(),
+					}
+					l.appendMessage(partialMsg)
+					lastAssistant = &partialMsg
+					l.emit(Event{Type: EventMessageEnd, TurnIdx: turnNo, Message: &partialMsg})
+				}
+				l.emit(Event{Type: EventTurnEnd, TurnIdx: turnNo})
+				steeredMidStream = true
+				break attemptTurn
 			}
 
 			if streamErr == nil {
@@ -328,6 +371,9 @@ func (l *Loop) Run(ctx context.Context, promptMsg *ai.Message) (*ai.Message, err
 
 			l.emit(Event{Type: EventTurnEnd, TurnIdx: turnNo, Error: streamErr.Error()})
 			return lastAssistant, streamErr
+		}
+		if steeredMidStream {
+			continue
 		}
 		if assistantMsg == nil {
 			assistantMsg = &ai.Message{Role: ai.RoleAssistant}

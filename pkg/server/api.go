@@ -830,6 +830,46 @@ func (s *Server) handleSessionSubroutes(w http.ResponseWriter, r *http.Request) 
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"checkpoints": cps})
 
+	case "truncate":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		sess, err := s.store.GetSession(r.Context(), sessID)
+		if err != nil {
+			writeErr(w, http.StatusNotFound, err)
+			return
+		}
+		var body struct {
+			FromSeq uint64 `json:"from_seq"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.FromSeq == 0 {
+			writeErr(w, http.StatusBadRequest, fmt.Errorf("from_seq > 0 is required"))
+			return
+		}
+		removed, err := s.store.TruncateSessionEventsFrom(r.Context(), sessID, body.FromSeq)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		// Mirror truncated history to the target Runner if currently online so next LLM turn uses truncated history
+		if sess.RunnerID != "" {
+			remaining, _ := s.store.ListSessionEventsAfter(r.Context(), sessID, 0)
+			if env, eErr := protocol.NewEnvelope(protocol.TypeSessionForkSync, protocol.SessionForkSyncPayload{
+				Session: *sess,
+				Events:  remaining,
+			}); eErr == nil {
+				env.RunnerID = sess.RunnerID
+				env.SessionID = sessID
+				_, _ = s.callRunnerRPC(r.Context(), sess.RunnerID, env, 8*time.Second)
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":       true,
+			"removed":  removed,
+			"from_seq": body.FromSeq,
+		})
+
 	case "rewind":
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)

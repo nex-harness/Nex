@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/nex-harness/nex/pkg/ai"
 	"github.com/nex-harness/nex/pkg/harness/tools"
@@ -229,6 +230,80 @@ func TestLoopSteerInterruptFollowUpTelemetryAndApproval(t *testing.T) {
 	sysBytes, _, err := st.GetBlob(ctx, t0.SystemPromptBlobHash)
 	if err != nil || string(sysBytes) != "Core agent prompt." {
 		t.Fatalf("system prompt trace blob mismatch: %q err=%v", string(sysBytes), err)
+	}
+}
+
+type blockingSteerProvider struct {
+	turn     atomic.Int32
+	streamFn func(ctx context.Context, req *ai.StreamRequest, turn int) (<-chan ai.StreamEvent, error)
+}
+
+func (p *blockingSteerProvider) Driver() ai.Driver { return ai.DriverAnthropic }
+func (p *blockingSteerProvider) Stream(ctx context.Context, req *ai.StreamRequest) (<-chan ai.StreamEvent, error) {
+	t := int(p.turn.Add(1))
+	return p.streamFn(ctx, req, t)
+}
+
+func TestLoopSteerInterruptsActiveLLMStreamImmediately(t *testing.T) {
+	ctx := context.Background()
+	var loopRef *Loop
+	var sawSteerInTurn2 atomic.Bool
+
+	prov := &blockingSteerProvider{
+		streamFn: func(streamCtx context.Context, req *ai.StreamRequest, turn int) (<-chan ai.StreamEvent, error) {
+			ch := make(chan ai.StreamEvent, 8)
+			go func() {
+				defer close(ch)
+				if turn == 1 {
+					ch <- ai.StreamEvent{Type: ai.StreamEventTextDelta, TextDelta: "Starting a long answer..."}
+					// Trigger Steer while Turn 1 is still streaming!
+					go func() {
+						time.Sleep(15 * time.Millisecond)
+						loopRef.Steer(ai.NewUserTextMessage("Stop and answer concisely instead."))
+					}()
+					// Block until streamCtx is canceled by Steer()
+					select {
+					case <-streamCtx.Done():
+						ch <- ai.StreamEvent{Type: ai.StreamEventError, Err: streamCtx.Err()}
+						return
+					case <-time.After(3 * time.Second):
+						ch <- ai.StreamEvent{Type: ai.StreamEventDone, Message: &ai.Message{Role: ai.RoleAssistant, Content: []ai.ContentBlock{ai.TextBlock("never interrupted")}}}
+						return
+					}
+				}
+				// Turn 2 should immediately receive the steering message
+				for _, m := range req.Messages {
+					if m.Role == ai.RoleUser && strings.Contains(m.PlainText(), "Stop and answer concisely") {
+						sawSteerInTurn2.Store(true)
+					}
+				}
+				msg := ai.Message{Role: ai.RoleAssistant, Content: []ai.ContentBlock{ai.TextBlock("Concise answer.")}}
+				ch <- ai.StreamEvent{Type: ai.StreamEventDone, Message: &msg}
+			}()
+			return ch, nil
+		},
+	}
+
+	loopRef = NewLoop(LoopConfig{
+		Provider: prov,
+		Model:    "test-model",
+	}, nil)
+
+	start := time.Now()
+	initMsg := ai.NewUserTextMessage("Explain everything")
+	finalMsg, err := loopRef.Run(ctx, &initMsg)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("Run err: %v", err)
+	}
+	if elapsed > 1500*time.Millisecond {
+		t.Fatalf("expected Steer to interrupt Turn 1 immediately, took %v", elapsed)
+	}
+	if !sawSteerInTurn2.Load() {
+		t.Fatalf("expected Turn 2 to see steering message")
+	}
+	if finalMsg == nil || finalMsg.PlainText() != "Concise answer." {
+		t.Fatalf("unexpected final message: %+v", finalMsg)
 	}
 }
 

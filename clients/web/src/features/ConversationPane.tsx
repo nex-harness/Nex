@@ -679,8 +679,11 @@ function UserBubble({
   const selectSession = useNexStore((s) => s.selectSession);
   const setComposerText = useNexStore((s) => s.setComposerText);
   const forkSession = useNexStore((s) => s.forkSession);
+  const editAndResendMessage = useNexStore((s) => s.editAndResendMessage);
   const openImagePreview = useNexStore((s) => s.openImagePreview);
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState('');
   const displayText = cleanUserDisplayText(text);
 
   const renderRichUserText = (raw: string) => {
@@ -744,11 +747,67 @@ function UserBubble({
           })}
         </div>
       )}
-      {displayText && (
-        <div className="max-w-full whitespace-pre-wrap break-words rounded-xl rounded-tr-xs border border-border bg-surface px-4 py-3 text-ui-base leading-[1.5] text-foreground @min-[624px]/conversation:max-w-xl">
-          {renderRichUserText(displayText)}
-        </div>
+      {editing ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const next = editDraft.trim();
+            setEditing(false);
+            if (!next) return;
+            if (activeSessionId && seq && seq > 0) {
+              void editAndResendMessage(activeSessionId, seq, next);
+            } else {
+              setComposerText(next);
+            }
+          }}
+          className="w-full max-w-xl space-y-2 rounded-xl border border-primary/50 bg-surface p-3"
+        >
+          <textarea
+            autoFocus
+            rows={3}
+            value={editDraft}
+            onChange={(e) => setEditDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setEditing(false);
+              } else if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const next = editDraft.trim();
+                setEditing(false);
+                if (!next) return;
+                if (activeSessionId && seq && seq > 0) {
+                  void editAndResendMessage(activeSessionId, seq, next);
+                } else {
+                  setComposerText(next);
+                }
+              }
+            }}
+            className="w-full resize-y rounded-lg border border-border bg-input p-2 text-ui-base text-foreground outline-none focus:border-primary"
+          />
+          <div className="flex items-center justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="h-7 rounded-lg border border-border bg-card px-2.5 text-ui-xs text-foreground-subtle hover:text-foreground"
+            >
+              {formatMsg(locale, 'common.cancel')}
+            </button>
+            <button
+              type="submit"
+              className="h-7 rounded-lg bg-primary px-3 text-ui-xs font-medium text-primary-foreground hover:opacity-90"
+            >
+              {formatMsg(locale, 'common.confirm')}
+            </button>
+          </div>
+        </form>
+      ) : (
+        displayText && (
+          <div className="max-w-full whitespace-pre-wrap break-words rounded-xl rounded-tr-xs border border-border bg-surface px-4 py-3 text-ui-base leading-[1.5] text-foreground @min-[624px]/conversation:max-w-xl">
+            {renderRichUserText(displayText)}
+          </div>
+        )
       )}
+      {!editing && (
       <div className="mt-0.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <button
           type="button"
@@ -761,7 +820,14 @@ function UserBubble({
         </button>
         <button
           type="button"
-          onClick={() => setComposerText(displayText)}
+          onClick={() => {
+            if (activeSessionId && seq && seq > 0) {
+              setEditDraft(displayText);
+              setEditing(true);
+            } else {
+              setComposerText(displayText);
+            }
+          }}
           title={formatMsg(locale, 'chat.editInComposer')}
           className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground"
         >
@@ -781,6 +847,7 @@ function UserBubble({
           </button>
         )}
       </div>
+      )}
     </div>
   );
 }
