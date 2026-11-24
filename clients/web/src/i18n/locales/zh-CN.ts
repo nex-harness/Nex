@@ -663,6 +663,8 @@ export const zhCN = {
   "runners.adminBadge": "管理员",
   "runners.updateAvailable": "有可用更新 ({version})",
   "runners.updateRequired": "需要强制升级 ({version})",
+  "runners.offlineOutdatedHint": "节点离线且版本过旧（最新 {version}）— 请更新二进制或携带最新配对密钥重新接入。",
+  "runners.copyJoinCommandBtn": "复制接入命令",
   "runners.upToDate": "已是最新",
   "runners.updateBtn": "升级",
   "runners.updateNowBtn": "立即升级",

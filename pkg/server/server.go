@@ -159,6 +159,8 @@ func New(cfg Config) (*Server, error) {
 
 	// Seed default embedded models if models table is currently empty
 	ctx := context.Background()
+	// Reset any stale 'online' runners persisted before a previous server restart/crash.
+	_ = s.store.MarkAllRunnersOffline(ctx)
 	if existing, err := s.store.ListModels(ctx, ""); err == nil && len(existing) == 0 {
 		_ = s.seedBuiltInProvidersAndModels(ctx)
 	}

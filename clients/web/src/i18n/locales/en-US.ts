@@ -661,6 +661,8 @@ export const enUS = {
   "runners.adminBadge": "Admin",
   "runners.updateAvailable": "Update available ({version})",
   "runners.updateRequired": "Upgrade required ({version})",
+  "runners.offlineOutdatedHint": "Offline & outdated ({version}) — reconnect with pairing token or reinstall the latest runner binary.",
+  "runners.copyJoinCommandBtn": "Copy join command",
   "runners.upToDate": "Up to date",
   "runners.updateBtn": "Upgrade",
   "runners.updateNowBtn": "Upgrade now",

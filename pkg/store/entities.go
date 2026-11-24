@@ -104,6 +104,12 @@ func (s *Store) ListRunners(ctx context.Context) ([]RunnerRecord, error) {
 	return out, rows.Err()
 }
 
+// MarkAllRunnersOffline resets any stale 'online' rows left in SQLite from a previous server process.
+func (s *Store) MarkAllRunnersOffline(ctx context.Context) error {
+	_, err := s.mainDB.ExecContext(ctx, `UPDATE runners SET status = 'offline' WHERE status != 'offline'`)
+	return err
+}
+
 type AgentProfile struct {
 	ID             string   `json:"id"`
 	Slug           string   `json:"slug"`

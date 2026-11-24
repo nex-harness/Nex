@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -119,5 +120,35 @@ func TestRunnerAuthEndpointsAndEnforcement(t *testing.T) {
 	}
 	if !srv.verifyRunnerAuthToken(ctx, "run_relay_1", devTok) {
 		t.Fatalf("expected paired device token to authorize runner")
+	}
+
+	// 7. Direct loopback runner with matching server hostname & empty token is allowed,
+	//    while spoofed/proxied loopback requests or wrong tokens are still rejected.
+	hostName, err := os.Hostname()
+	if err == nil && hostName != "" {
+		wsLocal, _, lErr := websocket.Dial(ctx, wsURL, nil)
+		if lErr != nil {
+			t.Fatal(lErr)
+		}
+		localHello, _ := protocol.NewEnvelope(protocol.TypeRunnerHello, protocol.RunnerHelloPayload{
+			RunnerID: "run_local_loopback",
+			Name:     "LocalHost",
+			Hostname: hostName,
+		})
+		bLocal, _ := json.Marshal(localHello)
+		_ = wsLocal.Write(ctx, websocket.MessageText, bLocal)
+		_, welcomeLocal, wlErr := wsLocal.Read(ctx)
+		_ = wsLocal.CloseNow()
+		if wlErr != nil || !strings.Contains(string(welcomeLocal), "runner.welcome") {
+			t.Fatalf("expected direct loopback co-located runner to connect, got err=%v raw=%s", wlErr, string(welcomeLocal))
+		}
+
+		// Proxied request (X-Forwarded-For present) must be rejected even from loopback
+		proxiedReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/ws/runner", nil)
+		proxiedReq.RemoteAddr = "127.0.0.1:54321"
+		proxiedReq.Header.Set("X-Forwarded-For", "203.0.113.10")
+		if isDirectLocalHostRunnerRequest(proxiedReq, hostName) {
+			t.Fatalf("expected proxied request with X-Forwarded-For to be rejected")
+		}
 	}
 }

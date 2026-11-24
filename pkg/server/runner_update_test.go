@@ -556,3 +556,96 @@ func TestRunnerUpdateTriggerAndUpdateAll(t *testing.T) {
 		t.Fatalf("expected 404 for nonexistent runner, got %d", respMiss.StatusCode)
 	}
 }
+
+func TestStaleOnlineResetLegacyRunnerDetectionAndSucceededTTL(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	// Pre-seed a stale "online" legacy Windows runner from a previous server lifetime
+	if err := st.UpsertRunner(ctx, store.RunnerRecord{
+		ID:      "win_legacy",
+		Name:    "WindowsT2",
+		OS:      "windows",
+		Arch:    "amd64",
+		Version: "0.3.0",
+		Status:  "online",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	runnersDir := t.TempDir()
+	winBytes := []byte("fake-windows-runner-v0.2.0")
+	if err := os.WriteFile(filepath.Join(runnersDir, "nex-runner-windows-amd64.exe"), winBytes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(winBytes)
+	winSHA := hex.EncodeToString(sum[:])
+	mfBytes, _ := json.Marshal(RunnerManifest{
+		Version: "v0.2.0",
+		Binaries: map[string]RunnerBinaryEntry{
+			"windows/amd64": {
+				Filename:  "nex-runner-windows-amd64.exe",
+				SHA256:    winSHA,
+				SizeBytes: int64(len(winBytes)),
+			},
+		},
+	})
+	if err := os.WriteFile(filepath.Join(runnersDir, "manifest.json"), mfBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srv, err := New(Config{
+		Store:      st,
+		Version:    "v0.2.0",
+		RunnersDir: runnersDir,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	wsBase := "ws" + strings.TrimPrefix(ts.URL, "http")
+
+	// 1. Stale DB runner must be reported offline AND flagged update_available (not up_to_date!)
+	resp, err := http.Get(ts.URL + "/api/v1/runners")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var list []store.RunnerRecord
+	_ = json.NewDecoder(resp.Body).Decode(&list)
+	_ = resp.Body.Close()
+	if len(list) != 1 || list[0].Status != "offline" || list[0].UpdateStatus != "update_available" {
+		t.Fatalf("expected stale runner reset to offline + update_available, got %+v", list)
+	}
+
+	// 2. Legacy runner connecting WITHOUT BinarySHA256 or self_update_v1 capability -> update_required + Incompatible
+	wsLegacy, welcomeLegacy := dialTestRunnerHello(t, ctx, wsBase+"/ws/runner", protocol.RunnerHelloPayload{
+		RunnerID: "win_legacy",
+		Name:     "WindowsT2",
+		OS:       "windows",
+		Arch:     "amd64",
+		Version:  "0.3.0",
+	})
+	defer wsLegacy.Close(websocket.StatusNormalClosure, "")
+	if welcomeLegacy.UpdateStatus != "update_required" || !welcomeLegacy.Incompatible {
+		t.Fatalf("expected legacy runner flagged update_required + incompatible, got %+v", welcomeLegacy)
+	}
+
+	// 3. Succeeded phase badge expires after runnerSucceededBadgeTTL
+	srv.mu.Lock()
+	srv.runnerMeta["win_legacy"].UpdatePhase = "succeeded"
+	srv.runnerMeta["win_legacy"].UpdatePhaseUpdatedAt = time.Now().Add(-runnerSucceededBadgeTTL - time.Second)
+	srv.mu.Unlock()
+	copied := srv.getRunnerRuntimeMetaCopy("win_legacy")
+	if copied == nil || copied.UpdatePhase != "" {
+		t.Fatalf("expected expired succeeded phase to clear, got %+v", copied)
+	}
+}

@@ -538,9 +538,20 @@ func (s *Server) handleRunners(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	// Mask auth tokens and enrich live runner update/compatibility metadata
+	// Mask auth tokens, reconcile live WS online state, and enrich runner update/compatibility metadata
+	s.mu.RLock()
+	onlineIDs := make(map[string]bool, len(s.runners))
+	for id := range s.runners {
+		onlineIDs[id] = true
+	}
+	s.mu.RUnlock()
 	for i := range list {
 		list[i].AuthToken = ""
+		if onlineIDs[list[i].ID] {
+			list[i].Status = "online"
+		} else {
+			list[i].Status = "offline"
+		}
 		s.enrichRunnerRecord(r.Context(), &list[i])
 	}
 	writeJSON(w, http.StatusOK, list)

@@ -24,8 +24,9 @@ import (
 )
 
 const (
-	releaseManifestCacheTTL = 5 * time.Minute
-	runnerDownloadTokenTTL  = 30 * time.Minute
+	releaseManifestCacheTTL   = 5 * time.Minute
+	runnerDownloadTokenTTL    = 30 * time.Minute
+	runnerSucceededBadgeTTL   = 45 * time.Second
 )
 
 // issueRunnerDownloadToken mints a short-lived opaque token so connected runners
@@ -117,9 +118,26 @@ type runnerRuntimeMeta struct {
 	TargetSHA256    string
 	DownloadURLs    []string
 	Incompatible    bool
-	UpdatePhase     string
-	UpdateProgress  int
-	UpdateError     string
+	UpdatePhase          string
+	UpdateProgress       int
+	UpdateError          string
+	UpdatePhaseUpdatedAt time.Time
+	Online               bool
+}
+
+func normalizeRunnerVersionForCompare(v string) string {
+	s := strings.TrimSpace(v)
+	s = strings.TrimPrefix(s, "v")
+	return strings.ToLower(s)
+}
+
+func hasRunnerCapability(caps []string, target string) bool {
+	for _, c := range caps {
+		if strings.EqualFold(strings.TrimSpace(c), target) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) effectiveMinRunnerProtocol() int {
@@ -351,6 +369,18 @@ func (s *Server) evaluateRunnerUpdate(ctx context.Context, meta *runnerRuntimeMe
 			return
 		}
 	}
+	// Detect legacy pre-self-update runners that connected with no BinarySHA256 and no capabilities
+	// when a concrete target version/binary exists on the server.
+	if meta.Online && meta.BinarySHA256 == "" && !hasRunnerCapability(meta.Capabilities, "self_update_v1") && entry != nil && entry.SHA256 != "" {
+		curVer := normalizeRunnerVersionForCompare(meta.Version)
+		tgtVer := normalizeRunnerVersionForCompare(targetVer)
+		if curVer != "" && tgtVer != "" && curVer != tgtVer {
+			meta.UpdateStatus = "update_required"
+			meta.Incompatible = true
+			meta.UpdateReason = fmt.Sprintf("Legacy runner (%s) lacks self-update and modern protocol capabilities; reinstall %s", meta.Version, targetVer)
+			return
+		}
+	}
 
 	meta.Incompatible = false
 
@@ -364,6 +394,16 @@ func (s *Server) evaluateRunnerUpdate(ctx context.Context, meta *runnerRuntimeMe
 				meta.UpdateReason = "Newer runner binary is available"
 			}
 			return
+		}
+		// Fallback version comparison for offline or legacy runners without BinarySHA256
+		if meta.BinarySHA256 == "" {
+			curVer := normalizeRunnerVersionForCompare(meta.Version)
+			tgtVer := normalizeRunnerVersionForCompare(targetVer)
+			if curVer != "" && tgtVer != "" && curVer != tgtVer {
+				meta.UpdateStatus = "update_available"
+				meta.UpdateReason = fmt.Sprintf("New runner version %s is available", targetVer)
+				return
+			}
 		}
 		if meta.IsDev && targetVer != "" && !protocol.IsDevVersion(targetVer) {
 			meta.UpdateStatus = "update_available"
@@ -402,6 +442,11 @@ func (s *Server) getRunnerRuntimeMetaCopy(runnerID string) *runnerRuntimeMeta {
 	cp := *m
 	cp.Capabilities = append([]string(nil), m.Capabilities...)
 	cp.DownloadURLs = append([]string(nil), m.DownloadURLs...)
+	// Auto-expire transient "succeeded" badge after runnerSucceededBadgeTTL so it does not stay stuck forever.
+	if cp.UpdatePhase == "succeeded" && !cp.UpdatePhaseUpdatedAt.IsZero() && time.Since(cp.UpdatePhaseUpdatedAt) >= runnerSucceededBadgeTTL {
+		cp.UpdatePhase = ""
+		cp.UpdateProgress = 0
+	}
 	return &cp
 }
 
@@ -430,7 +475,10 @@ func (s *Server) enrichRunnerRecord(ctx context.Context, rec *store.RunnerRecord
 			Arch:     rec.Arch,
 			Version:  rec.Version,
 			IsDev:    rec.IsDev,
+			Online:   rec.Status == "online",
 		}
+	} else {
+		meta.Online = rec.Status == "online"
 	}
 	s.evaluateRunnerUpdate(ctx, meta)
 	rec.BuildSHA = meta.BuildSHA

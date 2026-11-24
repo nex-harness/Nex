@@ -892,6 +892,31 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       </button>
                     </div>
                   )}
+                  {r.status !== 'online' && (isRequired || isAvailable) && (
+                    <div
+                      data-testid={`runner-update-offline-${r.id}`}
+                      className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-ui-xs text-amber-700 dark:text-amber-300"
+                    >
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <AlertTriangle className="size-3.5 shrink-0" />
+                        <span className="truncate font-medium">
+                          {formatMsg(locale, 'runners.offlineOutdatedHint', { version: r.target_version || 'latest' })}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManualOpen(true);
+                          void navigator.clipboard?.writeText(joinCmd);
+                          onFlash(formatMsg(locale, 'common.copied'));
+                        }}
+                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-amber-500/40 bg-card px-2 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover"
+                      >
+                        <Copy className="size-3" />
+                        <span>{formatMsg(locale, 'runners.copyJoinCommandBtn')}</span>
+                      </button>
+                    </div>
+                  )}
                   {r.update_error && (
                     <p className="mt-1 truncate text-ui-xs text-destructive">{r.update_error}</p>
                   )}

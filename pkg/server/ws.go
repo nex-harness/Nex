@@ -39,8 +39,10 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.verifyRunnerAuthToken(ctx, hello.RunnerID, hello.AuthToken) {
-		_ = ws.Close(websocket.StatusPolicyViolation, "unauthorized runner token")
-		return
+		if !(strings.TrimSpace(hello.AuthToken) == "" && isDirectLocalHostRunnerRequest(r, hello.Hostname)) {
+			_ = ws.Close(websocket.StatusPolicyViolation, "unauthorized runner token")
+			return
+		}
 	}
 
 	now := time.Now().UnixMilli()
@@ -78,6 +80,7 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 		Elevated:        hello.Elevated,
 		UpdatePhase:     hello.UpdateState,
 		UpdateError:     hello.UpdateError,
+		Online:          true,
 	}
 	s.evaluateRunnerUpdate(ctx, meta)
 	s.setRunnerRuntimeMeta(meta)
@@ -190,12 +193,34 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 					cur.UpdatePhase = st.Phase
 					cur.UpdateProgress = st.ProgressPct
 					cur.UpdateError = st.Error
+					cur.UpdatePhaseUpdatedAt = time.Now()
 					if st.Phase == "succeeded" {
 						cur.UpdateError = ""
 					}
 				}
 				s.mu.Unlock()
 				s.broadcastRunnerStatus(ctx, hello.RunnerID, "online")
+				if st.Phase == "succeeded" {
+					rid := hello.RunnerID
+					go func() {
+						timer := time.NewTimer(runnerSucceededBadgeTTL)
+						defer timer.Stop()
+						<-timer.C
+						s.mu.Lock()
+						cur := s.runnerMeta[rid]
+						changed := false
+						if cur != nil && cur.UpdatePhase == "succeeded" && time.Since(cur.UpdatePhaseUpdatedAt) >= runnerSucceededBadgeTTL {
+							cur.UpdatePhase = ""
+							cur.UpdateProgress = 0
+							changed = true
+						}
+						online := s.runners[rid] != nil
+						s.mu.Unlock()
+						if changed && online {
+							s.broadcastRunnerStatus(context.Background(), rid, "online")
+						}
+					}()
+				}
 			}
 
 		case protocol.TypePTYClosed:

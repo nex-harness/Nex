@@ -7,7 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -76,6 +78,37 @@ func (s *Server) effectiveRunnerPairingSecret(ctx context.Context) (secret strin
 		return strings.TrimSpace(s.cfg.PairingSecret), strings.TrimSpace(s.cfg.PairingSecret) != ""
 	}
 	return cfg.PairingSecret, cfg.RequireAuth
+}
+
+// isDirectLocalHostRunnerRequest returns true ONLY when a runner connects directly over
+// loopback (127.0.0.1 / ::1) with no reverse-proxy forwarding headers AND advertises
+// the exact same OS hostname as this nex-server process. This lets a co-located local
+// runner (e.g. systemd nex-v3-runner alongside nex-v3-server) stay connected even when
+// pairing auth is enabled, without weakening auth for remote or proxied connections.
+func isDirectLocalHostRunnerRequest(r *http.Request, reportedHostname string) bool {
+	if r == nil {
+		return false
+	}
+	if strings.TrimSpace(r.Header.Get("X-Forwarded-For")) != "" ||
+		strings.TrimSpace(r.Header.Get("X-Real-IP")) != "" ||
+		strings.TrimSpace(r.Header.Get("Forwarded")) != "" ||
+		strings.TrimSpace(r.Header.Get("CF-Connecting-IP")) != "" {
+		return false
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err != nil {
+		host = strings.TrimSpace(r.RemoteAddr)
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return false
+	}
+	serverHost, err := os.Hostname()
+	if err != nil || strings.TrimSpace(serverHost) == "" {
+		return false
+	}
+	rep := strings.TrimSpace(reportedHostname)
+	return rep != "" && strings.EqualFold(rep, strings.TrimSpace(serverHost))
 }
 
 // verifyRunnerAuthToken validates a runner handshake/download token against:
