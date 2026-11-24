@@ -3089,15 +3089,31 @@ export function ConversationPane() {
     }
   }, []);
 
-  // Reset bottom-following intent & tail window when switching sessions
-  useEffect(() => {
+  // Reset bottom-following intent & tail window synchronously BEFORE paint when switching sessions
+  useLayoutEffect(() => {
     followingRef.current = true;
+    prependScrollAnchorRef.current = null;
     setScrolledUp(false);
     setVisibleTurnLimit(INITIAL_VISIBLE_TURNS);
     setPendingJumpId('');
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
+    const rafId = window.requestAnimationFrame(() => {
+      if (!followingRef.current) return;
+      const cur = scrollRef.current;
+      if (cur) cur.scrollTop = cur.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(rafId);
   }, [activeSessionId]);
+
+  // Keep scroll pinned to bottom synchronously when async history replaces/populates items for the active session.
+  useLayoutEffect(() => {
+    if (!followingRef.current || prependScrollAnchorRef.current) return;
+    const el = scrollRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [items, visibleItems.length]);
 
   // Nex ResizeObserver Scroll Anchor: tokens never drive scroll directly; ResizeObserver sticks cleanly when height grows!
   useEffect(() => {
@@ -3470,7 +3486,7 @@ export function ConversationPane() {
               setActiveTurnId(closestId);
             }
           }}
-          className={`absolute inset-0 overflow-y-auto px-4 sm:px-8 transition-[padding] duration-200 ease-out ${statusTopClearanceClass} ${statusRightReserveClass}`}
+          className={`absolute inset-0 overflow-y-auto px-4 sm:px-8 [overflow-anchor:none] transition-[padding] duration-200 ease-out ${statusTopClearanceClass} ${statusRightReserveClass}`}
         >
           {isDraft ? (
             <div className="flex h-full flex-col items-center justify-center pb-10">
