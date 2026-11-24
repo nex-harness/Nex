@@ -20,12 +20,13 @@ type bgTask struct {
 	cancel    context.CancelFunc
 	doneCh    chan struct{}
 
-	mu       sync.Mutex
-	buf      strings.Builder
-	readPos  int
-	finished bool
-	exitCode int
-	errMsg   string
+	mu           sync.Mutex
+	buf          strings.Builder
+	readPos      int
+	finished     bool
+	exitCode     int
+	errMsg       string
+	streamFilter *StreamFilter
 }
 
 func (t *bgTask) Write(p []byte) (int, error) {
@@ -36,7 +37,13 @@ func (t *bgTask) Write(p []byte) (int, error) {
 	defer t.mu.Unlock()
 	// Cap in-memory buffer at 512KB (keep newest tail)
 	const maxBuf = 512 * 1024
-	t.buf.Write(p)
+	if t.streamFilter != nil {
+		if clean := t.streamFilter.Push(string(p)); clean != "" {
+			t.buf.WriteString(clean)
+		}
+	} else {
+		t.buf.Write(p)
+	}
 	if t.buf.Len() > maxBuf {
 		s := t.buf.String()
 		drop := len(s) - maxBuf
@@ -52,14 +59,23 @@ func (t *bgTask) Write(p []byte) (int, error) {
 
 // BackgroundTaskManager supervises long-running background bash commands within a session.
 type BackgroundTaskManager struct {
-	mu    sync.Mutex
-	tasks map[string]*bgTask
+	mu       sync.Mutex
+	tasks    map[string]*bgTask
+	extraEnv map[string]string
+	redactor *SecretRedactor
 }
 
 func NewBackgroundTaskManager() *BackgroundTaskManager {
 	return &BackgroundTaskManager{
 		tasks: make(map[string]*bgTask),
 	}
+}
+
+func (m *BackgroundTaskManager) SetExtraEnv(env map[string]string, redactor *SecretRedactor) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.extraEnv = env
+	m.redactor = redactor
 }
 
 // Start launches command asynchronously and returns its task ID.
@@ -73,24 +89,35 @@ func (m *BackgroundTaskManager) Start(workDir, command string, timeout time.Dura
 		runCtx, cancel = context.WithCancel(context.Background())
 	}
 
-	task := &bgTask{
-		id:        id,
-		command:   command,
-		workDir:   workDir,
-		startedAt: time.Now(),
-		cancel:    cancel,
-		doneCh:    make(chan struct{}),
-	}
-
 	m.mu.Lock()
+	extraEnv := m.extraEnv
+	redactor := m.redactor
+	var sf *StreamFilter
+	if redactor != nil {
+		sf = NewStreamFilter(redactor)
+	}
+	task := &bgTask{
+		id:           id,
+		command:      command,
+		workDir:      workDir,
+		startedAt:    time.Now(),
+		cancel:       cancel,
+		doneCh:       make(chan struct{}),
+		streamFilter: sf,
+	}
 	m.tasks[id] = task
 	m.mu.Unlock()
 
 	go func() {
 		defer close(task.doneCh)
 		defer cancel()
-		exitCode, err := runPlatformShellCommand(runCtx, workDir, command, task)
+		exitCode, err := runPlatformShellCommand(runCtx, workDir, command, task, extraEnv)
 		task.mu.Lock()
+		if task.streamFilter != nil {
+			if rem := task.streamFilter.Flush(); rem != "" {
+				task.buf.WriteString(rem)
+			}
+		}
 		task.finished = true
 		task.exitCode = exitCode
 		if err != nil {

@@ -318,6 +318,22 @@ func (s *Server) buildConfigSnapshot(ctx context.Context, runnerID string) (*pro
 		}
 	}
 
+	allCreds, _ := s.store.ListCredentials(ctx)
+	var creds []store.CredentialRecord
+	for _, c := range allCreds {
+		if !c.Enabled {
+			continue
+		}
+		if len(c.TargetRunners) > 0 {
+			if !matchesRunner("runner", c.TargetRunners) {
+				continue
+			}
+		} else if c.Scope == "runner" {
+			continue
+		}
+		creds = append(creds, s.store.DecryptCredentialForRunner(c, runnerID))
+	}
+
 	skillVisRules, _ := s.store.GetSkillVisibilityRules(ctx)
 	memories, _ := s.store.ListMemories(ctx, "")
 	prefs, _ := s.store.GetUserPreferences(ctx)
@@ -337,6 +353,8 @@ func (s *Server) buildConfigSnapshot(ctx context.Context, runnerID string) (*pro
 		Plugins:              plugins,
 		MCPServers:           mcps,
 		CronJobs:             crons,
+		Credentials:          creds,
+		CredentialsSynced:    true,
 		Memories:             memories,
 		MemoriesSynced:       true,
 		GlobalInstructions:   globalInstructions,

@@ -21,6 +21,7 @@ import {
   ChatImageBlock,
   ClientNotificationPayload,
   ComposerAttachment,
+  CredentialRecord,
   CronJobRecord,
   DirEntry,
   FilePreview,
@@ -142,6 +143,7 @@ const VALID_SETTINGS_SECTIONS = new Set<SettingsSectionId>([
   'appearance',
   'providers',
   'runners',
+  'credentials',
   'remote',
   'browser',
   'agents',
@@ -416,6 +418,7 @@ export interface AppState {
   plugins: PluginRecord[];
   mcpServers: MCPServerRecord[];
   cronJobs: CronJobRecord[];
+  credentials: CredentialRecord[];
   todaySummary: UsageSummary | null;
 
   selectedRunnerId: string;
@@ -691,6 +694,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   plugins: [],
   mcpServers: [],
   cronJobs: [],
+  credentials: [],
   todaySummary: null,
 
   selectedRunnerId: '',
@@ -1768,7 +1772,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   },
 
   refreshRegistries: async () => {
-    const [agentProfiles, memories, sshTargets, skills, plugins, mcpServers, cronJobs] = await Promise.all([
+    const [agentProfiles, memories, sshTargets, skills, plugins, mcpServers, cronJobs, credentials] = await Promise.all([
       apiFetch<AgentProfile[]>('/api/v1/agents').catch(() => []),
       apiFetch<MemoryRecord[]>('/api/v1/memories').catch(() => []),
       apiFetch<SSHTargetRecord[]>('/api/v1/ssh/targets').catch(() => []),
@@ -1776,6 +1780,7 @@ export const useNexStore = create<AppState>((set, get) => ({
       apiFetch<PluginRecord[]>('/api/v1/plugins').catch(() => []),
       apiFetch<MCPServerRecord[]>('/api/v1/mcp').catch(() => []),
       apiFetch<CronJobRecord[]>('/api/v1/cron').catch(() => []),
+      apiFetch<CredentialRecord[]>('/api/v1/credentials').catch(() => []),
     ]);
     set({
       agentProfiles: agentProfiles || [],
@@ -1785,6 +1790,7 @@ export const useNexStore = create<AppState>((set, get) => ({
       plugins: plugins || [],
       mcpServers: mcpServers || [],
       cronJobs: cronJobs || [],
+      credentials: credentials || [],
     });
   },
 

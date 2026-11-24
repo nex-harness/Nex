@@ -66,9 +66,10 @@ type SessionOptions struct {
 	Arch     string // GOARCH; defaults to runtime.GOARCH
 	Now      time.Time
 
-	Skills         []SkillInfo
-	Memories       []string
-	MCPNamespaces  string
+	Skills            []SkillInfo
+	Memories          []string
+	ConfiguredEnvKeys []string
+	MCPNamespaces     string
 	SubagentType   string // "" = main agent; "explore"/"worker" = subagent role
 	CustomPrompt   string // optional agent-profile instructions appended to the core
 	PermissionMode string // "full_access" | "interactive" | "autonomous" | "read_only" | "plan"
@@ -253,6 +254,9 @@ func buildMetaContext(opts SessionOptions) string {
 	sb.WriteString("- OS/Arch: " + platform + "/" + arch)
 	if mode := strings.TrimSpace(opts.PermissionMode); mode != "" {
 		sb.WriteString("\n- Permission mode: " + mode)
+	}
+	if len(opts.ConfiguredEnvKeys) > 0 {
+		sb.WriteString("\n- Configured runtime CLI env keys: " + strings.Join(opts.ConfiguredEnvKeys, ", ") + " (injected automatically into bash/CLI processes and redacted from output; do not run env/printenv to inspect secret values)")
 	}
 
 	if mode := strings.TrimSpace(opts.PermissionMode); mode == "read_only" || mode == "plan" {

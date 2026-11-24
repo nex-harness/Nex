@@ -702,7 +702,8 @@ export function SkillsAndPluginsSection({
 /* -------------------------------------------------------------------------- */
 
 export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void }) {
-  const { locale, runners, cronJobs, selectedRunnerId, refreshRegistries } = useNexStore();
+  const { locale, runners, cronJobs, credentials, selectedRunnerId, refreshRegistries } = useNexStore();
+  const isZh = locale === 'zh-CN';
 
   const [runnerId, setRunnerId] = useState(selectedRunnerId || runners[0]?.id || '');
   const [title, setTitle] = useState(
@@ -712,6 +713,24 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
   const [prompt, setPrompt] = useState(
     formatMsg(locale, 'capabilities.runTheTestSuiteAnd'),
   );
+  const [selectedCredIds, setSelectedCredIds] = useState<string[]>([]);
+
+  const eligibleCronCreds = useMemo(() => {
+    const target = runnerId || runners[0]?.id || '';
+    return credentials.filter((c) => {
+      if (!c.enabled || c.usage_policy === 'chat_only') return false;
+      if (c.target_runners && c.target_runners.length > 0 && target && !c.target_runners.includes(target)) {
+        return false;
+      }
+      return true;
+    });
+  }, [credentials, runnerId, runners]);
+
+  const toggleCred = (id: string) => {
+    setSelectedCredIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
 
   const createCron = async () => {
     const targetRunner = runnerId || runners[0]?.id || 'local';
@@ -724,10 +743,12 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local',
         prompt,
         permission_mode: 'autonomous',
+        credential_ids: selectedCredIds,
         recurring: true,
         enabled: true,
       }),
     });
+    setSelectedCredIds([]);
     await refreshRegistries();
     onFlash(
       formatMsg(locale, 'capabilities.automationScheduledOnRunner', { title }),
@@ -784,6 +805,37 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
               className={areaClass}
             />
           </Field>
+          {eligibleCronCreds.length > 0 && (
+            <Field
+              label={isZh ? '授权凭证分组（可选）' : 'Authorized Credential Groups (optional)'}
+              description={
+                isZh
+                  ? '已自动过滤「仅交互对话」凭证；勾选「仅定时任务显式授权」的分组以在此任务中注入。'
+                  : 'Chat-only credentials are excluded; select cron-explicit groups to grant them to this schedule.'
+              }
+            >
+              <div className="flex flex-wrap gap-2">
+                {eligibleCronCreds.map((c) => {
+                  const active = selectedCredIds.includes(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => toggleCred(c.id)}
+                      className={`rounded-lg border px-2.5 py-1 text-ui-xs transition-colors ${
+                        active
+                          ? 'border-brand-blue bg-brand-blue/10 font-medium text-foreground'
+                          : 'border-border bg-surface text-foreground-subtle hover:bg-hover'
+                      }`}
+                    >
+                      {c.name}
+                      {c.usage_policy === 'cron_explicit' ? (isZh ? ' (显式)' : ' (explicit)') : ''}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+          )}
           <div className="flex justify-end">
             <SaveButton
               label={formatMsg(locale, 'capabilities.createAutomation')}

@@ -136,11 +136,12 @@ func BuildPromptForCron(job store.CronJobRecord) protocol.PromptPayload {
 		perm = "autonomous"
 	}
 	return protocol.PromptPayload{
-		SessionID:      fmt.Sprintf("sess_cron_%s_%d", job.ID, time.Now().UnixNano()),
-		RunnerID:       job.RunnerID,
-		WorkspacePath:  job.WorkspacePath,
-		PermissionMode: perm,
-		Text:           job.Prompt,
+		SessionID:         fmt.Sprintf("sess_cron_%s_%d", job.ID, time.Now().UnixNano()),
+		RunnerID:          job.RunnerID,
+		WorkspacePath:     job.WorkspacePath,
+		PermissionMode:    perm,
+		CronCredentialIDs: job.CredentialIDs,
+		Text:              job.Prompt,
 	}
 }
 

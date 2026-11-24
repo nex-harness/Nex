@@ -479,21 +479,22 @@ func (s *Store) SetMCPServerVisibility(ctx context.Context, name, scopeTarget, w
 }
 
 type CronJobRecord struct {
-	ID             string `json:"id"`
-	RunnerID       string `json:"runner_id"`
-	Title          string `json:"title"`
-	CronExpr       string `json:"cron_expr"`
-	Timezone       string `json:"timezone"`
-	Prompt         string `json:"prompt"`
-	WorkspacePath  string `json:"workspace_path"`
-	PermissionMode string `json:"permission_mode"`
-	Recurring      bool   `json:"recurring"`
-	MaxRuns        int    `json:"max_runs"`
-	RunCount       int    `json:"run_count"`
-	Enabled        bool   `json:"enabled"`
-	LastRunAt      int64  `json:"last_run_at"`
-	NextRunAt      int64  `json:"next_run_at"`
-	UpdatedAt      int64  `json:"updated_at"`
+	ID             string   `json:"id"`
+	RunnerID       string   `json:"runner_id"`
+	Title          string   `json:"title"`
+	CronExpr       string   `json:"cron_expr"`
+	Timezone       string   `json:"timezone"`
+	Prompt         string   `json:"prompt"`
+	WorkspacePath  string   `json:"workspace_path"`
+	PermissionMode string   `json:"permission_mode"`
+	CredentialIDs  []string `json:"credential_ids,omitempty"`
+	Recurring      bool     `json:"recurring"`
+	MaxRuns        int      `json:"max_runs"`
+	RunCount       int      `json:"run_count"`
+	Enabled        bool     `json:"enabled"`
+	LastRunAt      int64    `json:"last_run_at"`
+	NextRunAt      int64    `json:"next_run_at"`
+	UpdatedAt      int64    `json:"updated_at"`
 }
 
 func (s *Store) UpsertCronJob(ctx context.Context, j CronJobRecord) (CronJobRecord, error) {
@@ -507,17 +508,22 @@ func (s *Store) UpsertCronJob(ctx context.Context, j CronJobRecord) (CronJobReco
 		j.PermissionMode = "autonomous"
 	}
 	j.UpdatedAt = time.Now().UnixMilli()
+	credJSON, _ := json.Marshal(j.CredentialIDs)
+	if len(credJSON) == 0 || string(credJSON) == "null" {
+		credJSON = []byte("[]")
+	}
 	_, err := s.mainDB.ExecContext(ctx, `
-		INSERT INTO cron_jobs (id, runner_id, title, cron_expr, timezone, prompt, workspace_path, permission_mode, recurring, max_runs, run_count, enabled, last_run_at, next_run_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO cron_jobs (id, runner_id, title, cron_expr, timezone, prompt, workspace_path, permission_mode, credential_ids_json, recurring, max_runs, run_count, enabled, last_run_at, next_run_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			runner_id=excluded.runner_id, title=excluded.title, cron_expr=excluded.cron_expr,
 			timezone=excluded.timezone, prompt=excluded.prompt, workspace_path=excluded.workspace_path,
-			permission_mode=excluded.permission_mode, recurring=excluded.recurring, max_runs=excluded.max_runs,
+			permission_mode=excluded.permission_mode, credential_ids_json=excluded.credential_ids_json,
+			recurring=excluded.recurring, max_runs=excluded.max_runs,
 			run_count=excluded.run_count, enabled=excluded.enabled, last_run_at=excluded.last_run_at,
 			next_run_at=excluded.next_run_at, updated_at=excluded.updated_at
 	`, j.ID, j.RunnerID, j.Title, j.CronExpr, j.Timezone, j.Prompt, j.WorkspacePath, j.PermissionMode,
-		b2i(j.Recurring), j.MaxRuns, j.RunCount, b2i(j.Enabled), j.LastRunAt, j.NextRunAt, j.UpdatedAt)
+		string(credJSON), b2i(j.Recurring), j.MaxRuns, j.RunCount, b2i(j.Enabled), j.LastRunAt, j.NextRunAt, j.UpdatedAt)
 	if err == nil {
 		_, _ = s.BumpConfigRev(ctx)
 	}
@@ -533,7 +539,7 @@ func (s *Store) DeleteCronJob(ctx context.Context, id string) error {
 }
 
 func (s *Store) ListCronJobs(ctx context.Context, runnerID string) ([]CronJobRecord, error) {
-	q := `SELECT id, runner_id, title, cron_expr, timezone, prompt, workspace_path, permission_mode, recurring, max_runs, run_count, enabled, last_run_at, next_run_at, updated_at FROM cron_jobs`
+	q := `SELECT id, runner_id, title, cron_expr, timezone, prompt, workspace_path, permission_mode, credential_ids_json, recurring, max_runs, run_count, enabled, last_run_at, next_run_at, updated_at FROM cron_jobs`
 	var args []any
 	if runnerID != "" {
 		q += ` WHERE runner_id = ?`
@@ -548,11 +554,13 @@ func (s *Store) ListCronJobs(ctx context.Context, runnerID string) ([]CronJobRec
 	var out []CronJobRecord
 	for rows.Next() {
 		var j CronJobRecord
+		var credS string
 		var rec, en int
 		if err := rows.Scan(&j.ID, &j.RunnerID, &j.Title, &j.CronExpr, &j.Timezone, &j.Prompt, &j.WorkspacePath, &j.PermissionMode,
-			&rec, &j.MaxRuns, &j.RunCount, &en, &j.LastRunAt, &j.NextRunAt, &j.UpdatedAt); err != nil {
+			&credS, &rec, &j.MaxRuns, &j.RunCount, &en, &j.LastRunAt, &j.NextRunAt, &j.UpdatedAt); err != nil {
 			return nil, err
 		}
+		_ = json.Unmarshal([]byte(credS), &j.CredentialIDs)
 		j.Recurring = rec == 1
 		j.Enabled = en == 1
 		out = append(out, j)

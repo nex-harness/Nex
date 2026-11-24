@@ -245,6 +245,44 @@ export interface MCPServerRecord {
   last_checked_at?: number;
 }
 
+export interface CredentialEntry {
+  key: string;
+  value?: string;
+  value_hint?: string;
+  has_value?: boolean;
+  clear_value?: boolean;
+  note?: string;
+}
+
+export type CredentialStorageMode = 'server_synced' | 'runner_local';
+export type CredentialUsagePolicy = 'all' | 'chat_only' | 'cron_explicit';
+export type CredentialScope = 'global' | 'workspace' | 'runner';
+
+export interface CredentialRecord {
+  id: string;
+  name: string;
+  description?: string;
+  preset?: string;
+  storage_mode: CredentialStorageMode;
+  usage_policy: CredentialUsagePolicy;
+  scope: CredentialScope;
+  workspace_path?: string;
+  target_runners?: string[];
+  entries: CredentialEntry[];
+  runner_overrides?: Record<string, CredentialEntry[]>;
+  probe_command?: string;
+  enabled: boolean;
+  updated_at?: number;
+}
+
+export interface CredentialProbeResult {
+  ok: boolean;
+  exit_code: number;
+  output?: string;
+  error?: string;
+  latency_ms: number;
+}
+
 export interface CronJobRecord {
   id?: string;
   runner_id: string;
@@ -254,6 +292,7 @@ export interface CronJobRecord {
   prompt: string;
   workspace_path: string;
   permission_mode: string;
+  credential_ids?: string[];
   recurring: boolean;
   max_runs: number;
   run_count?: number;
@@ -639,6 +678,7 @@ export type SettingsSectionId =
   | 'appearance'
   | 'providers'
   | 'runners'
+  | 'credentials'
   | 'remote'
   | 'browser'
   | 'agents'

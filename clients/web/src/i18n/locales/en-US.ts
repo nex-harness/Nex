@@ -153,6 +153,8 @@ export const enUS = {
   "settings.modelProvider.desc": "Manage custom model providers. Once configured, they can be selected during chat.",
   "settings.remoteDevices.title": "Remote devices",
   "settings.remoteDevices.desc": "Manage your connected macOS, Linux, and Windows Runners.",
+  "settings.credentials.title": "Credentials & Env",
+  "settings.credentials.desc": "Encrypted CLI credentials and environment variables with multi-runner scoping, cron isolation, and output redaction.",
   "settings.subagents.title": "Subagents",
   "settings.subagents.desc": "Manage subagent profiles, allowed tools, and worktree isolation.",
   "settings.memories.title": "Memory",

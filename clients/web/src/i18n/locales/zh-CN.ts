@@ -155,6 +155,8 @@ export const zhCN = {
   "settings.modelProvider.desc": "管理自定义模型供应商，配置后可在聊天时选择使用。",
   "settings.remoteDevices.title": "远程设备",
   "settings.remoteDevices.desc": "管理已连接的 macOS、Linux 与 Windows Runner 节点。",
+  "settings.credentials.title": "凭证与环境变量",
+  "settings.credentials.desc": "加密管理 CLI 鉴权凭证与环境变量，支持多 Runner 定向分发、本地直存、定时任务隔离与输出自动脱敏。",
   "settings.subagents.title": "子智能体",
   "settings.subagents.desc": "管理 Agent 运行时消费的子智能体角色、工具权限与 Worktree 隔离策略。",
   "settings.memories.title": "长期记忆",
