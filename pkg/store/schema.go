@@ -129,21 +129,48 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
 );
 
 CREATE TABLE IF NOT EXISTS cron_jobs (
-    id              TEXT PRIMARY KEY,
-    runner_id       TEXT NOT NULL,
-    title           TEXT NOT NULL,
-    cron_expr       TEXT NOT NULL,
-    timezone        TEXT NOT NULL DEFAULT 'Local',
-    prompt          TEXT NOT NULL,
-    workspace_path  TEXT NOT NULL DEFAULT '',
-    permission_mode TEXT NOT NULL DEFAULT 'autonomous',
-    recurring       INTEGER NOT NULL DEFAULT 1,
-    max_runs        INTEGER NOT NULL DEFAULT 0,
-    run_count       INTEGER NOT NULL DEFAULT 0,
-    enabled         INTEGER NOT NULL DEFAULT 1,
-    last_run_at     INTEGER NOT NULL DEFAULT 0,
-    next_run_at     INTEGER NOT NULL DEFAULT 0,
-    updated_at      INTEGER NOT NULL
+    id                  TEXT PRIMARY KEY,
+    runner_id           TEXT NOT NULL,
+    title               TEXT NOT NULL,
+    cron_expr           TEXT NOT NULL,
+    timezone            TEXT NOT NULL DEFAULT 'Local',
+    prompt              TEXT NOT NULL,
+    workspace_path      TEXT NOT NULL DEFAULT '',
+    permission_mode     TEXT NOT NULL DEFAULT 'autonomous',
+    credential_ids_json TEXT NOT NULL DEFAULT '[]',
+    recurring           INTEGER NOT NULL DEFAULT 1,
+    max_runs            INTEGER NOT NULL DEFAULT 0,
+    run_count           INTEGER NOT NULL DEFAULT 0,
+    enabled             INTEGER NOT NULL DEFAULT 1,
+    last_run_at         INTEGER NOT NULL DEFAULT 0,
+    next_run_at         INTEGER NOT NULL DEFAULT 0,
+    updated_at          INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS credentials (
+    id                    TEXT PRIMARY KEY,
+    name                  TEXT UNIQUE NOT NULL,
+    description           TEXT NOT NULL DEFAULT '',
+    preset                TEXT NOT NULL DEFAULT '',
+    storage_mode          TEXT NOT NULL DEFAULT 'server_synced',
+    usage_policy          TEXT NOT NULL DEFAULT 'all',
+    scope                 TEXT NOT NULL DEFAULT 'global',
+    workspace_path        TEXT NOT NULL DEFAULT '',
+    target_runners_json   TEXT NOT NULL DEFAULT '[]',
+    entries_json          TEXT NOT NULL DEFAULT '[]',
+    runner_overrides_json TEXT NOT NULL DEFAULT '{}',
+    probe_command         TEXT NOT NULL DEFAULT '',
+    enabled               INTEGER NOT NULL DEFAULT 1,
+    updated_at            INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS credential_local_values (
+    credential_id TEXT NOT NULL,
+    env_key       TEXT NOT NULL,
+    encrypted_val TEXT NOT NULL,
+    value_hint    TEXT NOT NULL DEFAULT '',
+    updated_at    INTEGER NOT NULL,
+    PRIMARY KEY (credential_id, env_key)
 );
 
 CREATE TABLE IF NOT EXISTS sessions (

@@ -78,12 +78,12 @@ func assignPIDToJob(job windows.Handle, pid int) {
 	_ = windows.AssignProcessToJobObject(job, procHandle)
 }
 
-func runPlatformShellCommand(ctx context.Context, dir string, command string, out io.Writer) (int, error) {
+func runPlatformShellCommand(ctx context.Context, dir string, command string, out io.Writer, extraEnv map[string]string) (int, error) {
 	cmd := buildWindowsCommand(command)
 	if dir != "" {
 		cmd.Dir = dir
 	}
-	cmd.Env = os.Environ()
+	cmd.Env = mergeProcessEnv(os.Environ(), extraEnv)
 
 	job, _ := createKillOnCloseJob()
 	defer func() {

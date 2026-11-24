@@ -29,15 +29,27 @@ type bashArgs struct {
 	RunInBackground bool   `json:"run_in_background,omitempty"`
 }
 
-// BashTool executes shell commands with streaming output and cross-platform process-tree cleanup.
+// BashTool executes shell commands with streaming output, scoped env injection, secret redaction,
+// and cross-platform process-tree cleanup.
 type BashTool struct {
-	bgMgr *BackgroundTaskManager
+	bgMgr    *BackgroundTaskManager
+	extraEnv map[string]string
+	redactor *SecretRedactor
 }
 
 func NewBashTool() *BashTool { return &BashTool{} }
 
 func NewBashToolWithBackground(mgr *BackgroundTaskManager) *BashTool {
 	return &BashTool{bgMgr: mgr}
+}
+
+// SetExtraEnv configures per-session injected environment variables and automatically enables output redaction.
+func (t *BashTool) SetExtraEnv(env map[string]string) {
+	t.extraEnv = env
+	t.redactor = NewSecretRedactor(env)
+	if t.bgMgr != nil {
+		t.bgMgr.SetExtraEnv(env, t.redactor)
+	}
 }
 
 func (t *BashTool) Name() string     { return "bash" }
@@ -117,10 +129,10 @@ func (t *BashTool) Execute(ctx context.Context, workDir string, rawArgs json.Raw
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
 	defer cancel()
 
-	collector := newBoundedCollector(maxInlineOutputBytes, onUpdate)
+	collector := newBoundedCollector(maxInlineOutputBytes, onUpdate, t.redactor)
 	defer collector.Close()
 
-	exitCode, runErr := runPlatformShellCommand(runCtx, execDir, args.Command, collector)
+	exitCode, runErr := runPlatformShellCommand(runCtx, execDir, args.Command, collector, t.extraEnv)
 	timedOut := errors.Is(runCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil
 	canceled := ctx.Err() != nil
 
@@ -177,25 +189,33 @@ func (t *BashTool) Execute(ctx context.Context, workDir string, rawArgs json.Raw
 
 // boundedCollector streams live chunks via onUpdate while keeping head+tail in RAM and spilling huge outputs to disk.
 type boundedCollector struct {
-	mu        sync.Mutex
-	maxBytes  int
-	headLimit int
-	tailLimit int
-	head      bytes.Buffer
-	tail      []byte
-	total     int
-	spillFile *os.File
-	spillPath string
-	onUpdate  UpdateFunc
+	mu           sync.Mutex
+	maxBytes     int
+	headLimit    int
+	tailLimit    int
+	head         bytes.Buffer
+	tail         []byte
+	total        int
+	spillFile    *os.File
+	spillPath    string
+	onUpdate     UpdateFunc
+	redactor     *SecretRedactor
+	streamFilter *StreamFilter
 }
 
-func newBoundedCollector(maxBytes int, onUpdate UpdateFunc) *boundedCollector {
+func newBoundedCollector(maxBytes int, onUpdate UpdateFunc, redactor *SecretRedactor) *boundedCollector {
 	half := maxBytes / 2
+	var sf *StreamFilter
+	if redactor != nil {
+		sf = NewStreamFilter(redactor)
+	}
 	return &boundedCollector{
-		maxBytes:  maxBytes,
-		headLimit: half,
-		tailLimit: maxBytes - half,
-		onUpdate:  onUpdate,
+		maxBytes:     maxBytes,
+		headLimit:    half,
+		tailLimit:    maxBytes - half,
+		onUpdate:     onUpdate,
+		redactor:     redactor,
+		streamFilter: sf,
 	}
 }
 
@@ -203,9 +223,29 @@ func (c *boundedCollector) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	chunkStr := string(p)
+	origLen := len(p)
+	data := p
+	var emitStr string
 
 	c.mu.Lock()
+	if c.streamFilter != nil {
+		emitStr = c.streamFilter.Push(string(p))
+		data = []byte(emitStr)
+	} else {
+		emitStr = string(p)
+	}
+	if len(data) > 0 {
+		c.writeCleanLocked(data)
+	}
+	c.mu.Unlock()
+
+	if c.onUpdate != nil && emitStr != "" {
+		c.onUpdate(emitStr)
+	}
+	return origLen, nil
+}
+
+func (c *boundedCollector) writeCleanLocked(p []byte) {
 	n := len(p)
 	c.total += n
 
@@ -226,7 +266,6 @@ func (c *boundedCollector) Write(p []byte) (int, error) {
 			c.spillFile = f
 			c.spillPath = f.Name()
 			_, _ = c.spillFile.Write(c.head.Bytes())
-			// Write existing tail excluding current p which is written below
 			prevTailLen := len(c.tail) - n
 			if prevTailLen > 0 {
 				_, _ = c.spillFile.Write(c.tail[:prevTailLen])
@@ -236,12 +275,6 @@ func (c *boundedCollector) Write(p []byte) (int, error) {
 	if c.spillFile != nil {
 		_, _ = c.spillFile.Write(p)
 	}
-	c.mu.Unlock()
-
-	if c.onUpdate != nil {
-		c.onUpdate(chunkStr)
-	}
-	return n, nil
 }
 
 func (c *boundedCollector) appendTailLocked(p []byte) {
@@ -259,25 +292,45 @@ func (c *boundedCollector) appendTailLocked(p []byte) {
 }
 
 func (c *boundedCollector) Finalize() (output string, spillPath string, total int) {
+	var flushed string
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	if c.streamFilter != nil {
+		flushed = c.streamFilter.Flush()
+		if flushed != "" {
+			c.writeCleanLocked([]byte(flushed))
+		}
+	}
 	if c.spillFile != nil {
 		_ = c.spillFile.Sync()
 		_ = c.spillFile.Close()
 		c.spillFile = nil
 	}
+	var out string
 	if c.total <= c.maxBytes {
 		var b strings.Builder
 		b.Write(c.head.Bytes())
 		b.Write(c.tail)
-		return b.String(), "", c.total
+		out = b.String()
+		spillPath = ""
+	} else {
+		omitted := c.total - c.head.Len() - len(c.tail)
+		var b strings.Builder
+		b.Write(c.head.Bytes())
+		fmt.Fprintf(&b, "\n... [%d bytes omitted] ...\n", omitted)
+		b.Write(c.tail)
+		out = b.String()
+		spillPath = c.spillPath
 	}
-	omitted := c.total - c.head.Len() - len(c.tail)
-	var b strings.Builder
-	b.Write(c.head.Bytes())
-	fmt.Fprintf(&b, "\n... [%d bytes omitted] ...\n", omitted)
-	b.Write(c.tail)
-	return b.String(), c.spillPath, c.total
+	total = c.total
+	onUpd := c.onUpdate
+	if c.redactor != nil {
+		out = c.redactor.Redact(out)
+	}
+	c.mu.Unlock()
+	if onUpd != nil && flushed != "" {
+		onUpd(flushed)
+	}
+	return out, spillPath, total
 }
 
 func (c *boundedCollector) Close() {

@@ -359,8 +359,11 @@ func (n *Node) ExecutePrompt(
 
 	history := n.loadSessionMessages(parentCtx, sessRec.ID)
 
+	// Resolve scoped runtime CLI credentials & environment variables for this session / cron run
+	sessionEnv, configuredEnvKeys := n.store.ResolveEffectiveEnv(parentCtx, n.cfg.RunnerID, workDir, triggerSource, p.CronCredentialIDs)
+
 	// Build System Sections (stable cached core + Skills + MCP + volatile meta context)
-	sections := buildPromptSections(parentCtx, n, sessRec, workDir, triggerSource)
+	sections := buildPromptSections(parentCtx, n, sessRec, workDir, triggerSource, configuredEnvKeys)
 
 	sessionLookup := &runnerSessionLookup{node: n}
 	if refReminder := tools.BuildReferencedSessionReminder(parentCtx, sessionLookup, p.Text); refReminder != "" {
@@ -373,6 +376,13 @@ func (n *Node) ExecutePrompt(
 
 	sessionTools, bgCleanup := tools.DefaultCodingToolsWithCleanup()
 	defer bgCleanup()
+	if len(sessionEnv) > 0 {
+		for _, tl := range sessionTools {
+			if bt, ok := tl.(*tools.BashTool); ok {
+				bt.SetExtraEnv(sessionEnv)
+			}
+		}
+	}
 	memStore := &runnerMemoryStore{node: n}
 	sessionTools = append(sessionTools,
 		tools.NewAskUserQuestionTool(&sessionUIBridge{
@@ -735,12 +745,13 @@ func buildUserTurnText(raw string) (title, modelText string) {
 // buildPromptSections assembles the ordered system sections for a session. Child
 // sessions use the subagent prompt builder; everything else uses the main agent.
 // Skills and MCP namespaces are collected here so the cached core stays stable.
-func buildPromptSections(ctx context.Context, n *Node, sessRec *store.SessionRecord, workDir, triggerSource string) []ai.SystemSection {
+func buildPromptSections(ctx context.Context, n *Node, sessRec *store.SessionRecord, workDir, triggerSource string, configuredEnvKeys []string) []ai.SystemSection {
 	opts := prompts.SessionOptions{
-		RunnerID:       n.cfg.RunnerID,
-		WorkDir:        workDir,
-		PermissionMode: sessRec.PermissionMode,
-		Now:            time.Now(),
+		RunnerID:          n.cfg.RunnerID,
+		WorkDir:           workDir,
+		PermissionMode:    sessRec.PermissionMode,
+		ConfiguredEnvKeys: configuredEnvKeys,
+		Now:               time.Now(),
 	}
 
 	isSubagent := sessRec.Depth > 0 || triggerSource == "subagent"

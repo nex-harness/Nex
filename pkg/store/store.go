@@ -24,6 +24,7 @@ type Store struct {
 	blobsDir    string
 	mainDB      *sql.DB
 	archiveDB   *sql.DB
+	vaultKey    []byte
 	mu          sync.Mutex
 }
 
@@ -69,6 +70,14 @@ func Open(dataDir string) (*Store, error) {
 	_, _ = mainDB.Exec(`ALTER TABLE mcp_servers ADD COLUMN last_checked_at INTEGER NOT NULL DEFAULT 0`)
 	_, _ = mainDB.Exec(`ALTER TABLE sessions ADD COLUMN thinking_effort TEXT NOT NULL DEFAULT ''`)
 	_, _ = archiveDB.Exec(`ALTER TABLE sessions ADD COLUMN thinking_effort TEXT NOT NULL DEFAULT ''`)
+	_, _ = mainDB.Exec(`ALTER TABLE cron_jobs ADD COLUMN credential_ids_json TEXT NOT NULL DEFAULT '[]'`)
+
+	vaultKey, err := loadOrCreateVaultKey(dataDir)
+	if err != nil {
+		_ = mainDB.Close()
+		_ = archiveDB.Close()
+		return nil, err
+	}
 
 	return &Store{
 		dataDir:     dataDir,
@@ -77,6 +86,7 @@ func Open(dataDir string) (*Store, error) {
 		blobsDir:    blobsDir,
 		mainDB:      mainDB,
 		archiveDB:   archiveDB,
+		vaultKey:    vaultKey,
 	}, nil
 }
 

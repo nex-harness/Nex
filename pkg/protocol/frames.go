@@ -57,8 +57,10 @@ const (
 	TypeBlobData        = "blob.data"
 	TypeMCPRemoteCall   = "mcp.remote_call"
 	TypeMCPRemoteResult = "mcp.remote_result"
-	TypeSkillsDiscover  = "skills.discover"
-	TypeMCPProbe        = "mcp.probe"
+	TypeSkillsDiscover     = "skills.discover"
+	TypeMCPProbe           = "mcp.probe"
+	TypeCredentialLocalSet = "credential.local_set"
+	TypeCredentialProbe    = "credential.probe"
 
 	// Remote Workspace (Files Tree, Preview, Git Diff) & Remote PTY Control
 	TypeWorkspaceReq  = "workspace.req"
@@ -219,6 +221,8 @@ type ConfigSnapshot struct {
 	Plugins              []store.PluginRecord                 `json:"plugins,omitempty"`
 	MCPServers           []store.MCPServerRecord              `json:"mcp_servers,omitempty"`
 	CronJobs             []store.CronJobRecord                `json:"cron_jobs,omitempty"`
+	Credentials          []store.CredentialRecord             `json:"credentials,omitempty"`
+	CredentialsSynced    bool                                 `json:"credentials_synced,omitempty"`
 	Memories             []store.MemoryRecord                 `json:"memories,omitempty"`
 	MemoriesSynced       bool                                 `json:"memories_synced,omitempty"`
 	MemorySettings       *MemoryConfigSync                    `json:"memory_settings,omitempty"`
@@ -250,16 +254,46 @@ type ClientSubscribePayload struct {
 
 // PromptPayload starts or continues a conversation on a target Runner.
 type PromptPayload struct {
-	SessionID        string            `json:"session_id"`
-	RunnerID         string            `json:"runner_id"`
-	WorkspacePath    string            `json:"workspace_path,omitempty"`
-	AgentProfileSlug string            `json:"agent_profile_slug,omitempty"`
-	ProviderID       string            `json:"provider_id,omitempty"`
-	ModelID          string            `json:"model_id,omitempty"`
-	ThinkingEffort   ai.ThinkingEffort `json:"thinking_effort,omitempty"`
-	PermissionMode   string            `json:"permission_mode,omitempty"`
-	Text             string            `json:"text"`
-	Images           []ai.ContentBlock `json:"images,omitempty"`
+	SessionID         string            `json:"session_id"`
+	RunnerID          string            `json:"runner_id"`
+	WorkspacePath     string            `json:"workspace_path,omitempty"`
+	AgentProfileSlug  string            `json:"agent_profile_slug,omitempty"`
+	ProviderID        string            `json:"provider_id,omitempty"`
+	ModelID           string            `json:"model_id,omitempty"`
+	ThinkingEffort    ai.ThinkingEffort `json:"thinking_effort,omitempty"`
+	PermissionMode    string            `json:"permission_mode,omitempty"`
+	CronCredentialIDs []string          `json:"cron_credential_ids,omitempty"`
+	Text              string            `json:"text"`
+	Images            []ai.ContentBlock `json:"images,omitempty"`
+}
+
+// CredentialLocalSetPayload writes or clears a runner-local encrypted credential value directly on a target Runner.
+type CredentialLocalSetPayload struct {
+	CredentialID string            `json:"credential_id"`
+	Values       map[string]string `json:"values"` // envKey -> plaintext (empty string deletes key)
+}
+
+// CredentialLocalSetResult acknowledges a runner-local credential write with masked hints.
+type CredentialLocalSetResult struct {
+	OK    bool              `json:"ok"`
+	Hints map[string]string `json:"hints,omitempty"`
+	Error string            `json:"error,omitempty"`
+}
+
+// CredentialProbePayload asks a target Runner to run a read-only probe command with resolved credential env.
+type CredentialProbePayload struct {
+	CredentialID  string `json:"credential_id"`
+	WorkspacePath string `json:"workspace_path,omitempty"`
+	Command       string `json:"command"`
+}
+
+// CredentialProbeResult returns the redacted result of a credential probe command.
+type CredentialProbeResult struct {
+	OK        bool   `json:"ok"`
+	ExitCode  int    `json:"exit_code"`
+	Output    string `json:"output,omitempty"`
+	Error     string `json:"error,omitempty"`
+	LatencyMs int64  `json:"latency_ms"`
 }
 
 // SessionForkSyncPayload mirrors a server-forked session and its event snapshot into a Runner's local SQLite.

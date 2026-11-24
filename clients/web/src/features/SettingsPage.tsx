@@ -15,6 +15,7 @@ import {
   Globe,
   GripVertical,
   HardDrive,
+  KeyRound,
   Lock,
   LogOut,
   Monitor,
@@ -49,6 +50,7 @@ import {
   SkillsAndPluginsSection,
 } from './SettingsCapabilities';
 import { SettingsBrowserSection } from './SettingsBrowser';
+import { SettingsCredentialsSection } from './SettingsCredentials';
 import { ClassifierSettingsCard, ImageGenerationSettingsCard } from './SettingsMultimodal';
 import { SettingsRemoteAccessSection } from './SettingsRemoteAccess';
 import { RunnersSettingsSection } from './SettingsRunners';
@@ -160,6 +162,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'appearance', icon: Palette, titleKey: 'settings.appearance.title', descKey: 'settings.appearance.desc', groupKey: 'settings.group.basics' },
   { id: 'providers', icon: Package, titleKey: 'settings.modelProvider.title', descKey: 'settings.modelProvider.desc', groupKey: 'settings.group.basics' },
   { id: 'runners', icon: HardDrive, titleKey: 'settings.remoteDevices.title', descKey: 'settings.remoteDevices.desc', groupKey: 'settings.group.basics' },
+  { id: 'credentials', icon: KeyRound, titleKey: 'settings.credentials.title', descKey: 'settings.credentials.desc', groupKey: 'settings.group.basics' },
   { id: 'remote', icon: Radio, titleKey: 'settings.remote.title', descKey: 'settings.remote.desc', groupKey: 'settings.group.basics' },
 
   { id: 'browser', icon: Globe, titleKey: 'settings.browser.title', descKey: 'settings.browser.desc', groupKey: 'settings.group.agentCapabilities' },
@@ -347,6 +350,7 @@ export function SettingsPage() {
             />
           )}
           {activeMeta.id === 'runners' && <RunnersSettingsSection onFlash={showFlash} />}
+          {activeMeta.id === 'credentials' && <SettingsCredentialsSection onFlash={showFlash} />}
           {activeMeta.id === 'remote' && <SettingsRemoteAccessSection onFlash={showFlash} />}
           {activeMeta.id === 'browser' && <SettingsBrowserSection onFlash={showFlash} />}
           {activeMeta.id === 'agents' && <AgentsSettingsSection onFlash={showFlash} />}

@@ -20,13 +20,13 @@ func DefaultShellName() string {
 	return "/bin/sh"
 }
 
-func runPlatformShellCommand(ctx context.Context, dir string, command string, out io.Writer) (int, error) {
+func runPlatformShellCommand(ctx context.Context, dir string, command string, out io.Writer, extraEnv map[string]string) (int, error) {
 	shell := DefaultShellName()
 	cmd := exec.Command(shell, "-c", command)
 	if dir != "" {
 		cmd.Dir = dir
 	}
-	cmd.Env = os.Environ()
+	cmd.Env = mergeProcessEnv(os.Environ(), extraEnv)
 	// Put child in its own process group so we can kill all spawned grandchildren cleanly.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 

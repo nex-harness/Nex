@@ -545,6 +545,13 @@ func (n *Node) ApplyConfigSnapshot(ctx context.Context, snap *protocol.ConfigSna
 	for _, cj := range snap.CronJobs {
 		_, _ = n.store.UpsertCronJob(ctx, cj)
 	}
+	if snap.CredentialsSynced {
+		_ = n.store.ReplaceSyncedCredentials(ctx, snap.Credentials)
+	} else {
+		for _, c := range snap.Credentials {
+			_, _ = n.store.UpsertCredential(ctx, c)
+		}
+	}
 	if snap.MemoriesSynced {
 		_, _ = n.store.ReplaceAllMemories(ctx, snap.Memories)
 	} else {
@@ -826,6 +833,67 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 				res := codemode.ProbeServer(ctx, req.Server)
 				reply, _ = protocol.NewEnvelope(protocol.TypeMCPProbe, res)
 			}
+			reply.ReplyTo = env.ID
+			_ = n.sendEnvelope(ctx, reply)
+		}()
+
+	case protocol.TypeCredentialLocalSet:
+		go func() {
+			var req protocol.CredentialLocalSetPayload
+			var res protocol.CredentialLocalSetResult
+			if err := json.Unmarshal(env.Payload, &req); err != nil {
+				res = protocol.CredentialLocalSetResult{OK: false, Error: err.Error()}
+			} else {
+				hints := map[string]string{}
+				var lastErr error
+				for k, v := range req.Values {
+					h, err := n.store.SetLocalCredentialValue(ctx, req.CredentialID, k, v)
+					if err != nil {
+						lastErr = err
+						break
+					}
+					hints[k] = h
+				}
+				if lastErr != nil {
+					res = protocol.CredentialLocalSetResult{OK: false, Error: lastErr.Error()}
+				} else {
+					res = protocol.CredentialLocalSetResult{OK: true, Hints: hints}
+				}
+			}
+			reply, _ := protocol.NewEnvelope(protocol.TypeCredentialLocalSet, res)
+			reply.ReplyTo = env.ID
+			_ = n.sendEnvelope(ctx, reply)
+		}()
+
+	case protocol.TypeCredentialProbe:
+		go func() {
+			var req protocol.CredentialProbePayload
+			var res protocol.CredentialProbeResult
+			start := time.Now()
+			if err := json.Unmarshal(env.Payload, &req); err != nil {
+				res = protocol.CredentialProbeResult{OK: false, ExitCode: -1, Error: err.Error()}
+			} else if strings.TrimSpace(req.Command) == "" {
+				res = protocol.CredentialProbeResult{OK: false, ExitCode: -1, Error: "probe command is required"}
+			} else {
+				ws := strings.TrimSpace(req.WorkspacePath)
+				if ws == "" {
+					ws = n.cfg.WorkspaceDefault
+				}
+				envMap, _ := n.store.ResolveEffectiveEnv(ctx, n.cfg.RunnerID, ws, "chat", []string{req.CredentialID})
+				probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				defer cancel()
+				code, out, runErr := tools.RunShellWithEnv(probeCtx, ws, req.Command, envMap)
+				res = protocol.CredentialProbeResult{
+					OK:        runErr == nil && code == 0,
+					ExitCode:  code,
+					Output:    out,
+					LatencyMs: time.Since(start).Milliseconds(),
+				}
+				if runErr != nil {
+					res.Error = runErr.Error()
+				}
+			}
+			reply, _ := protocol.NewEnvelope(protocol.TypeCredentialProbe, res)
 			reply.ReplyTo = env.ID
 			_ = n.sendEnvelope(ctx, reply)
 		}()
