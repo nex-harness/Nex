@@ -321,6 +321,11 @@ func (s *Server) buildConfigSnapshot(ctx context.Context, runnerID string) (*pro
 	skillVisRules, _ := s.store.GetSkillVisibilityRules(ctx)
 	memories, _ := s.store.ListMemories(ctx, "")
 	prefs, _ := s.store.GetUserPreferences(ctx)
+	var globalInstructions *string
+	if prefs.GlobalInstructions != "" {
+		gi := prefs.GlobalInstructions
+		globalInstructions = &gi
+	}
 	return &protocol.ConfigSnapshot{
 		ConfigRev:            rev,
 		ServerBaseURL:        s.cfg.PublicBaseURL,
@@ -334,6 +339,7 @@ func (s *Server) buildConfigSnapshot(ctx context.Context, runnerID string) (*pro
 		CronJobs:             crons,
 		Memories:             memories,
 		MemoriesSynced:       true,
+		GlobalInstructions:   globalInstructions,
 		MemorySettings: &protocol.MemoryConfigSync{
 			AutoExtract: prefs.MemoryAutoExtract,
 			ProviderID:  prefs.MemoryProviderID,

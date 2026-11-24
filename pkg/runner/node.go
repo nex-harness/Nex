@@ -600,9 +600,36 @@ func (n *Node) ApplyConfigSnapshot(ctx context.Context, snap *protocol.ConfigSna
 		prefs.JevAutoRouterEnabled = ms.JevAutoRouterEnabled
 		_ = n.store.SaveUserPreferences(ctx, prefs)
 	}
+	if snap.GlobalInstructions != nil {
+		prefs, err := n.store.GetUserPreferences(ctx)
+		if err != nil {
+			prefs = store.DefaultUserPreferences()
+		}
+		prefs.GlobalInstructions = *snap.GlobalInstructions
+		_ = n.store.SaveUserPreferences(ctx, prefs)
+		// Mirror to ~/.nex/AGENTS.md so prompts.BuildSystemSections picks it up.
+		if path, pathErr := globalInstructionsPath(); pathErr == nil {
+			if mkErr := os.MkdirAll(filepath.Dir(path), 0o700); mkErr == nil {
+				_ = os.WriteFile(path, []byte(*snap.GlobalInstructions), 0o600)
+			}
+		}
+	}
 	if n.cfg.Extensions != nil {
 		n.cfg.Extensions.OnSnapshotApplied(ctx, snap)
 	}
+}
+
+// globalInstructionsPath resolves ~/.nex/AGENTS.md, the file read by
+// prompts.BuildSystemSections for user-global instructions.
+func globalInstructionsPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	if home == "" {
+		return "", errors.New("runner: home directory unavailable")
+	}
+	return filepath.Join(home, ".nex", "AGENTS.md"), nil
 }
 
 func (n *Node) flushOutbox(ctx context.Context) {

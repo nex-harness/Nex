@@ -408,6 +408,43 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
   const [pwdError, setPwdError] = useState('');
   const [pwdBusy, setPwdBusy] = useState(false);
   const [notifyPerm, setNotifyPerm] = useState(() => hostBridge.getNotificationPermission());
+  const [globalInstr, setGlobalInstr] = useState('');
+  const [globalInstrPath, setGlobalInstrPath] = useState('~/.nex/AGENTS.md');
+  const [globalInstrLoading, setGlobalInstrLoading] = useState(true);
+  const [globalInstrSaving, setGlobalInstrSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<{ content: string; path: string }>('/api/v1/instructions/global')
+      .then((res) => {
+        if (cancelled) return;
+        setGlobalInstr(res?.content ?? '');
+        if (res?.path) setGlobalInstrPath(res.path);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setGlobalInstrLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const saveGlobalInstructions = async () => {
+    setGlobalInstrSaving(true);
+    try {
+      const res = await apiFetch<{ content: string; path: string }>('/api/v1/instructions/global', {
+        method: 'PUT',
+        body: JSON.stringify({ content: globalInstr }),
+      });
+      if (res?.path) setGlobalInstrPath(res.path);
+      onFlash(formatMsg(locale, 'settings.instructions.saved'));
+    } catch (err) {
+      onFlash(formatMsg(locale, 'settings.multimodalSaveFailed', { error: String(err) }));
+    } finally {
+      setGlobalInstrSaving(false);
+    }
+  };
 
   const notifyEnabled = preferences.notify_enabled !== false;
   const notifyOnComplete = preferences.notify_on_complete !== false;
@@ -629,6 +666,47 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
           </select>
         </SettingsRow>
       </SettingsGroupCard>
+
+      <div data-testid="settings-global-instructions" className="space-y-3">
+        <SectionHeading
+          title={formatMsg(locale, 'settings.instructions.title')}
+          description={formatMsg(locale, 'settings.instructions.desc')}
+        />
+        <SettingsGroupCard>
+          <div className="space-y-3 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-ui-xs text-foreground-subtle">
+              <span className="font-mono text-foreground-subtlest">
+                {globalInstrPath || formatMsg(locale, 'settings.instructions.path')}
+              </span>
+              <span>{formatMsg(locale, 'settings.instructions.hint')}</span>
+            </div>
+            <textarea
+              rows={8}
+              value={globalInstr}
+              disabled={globalInstrLoading}
+              onChange={(e) => setGlobalInstr(e.target.value)}
+              placeholder={
+                globalInstrLoading
+                  ? formatMsg(locale, 'settings.instructions.loading')
+                  : formatMsg(locale, 'settings.instructions.placeholder')
+              }
+              className="w-full resize-y rounded-lg border border-border bg-input p-3 font-mono text-ui-sm text-foreground placeholder-foreground-subtlest outline-none focus:border-primary"
+            />
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                disabled={globalInstrLoading || globalInstrSaving}
+                onClick={() => void saveGlobalInstructions()}
+                className="h-8 rounded-lg bg-primary px-4 text-ui-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              >
+                {globalInstrSaving
+                  ? formatMsg(locale, 'settings.saving')
+                  : formatMsg(locale, 'settings.saveChanges')}
+              </button>
+            </div>
+          </div>
+        </SettingsGroupCard>
+      </div>
 
       <div data-testid="settings-notifications" className="space-y-3">
         <SectionHeading

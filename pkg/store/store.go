@@ -163,6 +163,7 @@ type UserPreferences struct {
 	ClassifierProviders        []MultimodalProviderProfile `json:"classifier_providers,omitempty"`       // Multi-provider profiles for Jev/System One classifiers
 	ActiveClassifierProviderID string                      `json:"active_classifier_provider_id,omitempty"` // Single active classifier provider ID
 	ActiveClassifierModelID    string                      `json:"active_classifier_model_id,omitempty"`    // Single active classifier model ID
+	GlobalInstructions         string                      `json:"global_instructions,omitempty"`           // Global AGENTS.md content appended to all sessions
 }
 
 func DefaultUserPreferences() UserPreferences {

@@ -224,6 +224,7 @@ type ConfigSnapshot struct {
 	MemorySettings       *MemoryConfigSync                    `json:"memory_settings,omitempty"`
 	BrowserSettings      *BrowserConfigSync                   `json:"browser_settings,omitempty"`
 	MultimodalSettings   *MultimodalConfigSync                `json:"multimodal_settings,omitempty"`
+	GlobalInstructions   *string                              `json:"global_instructions,omitempty"`
 }
 
 // RunnerWelcomePayload acknowledges Runner registration and optionally pushes updated config.

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +32,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/auth/logout", s.handleAuthLogout)
 	s.mux.HandleFunc("/api/v1/auth/password", s.handleAuthPassword)
 	s.mux.HandleFunc("/api/v1/preferences", s.handlePreferences)
+	s.mux.HandleFunc("/api/v1/instructions/global", s.handleGlobalInstructions)
 	s.mux.HandleFunc("/api/v1/providers", s.handleProviders)
 	s.mux.HandleFunc("/api/v1/providers/", s.handleProviderDelete)
 	s.mux.HandleFunc("/api/v1/models", s.handleModels)
@@ -168,6 +171,73 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+// handleGlobalInstructions serves the user-global AGENTS.md (~/.nex/AGENTS.md).
+// The content is persisted in SQLite and mirrored to disk so that local sessions
+// and Runners pick it up through prompts.BuildSystemSections.
+func (s *Server) handleGlobalInstructions(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		prefs, err := s.store.GetUserPreferences(r.Context())
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		content := prefs.GlobalInstructions
+		if content == "" {
+			if b, readErr := os.ReadFile(globalInstructionsPath()); readErr == nil {
+				content = string(b)
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"content": content,
+			"path":    globalInstructionsDisplayPath,
+		})
+	case http.MethodPut, http.MethodPost:
+		var body struct {
+			Content string `json:"content"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+		prefs, err := s.store.GetUserPreferences(r.Context())
+		if err != nil {
+			prefs = store.DefaultUserPreferences()
+		}
+		prefs.GlobalInstructions = body.Content
+		if err := s.store.SaveUserPreferences(r.Context(), prefs); err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		// Best-effort disk mirror: ~/.nex/AGENTS.md keeps local sessions and
+		// any non-synced runner reading the same content.
+		path := globalInstructionsPath()
+		if mkErr := os.MkdirAll(filepath.Dir(path), 0o700); mkErr == nil {
+			_ = os.WriteFile(path, []byte(body.Content), 0o600)
+		}
+		s.BroadcastConfigSync(r.Context())
+		writeJSON(w, http.StatusOK, map[string]any{
+			"content": body.Content,
+			"path":    globalInstructionsDisplayPath,
+		})
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+// globalInstructionsDisplayPath is the user-facing location of the global AGENTS.md.
+const globalInstructionsDisplayPath = "~/.nex/AGENTS.md"
+
+// globalInstructionsPath resolves the on-disk global AGENTS.md path, falling
+// back to a relative path when the home directory cannot be determined.
+func globalInstructionsPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return filepath.Join(".nex", "AGENTS.md")
+	}
+	return filepath.Join(home, ".nex", "AGENTS.md")
 }
 
 func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
