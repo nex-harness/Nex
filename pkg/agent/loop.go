@@ -531,14 +531,68 @@ func (l *Loop) forceCompact(ctx context.Context, turnNo int, reason string) bool
 		return false
 	}
 
+	beforeTokens := EstimateContextTokens(nil, "", nil, snapshot)
+	l.emit(Event{
+		Type:    EventCompaction,
+		TurnIdx: turnNo,
+		Reason:  reason,
+		Compaction: &CompactionInfo{
+			Status:         "compacting",
+			Reason:         reason,
+			BeforeMessages: len(snapshot),
+			BeforeTokens:   beforeTokens,
+		},
+	})
+
 	compacted, summary, err := CompactMessages(ctx, l.cfg.Provider, l.cfg.Model, snapshot, "")
-	if err != nil || len(compacted) == 0 {
+	if err != nil {
+		l.emit(Event{
+			Type:    EventCompaction,
+			TurnIdx: turnNo,
+			Reason:  reason,
+			Error:   err.Error(),
+			Compaction: &CompactionInfo{
+				Status:         "failed",
+				Reason:         reason,
+				BeforeMessages: len(snapshot),
+				BeforeTokens:   beforeTokens,
+				Error:          err.Error(),
+			},
+		})
+		return false
+	}
+	if len(compacted) == 0 {
+		l.emit(Event{
+			Type:    EventCompaction,
+			TurnIdx: turnNo,
+			Reason:  reason,
+			Compaction: &CompactionInfo{
+				Status:         "skipped",
+				Reason:         reason,
+				BeforeMessages: len(snapshot),
+				AfterMessages:  len(snapshot),
+				BeforeTokens:   beforeTokens,
+				AfterTokens:    beforeTokens,
+			},
+		})
 		return false
 	}
 	// Check whether anything actually shrank (either message count or byte size)
-	beforeTokens := EstimateContextTokens(nil, "", nil, snapshot)
 	afterTokens := EstimateContextTokens(nil, "", nil, compacted)
 	if len(compacted) >= len(snapshot) && afterTokens >= beforeTokens {
+		l.emit(Event{
+			Type:    EventCompaction,
+			TurnIdx: turnNo,
+			Reason:  reason,
+			Compaction: &CompactionInfo{
+				Status:         "skipped",
+				Reason:         reason,
+				BeforeMessages: len(snapshot),
+				AfterMessages:  len(snapshot),
+				BeforeTokens:   beforeTokens,
+				AfterTokens:    beforeTokens,
+			},
+		})
 		return false
 	}
 
@@ -560,6 +614,15 @@ func (l *Loop) forceCompact(ctx context.Context, turnNo int, reason string) bool
 		Delta:             summary,
 		Message:           summaryMsg,
 		CompactedMessages: cp,
+		Compaction: &CompactionInfo{
+			Status:         "completed",
+			Reason:         reason,
+			BeforeMessages: len(snapshot),
+			AfterMessages:  len(cp),
+			BeforeTokens:   beforeTokens,
+			AfterTokens:    afterTokens,
+			Summary:        summary,
+		},
 	})
 	return true
 }

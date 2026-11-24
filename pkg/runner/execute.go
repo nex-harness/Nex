@@ -489,49 +489,87 @@ func (n *Node) ExecutePrompt(
 		n.recordAndEmitSessionEvent(context.Background(), sessRec.ID, ev.TurnIdx, string(ev.Type), raw, hashes)
 	}
 
-	// Handle built-in `/compact [focus]` command immediately without invoking a normal coding turn
+	// Handle built-in `/compact [focus]` command immediately without emitting chat bubbles.
 	if focus, isCompact := agent.ParseCompactCommand(p.Text); isCompact {
 		defer func() {
 			sessRec.Status = "idle"
 			_, _ = n.store.CreateOrUpdateSession(context.Background(), *sessRec)
 		}()
 		emitRaw(agent.Event{Type: agent.EventAgentStart})
-		userMsg := ai.NewUserTextMessage(p.Text)
-		emitRaw(agent.Event{Type: agent.EventMessageEnd, Message: &userMsg})
 
-		var replyText string
 		if len(history) <= 2 {
-			replyText = "Context is already compact (fewer than 3 messages in history)."
-		} else {
-			beforeTokens := agent.EstimateContextTokens(nil, "", nil, history)
-			compacted, summary, cErr := agent.CompactMessages(runCtx, prov, modelID, history, focus)
-			if cErr != nil {
-				replyText = fmt.Sprintf("Context compaction failed: %v", cErr)
-			} else {
-				afterTokens := agent.EstimateContextTokens(nil, "", nil, compacted)
-				var summaryMsg *ai.Message
-				if len(compacted) > 0 {
-					m := compacted[0]
-					summaryMsg = &m
-				}
-				emitRaw(agent.Event{
-					Type:              agent.EventCompaction,
-					Reason:            "manual",
-					Delta:             summary,
-					Message:           summaryMsg,
-					CompactedMessages: compacted,
-				})
-				replyText = fmt.Sprintf("Compacted session context (%d -> %d messages, ~%d -> ~%d tokens).\n\n%s", len(history), len(compacted), beforeTokens, afterTokens, summary)
-			}
+			toks := agent.EstimateContextTokens(sections, "", nil, history)
+			emitRaw(agent.Event{
+				Type:   agent.EventCompaction,
+				Reason: "manual",
+				Compaction: &agent.CompactionInfo{
+					Status:         "skipped",
+					Reason:         "manual",
+					BeforeMessages: len(history),
+					AfterMessages:  len(history),
+					BeforeTokens:   toks,
+					AfterTokens:    toks,
+				},
+			})
+			emitRaw(agent.Event{Type: agent.EventAgentEnd})
+			return nil, nil
 		}
-		replyMsg := ai.Message{
-			Role:      ai.RoleAssistant,
-			Content:   []ai.ContentBlock{ai.TextBlock(replyText)},
-			Timestamp: time.Now().UnixMilli(),
+
+		beforeTokens := agent.EstimateContextTokens(sections, "", nil, history)
+		emitRaw(agent.Event{
+			Type:   agent.EventCompaction,
+			Reason: "manual",
+			Compaction: &agent.CompactionInfo{
+				Status:         "compacting",
+				Reason:         "manual",
+				BeforeMessages: len(history),
+				BeforeTokens:   beforeTokens,
+			},
+		})
+
+		compacted, summary, cErr := agent.CompactMessages(runCtx, prov, modelID, history, focus)
+		if cErr != nil {
+			emitRaw(agent.Event{
+				Type:   agent.EventCompaction,
+				Reason: "manual",
+				Error:  cErr.Error(),
+				Compaction: &agent.CompactionInfo{
+					Status:         "failed",
+					Reason:         "manual",
+					BeforeMessages: len(history),
+					BeforeTokens:   beforeTokens,
+					Error:          cErr.Error(),
+				},
+			})
+			emitRaw(agent.Event{Type: agent.EventAgentEnd, Error: cErr.Error()})
+			return nil, cErr
 		}
-		emitRaw(agent.Event{Type: agent.EventMessageEnd, Message: &replyMsg})
+
+		afterTokens := agent.EstimateContextTokens(sections, "", nil, compacted)
+		sessRec.LatestContextTokens = afterTokens
+		var summaryMsg *ai.Message
+		if len(compacted) > 0 {
+			m := compacted[0]
+			summaryMsg = &m
+		}
+		emitRaw(agent.Event{
+			Type:              agent.EventCompaction,
+			Reason:            "manual",
+			Delta:             summary,
+			Message:           summaryMsg,
+			CompactedMessages: compacted,
+			Compaction: &agent.CompactionInfo{
+				Status:         "completed",
+				Reason:         "manual",
+				BeforeMessages: len(history),
+				AfterMessages:  len(compacted),
+				BeforeTokens:   beforeTokens,
+				AfterTokens:    afterTokens,
+				Summary:        summary,
+			},
+		})
 		emitRaw(agent.Event{Type: agent.EventAgentEnd})
-		return &replyMsg, nil
+		return summaryMsg, nil
 	}
 
 	// Dispatch plugin-registered `/slash` commands (e.g., `/deploy-check`) when not `/goal`

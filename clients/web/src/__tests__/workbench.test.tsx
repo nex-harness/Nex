@@ -4853,4 +4853,138 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     expect(st?.latestTelemetry?.total_context_tokens).toBe(607707);
     expect(st?.turnTelemetries.map((t) => t.total_context_tokens)).toEqual([90434, 607707]);
   });
+
+  it('renders ZCode-style inline compaction divider with collapsible summary and refreshes context meter', () => {
+    const sid = 'sess_compaction_ui_1';
+    let stream = applySessionEvent(emptyStreamState(), 'run_mac', {
+      session_id: sid,
+      seq: 1,
+      turn_idx: 1,
+      event_type: 'turn_end',
+      payload: {
+        telemetry: {
+          id: 'tel_before',
+          session_id: sid,
+          turn_idx: 1,
+          runner_id: 'run_mac',
+          provider_id: 'openai',
+          model_id: 'auto/gemini-4-neon',
+          trigger_source: 'chat',
+          context_window: 1048576,
+          total_context_tokens: 1059442,
+          window_utilization_pct: 100,
+          input_tokens: 0,
+          output_tokens: 0,
+          reasoning_tokens: 0,
+          cache_read_tokens: 0,
+          cache_write_tokens: 0,
+          cache_hit_rate_pct: 0,
+          estimated_cost_usd: 0,
+          cache_saved_usd: 0,
+          breakdown: [],
+          system_prompt_blob_hash: '',
+          raw_trace_blob_hash: '',
+          ttft_ms: 0,
+          duration_ms: 0,
+          recorded_at: 1000,
+        },
+      },
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 2,
+      turn_idx: 0,
+      event_type: 'agent_start',
+      payload: {},
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 3,
+      turn_idx: 0,
+      event_type: 'compaction',
+      payload: {
+        reason: 'manual',
+        compaction: {
+          status: 'compacting',
+          reason: 'manual',
+          before_messages: 950,
+          before_tokens: 561010,
+        },
+      },
+    });
+
+    expect(stream.items).toHaveLength(1);
+    expect(stream.items[0]?.role).toBe('compaction');
+    expect(stream.items[0]?.compaction?.status).toBe('compacting');
+
+    useNexStore.setState({
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      locale: 'zh-CN',
+      mainView: 'workspace',
+      activeSessionId: sid,
+      selectedRunnerId: 'run_mac',
+      sessions: [
+        {
+          id: sid,
+          runner_id: 'run_mac',
+          title: 'Compaction test',
+          workspace_path: '/tmp/ws',
+          status: 'running',
+          created_at: 1000,
+          updated_at: 2000,
+        } as never,
+      ],
+      streams: { [sid]: stream },
+    });
+
+    const { rerender } = render(<App />);
+    expect(screen.getByTestId('compaction-divider').getAttribute('data-status')).toBe('compacting');
+    expect(screen.getByTestId('compaction-divider').textContent).toContain('正在压缩上下文');
+
+    // Finish compaction: updates same divider item in place, collapses summary, and refreshes context meter!
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 4,
+      turn_idx: 0,
+      event_type: 'compaction',
+      created_at: 2000000,
+      payload: {
+        reason: 'manual',
+        delta: '## Goal & Constraints\n- Auth refactor summary',
+        compaction: {
+          status: 'completed',
+          reason: 'manual',
+          before_messages: 950,
+          after_messages: 5,
+          before_tokens: 561010,
+          after_tokens: 1166,
+          summary: '## Goal & Constraints\n- Auth refactor summary',
+        },
+      },
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 5,
+      turn_idx: 0,
+      event_type: 'agent_end',
+      payload: {},
+    });
+
+    expect(stream.items).toHaveLength(1);
+    expect(stream.latestTelemetry?.total_context_tokens).toBe(1166);
+
+    useNexStore.setState({ streams: { [sid]: stream } });
+    rerender(<App />);
+
+    const div = screen.getByTestId('compaction-divider');
+    expect(div.getAttribute('data-status')).toBe('completed');
+    expect(div.textContent).toContain('上下文已压缩');
+    expect(div.textContent).toContain('561K → 1.2K');
+    expect(screen.queryByTestId('compaction-summary-panel')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('compaction-toggle-summary'));
+    expect(screen.getByTestId('compaction-summary-panel').textContent).toContain('Auth refactor summary');
+  });
 });

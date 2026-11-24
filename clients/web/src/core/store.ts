@@ -328,6 +328,27 @@ function appendOptimisticUserPrompt(
   images?: ChatImageBlock[],
 ): SessionStreamState {
   const base = prev || emptyStreamState();
+  if ((!images || images.length === 0) && /^\/compact(?:\s|$)/i.test(text.trim())) {
+    const optId = `opt_cmp_${crypto.randomUUID().slice(0, 8)}`;
+    return {
+      ...base,
+      running: true,
+      runStartedAt: Date.now(),
+      items: [
+        ...base.items,
+        {
+          id: optId,
+          role: 'compaction',
+          text: '',
+          thinking: '',
+          toolCalls: [],
+          compaction: { status: 'compacting', reason: 'manual' },
+          streaming: true,
+          optimistic: true,
+        },
+      ],
+    };
+  }
   const optId = `opt_usr_${crypto.randomUUID().slice(0, 8)}`;
   return {
     ...base,
@@ -1867,7 +1888,10 @@ export const useNexStore = create<AppState>((set, get) => ({
     if (tels && tels.length > 0) {
       const sortedTels = tels.slice().sort((a, b) => (a.recorded_at || 0) - (b.recorded_at || 0));
       const latestFromTels = sortedTels[sortedTels.length - 1];
-      if (!st.latestTelemetry || (latestFromTels.recorded_at || 0) >= (st.latestTelemetry.recorded_at || 0)) {
+      const keepSyntheticCompaction =
+        st.latestTelemetry?.id?.startsWith('cmp_') &&
+        (latestFromTels.recorded_at || 0) <= (st.latestTelemetry.recorded_at || 0);
+      if (!keepSyntheticCompaction && (!st.latestTelemetry || (latestFromTels.recorded_at || 0) >= (st.latestTelemetry.recorded_at || 0))) {
         st.latestTelemetry = latestFromTels;
       }
       if (sortedTels.length >= st.turnTelemetries.length) {

@@ -2644,6 +2644,91 @@ function Composer({
   );
 }
 
+function formatCompactTokenCount(tokens?: number): string {
+  if (!tokens || tokens <= 0) return '';
+  if (tokens >= 1000) {
+    return `${(tokens / 1000).toFixed(tokens >= 10000 ? 0 : 1)}K`;
+  }
+  return String(tokens);
+}
+
+function CompactionDivider({
+  item,
+  locale,
+}: {
+  item: ChatTurnItem;
+  locale: LocaleCode;
+}) {
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const c = item.compaction || { status: 'completed' as const };
+  const hasSummary = Boolean(c.summary && c.status === 'completed');
+  const beforeStr = formatCompactTokenCount(c.beforeTokens);
+  const afterStr = formatCompactTokenCount(c.afterTokens);
+  const deltaText = beforeStr && afterStr ? `(${beforeStr} → ${afterStr})` : '';
+
+  const label =
+    c.status === 'compacting'
+      ? formatMsg(locale, 'chat.compaction.compacting')
+      : c.status === 'skipped'
+        ? formatMsg(locale, 'chat.compaction.alreadyCompact')
+        : c.status === 'failed'
+          ? formatMsg(locale, 'chat.compaction.failed')
+          : formatMsg(locale, 'chat.compaction.compacted');
+
+  return (
+    <div data-testid="compaction-divider" data-status={c.status} className="w-full py-1">
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-border/80" />
+        {hasSummary ? (
+          <button
+            type="button"
+            data-testid="compaction-toggle-summary"
+            onClick={() => setSummaryOpen((v) => !v)}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+          >
+            <Check className="size-3.5 text-success" />
+            <span>{label}</span>
+            {deltaText && <span className="tabular-nums text-foreground-subtlest">{deltaText}</span>}
+            <ChevronDown
+              className={`size-3.5 text-foreground-subtlest transition-transform ${summaryOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+        ) : (
+          <div
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-ui-xs ${
+              c.status === 'failed'
+                ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                : 'border-border bg-surface text-foreground-subtle'
+            }`}
+          >
+            {c.status === 'compacting' ? (
+              <LoaderCircle className="size-3.5 animate-spin text-foreground-subtle" />
+            ) : c.status === 'failed' ? (
+              <AlertTriangle className="size-3.5 text-destructive" />
+            ) : (
+              <Check className="size-3.5 text-foreground-subtle" />
+            )}
+            <span>{label}</span>
+            {deltaText && <span className="tabular-nums text-foreground-subtlest">{deltaText}</span>}
+          </div>
+        )}
+        <div className="h-px flex-1 bg-border/80" />
+      </div>
+      {c.status === 'failed' && c.error && (
+        <div className="mt-1.5 text-center font-mono text-ui-xs text-destructive/90">{c.error}</div>
+      )}
+      {summaryOpen && c.summary && (
+        <div
+          data-testid="compaction-summary-panel"
+          className="mt-2 rounded-xl border border-border bg-surface/60 px-3.5 py-2.5 text-ui-sm text-foreground-subtle"
+        >
+          <MarkdownRenderer content={c.summary} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 const EMPTY_STREAM = emptyStreamState();
 const INITIAL_VISIBLE_TURNS = 24;
 const LOAD_MORE_TURNS_STEP = 24;
@@ -2684,10 +2769,14 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
     <div
       ref={(el) => registerRef(item.id, el)}
       style={{ contain: 'layout style' }}
-      className={`flex flex-col ${item.role === 'user' ? 'items-end' : 'items-start'}`}
+      className={`flex flex-col ${
+        item.role === 'user' ? 'items-end' : item.role === 'compaction' ? 'items-stretch' : 'items-start'
+      }`}
     >
       {item.role === 'user' ? (
         <UserBubble text={item.text} images={item.images} seq={item.seq} />
+      ) : item.role === 'compaction' ? (
+        <CompactionDivider item={item} locale={locale} />
       ) : (
         <div className={`group/assistant min-w-0 w-full space-y-4 ${item.streaming ? 'nex-stream-in' : ''}`}>
           {(item.thinking || item.toolCalls.length > 0) && (
@@ -3636,11 +3725,20 @@ export function ConversationPane() {
           >
             {tickLayout.entries.map(({ item, idx }) => {
               const isActive = activeTurnId ? activeTurnId === item.id : idx === items.length - 1;
-              const rawPreview = item.role === 'user' ? cleanUserDisplayText(item.text) : item.text || item.thinking || '';
+              const rawPreview =
+                item.role === 'user'
+                  ? cleanUserDisplayText(item.text)
+                  : item.role === 'compaction'
+                    ? formatMsg(locale, 'chat.compaction.compacted')
+                    : item.text || item.thinking || '';
               const preview = rawPreview.replace(/\s+/g, ' ').trim().slice(0, 36);
-              const label = `${item.role === 'user' ? formatMsg(locale, 'chat.you') : 'Nex'} #${idx + 1}${
-                preview ? ` · ${preview}` : ''
-              }`;
+              const label = `${
+                item.role === 'user'
+                  ? formatMsg(locale, 'chat.you')
+                  : item.role === 'compaction'
+                    ? formatMsg(locale, 'chat.compaction.compacted')
+                    : 'Nex'
+              } #${idx + 1}${preview ? ` · ${preview}` : ''}`;
               return (
                 <button
                   key={item.id}

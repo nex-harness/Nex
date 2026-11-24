@@ -401,15 +401,27 @@ export interface ComposerAttachment {
   size: number;
 }
 
+export interface CompactionCard {
+  status: 'compacting' | 'completed' | 'skipped' | 'failed';
+  reason?: string;
+  beforeMessages?: number;
+  afterMessages?: number;
+  beforeTokens?: number;
+  afterTokens?: number;
+  summary?: string;
+  error?: string;
+}
+
 export interface ChatTurnItem {
   id: string;
   seq?: number;
   startSeq?: number;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'compaction';
   text: string;
   thinking: string;
   images?: ChatImageBlock[];
   toolCalls: ToolCallCard[];
+  compaction?: CompactionCard;
   streaming?: boolean;
   optimistic?: boolean;
 }

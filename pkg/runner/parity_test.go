@@ -78,6 +78,11 @@ func TestRunnerCompactCommandAndCheckpointHydration(t *testing.T) {
 	}
 
 	// Execute manual /compact command
+	eventsBefore, _ := node.Store().ListSessionEventsAfter(ctx, sessID, 0)
+	var seqBefore uint64
+	if len(eventsBefore) > 0 {
+		seqBefore = eventsBefore[len(eventsBefore)-1].Seq
+	}
 	compactReply, err := node.ExecutePrompt(ctx, protocol.PromptPayload{
 		SessionID: sessID,
 		Text:      "/compact focus on auth",
@@ -85,8 +90,36 @@ func TestRunnerCompactCommandAndCheckpointHydration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/compact failed: %v", err)
 	}
-	if !strings.Contains(compactReply.PlainText(), "Compacted session context") || !strings.Contains(compactReply.PlainText(), "Auth refactor focus") {
-		t.Fatalf("unexpected /compact reply: %q", compactReply.PlainText())
+	if compactReply == nil || !strings.Contains(compactReply.PlainText(), "Auth refactor focus") {
+		t.Fatalf("unexpected /compact summary msg: %+v", compactReply)
+	}
+
+	// Verify /compact emits structured compacting -> completed compaction events with zero message_end chat bubbles,
+	// and updates session.LatestContextTokens.
+	compactEvs, err := node.Store().ListSessionEventsAfter(ctx, sessID, seqBefore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawCompacting, sawCompleted bool
+	for _, ev := range compactEvs {
+		if ev.EventType == string(agent.EventMessageEnd) {
+			t.Fatalf("expected /compact not to emit chat message_end bubbles, got seq=%d", ev.Seq)
+		}
+		if ev.EventType == string(agent.EventCompaction) {
+			if strings.Contains(string(ev.Payload), `"status":"compacting"`) {
+				sawCompacting = true
+			}
+			if strings.Contains(string(ev.Payload), `"status":"completed"`) {
+				sawCompleted = true
+			}
+		}
+	}
+	if !sawCompacting || !sawCompleted {
+		t.Fatalf("expected both compacting and completed EventCompaction (compacting=%v completed=%v)", sawCompacting, sawCompleted)
+	}
+	recAfter, err := node.Store().GetSession(ctx, sessID)
+	if err != nil || recAfter.LatestContextTokens <= 0 {
+		t.Fatalf("expected session LatestContextTokens updated after compaction, got %+v err=%v", recAfter, err)
 	}
 
 	// Verify loadSessionMessages hydrates from the compaction checkpoint instead of all 10+ historical messages!

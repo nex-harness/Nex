@@ -33,20 +33,33 @@ const (
 	EventCompaction             EventType = "compaction"
 )
 
+// CompactionInfo carries structured lifecycle and token-delta metadata for EventCompaction.
+type CompactionInfo struct {
+	Status         string `json:"status"` // "compacting" | "completed" | "skipped" | "failed"
+	Reason         string `json:"reason,omitempty"`
+	BeforeMessages int    `json:"before_messages,omitempty"`
+	AfterMessages  int    `json:"after_messages,omitempty"`
+	BeforeTokens   int    `json:"before_tokens,omitempty"`
+	AfterTokens    int    `json:"after_tokens,omitempty"`
+	Summary        string `json:"summary,omitempty"`
+	Error          string `json:"error,omitempty"`
+}
+
 // Event represents a structured event emitted during an agent run.
 type Event struct {
-	Type          EventType            `json:"type"`
-	TurnIdx       int                  `json:"turn_idx,omitempty"`
-	DeltaKind     string               `json:"delta_kind,omitempty"` // "text" | "thinking" | "toolcall"
-	Delta         string               `json:"delta,omitempty"`
-	Message       *ai.Message          `json:"message,omitempty"`
-	ToolCallID    string               `json:"tool_call_id,omitempty"`
-	ToolName      string               `json:"tool_name,omitempty"`
-	ToolArgs      json.RawMessage      `json:"tool_args,omitempty"`
-	ToolResult    *tools.Result        `json:"tool_result,omitempty"`
-	ApprovalID    string               `json:"approval_id,omitempty"`
-	Approved      *bool                `json:"approved,omitempty"`
+	Type              EventType            `json:"type"`
+	TurnIdx           int                  `json:"turn_idx,omitempty"`
+	DeltaKind         string               `json:"delta_kind,omitempty"` // "text" | "thinking" | "toolcall"
+	Delta             string               `json:"delta,omitempty"`
+	Message           *ai.Message          `json:"message,omitempty"`
+	ToolCallID        string               `json:"tool_call_id,omitempty"`
+	ToolName          string               `json:"tool_name,omitempty"`
+	ToolArgs          json.RawMessage      `json:"tool_args,omitempty"`
+	ToolResult        *tools.Result        `json:"tool_result,omitempty"`
+	ApprovalID        string               `json:"approval_id,omitempty"`
+	Approved          *bool                `json:"approved,omitempty"`
 	Reason            string               `json:"reason,omitempty"`
+	Compaction        *CompactionInfo      `json:"compaction,omitempty"`
 	CompactedMessages []ai.Message         `json:"compacted_messages,omitempty"`
 	Telemetry         *store.TurnTelemetry `json:"telemetry,omitempty"`
 	UIStatusKey   string               `json:"ui_status_key,omitempty"`

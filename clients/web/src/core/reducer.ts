@@ -1,6 +1,7 @@
 import {
   BackgroundTaskItem,
   ChatTurnItem,
+  CompactionCard,
   GoalEntry,
   PendingApproval,
   PendingUIPrompt,
@@ -119,16 +120,24 @@ export function parseGoalTitle(text: string): string | null {
 /** Seals any trailing streaming/optimistic turns and settles dangling running tool calls. */
 export function sealRunningItems(items: ChatTurnItem[]): ChatTurnItem[] {
   const needsSeal = items.some(
-    (it) => it.streaming || it.optimistic || it.toolCalls.some((tc) => tc.status === 'running'),
+    (it) =>
+      it.streaming ||
+      it.optimistic ||
+      it.compaction?.status === 'compacting' ||
+      it.toolCalls.some((tc) => tc.status === 'running'),
   );
   if (!needsSeal) return items;
   return items.map((it) => {
     const hasRunningTool = it.toolCalls.some((tc) => tc.status === 'running');
-    if (!it.streaming && !it.optimistic && !hasRunningTool) return it;
+    const hasRunningCompaction = it.compaction?.status === 'compacting';
+    if (!it.streaming && !it.optimistic && !hasRunningTool && !hasRunningCompaction) return it;
     return {
       ...it,
       streaming: false,
       optimistic: false,
+      ...(hasRunningCompaction && it.compaction
+        ? { compaction: { ...it.compaction, status: 'failed' as const } }
+        : {}),
       toolCalls: hasRunningTool
         ? it.toolCalls.map((tc) =>
             tc.status === 'running'
@@ -617,10 +626,124 @@ export function applySessionEvent(
 
     case 'compaction': {
       const reason = String(p.reason || 'compacted');
+      const rawCompaction =
+        p.compaction && typeof p.compaction === 'object' ? (p.compaction as Record<string, unknown>) : null;
+      const rawStatus = String(rawCompaction?.status || 'completed');
+      const status: CompactionCard['status'] =
+        rawStatus === 'compacting' || rawStatus === 'skipped' || rawStatus === 'failed'
+          ? rawStatus
+          : 'completed';
+      const beforeMessages =
+        typeof rawCompaction?.before_messages === 'number' ? rawCompaction.before_messages : undefined;
+      const afterMessages =
+        typeof rawCompaction?.after_messages === 'number' ? rawCompaction.after_messages : undefined;
+      const beforeTokens =
+        typeof rawCompaction?.before_tokens === 'number' ? rawCompaction.before_tokens : undefined;
+      const afterTokens =
+        typeof rawCompaction?.after_tokens === 'number' ? rawCompaction.after_tokens : undefined;
+      const summary = String(rawCompaction?.summary || p.delta || '').trim() || undefined;
+      const errMsg = String(rawCompaction?.error || p.error || '').trim() || undefined;
+
+      const card: CompactionCard = {
+        status,
+        reason,
+        beforeMessages,
+        afterMessages,
+        beforeTokens,
+        afterTokens,
+        summary,
+        error: errMsg,
+      };
+
+      const nextItems = items.slice();
+      const tail = nextItems[nextItems.length - 1];
+      if (tail && tail.role === 'user' && tail.optimistic && /^\/compact(?:\s|$)/i.test(tail.text.trim())) {
+        nextItems.pop();
+      }
+      const afterStripTail = nextItems[nextItems.length - 1];
+      if (
+        afterStripTail &&
+        afterStripTail.role === 'compaction' &&
+        afterStripTail.compaction?.status === 'compacting'
+      ) {
+        nextItems[nextItems.length - 1] = {
+          ...afterStripTail,
+          seq: ev.seq > 0 ? ev.seq : afterStripTail.seq,
+          compaction: card,
+          streaming: status === 'compacting',
+          optimistic: false,
+        };
+      } else {
+        nextItems.push({
+          id: `cmp_${ev.seq || Date.now()}`,
+          seq: ev.seq > 0 ? ev.seq : undefined,
+          role: 'compaction',
+          text: '',
+          thinking: '',
+          toolCalls: [],
+          compaction: card,
+          streaming: status === 'compacting',
+        });
+      }
+      items = nextItems;
+
       uiBadges = {
         ...uiBadges,
         context: reason === 'manual' ? 'compacted' : 'auto-compacted',
       };
+
+      if (status === 'completed' && typeof afterTokens === 'number' && afterTokens > 0) {
+        const prevWin = latestTelemetry?.context_window || 200000;
+        const pct = prevWin > 0 ? Math.min(100, Number(((afterTokens * 100) / prevWin).toFixed(1))) : 0;
+        const baseBreakdown = latestTelemetry?.breakdown || [];
+        const nextBreakdown =
+          baseBreakdown.length > 0
+            ? baseBreakdown.map((b) =>
+                b.category === 'messages'
+                  ? { ...b, tokens: afterTokens, pct: 100 }
+                  : { ...b, tokens: 0, pct: 0 },
+              )
+            : [{ category: 'messages' as const, bytes: 0, tokens: afterTokens, pct: 100, blob_hash: '' }];
+        latestTelemetry = latestTelemetry
+          ? {
+              ...latestTelemetry,
+              id: `cmp_${ev.seq || Date.now()}`,
+              total_context_tokens: afterTokens,
+              window_utilization_pct: pct,
+              input_tokens: afterTokens,
+              cache_read_tokens: 0,
+              cache_write_tokens: 0,
+              output_tokens: 0,
+              breakdown: nextBreakdown,
+              recorded_at: Math.floor(eventTimestamp() / 1000),
+            }
+          : {
+              id: `cmp_${ev.seq || Date.now()}`,
+              session_id: ev.session_id,
+              turn_idx: ev.turn_idx,
+              runner_id: runnerId,
+              provider_id: '',
+              model_id: '',
+              trigger_source: 'chat',
+              context_window: prevWin,
+              total_context_tokens: afterTokens,
+              window_utilization_pct: pct,
+              input_tokens: afterTokens,
+              output_tokens: 0,
+              reasoning_tokens: 0,
+              cache_read_tokens: 0,
+              cache_write_tokens: 0,
+              cache_hit_rate_pct: 0,
+              estimated_cost_usd: 0,
+              cache_saved_usd: 0,
+              breakdown: nextBreakdown,
+              system_prompt_blob_hash: '',
+              raw_trace_blob_hash: '',
+              ttft_ms: 0,
+              duration_ms: 0,
+              recorded_at: Math.floor(eventTimestamp() / 1000),
+            };
+      }
       break;
     }
 
