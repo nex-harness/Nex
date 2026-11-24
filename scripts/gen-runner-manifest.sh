@@ -26,11 +26,7 @@ sha256_file() {
 
 size_file() {
   local f="$1"
-  if stat --version >/dev/null 2>&1; then
-    stat -c %s "$f"
-  else
-    stat -f %z "$f"
-  fi
+  wc -c < "$f" | tr -d '[:space:]'
 }
 
 json_escape() {
