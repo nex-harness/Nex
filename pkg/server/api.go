@@ -138,11 +138,18 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	onlineClients := len(s.clients)
 	s.mu.RUnlock()
 	rev, _ := s.store.GetConfigRev(r.Context())
+	ver := strings.TrimSpace(s.cfg.Version)
+	if ver == "" {
+		ver = "dev"
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":             true,
 		"online_runners": onlineRunners,
 		"online_clients": onlineClients,
 		"config_rev":     rev,
+		"version":        ver,
+		"build_sha":      strings.TrimSpace(s.cfg.BuildSHA),
+		"is_dev":         protocol.IsDevVersion(ver),
 	})
 }
 

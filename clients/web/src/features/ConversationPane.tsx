@@ -26,6 +26,7 @@ import {
   Hand,
   Hash,
   ImagePlus,
+  Info,
   ListTodo,
   LoaderCircle,
   MessageSquare,
@@ -53,6 +54,7 @@ import { emptyStreamState } from '../core/reducer';
 import { useNexStore } from '../core/store';
 import { ChatTurnItem, ModelMeta, ThinkingEffort, ToolCallCard } from '../core/types';
 import { formatMsg, type LocaleCode, type MessageKey } from '../i18n/messages';
+import { AboutModal } from './AboutModal';
 import { ChatLoading } from './ChatLoading';
 import { ContextWindowsButton } from './ContextPopover';
 import { InlineQuestionCard } from './ControlModals';
@@ -2940,6 +2942,7 @@ export function ConversationPane() {
   const exportSessionMarkdown = useNexStore((s) => s.exportSessionMarkdown);
 
   const [headerMenu, setHeaderMenu] = useState<'session' | 'help' | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState('');
   const [copiedId, setCopiedId] = useState(false);
@@ -3166,6 +3169,7 @@ export function ConversationPane() {
       <div className="relative">
         <button
           type="button"
+          data-testid="header-help-btn"
           onClick={() => setHeaderMenu((m) => (m === 'help' ? null : 'help'))}
           title={formatMsg(locale, 'header.help')}
           className="flex size-7 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
@@ -3197,6 +3201,19 @@ export function ConversationPane() {
                 <kbd className="rounded bg-tag px-1.5 font-mono text-ui-xs">Enter</kbd>
               </div>
             </div>
+            <div className="my-1.5 h-px bg-border" />
+            <button
+              type="button"
+              data-testid="open-about-btn"
+              onClick={() => {
+                setHeaderMenu(null);
+                setAboutOpen(true);
+              }}
+              className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-ui-sm font-medium text-foreground transition-colors hover:bg-menu-hover"
+            >
+              <Info className="size-3.5 text-foreground-subtle" />
+              <span>{formatMsg(locale, 'about.menuItem')}</span>
+            </button>
           </div>
         )}
       </div>
@@ -3687,6 +3704,7 @@ export function ConversationPane() {
           )}
         </div>
       )}
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </section>
   );
 }

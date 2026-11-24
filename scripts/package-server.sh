@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 SERVER_OS="${1:-$(go env GOOS)}"
 SERVER_ARCH="${2:-$(go env GOARCH)}"
 VERSION="${VERSION:-dev}"
+COMMIT_SHA="${COMMIT_SHA:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 PKG_NAME="nex-server-${SERVER_OS}-${SERVER_ARCH}"
 STAGE_DIR="dist/pkg/${PKG_NAME}"
 OUT_TARBALL="dist/${PKG_NAME}.tar.gz"
@@ -35,7 +36,7 @@ fi
 
 echo "==> Building ${SERVER_BIN} (${SERVER_OS}/${SERVER_ARCH}, CGO_ENABLED=0, version=${VERSION})..."
 CGO_ENABLED=0 GOOS="$SERVER_OS" GOARCH="$SERVER_ARCH" \
-  go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "${STAGE_DIR}/bin/${SERVER_BIN}" ./cmd/nex-server
+  go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${COMMIT_SHA}" -o "${STAGE_DIR}/bin/${SERVER_BIN}" ./cmd/nex-server
 
 for plat in "${RUNNER_PLATFORMS[@]}"; do
   os="${plat%/*}"

@@ -4554,4 +4554,57 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       globalThis.fetch = origFetch;
     }
   });
+
+  it('opens About modal from Help menu with logo, version, shortcuts, and conditional debug build hash', async () => {
+    const origFetch = globalThis.fetch;
+    let healthPayload = { ok: true, version: 'dev', build_sha: 'abc1234', is_dev: true };
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/api/v1/health')) {
+        return new Response(JSON.stringify(healthPayload), { status: 200 });
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      useNexStore.setState({
+        serverConnectRequired: false,
+        authEnabled: false,
+        authenticated: true,
+        locale: 'zh-CN',
+        mainView: 'workspace',
+        activeSessionId: '',
+      });
+
+      const { unmount } = render(<App />);
+
+      // 1. Open Help menu -> click About Nex -> shows debug badge, build hash, version, and shortcuts
+      fireEvent.click(screen.getByTestId('header-help-btn'));
+      fireEvent.click(screen.getByTestId('open-about-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('about-build-sha').textContent).toBe('abc1234');
+      });
+      expect(screen.getByTestId('about-app-name').textContent).toBe('Nex');
+      expect(screen.getByTestId('about-version').textContent).toBe('dev');
+      expect(screen.getByTestId('about-debug-badge')).toBeTruthy();
+      expect(screen.getByTestId('about-shortcuts')).toBeTruthy();
+
+      unmount();
+
+      // 2. Release build hides debug badge & build hash
+      healthPayload = { ok: true, version: 'v0.2.0', build_sha: 'abc1234', is_dev: false };
+      render(<App />);
+      fireEvent.click(screen.getByTestId('header-help-btn'));
+      fireEvent.click(screen.getByTestId('open-about-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('about-version').textContent).toBe('v0.2.0');
+      });
+      expect(screen.queryByTestId('about-build-sha')).toBeNull();
+      expect(screen.queryByTestId('about-debug-badge')).toBeNull();
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });

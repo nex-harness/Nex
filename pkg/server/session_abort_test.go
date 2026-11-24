@@ -295,3 +295,70 @@ func TestServerAbortRESTEndpoint(t *testing.T) {
 		t.Fatalf("expected status=idle after REST abort, got %q", rec.Status)
 	}
 }
+
+func TestHealthExposesBuildMetadata(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	// 1. Dev build exposes is_dev=true + build_sha
+	devSrv, err := New(Config{
+		Store:    st,
+		Version:  "v0.2.0-dev",
+		BuildSHA: "deadbeef",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tsDev := httptest.NewServer(devSrv.Handler())
+	defer tsDev.Close()
+
+	respDev, err := http.Get(tsDev.URL + "/api/v1/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respDev.Body.Close()
+	var bodyDev struct {
+		OK       bool   `json:"ok"`
+		Version  string `json:"version"`
+		BuildSHA string `json:"build_sha"`
+		IsDev    bool   `json:"is_dev"`
+	}
+	if err := json.NewDecoder(respDev.Body).Decode(&bodyDev); err != nil {
+		t.Fatal(err)
+	}
+	if !bodyDev.OK || bodyDev.Version != "v0.2.0-dev" || bodyDev.BuildSHA != "deadbeef" || !bodyDev.IsDev {
+		t.Fatalf("unexpected dev health payload: %+v", bodyDev)
+	}
+
+	// 2. Release build exposes is_dev=false
+	relSrv, err := New(Config{
+		Store:    st,
+		Version:  "v0.2.0",
+		BuildSHA: "cafebabe",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tsRel := httptest.NewServer(relSrv.Handler())
+	defer tsRel.Close()
+
+	respRel, err := http.Get(tsRel.URL + "/api/v1/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respRel.Body.Close()
+	var bodyRel struct {
+		Version  string `json:"version"`
+		BuildSHA string `json:"build_sha"`
+		IsDev    bool   `json:"is_dev"`
+	}
+	if err := json.NewDecoder(respRel.Body).Decode(&bodyRel); err != nil {
+		t.Fatal(err)
+	}
+	if bodyRel.Version != "v0.2.0" || bodyRel.BuildSHA != "cafebabe" || bodyRel.IsDev {
+		t.Fatalf("unexpected release health payload: %+v", bodyRel)
+	}
+}

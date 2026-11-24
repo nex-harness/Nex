@@ -14,7 +14,10 @@ import (
 	"github.com/nex-harness/nex/pkg/store"
 )
 
-var version = "dev"
+var (
+	version  = "dev"
+	buildSHA = ""
+)
 
 func main() {
 	defaultDir := filepath.Join(userHomeOrDot(), ".nex-server")
@@ -51,6 +54,7 @@ func main() {
 	srv, err := server.New(server.Config{
 		Store:              st,
 		Version:            version,
+		BuildSHA:           buildSHA,
 		PairingSecret:      *pairingToken,
 		PublicBaseURL:      *publicURL,
 		ListenPort:         listenPort,

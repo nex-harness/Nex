@@ -1197,6 +1197,18 @@ export const enUS = {
   "settings.credentials.list.saveLocal": "Save Local",
   "settings.credentials.list.probeOk": "OK",
   "settings.credentials.list.probeFailed": "Failed",
+  "about.menuItem": "About Nex",
+  "about.title": "About Nex",
+  "about.appName": "Nex",
+  "about.subtitle": "Autonomous Multi-Runner AI Workspace",
+  "about.version": "Version",
+  "about.buildHash": "Build Hash",
+  "about.debugBadge": "Debug",
+  "about.shortcutsTitle": "Keyboard Shortcuts",
+  "about.slashCommands": "Slash commands",
+  "about.commandPalette": "Search & commands",
+  "about.copyHash": "Copy build hash",
+  "about.copiedHash": "Copied",
 } as const;
 
 export type MessageKey = keyof typeof enUS;

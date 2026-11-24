@@ -37,6 +37,7 @@ type Config struct {
 	ListenPort                 int             // Local TCP listen port for LAN URL advertisement
 	RunnersDir                 string          // Optional directory containing prebuilt multi-platform nex-runner-<os>-<arch> binaries
 	Version                    string          // Server build version string
+	BuildSHA                   string          // Server short commit hash (exposed for debug/about diagnostics)
 	ReleaseManifestURL         string          // Optional URL pointing to GitHub/Gitea Release manifest.json / version.json
 	MinRunnerProtocolVersion   int             // Minimum runner protocol_version required (defaults to protocol.MinRunnerProtocolVersion)
 	RequiredRunnerCapabilities []string        // Optional capabilities required for compatibility gating
