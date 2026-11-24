@@ -69,6 +69,9 @@ func AttachDefaultSubsystems(n *Node) *DefaultRuntimeWiring {
 	w := &DefaultRuntimeWiring{node: n, browserMgr: browserMgr}
 	w.mcpPool = codemode.NewPool(w)
 	w.subMgr = subagent.NewManager(w, subagent.DefaultMaxDepth, subagent.DefaultMaxConcurrent)
+	w.subMgr.SetOnStateChange(func(parentSessionID string) {
+		w.node.emitBackgroundTasksSnapshot(parentSessionID)
+	})
 	w.cronEng = scheduler.NewEngine(n.store, w)
 
 	// Load initial MCP servers & Cron schedules from local SQLite snapshot (for immediate offline readiness!)
@@ -304,26 +307,51 @@ func (w *DefaultRuntimeWiring) NotifyParentBackgroundDone(parentSessionID, subag
 		return
 	}
 	noteText := fmt.Sprintf("[Background subagent %s completed]\n%s", subagentID, summary)
-	w.node.mu.Lock()
-	as := w.node.activeSessions[parentSessionID]
-	w.node.mu.Unlock()
-	if as != nil {
-		as.loop.FollowUp(ai.NewUserTextMessage(noteText))
-		return
-	}
-	// If parent session is currently idle, trigger a follow-up turn automatically
-	go func() {
-		_, _ = w.node.ExecutePrompt(context.Background(), protocol.PromptPayload{
-			SessionID: parentSessionID,
-			Text:      noteText,
-		}, "chat", w.node.IsOnline())
-	}()
+	w.node.wakeSessionWithBackgroundNotification(parentSessionID, noteText)
 }
 
-// OnSessionAbort cancels any running background subagents associated with the aborted parent session.
-func (w *DefaultRuntimeWiring) OnSessionAbort(sessionID string) {
+func (w *DefaultRuntimeWiring) ListBackgroundSubagents(parentSessionID string) []protocol.BackgroundTaskInfo {
+	if w.subMgr == nil {
+		return nil
+	}
+	snaps := w.subMgr.ListRunningByParent(parentSessionID)
+	out := make([]protocol.BackgroundTaskInfo, 0, len(snaps))
+	for _, s := range snaps {
+		title := strings.Join(strings.Fields(s.Prompt), " ")
+		if runes := []rune(title); len(runes) > 80 {
+			title = string(runes[:80]) + "..."
+		}
+		if title == "" {
+			title = s.AgentType
+		}
+		out = append(out, protocol.BackgroundTaskInfo{
+			TaskID:    s.SubagentID,
+			Kind:      "local_agent",
+			Title:     title,
+			Status:    "running",
+			StartedAt: s.StartedAt,
+		})
+	}
+	return out
+}
+
+func (w *DefaultRuntimeWiring) CancelBackgroundSubagent(taskID, initiator string) (string, bool) {
+	if w.subMgr == nil {
+		return "", false
+	}
+	return w.subMgr.CancelByID(taskID, initiator)
+}
+
+func (w *DefaultRuntimeWiring) IsBackgroundSession(sessionID string) bool {
+	if w.subMgr == nil {
+		return false
+	}
+	return w.subMgr.IsBackgroundSession(sessionID)
+}
+
+func (w *DefaultRuntimeWiring) CancelAllBackgroundSubagents() {
 	if w.subMgr != nil {
-		w.subMgr.CancelByParent(sessionID)
+		w.subMgr.CancelAll()
 	}
 }
 

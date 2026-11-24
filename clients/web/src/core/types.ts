@@ -766,3 +766,13 @@ export interface RemotePairedDevice {
   last_transport: string;
   revoked_at: number;
 }
+
+export interface BackgroundTaskItem {
+  task_id: string;
+  kind: 'local_bash' | 'local_agent' | string;
+  title: string;
+  status: 'running' | 'completed' | 'failed' | 'killed' | string;
+  started_at: number;
+  exit_code?: number;
+  stopped_by?: string;
+}

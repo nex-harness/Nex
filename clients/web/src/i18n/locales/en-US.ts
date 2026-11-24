@@ -46,6 +46,8 @@ export const enUS = {
   "chat.statusPanel.goal": "Goal",
   "chat.statusPanel.todo": "Progress",
   "chat.statusPanel.agents": "Agents",
+  "chat.statusPanel.stopTask": "Stop",
+  "chat.statusPanel.backgroundAgent": "Background agent",
   "chat.statusPanel.collapse": "Collapse to capsule",
   "chat.statusPanel.autoExpand": "Auto expand",
   "chat.statusPanel.modeAuto": "Auto layout",

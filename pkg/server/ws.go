@@ -551,7 +551,7 @@ func (s *Server) handleClientWS(w http.ResponseWriter, r *http.Request) {
 		case protocol.TypeSessionAbort:
 			s.handleClientAbort(ctx, cc, env)
 
-		case protocol.TypeSessionSteer, protocol.TypeSessionFollowUp,
+		case protocol.TypeSessionSteer, protocol.TypeSessionFollowUp, protocol.TypeSessionBgTaskStop,
 			protocol.TypeApprovalResolve, protocol.TypeUIResolve, protocol.TypeBrowserInput, protocol.TypeBrowserHandoff:
 			s.forwardControlToRunner(ctx, cc, env)
 
@@ -784,8 +784,8 @@ func (s *Server) handleClientAbort(ctx context.Context, cc *clientConn, env prot
 
 func (s *Server) forwardControlToRunner(ctx context.Context, cc *clientConn, env protocol.Envelope) {
 	runnerID := env.RunnerID
-	if runnerID == "" && env.SessionID != "" {
-		if sess, err := s.store.GetSession(ctx, env.SessionID); err == nil {
+	if env.SessionID != "" {
+		if sess, err := s.store.GetSession(ctx, env.SessionID); err == nil && sess != nil && sess.RunnerID != "" {
 			runnerID = sess.RunnerID
 		}
 	}

@@ -48,6 +48,8 @@ export const zhCN = {
   "chat.statusPanel.goal": "Goal",
   "chat.statusPanel.todo": "Progress",
   "chat.statusPanel.agents": "Agents",
+  "chat.statusPanel.stopTask": "停止",
+  "chat.statusPanel.backgroundAgent": "后台子代理",
   "chat.statusPanel.collapse": "收起为胶囊",
   "chat.statusPanel.autoExpand": "自动展开",
   "chat.statusPanel.modeAuto": "自动布局",

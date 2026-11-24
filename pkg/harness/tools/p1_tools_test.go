@@ -165,6 +165,56 @@ func TestBashBackgroundTaskLifecycle(t *testing.T) {
 	}
 }
 
+func TestBackgroundTaskManagerCallbacksAndInitiator(t *testing.T) {
+	dir := t.TempDir()
+	mgr := NewBackgroundTaskManager()
+	defer mgr.StopAll()
+
+	startedCh := make(chan BackgroundTaskSnapshot, 4)
+	completedCh := make(chan BackgroundTaskSnapshot, 4)
+	mgr.SetCallbacks(
+		func(snap BackgroundTaskSnapshot) { startedCh <- snap },
+		func(snap BackgroundTaskSnapshot) { completedCh <- snap },
+	)
+
+	// 1. Completing command triggers onStart -> completed with tail output
+	idOK := mgr.Start(dir, "printf 'ci-green\\n'", 5*time.Second)
+	s1 := <-startedCh
+	if s1.TaskID != idOK || s1.Status != "running" {
+		t.Fatalf("unexpected start snapshot: %+v", s1)
+	}
+	c1 := <-completedCh
+	if c1.TaskID != idOK || c1.Status != "completed" || c1.ExitCode != 0 || !strings.Contains(c1.OutputTail, "ci-green") {
+		t.Fatalf("unexpected completed snapshot: %+v", c1)
+	}
+
+	// 2. Failing command triggers onComplete with status=failed
+	idFail := mgr.Start(dir, "printf 'ci-red\\n' >&2; exit 2", 5*time.Second)
+	<-startedCh
+	c2 := <-completedCh
+	if c2.TaskID != idFail || c2.Status != "failed" || c2.ExitCode != 2 {
+		t.Fatalf("unexpected failed snapshot: %+v", c2)
+	}
+
+	// 3. Long command shows up in ListRunning and StopWithInitiator records user
+	idLong := mgr.Start(dir, "sleep 30", 30*time.Second)
+	<-startedCh
+	running := mgr.ListRunning()
+	if len(running) != 1 || running[0].TaskID != idLong {
+		t.Fatalf("expected %s in ListRunning, got %+v", idLong, running)
+	}
+	if err := mgr.StopWithInitiator(idLong, "user"); err != nil {
+		t.Fatal(err)
+	}
+	c3 := <-completedCh
+	if c3.TaskID != idLong || c3.Status != "killed" || c3.StoppedBy != "user" {
+		t.Fatalf("unexpected killed snapshot: %+v", c3)
+	}
+	if len(mgr.ListRunning()) != 0 {
+		t.Fatalf("expected 0 running tasks after stop, got %+v", mgr.ListRunning())
+	}
+}
+
 func TestWebFetchSSRFGuardHTMLStrippingAndCache(t *testing.T) {
 	wf := NewWebFetchTool()
 

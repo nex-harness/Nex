@@ -92,6 +92,7 @@ export function useConversationStatusPanelHasContent(): boolean {
   if ((stream?.goals || []).length > 0) return true;
   if ((stream?.todos || []).length > 0) return true;
   if (bottomTerminals.length > 0 || rightTabs.some((t) => t.kind === 'terminal')) return true;
+  if ((stream?.backgroundTasks || []).length > 0) return true;
   if (extractBackgroundBashEntries(stream?.items || [], Boolean(stream?.running)).length > 0) return true;
   for (const item of stream?.items || []) {
     for (const tc of item.toolCalls) {
@@ -133,6 +134,7 @@ interface TerminalEntry {
   title: string;
   startedAt: number;
   kind: 'pty' | 'bash';
+  testId?: string;
   onStop: () => void;
 }
 
@@ -156,6 +158,7 @@ export function ConversationStatusPanel({
   const closeBottomTerminal = useNexStore((s) => s.closeBottomTerminal);
   const closeRightTab = useNexStore((s) => s.closeRightTab);
   const abortActiveSession = useNexStore((s) => s.abortActiveSession);
+  const stopBackgroundTask = useNexStore((s) => s.stopBackgroundTask);
 
   const [internalMode, setInternalMode] = useState<StatusPanelMode>('auto');
   const mode = controlledMode ?? internalMode;
@@ -184,6 +187,9 @@ export function ConversationStatusPanel({
   const todos: TodoItem[] = stream?.todos || [];
   const goals = stream?.goals || [];
   const items = stream?.items || [];
+  const bgTasks = useMemo(() => stream?.backgroundTasks || [], [stream?.backgroundTasks]);
+  const bgBashTasks = useMemo(() => bgTasks.filter((t) => t.kind === 'local_bash'), [bgTasks]);
+  const bgAgentTasks = useMemo(() => bgTasks.filter((t) => t.kind === 'local_agent'), [bgTasks]);
 
   const subagents = useMemo(() => {
     const list: Array<{ tc: ToolCallCard; summary: string }> = [];
@@ -234,29 +240,53 @@ export function ConversationStatusPanel({
         onStop: () => closeRightTab(tab.id),
       });
     }
+    const bgBashIds = new Set(bgBashTasks.map((t) => t.task_id));
     for (const bash of runningBash) {
+      const m = /Started background task ([A-Za-z0-9_-]+)/.exec(bash.tc.finalOutput || bash.tc.streamOutput || '');
+      const tid = m?.[1] || '';
+      if (tid && bgBashIds.has(tid)) continue;
       if (!bashSeenRef.current[bash.tc.id]) bashSeenRef.current[bash.tc.id] = Date.now();
       list.push({
         id: bash.tc.id,
         title: bash.description || shortCommand(bash.command) || 'bash',
         startedAt: bashSeenRef.current[bash.tc.id],
         kind: 'bash',
-        onStop: () => abortActiveSession(),
+        testId: tid ? `stop-bg-task-${tid}` : undefined,
+        onStop: tid ? () => stopBackgroundTask(tid) : () => abortActiveSession(),
+      });
+    }
+    for (const bt of bgBashTasks) {
+      list.push({
+        id: bt.task_id,
+        title: bt.title || bt.task_id,
+        startedAt: bt.started_at || Date.now(),
+        kind: 'bash',
+        testId: `stop-bg-task-${bt.task_id}`,
+        onStop: () => stopBackgroundTask(bt.task_id),
       });
     }
     return list;
-  }, [bottomTerminals, rightTerminalTabs, runningBash, closeBottomTerminal, closeRightTab, abortActiveSession]);
+  }, [
+    bottomTerminals,
+    rightTerminalTabs,
+    runningBash,
+    bgBashTasks,
+    closeBottomTerminal,
+    closeRightTab,
+    abortActiveSession,
+    stopBackgroundTask,
+  ]);
 
   const hasGit = hasGitChanges(gitSummary);
   const hasGoal = goals.length > 0;
   const hasProgress = todos.length > 0;
   const hasTerminals = activeTerminals.length > 0;
-  const hasAgents = subagents.length > 0;
+  const hasAgents = subagents.length > 0 || bgAgentTasks.length > 0;
 
   const completedCount = todos.filter((t) => t.status === 'completed').length;
   const totalCount = todos.length;
 
-  const needsTicker = hasGoal || hasTerminals;
+  const needsTicker = hasGoal || hasTerminals || bgAgentTasks.length > 0;
   useEffect(() => {
     if (!needsTicker) return;
     const timer = window.setInterval(() => setTick((v) => v + 1), 1000);
@@ -651,11 +681,12 @@ export function ConversationStatusPanel({
                           </span>
                           <button
                             type="button"
+                            data-testid={term.testId}
                             onClick={term.onStop}
                             className="inline-flex items-center gap-1.5 rounded-md bg-black/[0.06] px-2.5 py-1 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover dark:bg-white/[0.1]"
                           >
                             <span className="size-2.5 rounded-[2px] bg-foreground" />
-                            Stop
+                            {formatMsg(locale, 'chat.statusPanel.stopTask')}
                           </button>
                         </div>
                       </div>
@@ -670,6 +701,40 @@ export function ConversationStatusPanel({
                   <div className={`text-ui-sm font-medium text-foreground-subtle ${firstSection === 'agents' ? 'flex min-h-6 items-center pr-14' : ''}`}>
                     {formatMsg(locale, 'chat.statusPanel.agents')}
                   </div>
+
+                  {bgAgentTasks.length > 0 && (
+                    <div className="mt-2 space-y-2">
+                      {bgAgentTasks.map((bt) => (
+                        <div key={bt.task_id} className="rounded-xl bg-surface p-3 space-y-2">
+                          <div className="flex items-start gap-2">
+                            <Bot className="mt-0.5 size-4 shrink-0 animate-pulse text-success" />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-ui-xs font-medium text-foreground-subtle">
+                                {formatMsg(locale, 'chat.statusPanel.backgroundAgent')}
+                              </div>
+                              <div className="line-clamp-2 text-ui-base font-medium leading-snug text-foreground">
+                                {bt.title || bt.task_id}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between pl-6">
+                            <span className="text-ui-sm tabular-nums text-foreground-subtle">
+                              {formatElapsed(Date.now() - (bt.started_at || Date.now()))}
+                            </span>
+                            <button
+                              type="button"
+                              data-testid={`stop-bg-task-${bt.task_id}`}
+                              onClick={() => stopBackgroundTask(bt.task_id)}
+                              className="inline-flex items-center gap-1.5 rounded-md bg-black/[0.06] px-2.5 py-1 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover dark:bg-white/[0.1]"
+                            >
+                              <span className="size-2.5 rounded-[2px] bg-foreground" />
+                              {formatMsg(locale, 'chat.statusPanel.stopTask')}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {runningSubagents.length > 0 && (
                     <div className="mt-2 space-y-1.5">

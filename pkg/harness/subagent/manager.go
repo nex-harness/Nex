@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nex-harness/nex/pkg/ai"
@@ -41,13 +42,28 @@ type LocalExecutor interface {
 	NotifyParentBackgroundDone(parentSessionID, subagentID, summary string)
 }
 
+// RunningSubagentSnapshot describes an active background subagent owned by a parent session.
+type RunningSubagentSnapshot struct {
+	SubagentID      string
+	ParentSessionID string
+	SessionID       string
+	AgentType       string
+	Prompt          string
+	StartedAt       int64
+}
+
 type runningEntry struct {
 	subagentID      string
 	parentSessionID string
 	sessionID       string
+	agentType       string
+	prompt          string
 	workDir         string
 	isWorktree      bool
 	branchName      string
+	isBackground    bool
+	startedAt       int64
+	stoppedBy       string
 	done            bool
 	summary         string
 	steer           func(msg string)
@@ -60,8 +76,16 @@ type Manager struct {
 	sem      chan struct{}
 	exec     LocalExecutor
 
-	mu      sync.Mutex
-	entries map[string]*runningEntry
+	mu            sync.Mutex
+	entries       map[string]*runningEntry
+	onStateChange func(parentSessionID string)
+}
+
+// SetOnStateChange registers a callback invoked outside m.mu whenever a background subagent starts or ends.
+func (m *Manager) SetOnStateChange(fn func(parentSessionID string)) {
+	m.mu.Lock()
+	m.onStateChange = fn
+	m.mu.Unlock()
 }
 
 // NewManager creates a Subagent Manager enforcing maxDepth (default 1) and maxConcurrent (default 6).
@@ -132,15 +156,23 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (string, error) {
 		subagentID:      subID,
 		parentSessionID: req.ParentSessionID,
 		sessionID:       childSessID,
+		agentType:       agentType,
+		prompt:          req.Prompt,
 		workDir:         effectiveDir,
 		isWorktree:      isWorktree,
 		branchName:      branchName,
+		isBackground:    req.RunInBackground,
+		startedAt:       time.Now().UnixMilli(),
 		cancel:          cancel,
 	}
 
 	m.mu.Lock()
 	m.entries[subID] = entry
+	onChangeStart := m.onStateChange
 	m.mu.Unlock()
+	if req.RunInBackground && onChangeStart != nil {
+		onChangeStart(req.ParentSessionID)
+	}
 
 	runFn := func(rCtx context.Context) (string, error) {
 		select {
@@ -169,7 +201,13 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (string, error) {
 		m.mu.Lock()
 		entry.done = true
 		entry.summary = finalOut
+		onChangeDone := m.onStateChange
+		isBg := entry.isBackground
+		parentID := entry.parentSessionID
 		m.mu.Unlock()
+		if isBg && onChangeDone != nil {
+			onChangeDone(parentID)
+		}
 		return finalOut, err
 	}
 
@@ -222,6 +260,95 @@ func (m *Manager) CancelByParent(parentSessionID string) int {
 		c()
 	}
 	return len(cancels)
+}
+
+// ListRunningByParent returns active background subagents spawned by parentSessionID.
+func (m *Manager) ListRunningByParent(parentSessionID string) []RunningSubagentSnapshot {
+	if parentSessionID == "" {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []RunningSubagentSnapshot
+	for _, entry := range m.entries {
+		if entry != nil && entry.isBackground && !entry.done && entry.parentSessionID == parentSessionID {
+			out = append(out, RunningSubagentSnapshot{
+				SubagentID:      entry.subagentID,
+				ParentSessionID: entry.parentSessionID,
+				SessionID:       entry.sessionID,
+				AgentType:       entry.agentType,
+				Prompt:          entry.prompt,
+				StartedAt:       entry.startedAt,
+			})
+		}
+	}
+	return out
+}
+
+// IsBackgroundSession reports whether sessionID belongs to an active detached background subagent.
+func (m *Manager) IsBackgroundSession(sessionID string) bool {
+	if sessionID == "" {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, entry := range m.entries {
+		if entry != nil && entry.isBackground && !entry.done && entry.sessionID == sessionID {
+			return true
+		}
+	}
+	return false
+}
+
+// CancelByID terminates a single running subagent matching subagentID or child sessionID.
+func (m *Manager) CancelByID(idOrSessionID, initiator string) (parentSessionID string, ok bool) {
+	if idOrSessionID == "" {
+		return "", false
+	}
+	m.mu.Lock()
+	var cancel context.CancelFunc
+	var onChange func(string)
+	for _, entry := range m.entries {
+		if entry != nil && !entry.done && (entry.subagentID == idOrSessionID || entry.sessionID == idOrSessionID) {
+			entry.done = true
+			entry.stoppedBy = initiator
+			parentSessionID = entry.parentSessionID
+			cancel = entry.cancel
+			onChange = m.onStateChange
+			ok = true
+			break
+		}
+	}
+	m.mu.Unlock()
+	if !ok {
+		return "", false
+	}
+	if cancel != nil {
+		cancel()
+	}
+	if onChange != nil && parentSessionID != "" {
+		onChange(parentSessionID)
+	}
+	return parentSessionID, true
+}
+
+// CancelAll terminates all running subagents (called during Node shutdown).
+func (m *Manager) CancelAll() {
+	m.mu.Lock()
+	var cancels []context.CancelFunc
+	for _, entry := range m.entries {
+		if entry != nil && !entry.done {
+			entry.done = true
+			entry.stoppedBy = "system"
+			if entry.cancel != nil {
+				cancels = append(cancels, entry.cancel)
+			}
+		}
+	}
+	m.mu.Unlock()
+	for _, c := range cancels {
+		c()
+	}
 }
 
 // SendMessage steers a running subagent or resumes a completed subagent session in place.

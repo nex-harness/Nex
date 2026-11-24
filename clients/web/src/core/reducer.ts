@@ -1,4 +1,5 @@
 import {
+  BackgroundTaskItem,
   ChatTurnItem,
   GoalEntry,
   PendingApproval,
@@ -21,6 +22,7 @@ export interface SessionStreamState {
   pendingUIPrompt: PendingUIPrompt | null;
   todos: TodoItem[];
   goals: GoalEntry[];
+  backgroundTasks?: BackgroundTaskItem[];
 }
 
 export function emptyStreamState(): SessionStreamState {
@@ -36,6 +38,7 @@ export function emptyStreamState(): SessionStreamState {
     pendingUIPrompt: null,
     todos: [],
     goals: [],
+    backgroundTasks: [],
   };
 }
 
@@ -167,6 +170,7 @@ export function applySessionEvent(
   let pendingUIPrompt = prev.pendingUIPrompt;
   let todos = prev.todos;
   let goals = prev.goals;
+  let backgroundTasks = prev.backgroundTasks || [];
 
   const p = ev.payload || {};
 
@@ -607,6 +611,30 @@ export function applySessionEvent(
       };
       break;
     }
+
+    case 'background_tasks_updated': {
+      const rawTasks = Array.isArray(p.tasks) ? p.tasks : [];
+      const nextTasks: BackgroundTaskItem[] = [];
+      for (const raw of rawTasks) {
+        if (!raw || typeof raw !== 'object') continue;
+        const rec = raw as Record<string, unknown>;
+        const taskId = String(rec.task_id || '').trim();
+        const status = String(rec.status || 'running').trim();
+        if (!taskId || status !== 'running') continue;
+        nextTasks.push({
+          task_id: taskId,
+          kind: String(rec.kind || 'local_bash'),
+          title: String(rec.title || taskId),
+          status,
+          started_at:
+            typeof rec.started_at === 'number' && Number.isFinite(rec.started_at) ? rec.started_at : Date.now(),
+          exit_code: typeof rec.exit_code === 'number' ? rec.exit_code : undefined,
+          stopped_by: rec.stopped_by ? String(rec.stopped_by) : undefined,
+        });
+      }
+      backgroundTasks = nextTasks;
+      break;
+    }
   }
 
   return {
@@ -621,5 +649,6 @@ export function applySessionEvent(
     pendingUIPrompt,
     todos,
     goals,
+    backgroundTasks,
   };
 }

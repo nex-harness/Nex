@@ -521,6 +521,7 @@ export interface AppState {
   removeFollowUp: (sessionId: string, id: string) => void;
   promoteFollowUpToSteer: (sessionId: string, id: string) => void;
   abortActiveSession: () => void;
+  stopBackgroundTask: (taskId: string, sessionId?: string) => void;
   resolveApproval: (approvalId: string, approved: boolean) => void;
   resolveUIPrompt: (requestId: string, confirmed: boolean, value: string, canceled?: boolean) => void;
 
@@ -2195,6 +2196,19 @@ export const useNexStore = create<AppState>((set, get) => ({
         .then(() => get().refreshInitialData())
         .catch(() => {});
     }
+  },
+
+  stopBackgroundTask: (taskId, sessionId) => {
+    const { activeSessionId, selectedRunnerId, sessions } = get();
+    const sid = sessionId || activeSessionId;
+    if (!sid || !taskId) return;
+    const sess = sessions.find((s) => s.id === sid);
+    const targetRunnerId = sess?.runner_id || selectedRunnerId;
+    wsClient.sendEnvelope(
+      'session.bg_task_stop',
+      { session_id: sid, task_id: taskId },
+      { session_id: sid, runner_id: targetRunnerId },
+    );
   },
 
   resolveApproval: (approvalId, approved) => {

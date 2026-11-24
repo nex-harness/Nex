@@ -174,3 +174,58 @@ func TestManagerCancelByParentStopsBackgroundSubagents(t *testing.T) {
 	case <-time.After(80 * time.Millisecond):
 	}
 }
+
+func TestManagerCancelByIDAndListRunningByParent(t *testing.T) {
+	exec := &blockingSubExecutor{
+		started:     make(chan struct{}),
+		canceled:    make(chan struct{}),
+		bgCompleted: make(chan string, 1),
+	}
+	mgr := NewManager(exec, 1, 2)
+	stateChanges := make(chan string, 4)
+	mgr.SetOnStateChange(func(parentSessionID string) {
+		stateChanges <- parentSessionID
+	})
+
+	out, err := mgr.Spawn(context.Background(), SpawnRequest{
+		ParentSessionID: "sess_parent_list",
+		ParentDepth:     0,
+		AgentType:       "explore",
+		Prompt:          "watch workflow run",
+		RunInBackground: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var meta struct {
+		AgentID string `json:"agent_id"`
+	}
+	_ = json.Unmarshal([]byte(out), &meta)
+
+	select {
+	case <-exec.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for background subagent")
+	}
+
+	running := mgr.ListRunningByParent("sess_parent_list")
+	if len(running) != 1 || running[0].SubagentID != meta.AgentID {
+		t.Fatalf("expected 1 running subagent for parent, got %+v", running)
+	}
+
+	parentID, ok := mgr.CancelByID(meta.AgentID, "user")
+	if !ok || parentID != "sess_parent_list" {
+		t.Fatalf("expected CancelByID ok=true parent=sess_parent_list, got ok=%v parent=%q", ok, parentID)
+	}
+	select {
+	case <-exec.canceled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for subagent cancel")
+	}
+	if len(mgr.ListRunningByParent("sess_parent_list")) != 0 {
+		t.Fatalf("expected 0 running subagents after CancelByID, got %+v", mgr.ListRunningByParent("sess_parent_list"))
+	}
+	if len(stateChanges) == 0 {
+		t.Fatal("expected onStateChange callbacks to fire")
+	}
+}

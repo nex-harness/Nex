@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -91,8 +92,11 @@ type activeWorkCounter interface {
 	ActiveCount() int
 }
 
-type sessionAbortHandler interface {
-	OnSessionAbort(sessionID string)
+type backgroundSubagentController interface {
+	ListBackgroundSubagents(parentSessionID string) []protocol.BackgroundTaskInfo
+	CancelBackgroundSubagent(taskID, initiator string) (parentSessionID string, ok bool)
+	IsBackgroundSession(sessionID string) bool
+	CancelAllBackgroundSubagents()
 }
 
 type activeSession struct {
@@ -115,6 +119,7 @@ type Node struct {
 
 	mu              sync.Mutex
 	activeSessions  map[string]*activeSession
+	sessionBgTasks  map[string]*tools.BackgroundTaskManager
 	activeTurns     int
 	activePTYs      map[string]bool
 	draining        bool
@@ -185,6 +190,7 @@ func NewNode(cfg Config) (*Node, error) {
 		binarySHA256:    binHash,
 		isDev:           isDev,
 		activeSessions:  make(map[string]*activeSession),
+		sessionBgTasks:  make(map[string]*tools.BackgroundTaskManager),
 		activePTYs:      make(map[string]bool),
 		pendingApproval: make(map[string]chan protocol.ApprovalResolvePayload),
 		pendingUI:       make(map[string]chan protocol.UIResolvePayload),
@@ -281,12 +287,154 @@ func (n *Node) reconcileOrphanedLocalSessions(ctx context.Context) {
 	}
 }
 
-// AbortSession cancels an active session (plus any child sessions/background subagents)
+func (n *Node) getOrCreateSessionBgTasks(sessionID string) *tools.BackgroundTaskManager {
+	n.mu.Lock()
+	if n.sessionBgTasks == nil {
+		n.sessionBgTasks = make(map[string]*tools.BackgroundTaskManager)
+	}
+	if existing := n.sessionBgTasks[sessionID]; existing != nil {
+		n.mu.Unlock()
+		return existing
+	}
+	mgr := tools.NewBackgroundTaskManager()
+	mgr.SetCallbacks(
+		func(_ tools.BackgroundTaskSnapshot) {
+			n.emitBackgroundTasksSnapshot(sessionID)
+		},
+		func(snap tools.BackgroundTaskSnapshot) {
+			n.emitBackgroundTasksSnapshot(sessionID)
+			if snap.Status == "killed" {
+				return
+			}
+			var sb strings.Builder
+			fmt.Fprintf(&sb, "[Background command %s %s (exit_code=%d)]\n", snap.TaskID, snap.Status, snap.ExitCode)
+			if strings.TrimSpace(snap.Command) != "" {
+				fmt.Fprintf(&sb, "Command: %s\n", strings.TrimSpace(snap.Command))
+			}
+			if strings.TrimSpace(snap.OutputTail) != "" {
+				sb.WriteString("Output:\n")
+				sb.WriteString(strings.TrimRight(snap.OutputTail, "\n"))
+			}
+			n.wakeSessionWithBackgroundNotification(sessionID, sb.String())
+		},
+	)
+	n.sessionBgTasks[sessionID] = mgr
+	n.mu.Unlock()
+	return mgr
+}
+
+func (n *Node) listSessionBackgroundTasks(sessionID string) []protocol.BackgroundTaskInfo {
+	var tasks []protocol.BackgroundTaskInfo
+	n.mu.Lock()
+	bgMgr := n.sessionBgTasks[sessionID]
+	n.mu.Unlock()
+
+	if bgMgr != nil {
+		for _, bt := range bgMgr.ListRunning() {
+			title := strings.Join(strings.Fields(bt.Command), " ")
+			if runes := []rune(title); len(runes) > 80 {
+				title = string(runes[:80]) + "..."
+			}
+			tasks = append(tasks, protocol.BackgroundTaskInfo{
+				TaskID:    bt.TaskID,
+				Kind:      "local_bash",
+				Title:     title,
+				Status:    "running",
+				StartedAt: bt.StartedAt,
+			})
+		}
+	}
+	if bgCtrl, ok := n.cfg.Extensions.(backgroundSubagentController); ok {
+		tasks = append(tasks, bgCtrl.ListBackgroundSubagents(sessionID)...)
+	}
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].StartedAt < tasks[j].StartedAt
+	})
+	if tasks == nil {
+		tasks = []protocol.BackgroundTaskInfo{}
+	}
+	return tasks
+}
+
+func (n *Node) emitBackgroundTasksSnapshot(sessionID string) {
+	if strings.TrimSpace(sessionID) == "" || n.store == nil {
+		return
+	}
+	tasks := n.listSessionBackgroundTasks(sessionID)
+	payload, err := json.Marshal(map[string]any{
+		"type":  string(agent.EventBackgroundTasksUpdated),
+		"tasks": tasks,
+	})
+	if err != nil {
+		return
+	}
+	n.recordAndEmitSessionEvent(context.Background(), sessionID, 0, string(agent.EventBackgroundTasksUpdated), payload, nil)
+}
+
+func (n *Node) wakeSessionWithBackgroundNotification(parentSessionID, noteText string) {
+	if strings.TrimSpace(parentSessionID) == "" || strings.TrimSpace(noteText) == "" {
+		return
+	}
+	n.mu.Lock()
+	as := n.activeSessions[parentSessionID]
+	n.mu.Unlock()
+	if as != nil {
+		as.loop.FollowUp(ai.NewUserTextMessage(noteText))
+		return
+	}
+	payload := protocol.PromptPayload{
+		SessionID: parentSessionID,
+		Text:      noteText,
+	}
+	if rec, err := n.store.GetSession(context.Background(), parentSessionID); err == nil && rec != nil {
+		payload.WorkspacePath = rec.WorkspacePath
+		payload.AgentProfileSlug = rec.AgentProfileSlug
+		payload.ProviderID = rec.ProviderID
+		payload.ModelID = rec.ModelID
+		payload.ThinkingEffort = ai.ThinkingEffort(rec.ThinkingEffort)
+		payload.PermissionMode = rec.PermissionMode
+	}
+	go func() {
+		_, _ = n.ExecutePrompt(context.Background(), payload, "chat", n.IsOnline())
+	}()
+}
+
+// StopBackgroundTask terminates a single detached background command or background subagent.
+func (n *Node) StopBackgroundTask(ctx context.Context, sessionID, taskID, initiator string) (bool, error) {
+	cleanID := strings.TrimSpace(taskID)
+	if cleanID == "" {
+		return false, errors.New("task_id is required")
+	}
+	n.mu.Lock()
+	bgMgr := n.sessionBgTasks[sessionID]
+	n.mu.Unlock()
+	if bgMgr != nil {
+		if err := bgMgr.StopWithInitiator(cleanID, initiator); err == nil {
+			n.emitBackgroundTasksSnapshot(sessionID)
+			return true, nil
+		}
+	}
+	if bgCtrl, ok := n.cfg.Extensions.(backgroundSubagentController); ok {
+		if parentID, found := bgCtrl.CancelBackgroundSubagent(cleanID, initiator); found {
+			targetSess := parentID
+			if targetSess == "" {
+				targetSess = sessionID
+			}
+			n.emitBackgroundTasksSnapshot(targetSess)
+			return true, nil
+		}
+	}
+	return false, fmt.Errorf("background task %q not found", cleanID)
+}
+
+// AbortSession cancels an active foreground session (plus synchronous child sessions)
+// without killing detached background bash commands or detached background subagents,
 // or reconciles an orphaned running session by emitting an interrupted agent_end event.
 func (n *Node) AbortSession(ctx context.Context, sessionID string) {
 	if strings.TrimSpace(sessionID) == "" {
 		return
 	}
+	bgCtrl, hasBgCtrl := n.cfg.Extensions.(backgroundSubagentController)
 	n.mu.Lock()
 	as := n.activeSessions[sessionID]
 	var cancels []context.CancelFunc
@@ -295,6 +443,9 @@ func (n *Node) AbortSession(ctx context.Context, sessionID string) {
 	}
 	for id, child := range n.activeSessions {
 		if id != sessionID && child != nil && child.record.ParentSessionID == sessionID && child.cancel != nil {
+			if hasBgCtrl && bgCtrl.IsBackgroundSession(id) {
+				continue
+			}
 			cancels = append(cancels, child.cancel)
 		}
 	}
@@ -302,9 +453,6 @@ func (n *Node) AbortSession(ctx context.Context, sessionID string) {
 
 	for _, c := range cancels {
 		c()
-	}
-	if h, ok := n.cfg.Extensions.(sessionAbortHandler); ok {
-		h.OnSessionAbort(sessionID)
 	}
 	if as == nil {
 		if sess, err := n.store.GetSession(ctx, sessionID); err == nil && sess != nil && sess.Status == "running" {
@@ -355,13 +503,25 @@ func (n *Node) ActiveWorkCount() int {
 	return count
 }
 
-// Close shuts down active sessions, PTYs, and the local store.
+// Close shuts down active sessions, detached background tasks, PTYs, and the local store.
 func (n *Node) Close() error {
 	n.mu.Lock()
 	for _, as := range n.activeSessions {
 		as.cancel()
 	}
+	bgManagers := make([]*tools.BackgroundTaskManager, 0, len(n.sessionBgTasks))
+	for _, m := range n.sessionBgTasks {
+		if m != nil {
+			bgManagers = append(bgManagers, m)
+		}
+	}
 	n.mu.Unlock()
+	for _, m := range bgManagers {
+		m.StopAll()
+	}
+	if bgCtrl, ok := n.cfg.Extensions.(backgroundSubagentController); ok {
+		bgCtrl.CancelAllBackgroundSubagents()
+	}
 	if n.cfg.PTY != nil {
 		n.cfg.PTY.CloseAll()
 	}
@@ -809,6 +969,16 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 
 	case protocol.TypeSessionAbort:
 		n.AbortSession(ctx, env.SessionID)
+
+	case protocol.TypeSessionBgTaskStop:
+		var req protocol.BgTaskStopPayload
+		if json.Unmarshal(env.Payload, &req) == nil {
+			sid := strings.TrimSpace(req.SessionID)
+			if sid == "" {
+				sid = env.SessionID
+			}
+			_, _ = n.StopBackgroundTask(ctx, sid, req.TaskID, "user")
+		}
 
 	case protocol.TypeSessionForkSync:
 		go func() {

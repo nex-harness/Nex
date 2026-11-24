@@ -27,9 +27,10 @@ const (
 	EventApprovalResolved    EventType = "approval_resolved"
 	EventUIPromptRequested   EventType = "ui_prompt_requested"
 	EventUIPromptResolved    EventType = "ui_prompt_resolved"
-	EventUIStatusUpdated     EventType = "ui_status_updated"
-	EventSubagentProgress    EventType = "subagent_progress"
-	EventCompaction          EventType = "compaction"
+	EventUIStatusUpdated        EventType = "ui_status_updated"
+	EventSubagentProgress       EventType = "subagent_progress"
+	EventBackgroundTasksUpdated EventType = "background_tasks_updated"
+	EventCompaction             EventType = "compaction"
 )
 
 // Event represents a structured event emitted during an agent run.

@@ -42,8 +42,9 @@ const (
 	TypeSessionPrompt   = "session.prompt"
 	TypeSessionSteer    = "session.steer"
 	TypeSessionFollowUp = "session.follow_up"
-	TypeSessionAbort    = "session.abort"
-	TypeSessionEvent    = "session.event"
+	TypeSessionAbort      = "session.abort"
+	TypeSessionBgTaskStop = "session.bg_task_stop"
+	TypeSessionEvent      = "session.event"
 	TypeSessionForkSync = "session.fork_sync"
 	TypeSessionRewind   = "session.rewind"
 	TypeMemorySync      = "memory.sync"
@@ -253,6 +254,23 @@ type RunnerWelcomePayload struct {
 type ClientSubscribePayload struct {
 	SessionID   string `json:"session_id"`
 	LastSeenSeq uint64 `json:"last_seen_seq"`
+}
+
+// BackgroundTaskInfo describes an active or terminal detached background command or subagent.
+type BackgroundTaskInfo struct {
+	TaskID    string `json:"task_id"`
+	Kind      string `json:"kind"` // "local_bash" | "local_agent"
+	Title     string `json:"title"`
+	Status    string `json:"status"` // "running" | "completed" | "failed" | "killed"
+	StartedAt int64  `json:"started_at"`
+	ExitCode  int    `json:"exit_code,omitempty"`
+	StoppedBy string `json:"stopped_by,omitempty"`
+}
+
+// BgTaskStopPayload stops a specific detached background task or subagent belonging to SessionID.
+type BgTaskStopPayload struct {
+	SessionID string `json:"session_id"`
+	TaskID    string `json:"task_id"`
 }
 
 // PromptPayload starts or continues a conversation on a target Runner.

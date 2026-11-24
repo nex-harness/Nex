@@ -17,6 +17,7 @@ import { wsClient } from '../core/wsClient';
 import { createHostBridge } from '../host/bridge';
 import { parsePastedSSHTarget } from '../features/SettingsRunners';
 import { computeTurnTickLayout } from '../features/ConversationPane';
+import { ConversationStatusPanel } from '../features/ConversationStatusPanel';
 
 let originalBootstrap: (() => Promise<void>) | null = null;
 
@@ -4605,6 +4606,94 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       expect(screen.queryByTestId('about-debug-badge')).toBeNull();
     } finally {
       globalThis.fetch = origFetch;
+    }
+  });
+
+  it('keeps detached background bash and subagent tasks visible when idle and sends per-task session.bg_task_stop', async () => {
+    const sendSpy = vi.spyOn(wsClient, 'sendEnvelope').mockImplementation(() => 'env_test');
+    try {
+      const sid = 'sess_bg_ui_1';
+      let stream = applySessionEvent(emptyStreamState(), 'run_mac', {
+        session_id: sid,
+        seq: 1,
+        turn_idx: 0,
+        event_type: 'agent_start',
+        payload: {},
+      });
+      stream = applySessionEvent(stream, 'run_mac', {
+        session_id: sid,
+        seq: 2,
+        turn_idx: 0,
+        event_type: 'background_tasks_updated',
+        payload: {
+          tasks: [
+            {
+              task_id: 'bg_ci123456',
+              kind: 'local_bash',
+              title: 'gh run watch --exit-status',
+              status: 'running',
+              started_at: Date.now() - 5000,
+            },
+            {
+              task_id: 'sub_ci123456',
+              kind: 'local_agent',
+              title: 'Watch GitHub Actions CI',
+              status: 'running',
+              started_at: Date.now() - 4000,
+            },
+          ],
+        },
+      });
+      // Foreground turn ends, but detached background tasks remain active
+      stream = applySessionEvent(stream, 'run_mac', {
+        session_id: sid,
+        seq: 3,
+        turn_idx: 0,
+        event_type: 'agent_end',
+        payload: { reason: 'completed' },
+      });
+
+      expect(stream.running).toBe(false);
+      expect(stream.backgroundTasks).toHaveLength(2);
+
+      useNexStore.setState({
+        activeSessionId: sid,
+        selectedRunnerId: 'run_mac',
+        sessions: [
+          {
+            id: sid,
+            runner_id: 'run_mac',
+            title: 'Watch CI',
+            workspace_path: '/tmp/ws',
+            status: 'idle',
+            created_at: 1000,
+            updated_at: 2000,
+          } as never,
+        ],
+        streams: { [sid]: stream },
+      });
+
+      render(<ConversationStatusPanel mode="panel" />);
+
+      expect(screen.getByText('gh run watch --exit-status')).toBeTruthy();
+      expect(screen.getByText('Watch GitHub Actions CI')).toBeTruthy();
+
+      fireEvent.click(screen.getByTestId('stop-bg-task-bg_ci123456'));
+      fireEvent.click(screen.getByTestId('stop-bg-task-sub_ci123456'));
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        'session.bg_task_stop',
+        { session_id: sid, task_id: 'bg_ci123456' },
+        { session_id: sid, runner_id: 'run_mac' },
+      );
+      expect(sendSpy).toHaveBeenCalledWith(
+        'session.bg_task_stop',
+        { session_id: sid, task_id: 'sub_ci123456' },
+        { session_id: sid, runner_id: 'run_mac' },
+      );
+      expect(sendSpy).not.toHaveBeenCalledWith('session.abort', expect.anything(), expect.anything());
+    } finally {
+      sendSpy.mockRestore();
     }
   });
 });

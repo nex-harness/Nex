@@ -26,7 +26,20 @@ type bgTask struct {
 	finished     bool
 	exitCode     int
 	errMsg       string
+	stoppedBy    string
 	streamFilter *StreamFilter
+}
+
+// BackgroundTaskSnapshot describes the state and tail output of a managed background bash command.
+type BackgroundTaskSnapshot struct {
+	TaskID     string
+	Command    string
+	WorkDir    string
+	Status     string // "running" | "completed" | "failed" | "killed"
+	ExitCode   int
+	StartedAt  int64
+	StoppedBy  string
+	OutputTail string
 }
 
 func (t *bgTask) Write(p []byte) (int, error) {
@@ -59,16 +72,26 @@ func (t *bgTask) Write(p []byte) (int, error) {
 
 // BackgroundTaskManager supervises long-running background bash commands within a session.
 type BackgroundTaskManager struct {
-	mu       sync.Mutex
-	tasks    map[string]*bgTask
-	extraEnv map[string]string
-	redactor *SecretRedactor
+	mu         sync.Mutex
+	tasks      map[string]*bgTask
+	extraEnv   map[string]string
+	redactor   *SecretRedactor
+	onStart    func(BackgroundTaskSnapshot)
+	onComplete func(BackgroundTaskSnapshot)
 }
 
 func NewBackgroundTaskManager() *BackgroundTaskManager {
 	return &BackgroundTaskManager{
 		tasks: make(map[string]*bgTask),
 	}
+}
+
+// SetCallbacks installs optional lifecycle hooks invoked outside locks when a task starts or terminates.
+func (m *BackgroundTaskManager) SetCallbacks(onStart, onComplete func(BackgroundTaskSnapshot)) {
+	m.mu.Lock()
+	m.onStart = onStart
+	m.onComplete = onComplete
+	m.mu.Unlock()
 }
 
 func (m *BackgroundTaskManager) SetExtraEnv(env map[string]string, redactor *SecretRedactor) {
@@ -106,7 +129,19 @@ func (m *BackgroundTaskManager) Start(workDir, command string, timeout time.Dura
 		streamFilter: sf,
 	}
 	m.tasks[id] = task
+	onStart := m.onStart
+	onComplete := m.onComplete
 	m.mu.Unlock()
+
+	if onStart != nil {
+		onStart(BackgroundTaskSnapshot{
+			TaskID:    id,
+			Command:   command,
+			WorkDir:   workDir,
+			Status:    "running",
+			StartedAt: task.startedAt.UnixMilli(),
+		})
+	}
 
 	go func() {
 		defer close(task.doneCh)
@@ -123,7 +158,32 @@ func (m *BackgroundTaskManager) Start(workDir, command string, timeout time.Dura
 		if err != nil {
 			task.errMsg = err.Error()
 		}
+		status := "completed"
+		if task.stoppedBy != "" {
+			status = "killed"
+		} else if exitCode != 0 || err != nil {
+			status = "failed"
+		}
+		tail := task.buf.String()
+		const maxTailBytes = 4000
+		if len(tail) > maxTailBytes {
+			tail = tail[len(tail)-maxTailBytes:]
+		}
+		snap := BackgroundTaskSnapshot{
+			TaskID:     id,
+			Command:    command,
+			WorkDir:    workDir,
+			Status:     status,
+			ExitCode:   exitCode,
+			StartedAt:  task.startedAt.UnixMilli(),
+			StoppedBy:  task.stoppedBy,
+			OutputTail: tail,
+		}
 		task.mu.Unlock()
+
+		if onComplete != nil {
+			onComplete(snap)
+		}
 	}()
 
 	return id
@@ -175,20 +235,62 @@ func (m *BackgroundTaskManager) ReadOutput(ctx context.Context, taskID string, w
 	return delta, status, task.exitCode, nil
 }
 
-// Stop terminates a running background task and its process tree.
-func (m *BackgroundTaskManager) Stop(taskID string) error {
+// StopWithInitiator terminates a running background task and records who stopped it ("user" or "model").
+func (m *BackgroundTaskManager) StopWithInitiator(taskID, initiator string) error {
 	m.mu.Lock()
 	task, ok := m.tasks[taskID]
 	m.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("background task %q not found", taskID)
 	}
+	task.mu.Lock()
+	if !task.finished && initiator != "" {
+		task.stoppedBy = initiator
+	}
+	task.mu.Unlock()
 	task.cancel()
 	select {
 	case <-task.doneCh:
 	case <-time.After(3 * time.Second):
 	}
 	return nil
+}
+
+// Stop terminates a running background task and its process tree.
+func (m *BackgroundTaskManager) Stop(taskID string) error {
+	return m.StopWithInitiator(taskID, "model")
+}
+
+// ListRunning returns snapshots of all background bash tasks still executing.
+func (m *BackgroundTaskManager) ListRunning() []BackgroundTaskSnapshot {
+	m.mu.Lock()
+	tasks := make([]*bgTask, 0, len(m.tasks))
+	for _, t := range m.tasks {
+		tasks = append(tasks, t)
+	}
+	m.mu.Unlock()
+
+	var out []BackgroundTaskSnapshot
+	for _, t := range tasks {
+		t.mu.Lock()
+		finished := t.finished
+		t.mu.Unlock()
+		if !finished {
+			out = append(out, BackgroundTaskSnapshot{
+				TaskID:    t.id,
+				Command:   t.command,
+				WorkDir:   t.workDir,
+				Status:    "running",
+				StartedAt: t.startedAt.UnixMilli(),
+			})
+		}
+	}
+	return out
+}
+
+// ActiveCount reports how many background bash tasks are currently running.
+func (m *BackgroundTaskManager) ActiveCount() int {
+	return len(m.ListRunning())
 }
 
 // StopAll terminates every running background task managed by this manager.
@@ -200,6 +302,11 @@ func (m *BackgroundTaskManager) StopAll() {
 	}
 	m.mu.Unlock()
 	for _, t := range list {
+		t.mu.Lock()
+		if !t.finished && t.stoppedBy == "" {
+			t.stoppedBy = "system"
+		}
+		t.mu.Unlock()
 		t.cancel()
 	}
 }
@@ -273,13 +380,19 @@ func (t *TaskOutputTool) Execute(ctx context.Context, _ string, rawArgs json.Raw
 	}, nil
 }
 
-// TaskStopTool terminates a running background bash task and its process tree.
+// TaskStopTool terminates a running background bash task (or fallback subagent task) by ID.
 type TaskStopTool struct {
-	mgr *BackgroundTaskManager
+	mgr       *BackgroundTaskManager
+	extraStop func(taskID string) (bool, error)
 }
 
 func NewTaskStopTool(mgr *BackgroundTaskManager) *TaskStopTool {
 	return &TaskStopTool{mgr: mgr}
+}
+
+// NewTaskStopToolWithFallback creates a TaskStopTool that falls back to extraStop (e.g., background subagent cancellation).
+func NewTaskStopToolWithFallback(mgr *BackgroundTaskManager, extraStop func(taskID string) (bool, error)) *TaskStopTool {
+	return &TaskStopTool{mgr: mgr, extraStop: extraStop}
 }
 
 func (t *TaskStopTool) Name() string                      { return "task_stop" }
@@ -290,11 +403,11 @@ func (t *TaskStopTool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
 		Name:        "task_stop",
 		Category:    "system",
-		Description: "Terminate a running background task started with `bash` (`run_in_background: true`).",
+		Description: "Terminate a running background command (`bash` `run_in_background: true`) or background subagent by task ID.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
-				"task_id": {"type": "string", "description": "Background task ID to terminate"}
+				"task_id": {"type": "string", "description": "Background task ID or subagent ID to terminate"}
 			},
 			"required": ["task_id"]
 		}`),
@@ -302,7 +415,7 @@ func (t *TaskStopTool) Definition() ai.ToolDefinition {
 }
 
 func (t *TaskStopTool) Execute(_ context.Context, _ string, rawArgs json.RawMessage, _ UpdateFunc) (Result, error) {
-	if t.mgr == nil {
+	if t.mgr == nil && t.extraStop == nil {
 		return Result{Output: "background task manager not initialized", IsError: true}, nil
 	}
 	var args struct {
@@ -311,11 +424,28 @@ func (t *TaskStopTool) Execute(_ context.Context, _ string, rawArgs json.RawMess
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return Result{Output: "invalid task_stop arguments: " + err.Error(), IsError: true}, nil
 	}
-	if err := t.mgr.Stop(strings.TrimSpace(args.TaskID)); err != nil {
-		return Result{Output: err.Error(), IsError: true}, nil
+	taskID := strings.TrimSpace(args.TaskID)
+	if t.mgr != nil {
+		if err := t.mgr.StopWithInitiator(taskID, "model"); err == nil {
+			return Result{
+				Output:   fmt.Sprintf("Stopped background task %s", taskID),
+				Metadata: map[string]any{"task_id": taskID, "stopped": true},
+			}, nil
+		} else if t.extraStop == nil {
+			return Result{Output: err.Error(), IsError: true}, nil
+		}
 	}
-	return Result{
-		Output:   fmt.Sprintf("Stopped background task %s", args.TaskID),
-		Metadata: map[string]any{"task_id": args.TaskID, "stopped": true},
-	}, nil
+	if t.extraStop != nil {
+		handled, err := t.extraStop(taskID)
+		if handled {
+			if err != nil {
+				return Result{Output: err.Error(), IsError: true}, nil
+			}
+			return Result{
+				Output:   fmt.Sprintf("Stopped background task %s", taskID),
+				Metadata: map[string]any{"task_id": taskID, "stopped": true},
+			}, nil
+		}
+	}
+	return Result{Output: fmt.Sprintf("background task %q not found", taskID), IsError: true}, nil
 }

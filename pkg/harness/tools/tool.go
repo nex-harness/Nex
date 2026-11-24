@@ -52,10 +52,19 @@ func DefaultCodingTools() []Tool {
 // DefaultCodingToolsWithCleanup returns the per-session coding tools and a cleanup function
 // that stops any lingering background shell tasks when the session run exits.
 func DefaultCodingToolsWithCleanup() ([]Tool, func()) {
+	bgMgr := NewBackgroundTaskManager()
+	return DefaultCodingToolsWithBackground(bgMgr, nil), bgMgr.StopAll
+}
+
+// DefaultCodingToolsWithBackground builds coding tools wired to an existing session-scoped BackgroundTaskManager
+// and optional fallback stopper (for background subagents).
+func DefaultCodingToolsWithBackground(bgMgr *BackgroundTaskManager, extraStop func(taskID string) (bool, error)) []Tool {
 	todoStore := NewTodoStore()
 	tracker := NewFileStateTracker()
-	bgMgr := NewBackgroundTaskManager()
-	list := []Tool{
+	if bgMgr == nil {
+		bgMgr = NewBackgroundTaskManager()
+	}
+	return []Tool{
 		NewReadToolWithTracker(tracker),
 		NewWriteToolWithTracker(tracker),
 		NewEditToolWithTracker(tracker),
@@ -68,7 +77,6 @@ func DefaultCodingToolsWithCleanup() ([]Tool, func()) {
 		NewWebSearchTool(),
 		NewExitPlanModeTool(),
 		NewTaskOutputTool(bgMgr),
-		NewTaskStopTool(bgMgr),
+		NewTaskStopToolWithFallback(bgMgr, extraStop),
 	}
-	return list, bgMgr.StopAll
 }

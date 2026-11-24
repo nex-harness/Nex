@@ -348,6 +348,7 @@ func (n *Node) ExecutePrompt(
 			AgentProfileSlug:   p.AgentProfileSlug,
 			ProviderID:         provID,
 			ModelID:            modelID,
+			ThinkingEffort:     string(p.ThinkingEffort),
 			PermissionMode:     string(permMode),
 			Status:             "running",
 			ContextWindowLimit: modelMeta.ContextWindow,
@@ -368,6 +369,9 @@ func (n *Node) ExecutePrompt(
 		sessRec.Status = "running"
 		sessRec.ProviderID = provID
 		sessRec.ModelID = modelID
+		if p.ThinkingEffort != "" {
+			sessRec.ThinkingEffort = string(p.ThinkingEffort)
+		}
 		sessRec.PermissionMode = string(permMode)
 		updated, _ := n.store.CreateOrUpdateSession(parentCtx, *sessRec)
 		sessRec = &updated
@@ -390,8 +394,17 @@ func (n *Node) ExecutePrompt(
 		})
 	}
 
-	sessionTools, bgCleanup := tools.DefaultCodingToolsWithCleanup()
-	defer bgCleanup()
+	var sessionTools []tools.Tool
+	if sessRec.Depth == 0 {
+		bgMgr := n.getOrCreateSessionBgTasks(sessRec.ID)
+		sessionTools = tools.DefaultCodingToolsWithBackground(bgMgr, func(taskID string) (bool, error) {
+			return n.StopBackgroundTask(context.Background(), sessRec.ID, taskID, "model")
+		})
+	} else {
+		var bgCleanup func()
+		sessionTools, bgCleanup = tools.DefaultCodingToolsWithCleanup()
+		defer bgCleanup()
+	}
 	if len(sessionEnv) > 0 {
 		for _, tl := range sessionTools {
 			if bt, ok := tl.(*tools.BashTool); ok {
