@@ -671,6 +671,16 @@ func (s *Server) finalizeSessionInterrupted(ctx context.Context, sessionID, runn
 		return false
 	}
 
+	// Finalize running child sessions before broadcasting parent's agent_end so
+	// clients reacting to parent completion observe consistent idle state across the tree.
+	if children, cErr := s.store.ListSessions(ctx, runnerID, true); cErr == nil {
+		for _, child := range children {
+			if child.ParentSessionID == sessionID && child.Status == "running" {
+				s.finalizeSessionInterrupted(ctx, child.ID, runnerID, reason)
+			}
+		}
+	}
+
 	payload, _ := json.Marshal(map[string]any{
 		"type":   "agent_end",
 		"reason": reason,
@@ -687,14 +697,6 @@ func (s *Server) finalizeSessionInterrupted(ctx context.Context, sessionID, runn
 		outEnv.RunnerID = runnerID
 		outEnv.Seq = savedEv.Seq
 		s.broadcastSessionEvent(ctx, savedEv.SessionID, outEnv)
-	}
-
-	if children, cErr := s.store.ListSessions(ctx, runnerID, true); cErr == nil {
-		for _, child := range children {
-			if child.ParentSessionID == sessionID && child.Status == "running" {
-				s.finalizeSessionInterrupted(ctx, child.ID, runnerID, reason)
-			}
-		}
 	}
 	return true
 }
