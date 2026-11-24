@@ -38,12 +38,9 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(helloEnv.Payload, &hello); err != nil || hello.RunnerID == "" {
 		return
 	}
-	if s.cfg.PairingSecret != "" && hello.AuthToken != s.cfg.PairingSecret {
-		existing, rErr := s.store.GetRunner(ctx, hello.RunnerID)
-		if rErr != nil || existing.AuthToken != hello.AuthToken {
-			_ = ws.Close(websocket.StatusPolicyViolation, "unauthorized runner token")
-			return
-		}
+	if !s.verifyRunnerAuthToken(ctx, hello.RunnerID, hello.AuthToken) {
+		_ = ws.Close(websocket.StatusPolicyViolation, "unauthorized runner token")
+		return
 	}
 
 	now := time.Now().UnixMilli()
