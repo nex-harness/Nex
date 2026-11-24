@@ -50,6 +50,20 @@ func main() {
 		}
 		return
 	}
+	// Support `nex-runner pair <nex://pair?...> [-data-dir ...] [-name ...]` for intranet/relay pairing
+	if len(os.Args) >= 3 && os.Args[1] == "pair" {
+		pfs := flag.NewFlagSet("pair", flag.ExitOnError)
+		pDataDir := pfs.String("data-dir", filepath.Join(userHomeOrDot(), ".nex-runner"), "Local autonomous state directory")
+		pName := pfs.String("name", os.Getenv("NEX_RUNNER_NAME"), "Human-readable runner name")
+		pairURI := os.Args[2]
+		_ = pfs.Parse(os.Args[3:])
+		st, transport, err := pairRunnerWithURI(context.Background(), *pDataDir, pairURI, *pName)
+		if err != nil {
+			log.Fatalf("pair failed: %v", err)
+		}
+		fmt.Printf("Paired with %s (node=%s) via %s. Saved to %s\n", st.Profile.HostName, st.Profile.NodeID, transport, filepath.Join(*pDataDir, pairedServerFile))
+		return
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -68,6 +82,7 @@ func runDaemonWithCancel(ctx context.Context, cancel context.CancelFunc, rawArgs
 	runnerID := fs.String("id", os.Getenv("NEX_RUNNER_ID"), "Unique runner node ID")
 	name := fs.String("name", os.Getenv("NEX_RUNNER_NAME"), "Human-readable runner name")
 	serverWS := fs.String("server", os.Getenv("NEX_SERVER_WS"), "Central server WebSocket URL (e.g. ws://127.0.0.1:8080/ws/runner)")
+	pairURI := fs.String("pair", os.Getenv("NEX_PAIR_URI"), "Optional nex://pair?... URI for intranet/nex-relay E2EE tunnel pairing")
 	token := fs.String("token", os.Getenv("NEX_PAIRING_TOKEN"), "Runner pairing/auth token")
 	dataDir := fs.String("data-dir", defaultDir, "Local autonomous state & snapshot directory")
 	workspace := fs.String("workspace", cwd, "Default workspace directory")
@@ -88,12 +103,45 @@ func runDaemonWithCancel(ctx context.Context, cancel context.CancelFunc, rawArgs
 		log.Printf("nex-runner: Windows UAC elevation skipped/cancelled (%v); continuing with standard privileges", err)
 	}
 
+	effectiveServerWS := *serverWS
+	effectiveToken := *token
+	var tunnelCleanup func()
+	if *pairURI != "" {
+		st, transport, err := pairRunnerWithURI(ctx, *dataDir, *pairURI, *name)
+		if err != nil {
+			log.Fatalf("failed to pair with server: %v", err)
+		}
+		log.Printf("nex-runner: paired with %s (node=%s) via %s", st.Profile.HostName, st.Profile.NodeID, transport)
+		wsURL, devTok, cleanup, err := startPairedServerTunnel(ctx, *dataDir, st)
+		if err != nil {
+			log.Fatalf("failed to start paired server tunnel: %v", err)
+		}
+		effectiveServerWS = wsURL
+		effectiveToken = devTok
+		tunnelCleanup = cleanup
+		defer tunnelCleanup()
+	} else if effectiveServerWS == "" && *oncePrompt == "" {
+		if st, err := loadPairedServerState(*dataDir); err == nil && st != nil {
+			wsURL, devTok, cleanup, err := startPairedServerTunnel(ctx, *dataDir, st)
+			if err != nil {
+				log.Printf("nex-runner: failed to start saved paired server tunnel: %v", err)
+			} else {
+				effectiveServerWS = wsURL
+				if effectiveToken == "" {
+					effectiveToken = devTok
+				}
+				tunnelCleanup = cleanup
+				defer tunnelCleanup()
+			}
+		}
+	}
+
 	var trayCleanup func()
 	node, err := runner.NewNode(runner.Config{
 		RunnerID:         *runnerID,
 		Name:             *name,
-		AuthToken:        *token,
-		ServerWSURL:      *serverWS,
+		AuthToken:        effectiveToken,
+		ServerWSURL:      effectiveServerWS,
 		DataDir:          *dataDir,
 		WorkspaceDefault: *workspace,
 		Version:          version,
@@ -131,8 +179,8 @@ func runDaemonWithCancel(ctx context.Context, cancel context.CancelFunc, rawArgs
 		return
 	}
 
-	fmt.Printf("nex-runner (%s) started; server=%q data=%s\n", node.RunnerID(), *serverWS, *dataDir)
-	if *serverWS != "" {
+	fmt.Printf("nex-runner (%s) started; server=%q data=%s\n", node.RunnerID(), effectiveServerWS, *dataDir)
+	if effectiveServerWS != "" {
 		node.StartConnectLoop(ctx)
 	} else {
 		// Standalone autonomous cron daemon mode (disconnected from any server)
