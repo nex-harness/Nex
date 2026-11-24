@@ -308,8 +308,18 @@ func TestRunnerManifestAndBinaryDownloadAuth(t *testing.T) {
 
 	// 2. Verify Release-first download URL ordering vs fallback-only when Release mismatches
 	_, _, _, urls, _, _ := srv.resolveTargetForPlatform(ctx, "linux", "amd64")
-	if len(urls) != 2 || urls[0] != "https://releases.example.com/v0.2.0/nex-runner-linux-amd64" || urls[1] != "/api/v1/runners/binary/linux/amd64" {
-		t.Fatalf("expected release-first ordering, got %v", urls)
+	if len(urls) != 2 || urls[0] != "https://releases.example.com/v0.2.0/nex-runner-linux-amd64" || !strings.HasPrefix(urls[1], "/api/v1/runners/binary/linux/amd64?token=") {
+		t.Fatalf("expected release-first ordering with signed fallback token, got %v", urls)
+	}
+
+	// Verify the minted fallback download token authorizes GET /api/v1/runners/binary/linux/amd64 without any extra auth
+	mintedResp, err := http.Get(ts.URL + urls[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = mintedResp.Body.Close()
+	if mintedResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 with server-minted download token, got %d", mintedResp.StatusCode)
 	}
 
 	// Reset cache & simulate mismatched Release SHA -> fallback-only
@@ -318,7 +328,7 @@ func TestRunnerManifestAndBinaryDownloadAuth(t *testing.T) {
 	srv.mu.Unlock()
 	releaseSHA = strings.Repeat("f", 64)
 	_, _, _, urlsMismatch, _, _ := srv.resolveTargetForPlatform(ctx, "linux", "amd64")
-	if len(urlsMismatch) != 1 || urlsMismatch[0] != "/api/v1/runners/binary/linux/amd64" {
+	if len(urlsMismatch) != 1 || !strings.HasPrefix(urlsMismatch[0], "/api/v1/runners/binary/linux/amd64?token=") {
 		t.Fatalf("expected server fallback only when release SHA mismatches, got %v", urlsMismatch)
 	}
 

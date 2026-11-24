@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -22,7 +23,55 @@ import (
 	"github.com/nex-harness/nex/pkg/store"
 )
 
-const releaseManifestCacheTTL = 5 * time.Minute
+const (
+	releaseManifestCacheTTL = 5 * time.Minute
+	runnerDownloadTokenTTL  = 30 * time.Minute
+)
+
+// issueRunnerDownloadToken mints a short-lived opaque token so connected runners
+// can fetch /api/v1/runners/binary/{os}/{arch} even when web password auth is enabled
+// and no static PairingSecret/AuthToken was configured on the runner.
+func (s *Server) issueRunnerDownloadToken() string {
+	var raw [24]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return ""
+	}
+	tok := hex.EncodeToString(raw[:])
+	now := time.Now()
+	s.dlTokensMu.Lock()
+	defer s.dlTokensMu.Unlock()
+	if s.dlTokens == nil {
+		s.dlTokens = make(map[string]time.Time)
+	}
+	for k, exp := range s.dlTokens {
+		if now.After(exp) {
+			delete(s.dlTokens, k)
+		}
+	}
+	s.dlTokens[tok] = now.Add(runnerDownloadTokenTTL)
+	return tok
+}
+
+func (s *Server) isValidRunnerDownloadToken(tok string) bool {
+	if tok == "" {
+		return false
+	}
+	now := time.Now()
+	s.dlTokensMu.Lock()
+	defer s.dlTokensMu.Unlock()
+	if s.dlTokens == nil {
+		return false
+	}
+	exp, ok := s.dlTokens[tok]
+	if !ok {
+		return false
+	}
+	if now.After(exp) {
+		delete(s.dlTokens, tok)
+		return false
+	}
+	return true
+}
 
 // RunnerBinaryEntry describes a staged multi-platform nex-runner binary.
 type RunnerBinaryEntry struct {
@@ -225,6 +274,9 @@ func (s *Server) resolveTargetForPlatform(ctx context.Context, osName, archName 
 	}
 
 	serverFallbackURL := fmt.Sprintf("/api/v1/runners/binary/%s/%s", osNorm, archNorm)
+	if dlTok := s.issueRunnerDownloadToken(); dlTok != "" {
+		serverFallbackURL += "?token=" + dlTok
+	}
 	var releaseAssetURL string
 	if rel != nil {
 		if re, ok := rel.Binaries[key]; ok {
@@ -425,6 +477,9 @@ func extractRunnerDownloadToken(r *http.Request) string {
 
 func (s *Server) isRunnerBinaryDownloadAuthorized(ctx context.Context, r *http.Request) bool {
 	if tok := extractRunnerDownloadToken(r); tok != "" {
+		if s.isValidRunnerDownloadToken(tok) {
+			return true
+		}
 		if s.cfg.PairingSecret != "" && subtle.ConstantTimeCompare([]byte(tok), []byte(s.cfg.PairingSecret)) == 1 {
 			return true
 		}

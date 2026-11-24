@@ -126,6 +126,8 @@ type Server struct {
 	pendingRPC       map[string]chan protocol.Envelope
 	modelsCache      modelsDevCache
 	releaseCache     releaseManifestCache
+	dlTokensMu       sync.Mutex
+	dlTokens         map[string]time.Time
 }
 
 // New constructs and wires a Control Plane Server.
