@@ -42,15 +42,16 @@ type LocalExecutor interface {
 }
 
 type runningEntry struct {
-	subagentID string
-	sessionID  string
-	workDir    string
-	isWorktree bool
-	branchName string
-	done       bool
-	summary    string
-	steer      func(msg string)
-	cancel     context.CancelFunc
+	subagentID      string
+	parentSessionID string
+	sessionID       string
+	workDir         string
+	isWorktree      bool
+	branchName      string
+	done            bool
+	summary         string
+	steer           func(msg string)
+	cancel          context.CancelFunc
 }
 
 // Manager coordinates local goroutine Subagents with max_depth=1 enforcement, concurrency semaphores, and git worktree isolation.
@@ -128,12 +129,13 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (string, error) {
 
 	childCtx, cancel := context.WithCancel(ctx)
 	entry := &runningEntry{
-		subagentID: subID,
-		sessionID:  childSessID,
-		workDir:    effectiveDir,
-		isWorktree: isWorktree,
-		branchName: branchName,
-		cancel:     cancel,
+		subagentID:      subID,
+		parentSessionID: req.ParentSessionID,
+		sessionID:       childSessID,
+		workDir:         effectiveDir,
+		isWorktree:      isWorktree,
+		branchName:      branchName,
+		cancel:          cancel,
 	}
 
 	m.mu.Lock()
@@ -178,6 +180,9 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (string, error) {
 		go func() {
 			defer bgCancel()
 			out, err := runFn(bgCtx)
+			if bgCtx.Err() != nil {
+				return
+			}
 			if err != nil && out == "" {
 				out = "Background subagent error: " + err.Error()
 			}
@@ -194,6 +199,29 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (string, error) {
 
 	defer cancel()
 	return runFn(childCtx)
+}
+
+// CancelByParent cancels all non-completed subagents spawned by parentSessionID and returns how many were cancelled.
+func (m *Manager) CancelByParent(parentSessionID string) int {
+	if parentSessionID == "" {
+		return 0
+	}
+	m.mu.Lock()
+	var cancels []context.CancelFunc
+	for _, entry := range m.entries {
+		if entry != nil && entry.parentSessionID == parentSessionID && !entry.done {
+			entry.done = true
+			if entry.cancel != nil {
+				cancels = append(cancels, entry.cancel)
+			}
+		}
+	}
+	m.mu.Unlock()
+
+	for _, c := range cancels {
+		c()
+	}
+	return len(cancels)
 }
 
 // SendMessage steers a running subagent or resumes a completed subagent session in place.

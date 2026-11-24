@@ -111,12 +111,37 @@ export function parseGoalTitle(text: string): string | null {
   return null;
 }
 
+/** Seals any trailing streaming/optimistic turns and settles dangling running tool calls. */
+export function sealRunningItems(items: ChatTurnItem[]): ChatTurnItem[] {
+  const needsSeal = items.some(
+    (it) => it.streaming || it.optimistic || it.toolCalls.some((tc) => tc.status === 'running'),
+  );
+  if (!needsSeal) return items;
+  return items.map((it) => {
+    const hasRunningTool = it.toolCalls.some((tc) => tc.status === 'running');
+    if (!it.streaming && !it.optimistic && !hasRunningTool) return it;
+    return {
+      ...it,
+      streaming: false,
+      optimistic: false,
+      toolCalls: hasRunningTool
+        ? it.toolCalls.map((tc) =>
+            tc.status === 'running'
+              ? { ...tc, status: 'error' as const, finalOutput: tc.finalOutput || tc.streamOutput }
+              : tc,
+          )
+        : it.toolCalls,
+    };
+  });
+}
+
 export interface RawSessionEventRow {
   session_id: string;
   seq: number;
   turn_idx: number;
   event_type: string;
   payload: Record<string, unknown>;
+  created_at?: number;
 }
 
 /**
@@ -233,10 +258,21 @@ export function applySessionEvent(
     }
   };
 
+  const eventTimestamp = (fallbackNow = Date.now()): number => {
+    if (typeof ev.created_at === 'number' && Number.isFinite(ev.created_at) && ev.created_at > 0) {
+      return ev.created_at;
+    }
+    const msgObj = p.message as { timestamp?: unknown } | undefined;
+    if (msgObj && typeof msgObj.timestamp === 'number' && Number.isFinite(msgObj.timestamp) && msgObj.timestamp > 0) {
+      return msgObj.timestamp;
+    }
+    return fallbackNow;
+  };
+
   switch (ev.event_type) {
     case 'agent_start':
       running = true;
-      if (!runStartedAt) runStartedAt = Date.now();
+      if (!runStartedAt) runStartedAt = eventTimestamp();
       break;
 
     case 'agent_end': {
@@ -244,13 +280,9 @@ export function applySessionEvent(
       runStartedAt = undefined;
       pendingUIPrompt = null;
       pendingApproval = null;
-      const lastIdx = items.length - 1;
-      if (lastIdx >= 0 && (items[lastIdx].streaming || items[lastIdx].optimistic)) {
-        items = items.slice();
-        items[lastIdx] = { ...items[lastIdx], streaming: false, optimistic: false };
-      }
+      items = sealRunningItems(items);
       if (goals.some((g) => g.status === 'running')) {
-        const completedAt = Date.now();
+        const completedAt = eventTimestamp();
         goals = goals.map((g) => (g.status === 'running' ? { ...g, status: 'completed', completedAt } : g));
       }
       break;
@@ -329,7 +361,7 @@ export function applySessionEvent(
             if (!lastGoal || lastGoal.title !== goalTitle) {
               if (lastGoal && lastGoal.status === 'running') {
                 goals = goals.slice();
-                goals[goals.length - 1] = { ...lastGoal, status: 'completed', completedAt: Date.now() };
+                goals[goals.length - 1] = { ...lastGoal, status: 'completed', completedAt: eventTimestamp() };
               }
               const counts = countTodos(todos);
               goals = [
@@ -339,7 +371,7 @@ export function applySessionEvent(
                   index: goals.length + 1,
                   title: goalTitle,
                   status: 'running',
-                  startedAt: Date.now(),
+                  startedAt: eventTimestamp(),
                   completedTodos: counts.completed,
                   totalTodos: counts.total,
                 },

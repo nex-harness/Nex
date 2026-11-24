@@ -4359,4 +4359,199 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       globalThis.fetch = origFetch;
     }
   });
+
+  it('seals dangling running tool calls on agent_end/idle select, targets session runner_id on abort, and skips follow-up auto-drain after interrupt', async () => {
+    // 1. agent_end seals dangling running tool calls
+    let st = emptyStreamState();
+    st = applySessionEvent(st, 'run_mac', {
+      session_id: 'sess_seal_1',
+      seq: 1,
+      turn_idx: 0,
+      event_type: 'agent_start',
+      payload: {},
+      created_at: 1000,
+    });
+    st = applySessionEvent(st, 'run_mac', {
+      session_id: 'sess_seal_1',
+      seq: 2,
+      turn_idx: 0,
+      event_type: 'message_end',
+      payload: {
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_call', tool_call_id: 'tc_stuck', tool_name: 'bash', arguments: { command: 'sleep 99' } }],
+        },
+      },
+      created_at: 1001,
+    });
+    st = applySessionEvent(st, 'run_mac', {
+      session_id: 'sess_seal_1',
+      seq: 3,
+      turn_idx: 0,
+      event_type: 'tool_execution_start',
+      payload: { tool_call_id: 'tc_stuck', tool_name: 'bash' },
+      created_at: 1002,
+    });
+    expect(st.items[0].toolCalls[0].status).toBe('running');
+
+    st = applySessionEvent(st, 'run_mac', {
+      session_id: 'sess_seal_1',
+      seq: 4,
+      turn_idx: 0,
+      event_type: 'agent_end',
+      payload: { reason: 'runner_restarted' },
+      created_at: 1005,
+    });
+    expect(st.running).toBe(false);
+    expect(st.items[0].streaming).toBe(false);
+    expect(st.items[0].toolCalls[0].status).toBe('error');
+
+    // 2. selectSession seals dangling running tool calls on an idle session even if history lacked agent_end
+    const origFetch = globalThis.fetch;
+    const origWS = globalThis.WebSocket;
+    let lastFakeWS: { onmessage?: ((ev: MessageEvent) => void) | null; onopen?: (() => void) | null } | null = null;
+    class FakeWebSocket {
+      static CONNECTING = 0;
+      static OPEN = 1;
+      static CLOSING = 2;
+      static CLOSED = 3;
+      readyState = 1;
+      binaryType = 'arraybuffer';
+      onopen: (() => void) | null = null;
+      onclose: (() => void) | null = null;
+      onmessage: ((ev: MessageEvent) => void) | null = null;
+      constructor(_url: string) {
+        lastFakeWS = this;
+      }
+      send(_data: string) {}
+      close() {}
+    }
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+
+    const sendSpy = vi.spyOn(wsClient, 'sendEnvelope').mockImplementation(() => 'cli_mock');
+    const idleEvents = [
+      {
+        session_id: 'sess_idle_stuck',
+        seq: 1,
+        turn_idx: 0,
+        event_type: 'agent_start',
+        payload: {},
+        created_at: 1000,
+      },
+      {
+        session_id: 'sess_idle_stuck',
+        seq: 2,
+        turn_idx: 0,
+        event_type: 'message_end',
+        payload: {
+          message: {
+            role: 'assistant',
+            content: [{ type: 'tool_call', tool_call_id: 'tc_orphan', tool_name: 'bash', arguments: { command: 'kill -TERM 1' } }],
+          },
+        },
+        created_at: 1001,
+      },
+      {
+        session_id: 'sess_idle_stuck',
+        seq: 3,
+        turn_idx: 0,
+        event_type: 'tool_execution_start',
+        payload: { tool_call_id: 'tc_orphan', tool_name: 'bash' },
+        created_at: 1002,
+      },
+    ];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/api/v1/auth/status')) {
+        return new Response(JSON.stringify({ enabled: false, authenticated: true }), { status: 200 });
+      }
+      if (url.includes('/events')) {
+        return new Response(JSON.stringify(idleEvents), { status: 200 });
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      await act(async () => {
+        await originalBootstrap?.();
+      });
+
+      useNexStore.setState({
+        wsConnected: true,
+        selectedRunnerId: 'run_other',
+        sessions: [
+          {
+            id: 'sess_idle_stuck',
+            runner_id: 'run_target',
+            depth: 0,
+            title: 'Stuck but idle',
+            workspace_path: '/tmp/ws',
+            agent_profile_slug: 'main',
+            model_id: 'm1',
+            provider_id: 'p1',
+            permission_mode: 'interactive',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: 1000,
+            updated_at: 1002,
+            last_active_at: 1002,
+          },
+        ],
+      });
+
+      await act(async () => {
+        await useNexStore.getState().selectSession('sess_idle_stuck');
+      });
+
+      const hydrated = useNexStore.getState().streams['sess_idle_stuck'];
+      expect(hydrated.running).toBe(false);
+      expect(hydrated.items[0].toolCalls[0].status).toBe('error');
+
+      // 3. abortActiveSession uses session's runner_id ('run_target') rather than stale selectedRunnerId ('run_other')
+      useNexStore.setState({ selectedRunnerId: 'run_other', activeSessionId: 'sess_idle_stuck' });
+      useNexStore.getState().abortActiveSession();
+      expect(sendSpy).toHaveBeenCalledWith(
+        'session.abort',
+        {},
+        { session_id: 'sess_idle_stuck', runner_id: 'run_target' },
+      );
+
+      // 4. Interrupted agent_end (aborted_timeout / runner_restarted) does not auto-drain followUpQueues
+      sendSpy.mockClear();
+      useNexStore.setState({
+        followUpQueues: {
+          sess_idle_stuck: [{ id: 'fq_1', text: 'do not auto run after stop', createdAt: 2000 }],
+        },
+      });
+      await act(async () => {
+        lastFakeWS?.onmessage?.({
+          data: JSON.stringify({
+            v: 1,
+            id: 'ev_aborted',
+            type: 'session.event',
+            ts: 3000,
+            session_id: 'sess_idle_stuck',
+            runner_id: 'run_target',
+            payload: {
+              session_id: 'sess_idle_stuck',
+              seq: 4,
+              turn_idx: 0,
+              event_type: 'agent_end',
+              payload: { reason: 'aborted_timeout' },
+              created_at: 3000,
+            },
+          }),
+        } as MessageEvent);
+        await new Promise((r) => setTimeout(r, 40));
+      });
+      expect(useNexStore.getState().followUpQueues['sess_idle_stuck']?.length).toBe(1);
+      expect(sendSpy).not.toHaveBeenCalledWith('session.prompt', expect.anything(), expect.anything());
+    } finally {
+      wsClient.disconnect();
+      sendSpy.mockRestore();
+      globalThis.WebSocket = origWS;
+      globalThis.fetch = origFetch;
+    }
+  });
 });

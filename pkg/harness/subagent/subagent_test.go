@@ -113,3 +113,64 @@ func TestSubagentMaxDepthEnforcementWorktreeIsolationAndBackground(t *testing.T)
 		t.Fatalf("SendMessage resume failed: %q err=%v", resumed, err)
 	}
 }
+
+type blockingSubExecutor struct {
+	started     chan struct{}
+	canceled    chan struct{}
+	bgCompleted chan string
+}
+
+func (b *blockingSubExecutor) RunChildSession(ctx context.Context, _ string, _ SpawnRequest, _ bool, _ string) (string, func(string), error) {
+	close(b.started)
+	<-ctx.Done()
+	close(b.canceled)
+	return "", nil, ctx.Err()
+}
+
+func (b *blockingSubExecutor) NotifyParentBackgroundDone(_, subID, summary string) {
+	if b.bgCompleted != nil {
+		b.bgCompleted <- subID + ":" + summary
+	}
+}
+
+func TestManagerCancelByParentStopsBackgroundSubagents(t *testing.T) {
+	exec := &blockingSubExecutor{
+		started:     make(chan struct{}),
+		canceled:    make(chan struct{}),
+		bgCompleted: make(chan string, 1),
+	}
+	mgr := NewManager(exec, 1, 2)
+
+	if _, err := mgr.Spawn(context.Background(), SpawnRequest{
+		ParentSessionID: "sess_parent_abort",
+		ParentDepth:     0,
+		AgentType:       "explore",
+		Prompt:          "long background scan",
+		RunInBackground: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-exec.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for background subagent to start")
+	}
+
+	if cancelled := mgr.CancelByParent("sess_parent_abort"); cancelled != 1 {
+		t.Fatalf("expected 1 cancelled subagent, got %d", cancelled)
+	}
+
+	select {
+	case <-exec.canceled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for background subagent context cancellation")
+	}
+
+	// Ensure cancelled background subagent does NOT invoke NotifyParentBackgroundDone
+	select {
+	case msg := <-exec.bgCompleted:
+		t.Fatalf("expected cancelled background subagent NOT to notify parent, got %q", msg)
+	case <-time.After(80 * time.Millisecond):
+	}
+}

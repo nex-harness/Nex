@@ -320,6 +320,13 @@ func (w *DefaultRuntimeWiring) NotifyParentBackgroundDone(parentSessionID, subag
 	}()
 }
 
+// OnSessionAbort cancels any running background subagents associated with the aborted parent session.
+func (w *DefaultRuntimeWiring) OnSessionAbort(sessionID string) {
+	if w.subMgr != nil {
+		w.subMgr.CancelByParent(sessionID)
+	}
+}
+
 // --- SessionExtensionBuilder ---
 
 type sessionUIBridge struct {

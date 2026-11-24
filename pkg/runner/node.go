@@ -91,6 +91,10 @@ type activeWorkCounter interface {
 	ActiveCount() int
 }
 
+type sessionAbortHandler interface {
+	OnSessionAbort(sessionID string)
+}
+
 type activeSession struct {
 	record store.SessionRecord
 	loop   *agent.Loop
@@ -187,6 +191,7 @@ func NewNode(cfg Config) (*Node, error) {
 		pendingRPC:      make(map[string]chan protocol.Envelope),
 	}
 	n.updater = newUpdater(n)
+	n.reconcileOrphanedLocalSessions(ctx)
 	return n, nil
 }
 
@@ -235,6 +240,82 @@ func (n *Node) autoUpdateEnabled() bool {
 func (n *Node) invokeRestartHook() {
 	if n.cfg.OnBeforeRestart != nil {
 		n.cfg.OnBeforeRestart()
+	}
+}
+
+// ActiveSessionIDs returns a snapshot of session IDs currently running inside this Node.
+func (n *Node) ActiveSessionIDs() []string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	out := make([]string, 0, len(n.activeSessions))
+	for id := range n.activeSessions {
+		out = append(out, id)
+	}
+	return out
+}
+
+func (n *Node) reconcileOrphanedLocalSessions(ctx context.Context) {
+	if n.store == nil {
+		return
+	}
+	sessions, err := n.store.ListSessions(ctx, "", true)
+	if err != nil {
+		return
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"type":   string(agent.EventAgentEnd),
+		"reason": "runner_restarted",
+	})
+	for _, sess := range sessions {
+		if sess.Status != "running" {
+			continue
+		}
+		sess.Status = "idle"
+		_, _ = n.store.CreateOrUpdateSession(ctx, sess)
+		_, _ = n.store.AppendSessionEvent(ctx, store.SessionEvent{
+			SessionID: sess.ID,
+			TurnIdx:   0,
+			EventType: string(agent.EventAgentEnd),
+			Payload:   payload,
+		}, true)
+	}
+}
+
+// AbortSession cancels an active session (plus any child sessions/background subagents)
+// or reconciles an orphaned running session by emitting an interrupted agent_end event.
+func (n *Node) AbortSession(ctx context.Context, sessionID string) {
+	if strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	n.mu.Lock()
+	as := n.activeSessions[sessionID]
+	var cancels []context.CancelFunc
+	if as != nil && as.cancel != nil {
+		cancels = append(cancels, as.cancel)
+	}
+	for id, child := range n.activeSessions {
+		if id != sessionID && child != nil && child.record.ParentSessionID == sessionID && child.cancel != nil {
+			cancels = append(cancels, child.cancel)
+		}
+	}
+	n.mu.Unlock()
+
+	for _, c := range cancels {
+		c()
+	}
+	if h, ok := n.cfg.Extensions.(sessionAbortHandler); ok {
+		h.OnSessionAbort(sessionID)
+	}
+	if as == nil {
+		if sess, err := n.store.GetSession(ctx, sessionID); err == nil && sess != nil && sess.Status == "running" {
+			sess.Status = "idle"
+			_, _ = n.store.CreateOrUpdateSession(ctx, *sess)
+		}
+		payload, _ := json.Marshal(map[string]any{
+			"type":   string(agent.EventAgentEnd),
+			"reason": "aborted_orphan",
+		})
+		n.recordAndEmitSessionEvent(ctx, sessionID, 0, string(agent.EventAgentEnd), payload, nil)
 	}
 }
 
@@ -371,9 +452,11 @@ func (n *Node) connectOnce(ctx context.Context) error {
 		Elevated:         n.cfg.Elevated,
 		UpdateState:      helloUpdateState,
 		UpdateError:      helloUpdateErr,
-		Tags:             n.cfg.Tags,
-		WorkspaceDefault: n.cfg.WorkspaceDefault,
-		SyncedConfigRev:  rev,
+		Tags:                 n.cfg.Tags,
+		WorkspaceDefault:     n.cfg.WorkspaceDefault,
+		SyncedConfigRev:      rev,
+		ActiveSessionsSynced: true,
+		ActiveSessionIDs:     n.ActiveSessionIDs(),
 	})
 	helloBytes, _ := json.Marshal(helloEnv)
 	if err := ws.Write(ctx, websocket.MessageText, helloBytes); err != nil {
@@ -725,12 +808,7 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 		}
 
 	case protocol.TypeSessionAbort:
-		n.mu.Lock()
-		as := n.activeSessions[env.SessionID]
-		n.mu.Unlock()
-		if as != nil {
-			as.cancel()
-		}
+		n.AbortSession(ctx, env.SessionID)
 
 	case protocol.TypeSessionForkSync:
 		go func() {

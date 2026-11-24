@@ -746,6 +746,18 @@ func (s *Server) handleSessionSubroutes(w http.ResponseWriter, r *http.Request) 
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"archived": true, "session_id": sessID})
 
+	case "abort":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if _, err := s.store.GetSession(r.Context(), sessID); err != nil {
+			writeErr(w, http.StatusNotFound, err)
+			return
+		}
+		finalized := s.abortSession(r.Context(), sessID, "", nil)
+		writeJSON(w, http.StatusOK, map[string]any{"aborted": sessID, "finalized": finalized})
+
 	case "fork":
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)

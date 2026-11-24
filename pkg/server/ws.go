@@ -135,6 +135,17 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 	})
 	_ = rc.sendJSON(ctx, welcomeEnv)
 
+	if hello.ActiveSessionsSynced {
+		helloTime := now
+		activeSet := make(map[string]bool, len(hello.ActiveSessionIDs))
+		for _, id := range hello.ActiveSessionIDs {
+			if id != "" {
+				activeSet[id] = true
+			}
+		}
+		go s.reconcileRunnerSessionsOnConnect(hello.RunnerID, rc, helloTime, activeSet)
+	}
+
 	for {
 		msgType, data, err := ws.Read(ctx)
 		if err != nil {
@@ -537,7 +548,10 @@ func (s *Server) handleClientWS(w http.ResponseWriter, r *http.Request) {
 		case protocol.TypeSessionPrompt:
 			s.routeClientPrompt(ctx, cc, env)
 
-		case protocol.TypeSessionSteer, protocol.TypeSessionFollowUp, protocol.TypeSessionAbort,
+		case protocol.TypeSessionAbort:
+			s.handleClientAbort(ctx, cc, env)
+
+		case protocol.TypeSessionSteer, protocol.TypeSessionFollowUp,
 			protocol.TypeApprovalResolve, protocol.TypeUIResolve, protocol.TypeBrowserInput, protocol.TypeBrowserHandoff:
 			s.forwardControlToRunner(ctx, cc, env)
 
@@ -639,6 +653,131 @@ func (s *Server) routeClientPrompt(ctx context.Context, cc *clientConn, env prot
 	fwdEnv.SessionID = p.SessionID
 	fwdEnv.RunnerID = p.RunnerID
 	_ = rc.sendJSON(ctx, fwdEnv)
+}
+
+func (s *Server) finalizeSessionInterrupted(ctx context.Context, sessionID, runnerID, reason string) bool {
+	if strings.TrimSpace(sessionID) == "" {
+		return false
+	}
+	sess, err := s.store.GetSession(ctx, sessionID)
+	if err != nil || sess == nil || sess.Status != "running" {
+		return false
+	}
+	if runnerID == "" {
+		runnerID = sess.RunnerID
+	}
+	sess.Status = "idle"
+	if _, err := s.store.CreateOrUpdateSession(ctx, *sess); err != nil {
+		return false
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		"type":   "agent_end",
+		"reason": reason,
+	})
+	savedEv, err := s.store.AppendSessionEvent(ctx, store.SessionEvent{
+		SessionID: sessionID,
+		TurnIdx:   0,
+		EventType: "agent_end",
+		Payload:   payload,
+	}, false)
+	if err == nil {
+		outEnv, _ := protocol.NewEnvelope(protocol.TypeSessionEvent, savedEv)
+		outEnv.SessionID = savedEv.SessionID
+		outEnv.RunnerID = runnerID
+		outEnv.Seq = savedEv.Seq
+		s.broadcastSessionEvent(ctx, savedEv.SessionID, outEnv)
+	}
+
+	if children, cErr := s.store.ListSessions(ctx, runnerID, true); cErr == nil {
+		for _, child := range children {
+			if child.ParentSessionID == sessionID && child.Status == "running" {
+				s.finalizeSessionInterrupted(ctx, child.ID, runnerID, reason)
+			}
+		}
+	}
+	return true
+}
+
+func (s *Server) reconcileRunnerSessionsOnConnect(runnerID string, rc *runnerConn, helloTime int64, activeSet map[string]bool) {
+	delay := s.effectiveReconcileDelay()
+	if delay > 0 {
+		time.Sleep(delay)
+	}
+	s.mu.RLock()
+	cur := s.runners[runnerID]
+	s.mu.RUnlock()
+	if cur != rc {
+		return
+	}
+	bgCtx := context.Background()
+	sessions, err := s.store.ListSessions(bgCtx, runnerID, true)
+	if err != nil {
+		return
+	}
+	for _, sess := range sessions {
+		if sess.Status != "running" {
+			continue
+		}
+		if activeSet[sess.ID] {
+			continue
+		}
+		if sess.LastActiveAt > helloTime {
+			continue
+		}
+		s.finalizeSessionInterrupted(bgCtx, sess.ID, runnerID, "runner_restarted")
+	}
+}
+
+func (s *Server) abortSession(ctx context.Context, sessionID, hintRunnerID string, rawEnv *protocol.Envelope) bool {
+	runnerID := hintRunnerID
+	if sess, err := s.store.GetSession(ctx, sessionID); err == nil && sess != nil && sess.RunnerID != "" {
+		runnerID = sess.RunnerID
+	}
+
+	s.mu.RLock()
+	rc := s.runners[runnerID]
+	s.mu.RUnlock()
+	if rc == nil {
+		return s.finalizeSessionInterrupted(ctx, sessionID, runnerID, "aborted_offline")
+	}
+
+	var lastSeqBefore uint64
+	if evs, err := s.store.ListSessionEventsAfter(ctx, sessionID, 0); err == nil && len(evs) > 0 {
+		lastSeqBefore = evs[len(evs)-1].Seq
+	}
+
+	var fwd protocol.Envelope
+	if rawEnv != nil {
+		fwd = *rawEnv
+	} else {
+		fwd, _ = protocol.NewEnvelope(protocol.TypeSessionAbort, map[string]any{})
+	}
+	fwd.SessionID = sessionID
+	fwd.RunnerID = runnerID
+	_ = rc.sendJSON(ctx, fwd)
+
+	timeout := s.effectiveAbortFallbackTimeout()
+	go func() {
+		time.Sleep(timeout)
+		bgCtx := context.Background()
+		sessAfter, err := s.store.GetSession(bgCtx, sessionID)
+		if err != nil || sessAfter == nil || sessAfter.Status != "running" {
+			return
+		}
+		evsAfter, _ := s.store.ListSessionEventsAfter(bgCtx, sessionID, lastSeqBefore)
+		if len(evsAfter) == 0 {
+			s.finalizeSessionInterrupted(bgCtx, sessionID, runnerID, "aborted_timeout")
+		}
+	}()
+	return false
+}
+
+func (s *Server) handleClientAbort(ctx context.Context, cc *clientConn, env protocol.Envelope) {
+	if strings.TrimSpace(env.SessionID) == "" {
+		return
+	}
+	_ = s.abortSession(ctx, env.SessionID, env.RunnerID, &env)
 }
 
 func (s *Server) forwardControlToRunner(ctx context.Context, cc *clientConn, env protocol.Envelope) {

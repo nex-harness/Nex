@@ -135,9 +135,11 @@ type RunnerHelloPayload struct {
 	Elevated         bool     `json:"elevated,omitempty"`
 	UpdateState      string   `json:"update_state,omitempty"`
 	UpdateError      string   `json:"update_error,omitempty"`
-	Tags             []string `json:"tags,omitempty"`
-	WorkspaceDefault string   `json:"workspace_default"`
-	SyncedConfigRev  int64    `json:"synced_config_rev"`
+	Tags                 []string `json:"tags,omitempty"`
+	WorkspaceDefault     string   `json:"workspace_default"`
+	SyncedConfigRev      int64    `json:"synced_config_rev"`
+	ActiveSessionsSynced bool     `json:"active_sessions_synced,omitempty"`
+	ActiveSessionIDs     []string `json:"active_session_ids,omitempty"`
 }
 
 // RunnerUpdatePayload instructs a connected Runner to download and install an update.

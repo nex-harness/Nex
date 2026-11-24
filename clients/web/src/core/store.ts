@@ -11,7 +11,7 @@ import {
   setRuntimeAuthToken,
   setRuntimeServerUrl,
 } from './protocol';
-import { applySessionEvent, emptyStreamState, RawSessionEventRow, SessionStreamState } from './reducer';
+import { applySessionEvent, emptyStreamState, RawSessionEventRow, sealRunningItems, SessionStreamState } from './reducer';
 import {
   AgentProfile,
   BrowseDirsResult,
@@ -1440,7 +1440,11 @@ export const useNexStore = create<AppState>((set, get) => ({
               if (raw.event_type === 'agent_end') {
                 shouldRefreshGit = true;
                 shouldRefreshData = true;
-                endedSessions.push(sid);
+                const reason = String((raw.payload || {}).reason || '');
+                const wasInterrupted = reason.startsWith('aborted') || reason === 'runner_restarted';
+                if (!wasInterrupted) {
+                  endedSessions.push(sid);
+                }
                 if (nextSessions.some((s) => s.id === sid && s.status !== 'idle')) {
                   nextSessions = nextSessions.map((s) => (s.id === sid ? { ...s, status: 'idle' } : s));
                 }
@@ -1833,21 +1837,31 @@ export const useNexStore = create<AppState>((set, get) => ({
         ]);
     const meta = get().sessions.find((s) => s.id === sessionId);
     const runnerId = meta?.runner_id || get().selectedRunnerId;
+    const prevStream = get().streams[sessionId];
     let st = emptyStreamState();
     for (const ev of evs || []) {
       st = applySessionEvent(st, runnerId, ev);
     }
     // If server metadata marks session as idle (e.g., forked or completed historical session),
-    // ensure no trailing item stays stuck in streaming/running state (which also blocks Shiki highlight!).
-    if (meta && meta.status !== 'running' && (st.running || st.items.some((it) => it.streaming))) {
+    // ensure no trailing item or dangling tool call stays stuck in streaming/running state (which also blocks Shiki highlight!).
+    if (
+      meta &&
+      meta.status !== 'running' &&
+      (st.running || st.items.some((it) => it.streaming || it.toolCalls.some((tc) => tc.status === 'running')))
+    ) {
       st = {
         ...st,
         running: false,
         runStartedAt: undefined,
-        items: st.items.map((it) => (it.streaming ? { ...it, streaming: false } : it)),
+        items: sealRunningItems(st.items),
       };
-    } else if (meta?.status === 'running' && st.running && !st.runStartedAt) {
-      st = { ...st, runStartedAt: Date.now() };
+    } else if (st.running) {
+      // Preserve earliest known start time across session switches if replay lacked created_at
+      if (prevStream?.running && prevStream.runStartedAt && (!st.runStartedAt || prevStream.runStartedAt < st.runStartedAt)) {
+        st = { ...st, runStartedAt: prevStream.runStartedAt };
+      } else if (!st.runStartedAt) {
+        st = { ...st, runStartedAt: meta?.last_active_at || Date.now() };
+      }
     }
     if (tels && tels.length > 0) {
       st.latestTelemetry = tels[tels.length - 1];
@@ -2171,9 +2185,16 @@ export const useNexStore = create<AppState>((set, get) => ({
   },
 
   abortActiveSession: () => {
-    const { activeSessionId, selectedRunnerId } = get();
+    const { activeSessionId, selectedRunnerId, sessions, wsConnected } = get();
     if (!activeSessionId) return;
-    wsClient.sendEnvelope('session.abort', {}, { session_id: activeSessionId, runner_id: selectedRunnerId });
+    const sess = sessions.find((s) => s.id === activeSessionId);
+    const targetRunnerId = sess?.runner_id || selectedRunnerId;
+    wsClient.sendEnvelope('session.abort', {}, { session_id: activeSessionId, runner_id: targetRunnerId });
+    if (!wsConnected) {
+      void apiFetch(`/api/v1/sessions/${encodeURIComponent(activeSessionId)}/abort`, { method: 'POST' })
+        .then(() => get().refreshInitialData())
+        .catch(() => {});
+    }
   },
 
   resolveApproval: (approvalId, approved) => {

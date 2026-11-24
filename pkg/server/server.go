@@ -128,6 +128,23 @@ type Server struct {
 	releaseCache     releaseManifestCache
 	dlTokensMu       sync.Mutex
 	dlTokens         map[string]time.Time
+
+	reconcileDelay       time.Duration
+	abortFallbackTimeout time.Duration
+}
+
+func (s *Server) effectiveReconcileDelay() time.Duration {
+	if s.reconcileDelay > 0 {
+		return s.reconcileDelay
+	}
+	return 1500 * time.Millisecond
+}
+
+func (s *Server) effectiveAbortFallbackTimeout() time.Duration {
+	if s.abortFallbackTimeout > 0 {
+		return s.abortFallbackTimeout
+	}
+	return 3 * time.Second
 }
 
 // New constructs and wires a Control Plane Server.

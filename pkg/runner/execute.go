@@ -325,6 +325,14 @@ func (n *Node) ExecutePrompt(
 
 	prov, provID, modelID, modelMeta, err := n.resolveProviderAndModel(parentCtx, p.ProviderID, p.ModelID)
 	if err != nil {
+		if p.SessionID != "" && n.IsOnline() {
+			errPayload, _ := json.Marshal(map[string]any{
+				"type":   string(agent.EventAgentEnd),
+				"reason": "error",
+				"error":  err.Error(),
+			})
+			n.recordAndEmitSessionEvent(context.Background(), p.SessionID, 0, string(agent.EventAgentEnd), errPayload, nil)
+		}
 		return nil, err
 	}
 
@@ -345,6 +353,14 @@ func (n *Node) ExecutePrompt(
 			ContextWindowLimit: modelMeta.ContextWindow,
 		})
 		if cErr != nil {
+			if p.SessionID != "" && n.IsOnline() {
+				errPayload, _ := json.Marshal(map[string]any{
+					"type":   string(agent.EventAgentEnd),
+					"reason": "error",
+					"error":  cErr.Error(),
+				})
+				n.recordAndEmitSessionEvent(context.Background(), p.SessionID, 0, string(agent.EventAgentEnd), errPayload, nil)
+			}
 			return nil, cErr
 		}
 		sessRec = &created
