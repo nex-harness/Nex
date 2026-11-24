@@ -1273,8 +1273,9 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 			strings.ReplaceAll(workspace, "'", "''"),
 			strings.ReplaceAll(remoteDataDir, "'", "''"),
 		)
-		if s.cfg.PairingSecret != "" {
-			psArgs += fmt.Sprintf(`','-token','%s`, strings.ReplaceAll(s.cfg.PairingSecret, "'", "''"))
+		effectiveSecret, _ := s.effectiveRunnerPairingSecret(ctx)
+		if effectiveSecret != "" {
+			psArgs += fmt.Sprintf(`','-token','%s`, strings.ReplaceAll(effectiveSecret, "'", "''"))
 		}
 		startCmd = fmt.Sprintf(
 			`powershell -NoProfile -NonInteractive -Command "$pidFile='%s'; $logFile='%s'; if (Test-Path $pidFile) { $old=Get-Content $pidFile -ErrorAction SilentlyContinue; if ($old) { Stop-Process -Id ([int]$old) -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 500 }; $p = Start-Process -FilePath '%s' -ArgumentList @(%s) -RedirectStandardOutput $logFile -RedirectStandardError ($logFile + '.err') -WindowStyle Hidden -PassThru; Set-Content -Path $pidFile -Value $p.Id; Start-Sleep -Seconds 1; if (Get-Process -Id $p.Id -ErrorAction SilentlyContinue) { Write-Output ('STARTED_PID=' + $p.Id) } else { Write-Error 'Runner exited immediately'; exit 1 }"`,
@@ -1299,13 +1300,14 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 		label := darwinLaunchAgentLabel(runnerID)
 		launchAgentsDir := joinRemotePath(remoteHome, "Library/LaunchAgents", "darwin")
 		plistPath := joinRemotePath(launchAgentsDir, label+".plist", "darwin")
+		effectiveSecret, _ := s.effectiveRunnerPairingSecret(ctx)
 		plistContent := buildDarwinLaunchAgentPlist(
-			label, appBin, runnerID, target.Name, wsURL, workspace, remoteDataDir, s.cfg.PairingSecret, remoteHome, logFile,
+			label, appBin, runnerID, target.Name, wsURL, workspace, remoteDataDir, effectiveSecret, remoteHome, logFile,
 		)
 		plistB64 := base64.StdEncoding.EncodeToString([]byte(plistContent))
 		tokenFlag := ""
-		if s.cfg.PairingSecret != "" {
-			tokenFlag = " -token " + shellQuote(s.cfg.PairingSecret)
+		if effectiveSecret != "" {
+			tokenFlag = " -token " + shellQuote(effectiveSecret)
 		}
 		logf("Installing macOS NexRunner.app (%s) & LaunchAgent %s (%s)...", appBundleDir, label, plistPath)
 		startCmd = fmt.Sprintf(
@@ -1353,9 +1355,10 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 		)
 
 	default:
+		effectiveSecret, _ := s.effectiveRunnerPairingSecret(ctx)
 		tokenFlag := ""
-		if s.cfg.PairingSecret != "" {
-			tokenFlag = " -token " + shellQuote(s.cfg.PairingSecret)
+		if effectiveSecret != "" {
+			tokenFlag = " -token " + shellQuote(effectiveSecret)
 		}
 		startCmd = fmt.Sprintf(
 			"if [ -f %s ]; then oldpid=$(cat %s); kill \"$oldpid\" 2>/dev/null || true; sleep 0.5; fi; "+

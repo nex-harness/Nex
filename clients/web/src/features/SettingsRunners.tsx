@@ -173,9 +173,93 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
   const [busyById, setBusyById] = useState<Record<string, 'test' | 'deploy' | 'stop'>>({});
   const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({});
 
+  const [runnerAuth, setRunnerAuth] = useState<{
+    pairing_secret: string;
+    require_auth: boolean;
+    env_managed: boolean;
+    rotated_at?: number;
+  } | null>(null);
+  const [showPairingSecret, setShowPairingSecret] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [relayPairCmd, setRelayPairCmd] = useState('');
+  const [relayPairLoading, setRelayPairLoading] = useState(false);
+  const [relayCopied, setRelayCopied] = useState(false);
+
   const wsProto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss' : 'ws';
   const wsHost = typeof window !== 'undefined' ? window.location.host : '127.0.0.1:8080';
-  const joinCmd = `./nex-runner -name "My-Linux-Box" -server ${wsProto}://${wsHost}/ws/runner`;
+  const tokenSnippet =
+    runnerAuth?.require_auth && runnerAuth?.pairing_secret ? ` -token "${runnerAuth.pairing_secret}"` : '';
+  const joinCmd = `./nex-runner -name "My-Linux-Box" -server ${wsProto}://${wsHost}/ws/runner${tokenSnippet}`;
+
+  const loadRunnerAuth = async () => {
+    try {
+      const data = await apiFetch<{
+        pairing_secret: string;
+        require_auth: boolean;
+        env_managed: boolean;
+        rotated_at?: number;
+      }>('/api/v1/runners/auth');
+      if (mountedRef.current && data && typeof data.pairing_secret === 'string') {
+        setRunnerAuth(data);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const toggleRequireAuth = async (next: boolean) => {
+    setAuthBusy(true);
+    try {
+      const data = await apiFetch<{
+        pairing_secret: string;
+        require_auth: boolean;
+        env_managed: boolean;
+        rotated_at?: number;
+      }>('/api/v1/runners/auth', {
+        method: 'PUT',
+        body: JSON.stringify({ require_auth: next }),
+      });
+      if (mountedRef.current && data) setRunnerAuth(data);
+    } catch (err) {
+      onFlash(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (mountedRef.current) setAuthBusy(false);
+    }
+  };
+
+  const rotatePairingSecret = async () => {
+    setAuthBusy(true);
+    try {
+      const data = await apiFetch<{
+        pairing_secret: string;
+        require_auth: boolean;
+        env_managed: boolean;
+        rotated_at?: number;
+      }>('/api/v1/runners/auth/rotate', { method: 'POST' });
+      if (mountedRef.current && data) {
+        setRunnerAuth(data);
+        onFlash(formatMsg(locale, 'runners.secretRotated'));
+      }
+    } catch (err) {
+      onFlash(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (mountedRef.current) setAuthBusy(false);
+    }
+  };
+
+  const generateRelayPairCommand = async () => {
+    setRelayPairLoading(true);
+    try {
+      const res = await apiFetch<{ uri?: string }>('/api/v1/remote/pair/invite', { method: 'POST' });
+      if (mountedRef.current && res?.uri) {
+        setRelayPairCmd(`./nex-runner -name "My-Remote-Box" -pair "${res.uri}"`);
+      }
+    } catch (err) {
+      onFlash(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (mountedRef.current) setRelayPairLoading(false);
+    }
+  };
 
   const loadStagedBinaries = async () => {
     try {
@@ -190,6 +274,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
   useEffect(() => {
     mountedRef.current = true;
     void loadStagedBinaries();
+    void loadRunnerAuth();
     return () => {
       mountedRef.current = false;
     };
@@ -853,9 +938,74 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
           </span>
         </button>
         {manualOpen && (
-          <div className="border-t border-border px-5 py-4">
+          <div className="space-y-4 border-t border-border px-5 py-4">
+            {runnerAuth && (
+              <div
+                data-testid="runner-auth-panel"
+                className="space-y-2.5 rounded-lg border border-border bg-surface/60 p-3.5"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-ui-xs font-medium text-foreground">
+                      {formatMsg(locale, 'runners.authSectionTitle')}
+                    </div>
+                    <div className="text-ui-xs text-foreground-subtlest">
+                      {runnerAuth.env_managed
+                        ? formatMsg(locale, 'runners.requireAuthEnvManaged')
+                        : formatMsg(locale, 'runners.authSectionDesc')}
+                    </div>
+                  </div>
+                  <label className="inline-flex items-center gap-2 text-ui-xs text-foreground">
+                    <input
+                      type="checkbox"
+                      data-testid="runner-require-auth-toggle"
+                      checked={runnerAuth.require_auth}
+                      disabled={authBusy || runnerAuth.env_managed}
+                      onChange={(e) => void toggleRequireAuth(e.target.checked)}
+                      className="accent-brand-blue"
+                    />
+                    <span>{formatMsg(locale, 'runners.requireAuthLabel')}</span>
+                  </label>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-ui-xs text-foreground-subtle">
+                    {formatMsg(locale, 'runners.pairingSecretLabel')}:
+                  </span>
+                  <code
+                    data-testid="runner-pairing-secret-val"
+                    className="flex-1 truncate rounded border border-border bg-card px-2 py-1 font-mono text-ui-xs text-foreground"
+                  >
+                    {showPairingSecret
+                      ? runnerAuth.pairing_secret
+                      : `${runnerAuth.pairing_secret.slice(0, 6)}••••••••${runnerAuth.pairing_secret.slice(-4)}`}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => setShowPairingSecret((v) => !v)}
+                    className="flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2 text-ui-xs text-foreground-subtle hover:bg-hover hover:text-foreground"
+                  >
+                    {showPairingSecret ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+                  </button>
+                  {!runnerAuth.env_managed && (
+                    <button
+                      type="button"
+                      data-testid="runner-rotate-secret-btn"
+                      disabled={authBusy}
+                      onClick={() => void rotatePairingSecret()}
+                      className="flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-ui-xs text-foreground transition-colors hover:bg-hover disabled:opacity-50"
+                    >
+                      <KeyRound className="size-3" />
+                      <span>{formatMsg(locale, 'runners.rotateSecretBtn')}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2">
-              <code className="truncate font-mono text-ui-sm text-foreground">{joinCmd}</code>
+              <code data-testid="runner-manual-join-cmd" className="truncate font-mono text-ui-sm text-foreground">
+                {joinCmd}
+              </code>
               <button
                 type="button"
                 onClick={() => {
@@ -868,6 +1018,52 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                 {copied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
                 <span>{copied ? (formatMsg(locale, 'common.copied')) : formatMsg(locale, 'runners.copyCommand')}</span>
               </button>
+            </div>
+
+            <div className="space-y-2 rounded-lg border border-border bg-surface/40 p-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-ui-xs font-medium text-foreground">
+                    {formatMsg(locale, 'runners.relayPairTitle')}
+                  </div>
+                  <div className="text-ui-xs text-foreground-subtlest">
+                    {formatMsg(locale, 'runners.relayPairDesc')}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  data-testid="generate-relay-pair-cmd-btn"
+                  disabled={relayPairLoading}
+                  onClick={() => void generateRelayPairCommand()}
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-ui-xs text-foreground transition-colors hover:bg-hover disabled:opacity-50"
+                >
+                  {relayPairLoading ? <LoaderCircle className="size-3 animate-spin" /> : <Link2 className="size-3" />}
+                  <span>
+                    {relayPairLoading
+                      ? formatMsg(locale, 'runners.generatingRelayPair')
+                      : formatMsg(locale, 'runners.generateRelayPairBtn')}
+                  </span>
+                </button>
+              </div>
+              {relayPairCmd && (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2">
+                  <code data-testid="runner-relay-pair-cmd" className="truncate font-mono text-ui-xs text-foreground">
+                    {relayPairCmd}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(relayPairCmd);
+                      setRelayCopied(true);
+                      setTimeout(() => setRelayCopied(false), 1500);
+                    }}
+                    className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2.5 py-1 text-ui-xs text-foreground transition-colors hover:bg-hover"
+                  >
+                    {relayCopied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
+                    <span>{relayCopied ? formatMsg(locale, 'common.copied') : formatMsg(locale, 'runners.copyCommand')}</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

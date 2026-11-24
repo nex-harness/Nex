@@ -476,11 +476,12 @@ func extractRunnerDownloadToken(r *http.Request) string {
 }
 
 func (s *Server) isRunnerBinaryDownloadAuthorized(ctx context.Context, r *http.Request) bool {
+	pairingSecret, requireAuth := s.effectiveRunnerPairingSecret(ctx)
 	if tok := extractRunnerDownloadToken(r); tok != "" {
 		if s.isValidRunnerDownloadToken(tok) {
 			return true
 		}
-		if s.cfg.PairingSecret != "" && subtle.ConstantTimeCompare([]byte(tok), []byte(s.cfg.PairingSecret)) == 1 {
+		if pairingSecret != "" && subtle.ConstantTimeCompare([]byte(tok), []byte(pairingSecret)) == 1 {
 			return true
 		}
 		if runners, err := s.store.ListRunners(ctx); err == nil {
@@ -490,6 +491,9 @@ func (s *Server) isRunnerBinaryDownloadAuthorized(ctx context.Context, r *http.R
 				}
 			}
 		}
+		if dev, err := s.store.GetPairedDeviceByTokenHash(ctx, sha256Hex(tok)); err == nil && dev != nil && dev.RevokedAt == 0 {
+			return true
+		}
 		// Fall through to web auth check in case bearer token is a web auth session token.
 	}
 
@@ -497,9 +501,9 @@ func (s *Server) isRunnerBinaryDownloadAuthorized(ctx context.Context, r *http.R
 	if enabled {
 		return authed
 	}
-	// If web auth is off but a pairing secret is configured, still require a valid runner token unless
+	// If web auth is off but runner auth is required, still require a valid runner token unless
 	// an explicit paired/device session was already authenticated above.
-	if s.cfg.PairingSecret != "" {
+	if requireAuth && pairingSecret != "" {
 		return false
 	}
 	return authed
