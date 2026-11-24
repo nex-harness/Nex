@@ -14,7 +14,7 @@ permissions:
 
 env:
   # Fallback app version for non-tag builds; tag builds use the tag name.
-  APP_VERSION_FALLBACK: "0.1.2"
+  APP_VERSION_FALLBACK: "0.2.0"
 
 jobs:
   resolve-version:
