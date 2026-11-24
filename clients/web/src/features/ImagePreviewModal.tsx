@@ -94,13 +94,18 @@ export function ImagePreviewModal() {
           />
         </div>
       ) : (
-        <img
-          src={previewImage.src}
-          alt={previewImage.alt || 'preview'}
+        <div
           onClick={(e) => e.stopPropagation()}
-          style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
-          className="zcode-dialog-content max-h-[82vh] max-w-[90vw] select-none rounded-xl object-contain shadow-2xl transition-transform duration-150"
-        />
+          className="zcode-dialog-content flex items-center justify-center"
+        >
+          <img
+            data-testid="image-preview-img"
+            src={previewImage.src}
+            alt={previewImage.alt || 'preview'}
+            style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
+            className="max-h-[82vh] max-w-[90vw] select-none rounded-xl object-contain shadow-2xl transition-transform duration-150"
+          />
+        </div>
       )}
 
       {/* Bottom floating action bar (for images) */}

@@ -1776,9 +1776,22 @@ describe('Nex-v3 ZCode-Aligned Layout, Blocks, i18n & On-Demand Side Pane', () =
       fireEvent.keyDown(window, { key: 'Escape' });
       expect(screen.queryByTestId('image-preview-modal')).toBeNull();
 
-      // Clicking markdown image opens preview overlay and close button dismisses it
+      // Clicking markdown image opens preview overlay, zoom/rotate controls update transform, and close button dismisses it
       fireEvent.click(screen.getByTestId('markdown-image-btn'));
       expect(screen.getByTestId('image-preview-modal')).toBeTruthy();
+      const previewImg = screen.getByTestId('image-preview-img');
+      expect(previewImg.className).not.toContain('zcode-dialog-content');
+      expect(previewImg.style.transform).toBe('scale(1) rotate(0deg)');
+
+      fireEvent.click(screen.getByLabelText(/Zoom in|放大/i));
+      expect(previewImg.style.transform).toBe('scale(1.25) rotate(0deg)');
+      fireEvent.click(screen.getByLabelText(/Rotate right|向右旋转/i));
+      expect(previewImg.style.transform).toBe('scale(1.25) rotate(90deg)');
+      fireEvent.click(screen.getByLabelText(/Rotate left|向左旋转/i));
+      expect(previewImg.style.transform).toBe('scale(1.25) rotate(0deg)');
+      fireEvent.click(screen.getByLabelText(/Zoom out|缩小/i));
+      expect(previewImg.style.transform).toBe('scale(1) rotate(0deg)');
+
       fireEvent.click(screen.getByTestId('image-preview-close'));
       expect(screen.queryByTestId('image-preview-modal')).toBeNull();
     } finally {
