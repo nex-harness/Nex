@@ -21,6 +21,16 @@ func findSection(sections []ai.SystemSection, category string) (ai.SystemSection
 	return ai.SystemSection{}, false
 }
 
+// findSectionByName returns the first section with the given Name.
+func findSectionByName(sections []ai.SystemSection, name string) (ai.SystemSection, bool) {
+	for _, s := range sections {
+		if s.Name == name {
+			return s, true
+		}
+	}
+	return ai.SystemSection{}, false
+}
+
 func TestBuildSystemSectionsPromptIsByteStable(t *testing.T) {
 	workDir := t.TempDir()
 	sessionDir := filepath.Join(workDir, "nested")
@@ -74,17 +84,22 @@ func TestBuildSystemSectionsPromptIsByteStable(t *testing.T) {
 		}
 	}
 
-	// Meta context, by contrast, must differ.
-	metaA, ok := findSection(first, CategoryMetaContext)
+	// Environment section reflects runner/workdir differences, while omitting volatile date & git status.
+	metaA, ok := findSectionByName(first, "environment")
 	if !ok {
-		t.Fatal("missing meta_context section")
+		t.Fatal("missing environment section")
 	}
-	metaB, _ := findSection(second, CategoryMetaContext)
+	metaB, _ := findSectionByName(second, "environment")
 	if metaA.Content == metaB.Content {
-		t.Fatal("meta_context should reflect volatile environment state")
+		t.Fatal("environment section should reflect different runner/workdir")
 	}
 	if metaA.CacheControl {
-		t.Fatal("meta_context must not be cache-controlled")
+		t.Fatal("environment section must not be cache-controlled")
+	}
+	for _, forbidden := range []string{"Today's date:", "# gitStatus", "Is a git repository:"} {
+		if strings.Contains(metaA.Content, forbidden) || strings.Contains(metaB.Content, forbidden) {
+			t.Fatalf("volatile %q must not appear in environment section to keep prompt cache warm", forbidden)
+		}
 	}
 }
 
@@ -120,32 +135,50 @@ func TestBuildSystemSectionsMetaContextEnvironmentGitAndInstructions(t *testing.
 		MCPNamespaces: "- github (local, 12 tools)",
 	})
 
-	meta, ok := findSection(sections, CategoryMetaContext)
-	if !ok {
-		t.Fatal("missing meta_context")
+	// Verify section ordering: core -> instructions -> skills -> mcp -> environment
+	order := make([]string, 0, len(sections))
+	for _, s := range sections {
+		order = append(order, s.Name)
 	}
-	m := meta.Content
+	wantOrder := []string{"core", "instructions", "available_skills", "mcp_namespaces", "environment"}
+	if strings.Join(order, ",") != strings.Join(wantOrder, ",") {
+		t.Fatalf("unexpected section order: got %v, want %v", order, wantOrder)
+	}
 
+	instr, ok := findSectionByName(sections, "instructions")
+	if !ok {
+		t.Fatal("missing instructions section")
+	}
 	for _, want := range []string{
-		"# Environment",
-		"Runner ID: run_abc",
-		"Primary working directory: " + workDir,
-		"Is a git repository: Yes",
-		"Platform: linux",
-		"Shell: /bin/bash",
-		"OS/Arch: linux/amd64",
-		"Today's date: 2026-11-19",
-		"# gitStatus",
-		"Current branch: main",
-		"?? bar.go",
-		"abc1234 initial commit",
 		"# Instructions",
 		"Codebase and user instructions are shown below. Be sure to adhere to these instructions.",
 		"Global rule: prefer `make test`.",
 		"Workspace rule: Go 1.27, no CGO.",
 	} {
-		if !strings.Contains(m, want) {
-			t.Fatalf("meta_context missing %q:\n%s", want, m)
+		if !strings.Contains(instr.Content, want) {
+			t.Fatalf("instructions section missing %q:\n%s", want, instr.Content)
+		}
+	}
+
+	envSec, ok := findSectionByName(sections, "environment")
+	if !ok {
+		t.Fatal("missing environment section")
+	}
+	for _, want := range []string{
+		"# Environment",
+		"Runner ID: run_abc",
+		"Primary working directory: " + workDir,
+		"Platform: linux",
+		"Shell: /bin/bash",
+		"OS/Arch: linux/amd64",
+	} {
+		if !strings.Contains(envSec.Content, want) {
+			t.Fatalf("environment section missing %q:\n%s", want, envSec.Content)
+		}
+	}
+	for _, omitted := range []string{"Today's date:", "# gitStatus", "Is a git repository:"} {
+		if strings.Contains(envSec.Content, omitted) {
+			t.Fatalf("environment section should omit volatile %q:\n%s", omitted, envSec.Content)
 		}
 	}
 
@@ -183,11 +216,8 @@ func TestBuildSystemSectionsOmitsEmptyOptionalSections(t *testing.T) {
 			t.Fatalf("section %q is empty", s.Category)
 		}
 	}
-	if meta, _ := findSection(sections, CategoryMetaContext); strings.Contains(meta.Content, "# gitStatus") {
-		t.Fatalf("non-repo workspace must not emit gitStatus:\n%s", meta.Content)
-	}
-	if meta, _ := findSection(sections, CategoryMetaContext); !strings.Contains(meta.Content, "Is a git repository: No") {
-		t.Fatalf("expected explicit non-repo marker:\n%s", meta.Content)
+	if envSec, _ := findSectionByName(sections, "environment"); strings.Contains(envSec.Content, "# gitStatus") {
+		t.Fatalf("environment section must not emit gitStatus:\n%s", envSec.Content)
 	}
 }
 
@@ -399,27 +429,38 @@ func TestBuildSystemSectionsPlanModeAndMultiLevelAgentsCLAUDE(t *testing.T) {
 		t.Fatalf("core system_prompt must remain byte-identical even in read_only Plan Mode")
 	}
 
-	meta, ok := findSection(sections, CategoryMetaContext)
+	envSec, ok := findSectionByName(sections, "environment")
 	if !ok {
-		t.Fatal("missing meta_context")
+		t.Fatal("missing environment section")
 	}
 	for _, want := range []string{
 		"# Plan Mode (Read-Only)",
 		"Permission mode: read_only",
+	} {
+		if !strings.Contains(envSec.Content, want) {
+			t.Fatalf("environment section missing %q:\n%s", want, envSec.Content)
+		}
+	}
+
+	instrSec, ok := findSectionByName(sections, "instructions")
+	if !ok {
+		t.Fatal("missing instructions section")
+	}
+	for _, want := range []string{
 		"ROOT_AGENT_RULE",
 		"ROOT_CLAUDE_RULE",
 		"SERVICES_AGENT_RULE",
 		"API_CLAUDE_RULE",
 	} {
-		if !strings.Contains(meta.Content, want) {
-			t.Fatalf("meta_context missing %q:\n%s", want, meta.Content)
+		if !strings.Contains(instrSec.Content, want) {
+			t.Fatalf("instructions section missing %q:\n%s", want, instrSec.Content)
 		}
 	}
 
 	// Verify outer-to-inner ordering (root first, deepest subDir last)
-	rootIdx := strings.Index(meta.Content, "ROOT_AGENT_RULE")
-	svcIdx := strings.Index(meta.Content, "SERVICES_AGENT_RULE")
-	apiIdx := strings.Index(meta.Content, "API_CLAUDE_RULE")
+	rootIdx := strings.Index(instrSec.Content, "ROOT_AGENT_RULE")
+	svcIdx := strings.Index(instrSec.Content, "SERVICES_AGENT_RULE")
+	apiIdx := strings.Index(instrSec.Content, "API_CLAUDE_RULE")
 	if !(rootIdx < svcIdx && svcIdx < apiIdx) {
 		t.Fatalf("expected outer-to-inner instruction order, got indices root=%d svc=%d api=%d", rootIdx, svcIdx, apiIdx)
 	}

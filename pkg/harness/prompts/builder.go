@@ -111,11 +111,26 @@ func BuildSessionSections(opts SessionOptions) []ai.SystemSection {
 	return BuildSystemSections(opts)
 }
 
-// BuildSystemSections assembles the full ordered section list. The returned
-// system_prompt section depends only on the session role, so repeated calls with
-// different times/git state produce byte-identical system_prompt content.
+// BuildSystemSections assembles the full ordered section list from most stable
+// to most dynamic for maximum prompt-cache hit rate (inspired by pi-agent):
+//  1. system_prompt (core identity + subagent/profile, CacheControl: true)
+//  2. instructions (global + workspace AGENTS.md, stable within a session)
+//  3. skills (sorted available skills catalog)
+//  4. mcp_namespaces (enabled MCP namespaces)
+//  5. environment & memories (static workspace/OS/shell/permission info + long-term memories)
+//
+// Volatile per-turn values such as current date and git status are intentionally
+// omitted; the agent can query them on demand via bash without busting prefix caches.
 func BuildSystemSections(opts SessionOptions) []ai.SystemSection {
 	sections := []ai.SystemSection{coreSection(opts)}
+
+	if instructions := buildInstructions(opts); instructions != "" {
+		sections = append(sections, ai.SystemSection{
+			Category: CategoryMetaContext,
+			Name:     "instructions",
+			Content:  instructions,
+		})
+	}
 
 	if skills := buildSkillsSection(opts.Skills); skills != "" {
 		sections = append(sections, ai.SystemSection{
@@ -211,13 +226,10 @@ func buildSkillsSection(skills []SkillInfo) string {
 	return strings.TrimRight(sb.String(), "\n")
 }
 
-// buildMetaContext renders the volatile environment, git snapshot, and AGENTS.md
-// instructions. This section is intentionally separate from the cached core.
+// buildMetaContext renders the session-stable environment and long-term memories.
+// Volatile values (current date, git status/log) are intentionally omitted to
+// preserve prefix prompt-cache stability across turns and days.
 func buildMetaContext(opts SessionOptions) string {
-	now := opts.Now
-	if now.IsZero() {
-		now = time.Now()
-	}
 	platform := opts.Platform
 	if platform == "" {
 		platform = runtime.GOOS
@@ -232,28 +244,16 @@ func buildMetaContext(opts SessionOptions) string {
 	}
 	workDir := strings.TrimSpace(opts.WorkDir)
 
-	gitInfo := opts.Git
-	if gitInfo == nil {
-		detected := ReadGitSnapshot(workDir)
-		gitInfo = &detected
-	}
-
 	var sb strings.Builder
 	sb.WriteString("# Environment\n")
 	sb.WriteString("- Runner ID: " + fallback(opts.RunnerID, "(unknown)") + "\n")
 	sb.WriteString("- Primary working directory: " + fallback(workDir, "(not set)") + "\n")
-	if gitInfo.IsRepo {
-		sb.WriteString("- Is a git repository: Yes\n")
-	} else {
-		sb.WriteString("- Is a git repository: No\n")
-	}
 	sb.WriteString("- Platform: " + platform + "\n")
 	sb.WriteString("- Shell: " + shell + "\n")
-	sb.WriteString("- OS/Arch: " + platform + "/" + arch + "\n")
+	sb.WriteString("- OS/Arch: " + platform + "/" + arch)
 	if mode := strings.TrimSpace(opts.PermissionMode); mode != "" {
-		sb.WriteString("- Permission mode: " + mode + "\n")
+		sb.WriteString("\n- Permission mode: " + mode)
 	}
-	sb.WriteString("- Today's date: " + now.Format("2006-01-02"))
 
 	if mode := strings.TrimSpace(opts.PermissionMode); mode == "read_only" || mode == "plan" {
 		sb.WriteString("\n\n# Plan Mode (Read-Only)\n")
@@ -279,25 +279,6 @@ func buildMetaContext(opts SessionOptions) string {
 			sb.WriteString(line)
 			memBudget -= len(line)
 		}
-	}
-
-	if gitInfo.IsRepo {
-		sb.WriteString("\n\n# gitStatus\n")
-		sb.WriteString("Current branch: " + fallback(strings.TrimSpace(gitInfo.Branch), "(unknown)") + "\n")
-		if status := strings.TrimRight(gitInfo.Status, "\n"); status != "" {
-			sb.WriteString("Status:\n" + truncateUTF8Lines(status, maxGitStatusBytes, maxGitStatusLines) + "\n")
-		} else {
-			sb.WriteString("Status: (clean)\n")
-		}
-		if log := strings.TrimRight(gitInfo.Log, "\n"); log != "" {
-			sb.WriteString("Recent commits:\n" + truncateUTF8Lines(log, maxGitStatusBytes/2, 5))
-		} else {
-			sb.WriteString("Recent commits: (none)")
-		}
-	}
-
-	if instructions := buildInstructions(opts); instructions != "" {
-		sb.WriteString("\n\n" + instructions)
 	}
 
 	return strings.TrimRight(sb.String(), "\n")
