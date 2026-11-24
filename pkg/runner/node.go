@@ -110,6 +110,7 @@ type Node struct {
 	cfg          Config
 	store        *store.Store
 	hc           *http.Client
+	streamHC     *http.Client
 	binarySHA256 string
 	isDev        bool
 	updater      *Updater
@@ -182,11 +183,27 @@ func NewNode(cfg Config) (*Node, error) {
 	if hc == nil {
 		hc = &http.Client{Timeout: 5 * time.Minute}
 	}
+	var streamHC *http.Client
+	if cfg.HTTPClient != nil {
+		streamHC = &http.Client{
+			Transport:     cfg.HTTPClient.Transport,
+			CheckRedirect: cfg.HTTPClient.CheckRedirect,
+			Jar:           cfg.HTTPClient.Jar,
+			Timeout:       0,
+		}
+	} else if baseTr, ok := http.DefaultTransport.(*http.Transport); ok && baseTr != nil {
+		tr := baseTr.Clone()
+		tr.ResponseHeaderTimeout = 60 * time.Second
+		streamHC = &http.Client{Transport: tr, Timeout: 0}
+	} else {
+		streamHC = &http.Client{Timeout: 0}
+	}
 
 	n := &Node{
 		cfg:             cfg,
 		store:           st,
 		hc:              hc,
+		streamHC:        streamHC,
 		binarySHA256:    binHash,
 		isDev:           isDev,
 		activeSessions:  make(map[string]*activeSession),

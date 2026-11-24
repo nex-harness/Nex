@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Archive,
   ArrowUp,
   ArrowUpCircle,
@@ -3609,6 +3610,18 @@ export function ConversationPane() {
                 locale={locale}
                 className="pt-0.5"
               />
+              {!currentStream.running && currentStream.lastError && (
+                <div
+                  data-testid="stream-error-banner"
+                  className="flex items-start gap-2.5 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-ui-sm text-destructive"
+                >
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="font-medium">{formatMsg(locale, 'chat.streamError.title')}</div>
+                    <div className="break-all font-mono text-ui-xs opacity-90">{currentStream.lastError}</div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

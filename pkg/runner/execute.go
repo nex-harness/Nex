@@ -217,7 +217,11 @@ func (n *Node) resolveProviderAndModel(ctx context.Context, provID, modelID stri
 		meta.ReasoningLevels = ai.DefaultReasoningLevels(meta)
 	}
 
-	p, err := ai.NewProvider(chosenProv.Driver, chosenProv.BaseURL, apiKey, n.hc)
+	streamClient := n.streamHC
+	if streamClient == nil {
+		streamClient = n.hc
+	}
+	p, err := ai.NewProvider(chosenProv.Driver, chosenProv.BaseURL, apiKey, streamClient)
 	if err != nil {
 		return nil, "", "", ai.ModelMeta{}, err
 	}

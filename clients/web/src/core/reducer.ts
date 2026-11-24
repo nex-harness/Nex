@@ -23,6 +23,7 @@ export interface SessionStreamState {
   todos: TodoItem[];
   goals: GoalEntry[];
   backgroundTasks?: BackgroundTaskItem[];
+  lastError?: string;
 }
 
 export function emptyStreamState(): SessionStreamState {
@@ -39,6 +40,7 @@ export function emptyStreamState(): SessionStreamState {
     todos: [],
     goals: [],
     backgroundTasks: [],
+    lastError: undefined,
   };
 }
 
@@ -171,6 +173,7 @@ export function applySessionEvent(
   let todos = prev.todos;
   let goals = prev.goals;
   let backgroundTasks = prev.backgroundTasks || [];
+  let lastError = prev.lastError;
 
   const p = ev.payload || {};
 
@@ -276,6 +279,7 @@ export function applySessionEvent(
   switch (ev.event_type) {
     case 'agent_start':
       running = true;
+      lastError = undefined;
       if (!runStartedAt) runStartedAt = eventTimestamp();
       break;
 
@@ -285,6 +289,9 @@ export function applySessionEvent(
       pendingUIPrompt = null;
       pendingApproval = null;
       items = sealRunningItems(items);
+      if (typeof p.error === 'string' && p.error.trim()) {
+        lastError = p.error.trim();
+      }
       if (goals.some((g) => g.status === 'running')) {
         const completedAt = eventTimestamp();
         goals = goals.map((g) => (g.status === 'running' ? { ...g, status: 'completed', completedAt } : g));
@@ -586,6 +593,11 @@ export function applySessionEvent(
     }
 
     case 'turn_end':
+      if (typeof p.error === 'string' && p.error.trim()) {
+        lastError = p.error.trim();
+      } else if (p.telemetry) {
+        lastError = undefined;
+      }
       if (p.telemetry) {
         const tel = p.telemetry as TurnTelemetry;
         latestTelemetry = tel;
@@ -650,5 +662,6 @@ export function applySessionEvent(
     todos,
     goals,
     backgroundTasks,
+    lastError,
   };
 }

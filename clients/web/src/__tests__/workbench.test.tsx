@@ -4696,4 +4696,80 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       sendSpy.mockRestore();
     }
   });
+
+  it('displays stream error banner on turn_end error and clears it when next turn starts', () => {
+    const sid = 'sess_stream_err_1';
+    let stream = applySessionEvent(emptyStreamState(), 'run_mac', {
+      session_id: sid,
+      seq: 1,
+      turn_idx: 0,
+      event_type: 'agent_start',
+      payload: {},
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 2,
+      turn_idx: 0,
+      event_type: 'message_end',
+      payload: {
+        message: { role: 'user', content: [{ type: 'text', text: '/goal finish task' }] },
+      },
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 3,
+      turn_idx: 1,
+      event_type: 'turn_end',
+      payload: { error: 'upstream stream idle timeout: no events received for 1m30s' },
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 4,
+      turn_idx: 0,
+      event_type: 'agent_end',
+      payload: {},
+    });
+
+    expect(stream.running).toBe(false);
+    expect(stream.lastError).toBe('upstream stream idle timeout: no events received for 1m30s');
+
+    useNexStore.setState({
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      locale: 'zh-CN',
+      mainView: 'workspace',
+      activeSessionId: sid,
+      selectedRunnerId: 'run_mac',
+      sessions: [
+        {
+          id: sid,
+          runner_id: 'run_mac',
+          title: 'Stream error test',
+          workspace_path: '/tmp/ws',
+          status: 'idle',
+          created_at: 1000,
+          updated_at: 2000,
+        } as never,
+      ],
+      streams: { [sid]: stream },
+    });
+
+    const { rerender } = render(<App />);
+    const banner = screen.getByTestId('stream-error-banner');
+    expect(banner.textContent).toContain('请求中断');
+    expect(banner.textContent).toContain('upstream stream idle timeout: no events received for 1m30s');
+
+    const restarted = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 5,
+      turn_idx: 0,
+      event_type: 'agent_start',
+      payload: {},
+    });
+    expect(restarted.lastError).toBeUndefined();
+    useNexStore.setState({ streams: { [sid]: restarted } });
+    rerender(<App />);
+    expect(screen.queryByTestId('stream-error-banner')).toBeNull();
+  });
 });

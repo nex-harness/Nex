@@ -7,6 +7,14 @@ import (
 	"time"
 )
 
+// DefaultStreamIdleTimeout is how long a single provider stream turn can go without
+// receiving any SSE/stream event before being aborted as an idle hang.
+const DefaultStreamIdleTimeout = 90 * time.Second
+
+// ErrStreamIdleTimeout indicates the upstream LLM provider accepted the request
+// (or was mid-stream) but stopped sending any events within the idle timeout window.
+var ErrStreamIdleTimeout = errors.New("upstream stream idle timeout")
+
 // IsContextOverflowError reports whether an LLM provider error indicates the request
 // exceeded the model's context window or input token limit.
 func IsContextOverflowError(err error) bool {
@@ -41,6 +49,9 @@ func IsContextOverflowError(err error) bool {
 func IsRetryableProviderError(err error) bool {
 	if err == nil {
 		return false
+	}
+	if errors.Is(err, ErrStreamIdleTimeout) {
+		return true
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
@@ -90,6 +101,8 @@ func IsRetryableProviderError(err error) bool {
 		"broken pipe",
 		"unexpected eof",
 		"eof",
+		"timeout awaiting response headers",
+		"i/o timeout",
 		"timeout",
 		"temporarily unavailable",
 	}

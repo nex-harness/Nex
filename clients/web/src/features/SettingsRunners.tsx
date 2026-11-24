@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CloudDownload,
   Copy,
+  Ellipsis,
   Eye,
   EyeOff,
   FileCode2,
@@ -467,6 +468,19 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
   const [removingRunnerIds, setRemovingRunnerIds] = useState<Record<string, boolean>>({});
   const [upgradingRunnerIds, setUpgradingRunnerIds] = useState<Record<string, boolean>>({});
   const [upgradingAll, setUpgradingAll] = useState(false);
+  const [openMenuKey, setOpenMenuKey] = useState<string | null>(null);
+  const menuContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!openMenuKey) return;
+    const onDown = (event: MouseEvent) => {
+      if (menuContainerRef.current && !menuContainerRef.current.contains(event.target as Node)) {
+        setOpenMenuKey(null);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [openMenuKey]);
 
   const upgradableCount = runners.filter(
     (r) =>

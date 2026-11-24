@@ -35,8 +35,9 @@ type LoopConfig struct {
 	Pricing            ai.ModelPricing
 	PermissionMode     PermissionMode
 	TriggerSource      string // "chat" | "subagent" | "cron"
-	MaxRetries         int    // 0 defaults to 3; <0 disables retries
-	RetryBaseDelay     time.Duration
+	MaxRetries         int           // 0 defaults to 3; <0 disables retries
+	RetryBaseDelay     time.Duration // backoff base duration
+	StreamIdleTimeout  time.Duration // 0 defaults to DefaultStreamIdleTimeout (90s); <0 disables idle watchdog
 	DisableAutoCompact bool
 	Tools              []tools.Tool
 	Approver           Approver
@@ -299,27 +300,64 @@ func (l *Loop) Run(ctx context.Context, promptMsg *ai.Message) (*ai.Message, err
 				streamErr = err
 			} else {
 				l.emit(Event{Type: EventMessageStart, TurnIdx: turnNo})
-				for sev := range streamCh {
-					if firstTokenTS.IsZero() && (sev.Type == ai.StreamEventTextDelta || sev.Type == ai.StreamEventThinkingDelta || sev.Type == ai.StreamEventToolCallStart) {
-						firstTokenTS = time.Now()
+				idleTimeout := l.cfg.StreamIdleTimeout
+				if idleTimeout == 0 {
+					idleTimeout = DefaultStreamIdleTimeout
+				}
+				var idleTimer *time.Timer
+				var idleTimerC <-chan time.Time
+				if idleTimeout > 0 {
+					idleTimer = time.NewTimer(idleTimeout)
+					idleTimerC = idleTimer.C
+				}
+			readStream:
+				for {
+					select {
+					case sev, ok := <-streamCh:
+						if !ok {
+							break readStream
+						}
+						if idleTimer != nil {
+							if !idleTimer.Stop() {
+								select {
+								case <-idleTimer.C:
+								default:
+								}
+							}
+							idleTimer.Reset(idleTimeout)
+						}
+						if firstTokenTS.IsZero() && (sev.Type == ai.StreamEventTextDelta || sev.Type == ai.StreamEventThinkingDelta || sev.Type == ai.StreamEventToolCallStart) {
+							firstTokenTS = time.Now()
+						}
+						switch sev.Type {
+						case ai.StreamEventTextDelta:
+							emittedAnyDelta = true
+							partialText.WriteString(sev.TextDelta)
+							l.emit(Event{Type: EventMessageUpdate, TurnIdx: turnNo, DeltaKind: "text", Delta: sev.TextDelta})
+						case ai.StreamEventThinkingDelta:
+							emittedAnyDelta = true
+							l.emit(Event{Type: EventMessageUpdate, TurnIdx: turnNo, DeltaKind: "thinking", Delta: sev.ThinkingDelta})
+						case ai.StreamEventToolCallDelta:
+							emittedAnyDelta = true
+							l.emit(Event{Type: EventMessageUpdate, TurnIdx: turnNo, DeltaKind: "toolcall", ToolCallID: sev.ToolCallID, ToolName: sev.ToolName, Delta: sev.ArgsDelta})
+						case ai.StreamEventDone:
+							assistantMsg = sev.Message
+							turnUsage = sev.Usage
+						case ai.StreamEventError:
+							streamErr = sev.Err
+						}
+					case <-idleTimerC:
+						turnCancel()
+						if ctx.Err() == nil {
+							streamErr = fmt.Errorf("%w: no events received for %s", ErrStreamIdleTimeout, idleTimeout)
+						} else {
+							streamErr = ctx.Err()
+						}
+						break readStream
 					}
-					switch sev.Type {
-					case ai.StreamEventTextDelta:
-						emittedAnyDelta = true
-						partialText.WriteString(sev.TextDelta)
-						l.emit(Event{Type: EventMessageUpdate, TurnIdx: turnNo, DeltaKind: "text", Delta: sev.TextDelta})
-					case ai.StreamEventThinkingDelta:
-						emittedAnyDelta = true
-						l.emit(Event{Type: EventMessageUpdate, TurnIdx: turnNo, DeltaKind: "thinking", Delta: sev.ThinkingDelta})
-					case ai.StreamEventToolCallDelta:
-						emittedAnyDelta = true
-						l.emit(Event{Type: EventMessageUpdate, TurnIdx: turnNo, DeltaKind: "toolcall", ToolCallID: sev.ToolCallID, ToolName: sev.ToolName, Delta: sev.ArgsDelta})
-					case ai.StreamEventDone:
-						assistantMsg = sev.Message
-						turnUsage = sev.Usage
-					case ai.StreamEventError:
-						streamErr = sev.Err
-					}
+				}
+				if idleTimer != nil {
+					idleTimer.Stop()
 				}
 			}
 
