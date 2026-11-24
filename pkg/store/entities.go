@@ -765,7 +765,7 @@ func (s *Store) ListSessionTelemetry(ctx context.Context, sessionID string) ([]T
 		       input_tokens, output_tokens, reasoning_tokens, cache_read_tokens, cache_write_tokens, cache_hit_rate_pct,
 		       estimated_cost_usd, cache_saved_usd, breakdown_json, system_prompt_blob_hash, raw_trace_blob_hash,
 		       ttft_ms, duration_ms, recorded_at
-		FROM turn_telemetry WHERE session_id = ? ORDER BY turn_idx ASC
+		FROM turn_telemetry WHERE session_id = ? ORDER BY recorded_at ASC, rowid ASC
 	`, sessionID)
 	if err != nil {
 		return nil, err

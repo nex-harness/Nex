@@ -1865,7 +1865,14 @@ export const useNexStore = create<AppState>((set, get) => ({
       }
     }
     if (tels && tels.length > 0) {
-      st.latestTelemetry = tels[tels.length - 1];
+      const sortedTels = tels.slice().sort((a, b) => (a.recorded_at || 0) - (b.recorded_at || 0));
+      const latestFromTels = sortedTels[sortedTels.length - 1];
+      if (!st.latestTelemetry || (latestFromTels.recorded_at || 0) >= (st.latestTelemetry.recorded_at || 0)) {
+        st.latestTelemetry = latestFromTels;
+      }
+      if (sortedTels.length >= st.turnTelemetries.length) {
+        st.turnTelemetries = sortedTels;
+      }
     }
     set((s) => {
       const bound = s.sessionModels[sessionId];

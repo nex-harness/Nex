@@ -399,3 +399,58 @@ func TestSessionThinkingEffortPersistenceAndArchive(t *testing.T) {
 		t.Fatalf("expected ThinkingEffort=low after UnarchiveSession, got %+v err=%v", restored, err)
 	}
 }
+
+func TestListSessionTelemetryOrdersChronologicallyAcrossTurns(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	_, err = st.CreateOrUpdateSession(ctx, SessionRecord{
+		ID:         "sess_tel_order",
+		RunnerID:   "run_local",
+		Title:      "Telemetry Order",
+		ModelID:    "auto/gemini-4-neon",
+		ProviderID: "openai",
+	})
+	if err != nil {
+		t.Fatalf("CreateOrUpdateSession: %v", err)
+	}
+
+	if err := st.RecordTurnTelemetry(ctx, TurnTelemetry{
+		SessionID:          "sess_tel_order",
+		TurnIdx:            40,
+		RunnerID:           "run_local",
+		ProviderID:         "openai",
+		ModelID:            "auto/gemini-4-neon",
+		TotalContextTokens: 90434,
+		RecordedAt:         1000,
+	}); err != nil {
+		t.Fatalf("RecordTurnTelemetry 1: %v", err)
+	}
+	if err := st.RecordTurnTelemetry(ctx, TurnTelemetry{
+		SessionID:          "sess_tel_order",
+		TurnIdx:            3,
+		RunnerID:           "run_local",
+		ProviderID:         "openai",
+		ModelID:            "auto/gemini-4-neon",
+		TotalContextTokens: 607707,
+		RecordedAt:         2000,
+	}); err != nil {
+		t.Fatalf("RecordTurnTelemetry 2: %v", err)
+	}
+
+	got, err := st.ListSessionTelemetry(ctx, "sess_tel_order")
+	if err != nil {
+		t.Fatalf("ListSessionTelemetry: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 telemetry rows, got %d", len(got))
+	}
+	if got[0].TotalContextTokens != 90434 || got[1].TotalContextTokens != 607707 {
+		t.Fatalf("unexpected telemetry order: [0]=%d (turn=%d) [1]=%d (turn=%d)",
+			got[0].TotalContextTokens, got[0].TurnIdx, got[1].TotalContextTokens, got[1].TurnIdx)
+	}
+}

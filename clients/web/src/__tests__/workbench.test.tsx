@@ -4772,4 +4772,85 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     rerender(<App />);
     expect(screen.queryByTestId('stream-error-banner')).toBeNull();
   });
+
+  it('uses chronological recorded_at order for latestTelemetry even when older turn_idx is larger', async () => {
+    const sid = 'sess_tel_order_1';
+    useNexStore.setState({
+      sessions: [
+        {
+          id: sid,
+          runner_id: 'run_mac',
+          title: 'Telemetry sort test',
+          workspace_path: '/tmp/ws',
+          status: 'idle',
+          created_at: 1000,
+          updated_at: 2000,
+        } as never,
+      ],
+    });
+
+    await useNexStore.getState().selectSession(sid, {
+      preloaded: [
+        [],
+        [
+          {
+            id: 'tel_recent',
+            session_id: sid,
+            turn_idx: 3,
+            runner_id: 'run_mac',
+            provider_id: 'openai',
+            model_id: 'auto/gemini-4-neon',
+            trigger_source: 'chat',
+            context_window: 1048576,
+            total_context_tokens: 607707,
+            window_utilization_pct: 58.0,
+            input_tokens: 2973,
+            output_tokens: 239,
+            reasoning_tokens: 0,
+            cache_read_tokens: 604734,
+            cache_write_tokens: 0,
+            cache_hit_rate_pct: 99.5,
+            estimated_cost_usd: 0.5,
+            cache_saved_usd: 0,
+            breakdown: [],
+            system_prompt_blob_hash: '',
+            raw_trace_blob_hash: '',
+            ttft_ms: 100,
+            duration_ms: 500,
+            recorded_at: 2000,
+          },
+          {
+            id: 'tel_old_high_turn',
+            session_id: sid,
+            turn_idx: 40,
+            runner_id: 'run_mac',
+            provider_id: 'openai',
+            model_id: 'auto/gemini-4-neon',
+            trigger_source: 'chat',
+            context_window: 1048576,
+            total_context_tokens: 90434,
+            window_utilization_pct: 8.6,
+            input_tokens: 90434,
+            output_tokens: 978,
+            reasoning_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            cache_hit_rate_pct: 0,
+            estimated_cost_usd: 0.286,
+            cache_saved_usd: 0,
+            breakdown: [],
+            system_prompt_blob_hash: '',
+            raw_trace_blob_hash: '',
+            ttft_ms: 100,
+            duration_ms: 500,
+            recorded_at: 1000,
+          },
+        ],
+      ],
+    });
+
+    const st = useNexStore.getState().streams[sid];
+    expect(st?.latestTelemetry?.total_context_tokens).toBe(607707);
+    expect(st?.turnTelemetries.map((t) => t.total_context_tokens)).toEqual([90434, 607707]);
+  });
 });
