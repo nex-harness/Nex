@@ -1,32 +1,68 @@
-FROM golang:1.25-alpine AS builder
+# syntax=docker/dockerfile:1.7
 
+# Stage 1: Build embedded Web UI once on native host ($BUILDPLATFORM)
+FROM --platform=$BUILDPLATFORM node:24-alpine AS web-builder
+WORKDIR /src
+ARG VERSION=dev
+ARG COMMIT_SHA=unknown
+
+COPY clients/web/package.json clients/web/package-lock.json ./clients/web/
+RUN --mount=type=cache,target=/root/.npm \
+    npm --prefix clients/web ci
+
+COPY clients/web ./clients/web
+RUN mkdir -p /src/pkg/webui/dist && \
+    VERSION=${VERSION} COMMIT_SHA=${COMMIT_SHA} npm --prefix clients/web run build
+
+# Stage 2: Native Go toolchain & module cache shared across all targets ($BUILDPLATFORM)
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS go-base
 ENV GOTOOLCHAIN=auto
 WORKDIR /src
-RUN apk add --no-cache git ca-certificates
+RUN apk add --no-cache git bash ca-certificates
 
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
 
-COPY . .
-ARG TARGETARCH=amd64
+# Stage 3: Build bundled multi-platform nex-runner binaries ONCE (shared by amd64 & arm64 images)
+FROM go-base AS runners-builder
 ARG VERSION=dev
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/nex-server ./cmd/nex-server
+ARG COMMIT_SHA=unknown
+COPY cmd ./cmd
+COPY pkg ./pkg
+COPY scripts/gen-runner-manifest.sh ./scripts/gen-runner-manifest.sh
+COPY --from=web-builder /src/pkg/webui/dist ./pkg/webui/dist
 
-# Pre-build multi-platform runners so nex-server can distribute them
-RUN mkdir -p /out/runners && \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    mkdir -p /out/runners && \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-linux-amd64 ./cmd/nex-runner && \
     CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-linux-arm64 ./cmd/nex-runner && \
     CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-darwin-arm64 ./cmd/nex-runner && \
     CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-darwin-amd64 ./cmd/nex-runner && \
-    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-windows-amd64.exe ./cmd/nex-runner
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-windows-amd64.exe ./cmd/nex-runner && \
+    VERSION="${VERSION}" COMMIT_SHA="${COMMIT_SHA}" bash ./scripts/gen-runner-manifest.sh /out/runners
 
+# Stage 4: Cross-compile target nex-server natively on host (zero QEMU overhead)
+FROM runners-builder AS server-builder
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+ARG VERSION=dev
+ARG COMMIT_SHA=unknown
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${COMMIT_SHA}" -o /out/nex-server ./cmd/nex-server
+
+# Stage 5: Minimal runtime image
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata && \
     mkdir -p /data /opt/nex-v3/runners
 
-COPY --from=builder /out/nex-server /usr/local/bin/nex-server
-COPY --from=builder /out/runners /opt/nex-v3/runners
+COPY --from=server-builder /out/nex-server /usr/local/bin/nex-server
+COPY --from=runners-builder /out/runners /opt/nex-v3/runners
 
 ENV NEX_RUNNERS_DIR=/opt/nex-v3/runners
 VOLUME ["/data"]

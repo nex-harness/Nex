@@ -1,0 +1,15 @@
+.git
+.github
+.gitea
+.nex
+.playwright-cli
+dist
+docs
+clients/web/node_modules
+clients/web/dist
+pkg/webui/dist
+*.db
+*.db-wal
+*.db-shm
+*.log
+.DS_Store
