@@ -408,3 +408,68 @@ func TestMicrocompactAndGuardUTF8(t *testing.T) {
 		t.Fatalf("/compaction should not match /compact")
 	}
 }
+
+func TestShouldCompactLargeWindowCapsAndMicrocompactPersists(t *testing.T) {
+	// 1M context window should trigger microcompact >=180k and auto-compact >=320k
+	if ShouldMicrocompact(150_000, 1_048_576) {
+		t.Fatalf("150k on 1M window should not trigger microcompact")
+	}
+	if !ShouldMicrocompact(190_000, 1_048_576) {
+		t.Fatalf("190k on 1M window should trigger microcompact via absolute cap")
+	}
+	if ShouldAutoCompact(250_000, 1_048_576) {
+		t.Fatalf("250k on 1M window should not trigger full auto-compact")
+	}
+	if !ShouldAutoCompact(330_000, 1_048_576) {
+		t.Fatalf("330k on 1M window should trigger full auto-compact via absolute cap")
+	}
+
+	// Simulate history above microcompactMaxTriggerTokens (180k) with bulky tool results so
+	// maybePreFlightCompact runs MicrocompactMessages and emits a persistent EventCompaction.
+	bigBlock := strings.Repeat("bash output line\n", 14000) // ~238KB (~68k tokens each)
+	history := []ai.Message{
+		ai.NewUserTextMessage("step 1"),
+		ai.NewToolResultMessage("c1", "bash", bigBlock, false),
+		ai.NewToolResultMessage("c2", "grep", bigBlock, false),
+		ai.NewToolResultMessage("c3", "bash", bigBlock, false),
+		ai.NewUserTextMessage("recent turn"),
+		{Role: ai.RoleAssistant, Content: []ai.ContentBlock{ai.TextBlock("ack")}},
+		ai.NewToolResultMessage("c4", "read", "small recent", false),
+		ai.NewUserTextMessage("next"),
+		{Role: ai.RoleAssistant, Content: []ai.ContentBlock{ai.TextBlock("ok")}},
+		ai.NewToolResultMessage("c5", "bash", "ok", false),
+	}
+
+	var mu sync.Mutex
+	var events []Event
+	loop := NewLoop(LoopConfig{
+		SessionID:     "sess_micro_persist",
+		Model:         "auto/gemini-4-neon",
+		ContextWindow: 1_048_576,
+		OnEvent: func(ev Event) {
+			mu.Lock()
+			events = append(events, ev)
+			mu.Unlock()
+		},
+	}, history)
+
+	loop.maybePreFlightCompact(context.Background(), 1, nil)
+
+	mu.Lock()
+	defer mu.Unlock()
+	var sawMicro bool
+	for _, ev := range events {
+		if ev.Type == EventCompaction && ev.Reason == "microcompact" {
+			sawMicro = true
+			if len(ev.CompactedMessages) == 0 {
+				t.Fatalf("expected microcompact EventCompaction to carry CompactedMessages for persistence")
+			}
+			if ev.Compaction == nil || ev.Compaction.Status != "completed" || ev.Compaction.AfterTokens >= ev.Compaction.BeforeTokens {
+				t.Fatalf("expected shrinking microcompact CompactionInfo, got %+v", ev.Compaction)
+			}
+		}
+	}
+	if !sawMicro {
+		t.Fatalf("expected persistent microcompact EventCompaction on 1M window >180k tokens, got events=%+v", events)
+	}
+}

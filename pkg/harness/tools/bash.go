@@ -18,7 +18,7 @@ import (
 const (
 	defaultBashTimeoutMS = 120_000
 	maxBashTimeoutMS     = 600_000
-	maxInlineOutputBytes = 64 * 1024
+	maxInlineOutputBytes = 16 * 1024
 )
 
 type bashArgs struct {

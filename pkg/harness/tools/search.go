@@ -5,13 +5,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/nex-harness/nex/pkg/ai"
 )
@@ -283,15 +286,23 @@ func (t *GlobTool) Execute(ctx context.Context, workDir string, rawArgs json.Raw
 
 // --- Grep Tool ---
 
+const (
+	grepDefaultLimit   = 80
+	grepMaxLineChars   = 240
+	grepMaxFileBytes   = 4 * 1024 * 1024
+)
+
 type grepArgs struct {
 	Pattern         string `json:"pattern"`
 	Path            string `json:"path,omitempty"`
 	Include         string `json:"include,omitempty"`
 	CaseInsensitive bool   `json:"case_insensitive,omitempty"`
+	OutputMode      string `json:"output_mode,omitempty"` // "content" | "files_with_matches" | "count"
 	Limit           int    `json:"limit,omitempty"`
 }
 
-// GrepTool searches text files using Go regular expressions while skipping binaries and .gitignore entries.
+// GrepTool searches text files using ripgrep (`rg`) when installed or pure-Go regular expressions as fallback,
+// while skipping binaries and .gitignore entries.
 type GrepTool struct{}
 
 func NewGrepTool() *GrepTool { return &GrepTool{} }
@@ -304,7 +315,7 @@ func (t *GrepTool) Definition() ai.ToolDefinition {
 	return ai.ToolDefinition{
 		Name:        "grep",
 		Category:    "system",
-		Description: "Search file contents with a regular expression. Returns `path:line: text` matches, automatically skips binary files, large files, `.git`, and `.gitignore` paths.\n\n- Prefer `grep` over shell `grep`/`rg`: it is fast, pure Go, and needs no external binary.\n- Use `include` to filter by filename (for example `*.go`), `path` to scope to a directory or single file, and `case_insensitive` when casing should not matter.\n- Narrow with a specific pattern; if a search is noisy, search the directory you actually care about.",
+		Description: "Search file contents with a regular expression (automatically accelerated with ripgrep when available, with pure-Go fallback). Automatically skips binary files, large files, `.git`, and `.gitignore` paths.\n\n- Prefer `grep` over shell `grep`/`rg`.\n- Use `output_mode: \"files_with_matches\"` first when locating files so results stay compact; use `output_mode: \"content\"` (default) for matching lines (each truncated at 240 chars) or `\"count\"` for per-file hit counts.\n- Use `include` to filter by filename (for example `*.go`), `path` to scope to a directory or single file, and `case_insensitive` when casing should not matter.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -312,11 +323,140 @@ func (t *GrepTool) Definition() ai.ToolDefinition {
 				"path": {"type": "string", "description": "Optional directory or single file path to search"},
 				"include": {"type": "string", "description": "Optional filename filter glob such as '*.go'"},
 				"case_insensitive": {"type": "boolean", "description": "Enable case-insensitive matching"},
-				"limit": {"type": "integer", "description": "Maximum matching lines to return (default 100)"}
+				"output_mode": {"type": "string", "enum": ["content", "files_with_matches", "count"], "description": "Output mode: 'content' (matching lines, default), 'files_with_matches' (file paths only), or 'count' (match count per file)"},
+				"limit": {"type": "integer", "description": "Maximum matching lines/files to return (default 80)"}
 			},
 			"required": ["pattern"]
 		}`),
 	}
+}
+
+func truncateGrepLine(line string, maxChars int) string {
+	line = strings.TrimRight(line, "\r\n")
+	if maxChars <= 0 || utf8.RuneCountInString(line) <= maxChars {
+		return line
+	}
+	runes := []rune(line)
+	return string(runes[:maxChars]) + "..."
+}
+
+func formatGrepDisplayPath(workDir, target string, isDir bool, rawPath string) string {
+	base := target
+	if !isDir {
+		if workDir != "" {
+			if r, err := filepath.Rel(workDir, target); err == nil {
+				return filepath.ToSlash(r)
+			}
+		}
+		return filepath.Base(target)
+	}
+	if r, err := filepath.Rel(base, rawPath); err == nil {
+		return filepath.ToSlash(r)
+	}
+	return filepath.ToSlash(rawPath)
+}
+
+func tryRipgrep(
+	ctx context.Context,
+	workDir string,
+	target string,
+	isDir bool,
+	args grepArgs,
+	outputMode string,
+	limit int,
+) (results []string, truncated bool, ok bool) {
+	rgPath, err := exec.LookPath("rg")
+	if err != nil {
+		return nil, false, false
+	}
+
+	cmdCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	cmdArgs := []string{"--no-heading", "--color=never", "--no-require-git", "--max-filesize=2M"}
+	switch outputMode {
+	case "files_with_matches":
+		cmdArgs = append(cmdArgs, "--files-with-matches")
+	case "count":
+		cmdArgs = append(cmdArgs, "--count", "--with-filename")
+	default:
+		cmdArgs = append(cmdArgs, "--with-filename", "--line-number", "--no-column")
+	}
+	if args.CaseInsensitive {
+		cmdArgs = append(cmdArgs, "-i")
+	}
+	if args.Include != "" {
+		cmdArgs = append(cmdArgs, "-g", args.Include)
+	}
+	cmdArgs = append(cmdArgs, "--", args.Pattern, target)
+
+	cmd := exec.CommandContext(cmdCtx, rgPath, cmdArgs...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, false, false
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, false, false
+	}
+
+	sc := bufio.NewScanner(stdout)
+	buf := make([]byte, 64*1024)
+	sc.Buffer(buf, 2*1024*1024)
+	for sc.Scan() {
+		line := strings.TrimRight(sc.Text(), "\r\n")
+		if line == "" {
+			continue
+		}
+		var formatted string
+		switch outputMode {
+		case "files_with_matches":
+			formatted = formatGrepDisplayPath(workDir, target, isDir, line)
+		case "count":
+			if idx := strings.LastIndexByte(line, ':'); idx > 0 {
+				rel := formatGrepDisplayPath(workDir, target, isDir, line[:idx])
+				formatted = rel + line[idx:]
+			} else {
+				formatted = line
+			}
+		default:
+			// rg format: <path>:<line>:<text>
+			if idx1 := strings.IndexByte(line, ':'); idx1 > 0 {
+				rest := line[idx1+1:]
+				if idx2 := strings.IndexByte(rest, ':'); idx2 > 0 {
+					rel := formatGrepDisplayPath(workDir, target, isDir, line[:idx1])
+					lineNum := rest[:idx2]
+					content := truncateGrepLine(rest[idx2+1:], grepMaxLineChars)
+					formatted = fmt.Sprintf("%s:%s: %s", rel, lineNum, content)
+				} else {
+					formatted = truncateGrepLine(line, grepMaxLineChars)
+				}
+			} else {
+				formatted = truncateGrepLine(line, grepMaxLineChars)
+			}
+		}
+		if len(results) >= limit {
+			truncated = true
+			cancel()
+			break
+		}
+		results = append(results, formatted)
+	}
+
+	waitErr := cmd.Wait()
+	if truncated {
+		return results, true, true
+	}
+	if err := sc.Err(); err != nil && !errors.Is(err, context.Canceled) {
+		return nil, false, false
+	}
+	if waitErr != nil {
+		var exitErr *exec.ExitError
+		if errors.As(waitErr, &exitErr) && exitErr.ExitCode() == 1 {
+			return nil, false, true
+		}
+		return nil, false, false
+	}
+	return results, false, true
 }
 
 func (t *GrepTool) Execute(ctx context.Context, workDir string, rawArgs json.RawMessage, _ UpdateFunc) (Result, error) {
@@ -327,11 +467,52 @@ func (t *GrepTool) Execute(ctx context.Context, workDir string, rawArgs json.Raw
 	if args.Pattern == "" {
 		return Result{Output: "pattern is required", IsError: true}, nil
 	}
-	limit := args.Limit
-	if limit <= 0 {
-		limit = 100
+	outputMode := strings.ToLower(strings.TrimSpace(args.OutputMode))
+	if outputMode == "" {
+		outputMode = "content"
+	}
+	switch outputMode {
+	case "content", "files_with_matches", "count":
+	default:
+		return Result{Output: fmt.Sprintf("invalid output_mode %q: must be 'content', 'files_with_matches', or 'count'", args.OutputMode), IsError: true}, nil
 	}
 
+	limit := args.Limit
+	if limit <= 0 {
+		limit = grepDefaultLimit
+	}
+
+	target := workDir
+	if target == "" {
+		target = "."
+	}
+	if args.Path != "" {
+		target = ResolvePath(workDir, args.Path)
+	}
+
+	info, err := os.Stat(target)
+	if err != nil {
+		return Result{Output: fmt.Sprintf("cannot access %s: %v", target, err), IsError: true}, nil
+	}
+
+	// Fast path: ripgrep (`rg`) when installed on the runner host.
+	if rgResults, rgTruncated, ok := tryRipgrep(ctx, workDir, target, info.IsDir(), args, outputMode, limit); ok {
+		if len(rgResults) == 0 {
+			return Result{Output: "(no matches found)"}, nil
+		}
+		joined := strings.Join(rgResults, "\n")
+		if rgTruncated {
+			joined += fmt.Sprintf("\n\n[... results truncated at limit %d; narrow with path, include, or output_mode=\"files_with_matches\"]", limit)
+		}
+		inline, spillPath := SpillLargeOutput("grep", joined, defaultSpillMaxChars)
+		var meta map[string]any
+		if spillPath != "" {
+			meta = map[string]any{"spill_path": spillPath, "total_matches": len(rgResults)}
+		}
+		return Result{Output: inline, Metadata: meta}, nil
+	}
+
+	// Pure-Go fallback when `rg` is absent or returned an error.
 	expr := args.Pattern
 	if args.CaseInsensitive && !strings.HasPrefix(expr, "(?i)") {
 		expr = "(?i)" + expr
@@ -349,20 +530,8 @@ func (t *GrepTool) Execute(ctx context.Context, workDir string, rawArgs json.Raw
 		}
 	}
 
-	target := workDir
-	if target == "" {
-		target = "."
-	}
-	if args.Path != "" {
-		target = ResolvePath(workDir, args.Path)
-	}
-
-	info, err := os.Stat(target)
-	if err != nil {
-		return Result{Output: fmt.Sprintf("cannot access %s: %v", target, err), IsError: true}, nil
-	}
-
 	var results []string
+	var truncated bool
 	searchSingleFile := func(absFile, displayRel string) {
 		f, err := os.Open(absFile)
 		if err != nil {
@@ -384,30 +553,42 @@ func (t *GrepTool) Execute(ctx context.Context, workDir string, rawArgs json.Raw
 		buf := make([]byte, 64*1024)
 		sc.Buffer(buf, 2*1024*1024)
 		lineNo := 0
+		matchCount := 0
 		for sc.Scan() {
 			lineNo++
 			line := sc.Text()
-			if re.MatchString(line) {
-				trimmed := line
-				if len(trimmed) > 400 {
-					trimmed = trimmed[:400] + "..."
-				}
-				results = append(results, fmt.Sprintf("%s:%d: %s", displayRel, lineNo, trimmed))
+			if !re.MatchString(line) {
+				continue
+			}
+			switch outputMode {
+			case "files_with_matches":
 				if len(results) >= limit {
+					truncated = true
 					return
 				}
+				results = append(results, displayRel)
+				return
+			case "count":
+				matchCount++
+			default:
+				if len(results) >= limit {
+					truncated = true
+					return
+				}
+				results = append(results, fmt.Sprintf("%s:%d: %s", displayRel, lineNo, truncateGrepLine(line, grepMaxLineChars)))
 			}
+		}
+		if outputMode == "count" && matchCount > 0 {
+			if len(results) >= limit {
+				truncated = true
+				return
+			}
+			results = append(results, fmt.Sprintf("%s:%d", displayRel, matchCount))
 		}
 	}
 
 	if !info.IsDir() {
-		rel := filepath.Base(target)
-		if workDir != "" {
-			if r, err := filepath.Rel(workDir, target); err == nil {
-				rel = filepath.ToSlash(r)
-			}
-		}
-		searchSingleFile(target, rel)
+		searchSingleFile(target, formatGrepDisplayPath(workDir, target, false, target))
 	} else {
 		ign := LoadIgnoreMatcher(target)
 		_ = filepath.WalkDir(target, func(p string, d fs.DirEntry, walkErr error) error {
@@ -431,14 +612,14 @@ func (t *GrepTool) Execute(ctx context.Context, workDir string, rawArgs json.Raw
 			if d.IsDir() || !d.Type().IsRegular() {
 				return nil
 			}
-			if fi, err := d.Info(); err == nil && fi.Size() > 4*1024*1024 {
+			if fi, err := d.Info(); err == nil && fi.Size() > grepMaxFileBytes {
 				return nil
 			}
 			if includeRe != nil && !includeRe.MatchString(d.Name()) && !includeRe.MatchString(relSlash) {
 				return nil
 			}
 			searchSingleFile(p, relSlash)
-			if len(results) >= limit {
+			if truncated {
 				return fs.SkipAll
 			}
 			return nil
@@ -449,6 +630,9 @@ func (t *GrepTool) Execute(ctx context.Context, workDir string, rawArgs json.Raw
 		return Result{Output: "(no matches found)"}, nil
 	}
 	joined := strings.Join(results, "\n")
+	if truncated {
+		joined += fmt.Sprintf("\n\n[... results truncated at limit %d; narrow with path, include, or output_mode=\"files_with_matches\"]", limit)
+	}
 	inline, spillPath := SpillLargeOutput("grep", joined, defaultSpillMaxChars)
 	var meta map[string]any
 	if spillPath != "" {

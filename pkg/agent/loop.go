@@ -499,24 +499,40 @@ func (l *Loop) maybePreFlightCompact(ctx context.Context, turnNo int, activeSect
 	l.mu.Unlock()
 
 	estTokens := EstimateContextTokens(activeSections, l.cfg.SystemPrompt, l.toolDefs, snapshot)
-	ratio := float64(estTokens) / float64(l.cfg.ContextWindow)
-	if ratio < microcompactThresholdPct {
+	if !ShouldMicrocompact(estTokens, l.cfg.ContextWindow) {
 		return
 	}
 
-	// Tier 1 (>=65%): zero-LLM microcompaction of bulky old tool outputs
+	// Tier 1 (>=65% or >=180K): zero-LLM microcompaction of bulky old tool outputs, persisted as a checkpoint
+	// so future turns keep the pruned prefix and maintain stable prompt caching.
 	pruned, count := MicrocompactMessages(snapshot, microcompactKeepRecent)
 	if count > 0 {
 		l.mu.Lock()
 		l.messages = pruned
 		l.mu.Unlock()
 		snapshot = pruned
-		estTokens = EstimateContextTokens(activeSections, l.cfg.SystemPrompt, l.toolDefs, snapshot)
-		ratio = float64(estTokens) / float64(l.cfg.ContextWindow)
+		afterTokens := EstimateContextTokens(activeSections, l.cfg.SystemPrompt, l.toolDefs, snapshot)
+		cp := make([]ai.Message, len(pruned))
+		copy(cp, pruned)
+		l.emit(Event{
+			Type:              EventCompaction,
+			TurnIdx:           turnNo,
+			Reason:            "microcompact",
+			CompactedMessages: cp,
+			Compaction: &CompactionInfo{
+				Status:         "completed",
+				Reason:         "microcompact",
+				BeforeMessages: len(snapshot),
+				AfterMessages:  len(cp),
+				BeforeTokens:   estTokens,
+				AfterTokens:    afterTokens,
+			},
+		})
+		estTokens = afterTokens
 	}
 
-	// Tier 2 (>=85%): full LLM-backed compaction with deterministic fallback
-	if ratio >= autoCompactThresholdPct {
+	// Tier 2 (>=85% or >=320K): full LLM-backed compaction with deterministic fallback
+	if ShouldAutoCompact(estTokens, l.cfg.ContextWindow) {
 		l.forceCompact(ctx, turnNo, "auto_compact")
 	}
 }

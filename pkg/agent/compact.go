@@ -13,7 +13,7 @@ import (
 
 const (
 	// DefaultMaxToolOutputBytes caps any single tool output inserted into LLM history.
-	DefaultMaxToolOutputBytes = 64 * 1024
+	DefaultMaxToolOutputBytes = 16 * 1024
 	// microcompactMinBytes is the threshold above which historical tool outputs are pruned.
 	microcompactMinBytes = 1200
 	// microcompactKeepRecent preserves tool outputs in the latest N messages untouched.
@@ -22,9 +22,37 @@ const (
 	compactKeepRecentMsgs = 6
 	// microcompactThresholdPct triggers zero-LLM microcompaction before a turn.
 	microcompactThresholdPct = 0.65
+	// microcompactMaxTriggerTokens caps the pre-flight microcompact trigger on huge (e.g. 1M) windows.
+	microcompactMaxTriggerTokens = 180_000
 	// autoCompactThresholdPct triggers full LLM-backed compaction before a turn.
 	autoCompactThresholdPct = 0.85
+	// autoCompactMaxTriggerTokens caps the full auto-compact trigger on huge (e.g. 1M) windows.
+	autoCompactMaxTriggerTokens = 320_000
 )
+
+// ShouldMicrocompact reports whether estimated prompt tokens reached the Tier 1
+// zero-LLM microcompaction threshold (either 65% of context window or 180k tokens).
+func ShouldMicrocompact(estTokens, contextWindow int) bool {
+	if contextWindow <= 0 {
+		return false
+	}
+	if estTokens >= microcompactMaxTriggerTokens {
+		return true
+	}
+	return float64(estTokens)/float64(contextWindow) >= microcompactThresholdPct
+}
+
+// ShouldAutoCompact reports whether estimated prompt tokens reached the Tier 2
+// full LLM-backed auto-compaction threshold (either 85% of context window or 320k tokens).
+func ShouldAutoCompact(estTokens, contextWindow int) bool {
+	if contextWindow <= 0 {
+		return false
+	}
+	if estTokens >= autoCompactMaxTriggerTokens {
+		return true
+	}
+	return float64(estTokens)/float64(contextWindow) >= autoCompactThresholdPct
+}
 
 // GuardToolOutput ensures no single tool result blows up the context window,
 // preserving both the head and tail when truncation occurs.

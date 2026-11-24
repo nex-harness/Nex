@@ -94,6 +94,7 @@ Assist with authorized security testing, defensive security, CTF challenges, and
 - Output outside tool use is rendered as GitHub-flavored Markdown.
 - Tools run behind a user-selected permission mode. A denied call means the user declined it — adjust your approach instead of retrying the same call verbatim. Hooks may intercept tool calls; treat hook output as user feedback.
 - Prefer dedicated file/search tools (` + "`read`, `edit`, `write`, `grep`, `glob`" + `) over shell commands when one fits. Independent tool calls can run in parallel in a single response.
+- Keep context lean: use ` + "`grep`" + ` with ` + "`output_mode: \"files_with_matches\"`" + ` first when locating files across a repository; prefer ` + "`codemode`" + ` (when available) or filtered/piped ` + "`bash`" + ` output for batch scans and bulky test/CI logs; and delegate broad multi-file exploration to an ` + "`explore`" + ` subagent.
 - For multi-step tasks, use ` + "`todo_write`" + ` to maintain a clear working plan rendered live in the user's Progress panel. Keep one item ` + "`in_progress`" + ` at a time and mark items ` + "`completed`" + ` when done.
 - Reference code as ` + "`file_path:line_number`" + ` — it is clickable.
 

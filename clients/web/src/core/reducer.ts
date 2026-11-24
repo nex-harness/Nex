@@ -738,48 +738,51 @@ export function applySessionEvent(
       const summary = String(rawCompaction?.summary || p.delta || '').trim() || undefined;
       const errMsg = String(rawCompaction?.error || p.error || '').trim() || undefined;
 
-      const card: CompactionCard = {
-        status,
-        reason,
-        beforeMessages,
-        afterMessages,
-        beforeTokens,
-        afterTokens,
-        summary,
-        error: errMsg,
-      };
-
-      const nextItems = items.slice();
-      const tail = nextItems[nextItems.length - 1];
-      if (tail && tail.role === 'user' && tail.optimistic && /^\/compact(?:\s|$)/i.test(tail.text.trim())) {
-        nextItems.pop();
-      }
-      const afterStripTail = nextItems[nextItems.length - 1];
-      if (
-        afterStripTail &&
-        afterStripTail.role === 'compaction' &&
-        afterStripTail.compaction?.status === 'compacting'
-      ) {
-        nextItems[nextItems.length - 1] = {
-          ...afterStripTail,
-          seq: ev.seq > 0 ? ev.seq : afterStripTail.seq,
-          compaction: card,
-          streaming: status === 'compacting',
-          optimistic: false,
+      // Silent background microcompaction updates telemetry/badge without cluttering the chat timeline.
+      if (reason !== 'microcompact') {
+        const card: CompactionCard = {
+          status,
+          reason,
+          beforeMessages,
+          afterMessages,
+          beforeTokens,
+          afterTokens,
+          summary,
+          error: errMsg,
         };
-      } else {
-        nextItems.push({
-          id: `cmp_${ev.seq || Date.now()}`,
-          seq: ev.seq > 0 ? ev.seq : undefined,
-          role: 'compaction',
-          text: '',
-          thinking: '',
-          toolCalls: [],
-          compaction: card,
-          streaming: status === 'compacting',
-        });
+
+        const nextItems = items.slice();
+        const tail = nextItems[nextItems.length - 1];
+        if (tail && tail.role === 'user' && tail.optimistic && /^\/compact(?:\s|$)/i.test(tail.text.trim())) {
+          nextItems.pop();
+        }
+        const afterStripTail = nextItems[nextItems.length - 1];
+        if (
+          afterStripTail &&
+          afterStripTail.role === 'compaction' &&
+          afterStripTail.compaction?.status === 'compacting'
+        ) {
+          nextItems[nextItems.length - 1] = {
+            ...afterStripTail,
+            seq: ev.seq > 0 ? ev.seq : afterStripTail.seq,
+            compaction: card,
+            streaming: status === 'compacting',
+            optimistic: false,
+          };
+        } else {
+          nextItems.push({
+            id: `cmp_${ev.seq || Date.now()}`,
+            seq: ev.seq > 0 ? ev.seq : undefined,
+            role: 'compaction',
+            text: '',
+            thinking: '',
+            toolCalls: [],
+            compaction: card,
+            streaming: status === 'compacting',
+          });
+        }
+        items = nextItems;
       }
-      items = nextItems;
 
       uiBadges = {
         ...uiBadges,

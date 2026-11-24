@@ -249,7 +249,7 @@ func TestToolDefinitionsKeepNamesAndSchemas(t *testing.T) {
 		"write":      {"file_path", "content"},
 		"edit":       {"file_path", "old_string", "new_string", "replace_all"},
 		"bash":       {"command", "description", "timeout_ms", "cwd"},
-		"grep":       {"pattern", "path", "include", "case_insensitive", "limit"},
+		"grep":       {"pattern", "path", "include", "case_insensitive", "output_mode", "limit"},
 		"glob":       {"pattern", "path", "limit"},
 		"todo_write": {"todos"},
 		"todo_read":  {},
@@ -280,4 +280,49 @@ func TestToolDefinitionsKeepNamesAndSchemas(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestGrepOutputModesAndLineTruncation(t *testing.T) {
+	dir := t.TempDir()
+	longLine := "MATCH_LONG_" + strings.Repeat("x", 500)
+	_ = os.WriteFile(filepath.Join(dir, "a.go"), []byte("package a\nMATCH_HERE 1\nMATCH_HERE 2\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "b.txt"), []byte(longLine+"\nMATCH_HERE 3\n"), 0o644)
+
+	grepTool := NewGrepTool()
+
+	runSuite := func(label string) {
+		// 1. files_with_matches
+		res, err := grepTool.Execute(context.Background(), dir, json.RawMessage(`{"pattern":"MATCH_HERE","output_mode":"files_with_matches"}`), nil)
+		if err != nil || res.IsError {
+			t.Fatalf("[%s] files_with_matches failed: %+v err=%v", label, res, err)
+		}
+		if !strings.Contains(res.Output, "a.go") || !strings.Contains(res.Output, "b.txt") || strings.Contains(res.Output, "MATCH_HERE 1") {
+			t.Fatalf("[%s] unexpected files_with_matches output: %q", label, res.Output)
+		}
+
+		// 2. count
+		resCount, err := grepTool.Execute(context.Background(), dir, json.RawMessage(`{"pattern":"MATCH_HERE","output_mode":"count"}`), nil)
+		if err != nil || resCount.IsError {
+			t.Fatalf("[%s] count failed: %+v err=%v", label, resCount, err)
+		}
+		if !strings.Contains(resCount.Output, "a.go:2") || !strings.Contains(resCount.Output, "b.txt:1") {
+			t.Fatalf("[%s] unexpected count output: %q", label, resCount.Output)
+		}
+
+		// 3. content line truncation at 240 chars
+		resLong, err := grepTool.Execute(context.Background(), dir, json.RawMessage(`{"pattern":"MATCH_LONG_"}`), nil)
+		if err != nil || resLong.IsError {
+			t.Fatalf("[%s] content long line failed: %+v err=%v", label, resLong, err)
+		}
+		if !strings.Contains(resLong.Output, "...") || len(resLong.Output) >= 320 {
+			t.Fatalf("[%s] expected matched line truncated around 240 chars, got len=%d: %q", label, len(resLong.Output), resLong.Output)
+		}
+	}
+
+	// Test default path (uses rg if installed)
+	runSuite("default")
+
+	// Force pure-Go fallback by clearing PATH
+	t.Setenv("PATH", "")
+	runSuite("pure-go-fallback")
 }
