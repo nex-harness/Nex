@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
 # Stage 1: Build embedded Web UI once on native host ($BUILDPLATFORM)
-FROM --platform=$BUILDPLATFORM node:24-alpine AS web-builder
+# Use glibc-based slim image to avoid musl small-stack crash in Rollup's native parser.
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim AS web-builder
 WORKDIR /src
 ARG VERSION=dev
 ARG COMMIT_SHA=unknown
