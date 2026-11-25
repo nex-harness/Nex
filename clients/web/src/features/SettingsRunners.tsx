@@ -545,12 +545,111 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
 
   const livePreview = `${form.username.trim() || 'user'}@${form.host.trim() || 'host'}:${form.port.trim() || '22'}`;
 
+  // Map each connected runner to its matching SSH target (by name or hostname),
+  // and track which SSH targets have been merged into a Connected Runner row so
+  // they are not duplicated in the SSH Targets section above.
+  const matchSshTargetForRunner = (r: (typeof runners)[number]): (typeof sshTargets)[number] | undefined =>
+    sshTargets.find(
+      (t) =>
+        t.name.toLowerCase() === r.name.toLowerCase() ||
+        (Boolean(r.hostname) && t.host.toLowerCase() === r.hostname!.toLowerCase()),
+    );
+  const matchedSshTargetIds = new Set<string>();
+  for (const r of runners) {
+    const matched = matchSshTargetForRunner(r);
+    if (matched) matchedSshTargetIds.add(matched.id);
+  }
+  const standaloneSshTargets = sshTargets.filter((t) => !matchedSshTargetIds.has(t.id));
+
+  const renderSshActionButtons = (t: (typeof sshTargets)[number], isOnline: boolean, compact = false) => {
+    const busy = busyById[t.id];
+    const logOpen = Boolean(expandedLogs[t.id]);
+    return (
+      <>
+        <button
+          type="button"
+          data-testid={`ssh-test-${t.id}`}
+          disabled={Boolean(busy)}
+          onClick={() => void runTargetAction(t, 'test')}
+          className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover disabled:opacity-50"
+        >
+          {busy === 'test' ? <LoaderCircle className="size-3 animate-spin" /> : <Wifi className="size-3" />}
+          <span>{formatMsg(locale, 'runners.test')}</span>
+        </button>
+        <button
+          type="button"
+          data-testid={`ssh-deploy-${t.id}`}
+          disabled={Boolean(busy)}
+          onClick={() => void runTargetAction(t, 'deploy')}
+          className="inline-flex h-7 items-center gap-1 rounded-md bg-foreground px-2.5 text-ui-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {busy === 'deploy' ? (
+            <LoaderCircle className="size-3 animate-spin" />
+          ) : t.install_mode === 'remote_install' ? (
+            <CloudDownload className="size-3" />
+          ) : (
+            <Play className="size-3" />
+          )}
+          <span>
+            {busy === 'deploy'
+              ? formatMsg(locale, 'runners.deploying')
+              : t.install_mode === 'remote_install'
+                ? formatMsg(locale, 'runners.remoteInstall')
+                : formatMsg(locale, 'runners.scpDeploy')}
+          </span>
+        </button>
+        {isOnline && (
+          <button
+            type="button"
+            disabled={Boolean(busy)}
+            onClick={() => void runTargetAction(t, 'stop')}
+            title={formatMsg(locale, 'runners.stopRemoteRunner')}
+            className="flex size-7 items-center justify-center rounded-md border border-border text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground disabled:opacity-50"
+          >
+            {busy === 'stop' ? <LoaderCircle className="size-3 animate-spin" /> : <Square className="size-3" />}
+          </button>
+        )}
+        {t.last_log && (
+          <button
+            type="button"
+            onClick={() => setExpandedLogs((p) => ({ ...p, [t.id]: !p[t.id] }))}
+            title={formatMsg(locale, 'runners.toggleLogs')}
+            className={`flex size-7 items-center justify-center rounded-md transition-colors hover:bg-hover ${
+              logOpen ? 'bg-selected text-foreground' : 'text-foreground-subtlest hover:text-foreground'
+            }`}
+          >
+            <Terminal className="size-3.5" />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => openEditModal(t)}
+          aria-label={formatMsg(locale, 'runners.editSshServer')}
+          title={formatMsg(locale, 'runners.editSshServer')}
+          className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
+        >
+          <Pencil className="size-3.5" />
+        </button>
+        {!compact && (
+          <button
+            type="button"
+            onClick={() => void deleteTarget(t.id)}
+            aria-label={formatMsg(locale, 'runners.deleteSshServer')}
+            className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      {/* Top Action Bar & SSH Targets Section */}
+      {/* Top Action Bar & SSH Targets Section (only show standalone targets not yet matched to a runner, or empty state) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SectionHeading
-          title={formatMsg(locale, 'runners.sshRemoteServers', { length: sshTargets.length })}
+          title={formatMsg(locale, 'runners.sshRemoteServers', { length: standaloneSshTargets.length })}
           description={
             formatMsg(locale, 'runners.configureRemoteHostsViaSsh')
           }
@@ -566,21 +665,9 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
         </button>
       </div>
 
+      {standaloneSshTargets.length > 0 && (
       <SettingsGroupCard>
-        {sshTargets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 px-5 py-9 text-center">
-            <Server className="size-6 text-foreground-subtlest" />
-            <p className="text-ui-sm text-foreground-subtle">
-              {formatMsg(locale, 'runners.noSshServersConfiguredYet')}
-            </p>
-          </div>
-        ) : (
-          sshTargets.map((t) => {
-            const busy = busyById[t.id];
-            const matchedRunner = runners.find(
-              (r) => r.name.toLowerCase() === t.name.toLowerCase() || r.hostname?.toLowerCase() === t.host.toLowerCase(),
-            );
-            const isOnline = matchedRunner?.status === 'online';
+        {standaloneSshTargets.map((t) => {
             const logOpen = Boolean(expandedLogs[t.id]);
 
             return (
@@ -590,11 +677,9 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     <div className="flex flex-wrap items-center gap-2">
                       <span
                         className={`size-2 shrink-0 rounded-full ${
-                          isOnline
-                            ? 'bg-success'
-                            : t.last_status === 'error'
-                              ? 'bg-destructive'
-                              : 'bg-foreground-subtlest'
+                          t.last_status === 'error'
+                            ? 'bg-destructive'
+                            : 'bg-foreground-subtlest'
                         }`}
                       />
                       <span className="truncate text-ui-base font-medium text-foreground">{t.name}</span>
@@ -613,21 +698,6 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                           {t.ssh_alias}
                         </span>
                       )}
-                      {isOnline && (
-                        <span className="rounded-md bg-success-surface px-1.5 py-0.5 text-[11px] font-medium text-success-surface-fg">
-                          {formatMsg(locale, 'runners.runnerOnline')}
-                        </span>
-                      )}
-                      {matchedRunner?.version && (
-                        <span
-                          data-testid={`ssh-target-version-${t.id}`}
-                          className="rounded bg-surface px-1.5 py-0.5 font-mono text-[11px] text-foreground-subtle"
-                        >
-                          {matchedRunner.version.startsWith('v')
-                            ? matchedRunner.version
-                            : formatMsg(locale, 'runners.versionLabel', { version: matchedRunner.version })}
-                        </span>
-                      )}
                     </div>
                     {t.last_error ? (
                       <p className="truncate text-ui-xs text-destructive">{t.last_error}</p>
@@ -639,81 +709,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                   </div>
 
                   <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                    <button
-                      type="button"
-                      data-testid={`ssh-test-${t.id}`}
-                      disabled={Boolean(busy)}
-                      onClick={() => void runTargetAction(t, 'test')}
-                      className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover disabled:opacity-50"
-                    >
-                      {busy === 'test' ? (
-                        <LoaderCircle className="size-3 animate-spin" />
-                      ) : (
-                        <Wifi className="size-3" />
-                      )}
-                      <span>{formatMsg(locale, 'runners.test')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      data-testid={`ssh-deploy-${t.id}`}
-                      disabled={Boolean(busy)}
-                      onClick={() => void runTargetAction(t, 'deploy')}
-                      className="inline-flex h-7 items-center gap-1 rounded-md bg-foreground px-2.5 text-ui-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
-                    >
-                      {busy === 'deploy' ? (
-                        <LoaderCircle className="size-3 animate-spin" />
-                      ) : t.install_mode === 'remote_install' ? (
-                        <CloudDownload className="size-3" />
-                      ) : (
-                        <Play className="size-3" />
-                      )}
-                      <span>
-                        {busy === 'deploy'
-                          ? formatMsg(locale, 'runners.deploying')
-                          : t.install_mode === 'remote_install'
-                            ? formatMsg(locale, 'runners.remoteInstall')
-                            : formatMsg(locale, 'runners.scpDeploy')}
-                      </span>
-                    </button>
-                    {isOnline && (
-                      <button
-                        type="button"
-                        disabled={Boolean(busy)}
-                        onClick={() => void runTargetAction(t, 'stop')}
-                        title={formatMsg(locale, 'runners.stopRemoteRunner')}
-                        className="flex size-7 items-center justify-center rounded-md border border-border text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground disabled:opacity-50"
-                      >
-                        {busy === 'stop' ? <LoaderCircle className="size-3 animate-spin" /> : <Square className="size-3" />}
-                      </button>
-                    )}
-                    {t.last_log && (
-                      <button
-                        type="button"
-                        onClick={() => setExpandedLogs((p) => ({ ...p, [t.id]: !p[t.id] }))}
-                        title={formatMsg(locale, 'runners.toggleLogs')}
-                        className={`flex size-7 items-center justify-center rounded-md transition-colors hover:bg-hover ${
-                          logOpen ? 'bg-selected text-foreground' : 'text-foreground-subtlest hover:text-foreground'
-                        }`}
-                      >
-                        <Terminal className="size-3.5" />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(t)}
-                      aria-label={formatMsg(locale, 'runners.editSshServer')}
-                      className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
-                    >
-                      <Pencil className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void deleteTarget(t.id)}
-                      aria-label={formatMsg(locale, 'runners.deleteSshServer')}
-                      className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
+                    {renderSshActionButtons(t, false)}
                   </div>
                 </div>
 
@@ -724,9 +720,9 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                 )}
               </div>
             );
-          })
-        )}
+          })}
       </SettingsGroupCard>
+      )}
 
       {/* Connected Runners */}
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -773,6 +769,8 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
           runners.map((r) => {
             const removing = Boolean(removingRunnerIds[r.id]);
             const upgrading = Boolean(upgradingRunnerIds[r.id]);
+            const matchedSsh = matchSshTargetForRunner(r);
+            const sshLogOpen = matchedSsh ? Boolean(expandedLogs[matchedSsh.id]) : false;
             const formattedVersion = r.version
               ? r.version.startsWith('v')
                 ? r.version
@@ -788,8 +786,9 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
               <div
                 key={r.id}
                 data-testid={`connected-runner-${r.id}`}
-                className="grid grid-cols-1 items-center gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto]"
+                className="px-5 py-4"
               >
+                <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span
@@ -833,6 +832,12 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                         <span>{formatMsg(locale, 'runners.adminBadge')}</span>
                       </span>
                     )}
+                    {matchedSsh?.ssh_alias && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-brand-blue/10 px-1.5 py-0.5 font-mono text-[11px] text-brand-blue">
+                        <Link2 className="size-3" />
+                        {matchedSsh.ssh_alias}
+                      </span>
+                    )}
                     {phaseLabel && (
                       <span
                         data-testid={`runner-update-phase-${r.id}`}
@@ -853,9 +858,18 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     <span className="rounded bg-surface px-1.5 py-0.5 font-mono">{r.os}</span>
                     <span className="rounded bg-surface px-1.5 py-0.5 font-mono">{r.arch}</span>
                     <span className="rounded bg-surface px-1.5 py-0.5 font-mono">{r.shell || 'default'}</span>
+                    {matchedSsh && (
+                      <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-[11px]">
+                        {matchedSsh.username ? `${matchedSsh.username}@` : ''}
+                        {matchedSsh.host}:{matchedSsh.port || 22}
+                      </span>
+                    )}
                     {r.hostname ? <span className="font-mono">{r.hostname}</span> : null}
                     {r.workspace_default ? <span className="truncate font-mono">{r.workspace_default}</span> : null}
                   </div>
+                  {matchedSsh?.last_error && (
+                    <p className="mt-1 truncate text-ui-xs text-destructive">{matchedSsh.last_error}</p>
+                  )}
                   {r.status === 'online' && isRequired && (
                     <div
                       data-testid={`runner-update-required-${r.id}`}
@@ -935,7 +949,8 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     <p className="mt-1 truncate text-ui-xs text-destructive">{r.update_error}</p>
                   )}
                 </div>
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  {matchedSsh && renderSshActionButtons(matchedSsh, r.status === 'online', true)}
                   <span className="font-mono text-ui-xs tabular-nums text-foreground-subtlest">
                     rev #{r.synced_config_rev}
                   </span>
@@ -955,6 +970,12 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     )}
                   </button>
                 </div>
+                </div>
+                {matchedSsh && sshLogOpen && matchedSsh.last_log && (
+                  <pre className="mt-3 max-h-56 overflow-auto rounded-lg border border-border bg-surface p-3 font-mono text-[11px] leading-relaxed text-foreground-subtle whitespace-pre-wrap">
+                    {matchedSsh.last_log}
+                  </pre>
+                )}
               </div>
             );
           })
