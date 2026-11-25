@@ -41,7 +41,7 @@ export function App() {
   );
 
   const [sidebarWidth, setSidebarWidth] = useState(260);
-  const [sidePaneWidth, setSidePaneWidth] = useState(440);
+  const [sidePaneWidth, setSidePaneWidth] = useState(520);
   const [terminalHeight, setTerminalHeight] = useState(220);
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth : 1440,
@@ -93,10 +93,10 @@ export function App() {
     };
   }, []);
 
-  const effectiveSidePaneWidth = Math.min(
-    sidePaneWidth,
-    Math.max(280, Math.floor(viewportWidth * 0.36)),
-  );
+  const isCompact = viewportWidth < 768;
+  const leftOccupied = !isCompact && sidebarVisible ? sidebarWidth : 0;
+  const maxSidePaneWidth = Math.max(280, viewportWidth - leftOccupied - 320);
+  const effectiveSidePaneWidth = Math.max(280, Math.min(sidePaneWidth, maxSidePaneWidth));
 
   useEffect(() => {
     if (sidePaneVisible) setHasOpenedSidePane(true);
@@ -150,7 +150,6 @@ export function App() {
 
   const shouldMountSidePane = sidePaneVisible || hasOpenedSidePane;
   const shouldMountTerminal = showBottomPanel || hasOpenedTerminal;
-  const isCompact = viewportWidth < 768;
 
   const activeBottomTerm = bottomTerminals.find((t) => t.id === activeBottomTermId) || bottomTerminals[0];
 
@@ -314,7 +313,7 @@ export function App() {
             <div
               role="separator"
               onPointerDown={(e) =>
-                startHorizontalDrag(e, 'sidepane', effectiveSidePaneWidth, 280, 760, true, setSidePaneWidth)
+                startHorizontalDrag(e, 'sidepane', effectiveSidePaneWidth, 280, maxSidePaneWidth, true, setSidePaneWidth)
               }
               className="absolute top-0 left-0 z-20 h-full w-1.5 cursor-col-resize transition-colors hover:bg-resize-handle/40"
             />

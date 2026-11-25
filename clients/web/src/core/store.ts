@@ -2600,53 +2600,70 @@ export const useNexStore = create<AppState>((set, get) => ({
   setActiveRightTab: (tabId) => set({ activeRightTabId: tabId }),
 
   openFileInPreviewTab: async (relPath, line) => {
-    const cleanRel = relPath.replace(/^\.\//, '');
-    const isMediaModalPath = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif|pdf)$/i.test(cleanRel);
+    const stateNow = get();
+    const activeSession = stateNow.sessions.find((s) => s.id === stateNow.activeSessionId);
+    const workspacePath = (activeSession?.workspace_path || stateNow.selectedWorkspacePath || '').replace(/[\\/]+$/, '');
+    const cleanRel = relPath.trim().replace(/^\.\//, '');
+    const requestPath =
+      workspacePath && cleanRel.startsWith(`${workspacePath}/`)
+        ? cleanRel.slice(workspacePath.length + 1)
+        : cleanRel;
+    const baseNameFromPath = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() || p;
+    const isMediaModalPath = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif|pdf)$/i.test(requestPath);
 
     if (isMediaModalPath) {
-      const resp = await wsClient.requestRPC<
-        { action: string; rel_path: string; workspace_path?: string },
-        FilePreview
-      >(
-        'workspace.req',
-        {
-          action: 'fs_read_preview',
-          rel_path: cleanRel,
-          workspace_path: get().selectedWorkspacePath || undefined,
-        },
-        { runner_id: get().selectedRunnerId },
-      );
-      const preview = resp.payload;
-      if (!preview) return;
-      const mime = preview.mime_type || (cleanRel.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/png');
-      const rawContent = preview.content || '';
-      if (preview.preview_as === 'image' || mime.startsWith('image/')) {
-        const src = rawContent
-          ? rawContent.startsWith('data:')
-            ? rawContent
-            : `data:${mime};base64,${rawContent}`
-          : '';
-        if (src) {
-          set({ previewImage: { src, alt: preview.name || cleanRel, kind: 'image' } });
-          return;
+      try {
+        const resp = await wsClient.requestRPC<
+          { action: string; rel_path: string; workspace_path?: string },
+          FilePreview
+        >(
+          'workspace.req',
+          {
+            action: 'fs_read_preview',
+            rel_path: requestPath,
+            workspace_path: workspacePath || undefined,
+          },
+          { runner_id: get().selectedRunnerId },
+        );
+        const preview = resp.payload;
+        if (preview) {
+          const mime = preview.mime_type || (requestPath.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/png');
+          const rawContent = preview.content || '';
+          if (preview.preview_as === 'image' || mime.startsWith('image/')) {
+            const src = rawContent
+              ? rawContent.startsWith('data:')
+                ? rawContent
+                : `data:${mime};base64,${rawContent}`
+              : '';
+            if (src) {
+              set({ previewImage: { src, alt: preview.name || requestPath, kind: 'image' } });
+              return;
+            }
+          }
+          if (mime === 'application/pdf' || requestPath.toLowerCase().endsWith('.pdf')) {
+            const src = rawContent
+              ? rawContent.startsWith('data:')
+                ? rawContent
+                : `data:application/pdf;base64,${rawContent}`
+              : '';
+            if (src) {
+              set({ previewImage: { src, alt: preview.name || requestPath, kind: 'pdf' } });
+              return;
+            }
+          }
         }
-      }
-      if (mime === 'application/pdf' || cleanRel.toLowerCase().endsWith('.pdf')) {
-        const src = rawContent
-          ? rawContent.startsWith('data:')
-            ? rawContent
-            : `data:application/pdf;base64,${rawContent}`
-          : '';
-        if (src) {
-          set({ previewImage: { src, alt: preview.name || cleanRel, kind: 'pdf' } });
-          return;
-        }
+      } catch {
+        // Fall through to opening a preview tab so the error is shown visibly instead of silently failing.
       }
     }
 
     const wasOpen = get().sidePaneVisible;
-    const existing = get().rightTabs.find((t) => t.kind === 'file_preview' && t.relPath === cleanRel);
-    if (existing) {
+    const existing = get().rightTabs.find(
+      (t) =>
+        t.kind === 'file_preview' &&
+        (t.relPath === requestPath || t.relPath === cleanRel || t.preview?.rel_path === requestPath),
+    );
+    if (existing && !existing.error && (existing.preview || existing.loading)) {
       set((s) => ({
         sidePaneVisible: true,
         activeRightTabId: existing.id,
@@ -2656,41 +2673,93 @@ export const useNexStore = create<AppState>((set, get) => ({
       }));
       return;
     }
-    set({ sidePaneVisible: true });
-    const resp = await wsClient.requestRPC<
-      { action: string; rel_path: string; workspace_path?: string },
-      FilePreview
-    >(
-      'workspace.req',
-      {
-        action: 'fs_read_preview',
-        rel_path: cleanRel,
-        workspace_path: get().selectedWorkspacePath || undefined,
-      },
-      { runner_id: get().selectedRunnerId },
-    );
-    const preview = resp.payload;
-    if (!preview) return;
-    if (preview.preview_as === 'image' && preview.content) {
-      const mime = preview.mime_type || 'image/png';
-      const src = preview.content.startsWith('data:') ? preview.content : `data:${mime};base64,${preview.content}`;
-      set({
-        sidePaneVisible: wasOpen,
-        previewImage: { src, alt: preview.name || cleanRel, kind: 'image' },
-      });
-      return;
-    }
-    const id = `prev_${crypto.randomUUID().slice(0, 8)}`;
-    const tab: WorkbenchTab = {
-      id,
+
+    const tabId = existing ? existing.id : `prev_${crypto.randomUUID().slice(0, 8)}`;
+    const placeholderTab: WorkbenchTab = {
+      id: tabId,
       kind: 'file_preview',
-      title: preview.name || cleanRel,
-      relPath: cleanRel,
+      title: existing?.title || baseNameFromPath(requestPath),
+      relPath: requestPath,
       highlightLine: line,
-      preview,
+      loading: true,
+      error: undefined,
       closable: true,
     };
-    set((s) => insertConcreteRightTab(s.rightTabs, s.activeRightTabId, wasOpen, tab));
+
+    if (existing) {
+      set((s) => ({
+        sidePaneVisible: true,
+        activeRightTabId: tabId,
+        rightTabs: (wasOpen ? s.rightTabs : s.rightTabs.filter((t) => t.kind !== 'new_tab')).map((t) =>
+          t.id === tabId ? { ...t, ...placeholderTab } : t,
+        ),
+      }));
+    } else {
+      set((s) => ({
+        sidePaneVisible: true,
+        ...insertConcreteRightTab(s.rightTabs, s.activeRightTabId, wasOpen, placeholderTab),
+      }));
+    }
+
+    try {
+      const resp = await wsClient.requestRPC<
+        { action: string; rel_path: string; workspace_path?: string },
+        FilePreview & { error?: string }
+      >(
+        'workspace.req',
+        {
+          action: 'fs_read_preview',
+          rel_path: requestPath,
+          workspace_path: workspacePath || undefined,
+        },
+        { runner_id: get().selectedRunnerId },
+      );
+      const preview = resp.payload;
+      if (!preview || (typeof preview.error === 'string' && !preview.preview_as)) {
+        const errMsg = preview?.error || 'Failed to load file preview';
+        set((s) => ({
+          rightTabs: s.rightTabs.map((t) =>
+            t.id === tabId ? { ...t, loading: false, error: errMsg } : t,
+          ),
+        }));
+        return;
+      }
+      if (preview.preview_as === 'image' && preview.content) {
+        const mime = preview.mime_type || 'image/png';
+        const src = preview.content.startsWith('data:') ? preview.content : `data:${mime};base64,${preview.content}`;
+        set((s) => {
+          const remaining = s.rightTabs.filter((t) => t.id !== tabId);
+          return {
+            rightTabs: remaining,
+            activeRightTabId: s.activeRightTabId === tabId ? remaining[remaining.length - 1]?.id || '' : s.activeRightTabId,
+            sidePaneVisible: wasOpen || remaining.length > 0,
+            previewImage: { src, alt: preview.name || requestPath, kind: 'image' },
+          };
+        });
+        return;
+      }
+      set((s) => ({
+        rightTabs: s.rightTabs.map((t) =>
+          t.id === tabId
+            ? {
+                ...t,
+                title: preview.name || baseNameFromPath(requestPath),
+                relPath: preview.rel_path || requestPath,
+                preview,
+                loading: false,
+                error: undefined,
+              }
+            : t,
+        ),
+      }));
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err || 'Failed to load file preview');
+      set((s) => ({
+        rightTabs: s.rightTabs.map((t) =>
+          t.id === tabId ? { ...t, loading: false, error: errMsg } : t,
+        ),
+      }));
+    }
   },
 
   listWorkspaceDir: async (relPath) => {

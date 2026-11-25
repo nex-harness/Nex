@@ -374,12 +374,58 @@ func (s *Service) SearchFiles(ctx context.Context, rootDir, query string, limit 
 	return map[string]any{"files": matches}, nil
 }
 
+// resolvePreviewPath resolves either a workspace-relative path (guarded against traversal/escapes)
+// or an explicit absolute / tilde-prefixed path passed from tool calls (e.g. read/edit/write).
+func resolvePreviewPath(rootDir, rawPath string) (absFile string, displayRel string, err error) {
+	trimmed := strings.TrimSpace(rawPath)
+	if trimmed == "" {
+		return "", "", errors.New("rel_path is required")
+	}
+
+	if homeDir, homeErr := os.UserHomeDir(); homeErr == nil && homeDir != "" {
+		if trimmed == "~" {
+			trimmed = homeDir
+		} else if strings.HasPrefix(trimmed, "~/") || strings.HasPrefix(trimmed, "~\\") {
+			trimmed = filepath.Join(homeDir, trimmed[2:])
+		}
+	}
+
+	if filepath.IsAbs(trimmed) {
+		absFile = filepath.Clean(trimmed)
+		displayRel = filepath.ToSlash(absFile)
+		if strings.TrimSpace(rootDir) != "" {
+			if absRoot, err := filepath.Abs(rootDir); err == nil {
+				if realRoot, rErr := filepath.EvalSymlinks(absRoot); rErr == nil {
+					absRoot = realRoot
+				}
+				checkFile := absFile
+				if realFile, fErr := filepath.EvalSymlinks(absFile); fErr == nil {
+					checkFile = realFile
+				}
+				if rel, relErr := filepath.Rel(absRoot, checkFile); relErr == nil &&
+					rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+					if rel == "." {
+						displayRel = filepath.Base(absFile)
+					} else {
+						displayRel = filepath.ToSlash(rel)
+					}
+				}
+			}
+		}
+		return absFile, displayRel, nil
+	}
+
+	absRoot, joinedFile, err := safeJoinWorkspace(rootDir, trimmed)
+	if err != nil {
+		return "", "", err
+	}
+	relClean, _ := filepath.Rel(absRoot, joinedFile)
+	return joinedFile, filepath.ToSlash(relClean), nil
+}
+
 // ReadPreview inspects file magic bytes and returns safe text, markdown, image, or binary metadata for a Preview Tab.
 func (s *Service) ReadPreview(_ context.Context, rootDir, relPath string) (*FilePreview, error) {
-	if strings.TrimSpace(relPath) == "" {
-		return nil, errors.New("rel_path is required")
-	}
-	absRoot, absFile, err := safeJoinWorkspace(rootDir, relPath)
+	absFile, relSlash, err := resolvePreviewPath(rootDir, relPath)
 	if err != nil {
 		return nil, err
 	}
@@ -391,8 +437,6 @@ func (s *Service) ReadPreview(_ context.Context, rootDir, relPath string) (*File
 		return nil, errors.New("cannot preview directory as file")
 	}
 
-	relClean, _ := filepath.Rel(absRoot, absFile)
-	relSlash := filepath.ToSlash(relClean)
 	ext := strings.ToLower(filepath.Ext(absFile))
 
 	f, err := os.Open(absFile)

@@ -591,6 +591,8 @@ export interface WorkbenchTab {
   relPath?: string;
   highlightLine?: number;
   preview?: FilePreview;
+  loading?: boolean;
+  error?: string;
   ptyId?: string;
   sideSessionId?: string;
   subagent?: SubagentInspectorData;

@@ -90,6 +90,21 @@ func TestWorkspaceTreeSearchPreviewTraversalGuardAndGitDiff(t *testing.T) {
 		t.Fatalf("expected binary guard preview with empty content, got %+v", binPrev)
 	}
 
+	// 4b. Absolute path inside workspace succeeds and normalizes RelPath to workspace-relative
+	absInWsPrev, err := svc.ReadPreview(ctx, dir, filepath.Join(dir, "README.md"))
+	if err != nil || absInWsPrev.PreviewAs != "markdown" || absInWsPrev.RelPath != "README.md" {
+		t.Fatalf("expected absolute in-workspace preview to normalize RelPath=README.md, got %+v err=%v", absInWsPrev, err)
+	}
+
+	// 4c. Absolute path outside workspace succeeds (e.g. tool operated in another repo/folder)
+	extDir := t.TempDir()
+	extFile := filepath.Join(extDir, "00-overview.md")
+	_ = os.WriteFile(extFile, []byte("# Overview\n"), 0o644)
+	absOutWsPrev, err := svc.ReadPreview(ctx, dir, extFile)
+	if err != nil || absOutWsPrev.PreviewAs != "markdown" || absOutWsPrev.Content != "# Overview\n" {
+		t.Fatalf("expected absolute out-of-workspace preview to succeed, got %+v err=%v", absOutWsPrev, err)
+	}
+
 	// 5. Git Summary & Review Diff
 	gitSum, err := svc.GitSummary(ctx, dir, true, "")
 	if err != nil || !gitSum.IsGitRepo || gitSum.Additions < 4 {

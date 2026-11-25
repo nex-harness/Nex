@@ -1042,8 +1042,10 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
   });
 
   it('supports clickable file_path:line_number links and follow-up message queueing while running', () => {
+    const originalOpenFile = useNexStore.getState().openFileInPreviewTab;
     const openFileSpy = vi.fn().mockResolvedValue(undefined);
-    useNexStore.setState({
+    try {
+      useNexStore.setState({
       locale: 'zh-CN',
       mainView: 'workspace',
       activeSessionId: 'sess_b1',
@@ -1131,6 +1133,9 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     // Removing the queued follow-up clears the queue
     fireEvent.click(screen.getByTestId('followup-remove-0'));
     expect(useNexStore.getState().followUpQueues['sess_b1']?.length).toBe(0);
+    } finally {
+      useNexStore.setState({ openFileInPreviewTab: originalOpenFile });
+    }
   });
 
   it('renders Plan Mode approval bar and Memory settings management section', async () => {
@@ -5334,5 +5339,118 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     // Click second WorkGroup header to inspect its running bash tool inside workgroup-body
     fireEvent.click(headers[1]!);
     expect(screen.getByTestId('workgroup-body').textContent).toContain('go test ./...');
+  });
+
+  it('strips active workspace prefix when opening an absolute file path and renders preview tab', async () => {
+    const sid = 'sess_preview_abs';
+    useNexStore.setState({
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      locale: 'zh-CN',
+      mainView: 'workspace',
+      activeSessionId: sid,
+      selectedRunnerId: 'run_mac',
+      selectedWorkspacePath: '/Users/tylinux/Developer/Projects/Nex-v3',
+      sidePaneVisible: false,
+      rightTabs: [],
+      activeRightTabId: '',
+      sessions: [
+        {
+          id: sid,
+          runner_id: 'run_mac',
+          title: 'Preview Abs',
+          workspace_path: '/Users/tylinux/Developer/Reverse/UURemote',
+          status: 'idle',
+          created_at: 1000,
+          updated_at: 2000,
+        } as never,
+      ],
+    });
+
+    const spy = vi.spyOn(wsClient, 'requestRPC').mockResolvedValue({
+      v: 1,
+      id: 'res_prev_1',
+      type: 'workspace.res',
+      ts: Date.now(),
+      payload: {
+        rel_path: 'docs/00-总览.md',
+        name: '00-总览.md',
+        preview_as: 'markdown',
+        content: '# 总览\n\n传输层与鉴权说明',
+        total_size: 28,
+        truncated: false,
+      },
+    } as never);
+
+    try {
+      render(<App />);
+      await act(async () => {
+        await useNexStore
+          .getState()
+          .openFileInPreviewTab('/Users/tylinux/Developer/Reverse/UURemote/docs/00-总览.md');
+      });
+
+      expect(spy).toHaveBeenCalledWith(
+        'workspace.req',
+        {
+          action: 'fs_read_preview',
+          rel_path: 'docs/00-总览.md',
+          workspace_path: '/Users/tylinux/Developer/Reverse/UURemote',
+        },
+        { runner_id: 'run_mac' },
+      );
+      expect(useNexStore.getState().sidePaneVisible).toBe(true);
+      expect(screen.getByTestId('workbench-tab-file_preview').textContent).toContain('00-总览.md');
+      expect(screen.getByTestId('side-pane-container').textContent).toContain('传输层与鉴权说明');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('shows a visible error card with Retry instead of a blank pane when fs_read_preview fails', async () => {
+    const sid = 'sess_preview_err';
+    useNexStore.setState({
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      locale: 'zh-CN',
+      mainView: 'workspace',
+      activeSessionId: sid,
+      selectedRunnerId: 'run_mac',
+      selectedWorkspacePath: '/tmp/ws',
+      sidePaneVisible: false,
+      rightTabs: [],
+      activeRightTabId: '',
+      sessions: [
+        {
+          id: sid,
+          runner_id: 'run_mac',
+          title: 'Preview Error',
+          workspace_path: '/tmp/ws',
+          status: 'idle',
+          created_at: 1000,
+          updated_at: 2000,
+        } as never,
+      ],
+    });
+
+    const spy = vi.spyOn(wsClient, 'requestRPC').mockRejectedValue(new Error('path escapes workspace root'));
+
+    try {
+      render(<App />);
+      await act(async () => {
+        await useNexStore.getState().openFileInPreviewTab('/other/dir/00-总览.md');
+      });
+
+      expect(useNexStore.getState().sidePaneVisible).toBe(true);
+      expect(screen.getByTestId('workbench-tab-file_preview').textContent).toContain('00-总览.md');
+      const errPanel = screen.getByTestId('file-preview-error');
+      expect(errPanel.textContent).toContain('无法预览文件');
+      expect(errPanel.textContent).toContain('path escapes workspace root');
+      expect(errPanel.textContent).toContain('重试');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

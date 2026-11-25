@@ -1,4 +1,5 @@
 import {
+  AlertCircle,
   Bot,
   Check,
   ChevronDown,
@@ -10,6 +11,7 @@ import {
   GitBranch,
   GitCommitHorizontal,
   Globe,
+  Loader2,
   MessageSquare,
   MessageSquareText,
   Minus,
@@ -175,12 +177,53 @@ export function WorkbenchSidebar() {
           />
         )}
 
-        {activeTab?.kind === 'file_preview' && activeTab.preview && (
-          <FilePreviewPanel
-            preview={activeTab.preview}
-            highlightLine={activeTab.highlightLine}
-            onAddRef={appendComposerRef}
-          />
+        {activeTab?.kind === 'file_preview' && (
+          activeTab.preview ? (
+            <FilePreviewPanel
+              preview={activeTab.preview}
+              highlightLine={activeTab.highlightLine}
+              onAddRef={appendComposerRef}
+            />
+          ) : activeTab.error ? (
+            <div
+              data-testid="file-preview-error"
+              className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center"
+            >
+              <AlertCircle className="size-6 text-destructive" />
+              <div className="space-y-1">
+                <div className="text-ui-base font-medium text-foreground">
+                  {formatMsg(locale, 'workbench.previewFailed')}
+                </div>
+                {activeTab.relPath && (
+                  <div className="break-all font-mono text-ui-xs text-foreground-subtle">{activeTab.relPath}</div>
+                )}
+                <div className="max-w-md break-words text-ui-xs text-foreground-subtlest">{activeTab.error}</div>
+              </div>
+              {activeTab.relPath && (
+                <button
+                  type="button"
+                  onClick={() => void openFileInPreviewTab(activeTab.relPath || '', activeTab.highlightLine)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover"
+                >
+                  <RefreshCw className="size-3.5" />
+                  <span>{formatMsg(locale, 'workbench.retry')}</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <div
+              data-testid="file-preview-loading"
+              className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-ui-sm text-foreground-subtle"
+            >
+              <Loader2 className="size-5 animate-spin text-foreground-subtlest" />
+              <span>{formatMsg(locale, 'workbench.loadingFile')}</span>
+              {activeTab.relPath && (
+                <span className="max-w-full truncate font-mono text-ui-xs text-foreground-subtlest">
+                  {activeTab.relPath}
+                </span>
+              )}
+            </div>
+          )
         )}
 
         {activeTab?.kind === 'review' && (
