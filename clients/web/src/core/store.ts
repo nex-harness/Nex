@@ -459,6 +459,7 @@ export interface AppState {
   activeSessionId: string;
   composerText: string;
   composerAttachments: ComposerAttachment[];
+  composerAttachmentsBySession: Record<string, ComposerAttachment[]>;
 
   streams: Record<string, SessionStreamState>;
   followUpQueues: Record<string, QueuedFollowUp[]>;
@@ -764,6 +765,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   activeSessionId: '',
   composerText: readPersistedComposerDraft(''),
   composerAttachments: [],
+  composerAttachmentsBySession: {},
 
   streams: {},
   followUpQueues: {},
@@ -845,14 +847,39 @@ export const useNexStore = create<AppState>((set, get) => ({
     set({ composerText: text });
   },
   addComposerAttachment: (att) =>
-    set((s) => ({
-      composerAttachments: s.composerAttachments.length >= 4 ? s.composerAttachments : [...s.composerAttachments, att],
-    })),
+    set((s) => {
+      const key = composerDraftKey(s.activeSessionId);
+      const next = s.composerAttachments.length >= 4 ? s.composerAttachments : [...s.composerAttachments, att];
+      return {
+        composerAttachments: next,
+        composerAttachmentsBySession: { ...s.composerAttachmentsBySession, [key]: next },
+      };
+    }),
   removeComposerAttachment: (id) =>
-    set((s) => ({
-      composerAttachments: s.composerAttachments.filter((a) => a.id !== id),
-    })),
-  clearComposerAttachments: () => set({ composerAttachments: [] }),
+    set((s) => {
+      const key = composerDraftKey(s.activeSessionId);
+      const next = s.composerAttachments.filter((a) => a.id !== id);
+      const nextMap = { ...s.composerAttachmentsBySession };
+      if (next.length > 0) {
+        nextMap[key] = next;
+      } else {
+        delete nextMap[key];
+      }
+      return {
+        composerAttachments: next,
+        composerAttachmentsBySession: nextMap,
+      };
+    }),
+  clearComposerAttachments: () =>
+    set((s) => {
+      const key = composerDraftKey(s.activeSessionId);
+      const nextMap = { ...s.composerAttachmentsBySession };
+      delete nextMap[key];
+      return {
+        composerAttachments: [],
+        composerAttachmentsBySession: nextMap,
+      };
+    }),
   appendComposerRef: (refText) =>
     set((s) => {
       const next = s.composerText ? `${s.composerText} ${refText} ` : `${refText} `;
@@ -1845,6 +1872,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         mainView: preserveView ? s.mainView : 'workspace',
         activeSessionId: sessionId,
         composerText: readPersistedComposerDraft(sessionId),
+        composerAttachments: s.composerAttachmentsBySession[composerDraftKey(sessionId)] || [],
         selectedProviderId: resolvedBefore.providerId,
         selectedModelId: resolvedBefore.modelId,
         thinkingEffort: nextEffort,
@@ -1951,6 +1979,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         mainView: 'workspace',
         activeSessionId: '',
         composerText: readPersistedComposerDraft(''),
+        composerAttachments: s.composerAttachmentsBySession[composerDraftKey('')] || [],
         selectedRunnerId: runnerId || s.selectedRunnerId,
         selectedWorkspacePath: workspacePath !== undefined ? workspacePath : s.selectedWorkspacePath,
         draftProviderId: resolvedDraft.providerId,
@@ -1975,11 +2004,15 @@ export const useNexStore = create<AppState>((set, get) => ({
     persistComposerDraft(sessionId, '');
     set((s) => {
       const updates: Partial<AppState> = {};
+      const nextAttachMap = { ...s.composerAttachmentsBySession };
+      delete nextAttachMap[composerDraftKey(sessionId)];
       if (s.activeSessionId === sessionId) {
         persistActiveSessionId('');
         updates.activeSessionId = '';
         updates.composerText = readPersistedComposerDraft('');
+        updates.composerAttachments = nextAttachMap[composerDraftKey('')] || [];
       }
+      updates.composerAttachmentsBySession = nextAttachMap;
       if (s.unreadSessionIds[sessionId]) {
         const nextUnread = { ...s.unreadSessionIds };
         delete nextUnread[sessionId];
@@ -2068,7 +2101,11 @@ export const useNexStore = create<AppState>((set, get) => ({
       }
       if (overrideText === undefined) {
         persistComposerDraft(sessionId, '');
-        set({ composerText: '', composerAttachments: [] });
+        set((prev) => {
+          const nextMap = { ...prev.composerAttachmentsBySession };
+          delete nextMap[composerDraftKey(sessionId)];
+          return { composerText: '', composerAttachments: [], composerAttachmentsBySession: nextMap };
+        });
       }
       return;
     }
@@ -2193,7 +2230,12 @@ export const useNexStore = create<AppState>((set, get) => ({
     if (overrideText === undefined) {
       if (wasDraft) persistComposerDraft('', '');
       persistComposerDraft(sessionId, '');
-      set({ composerText: '', composerAttachments: [] });
+      set((prev) => {
+        const nextMap = { ...prev.composerAttachmentsBySession };
+        if (wasDraft) delete nextMap[composerDraftKey('')];
+        delete nextMap[composerDraftKey(sessionId)];
+        return { composerText: '', composerAttachments: [], composerAttachmentsBySession: nextMap };
+      });
     }
   },
 
@@ -2287,11 +2329,15 @@ export const useNexStore = create<AppState>((set, get) => ({
     persistComposerDraft(sessionId, '');
     set((s) => {
       const updates: Partial<AppState> = {};
+      const nextAttachMap = { ...s.composerAttachmentsBySession };
+      delete nextAttachMap[composerDraftKey(sessionId)];
       if (s.activeSessionId === sessionId) {
         persistActiveSessionId('');
         updates.activeSessionId = '';
         updates.composerText = readPersistedComposerDraft('');
+        updates.composerAttachments = nextAttachMap[composerDraftKey('')] || [];
       }
+      updates.composerAttachmentsBySession = nextAttachMap;
       if (s.unreadSessionIds[sessionId]) {
         const nextUnread = { ...s.unreadSessionIds };
         delete nextUnread[sessionId];

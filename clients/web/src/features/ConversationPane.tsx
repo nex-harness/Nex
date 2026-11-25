@@ -3048,6 +3048,7 @@ export function ConversationPane() {
   const contentRef = useRef<HTMLDivElement | null>(null);
   const followingRef = useRef(true);
   const headerMenuRef = useRef<HTMLDivElement | null>(null);
+  const helpMenuRef = useRef<HTMLDivElement | null>(null);
   const turnRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
@@ -3234,7 +3235,10 @@ export function ConversationPane() {
   useEffect(() => {
     if (!headerMenu) return;
     const onDown = (event: MouseEvent) => {
-      if (headerMenuRef.current && !headerMenuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const inSessionMenu = headerMenuRef.current?.contains(target) ?? false;
+      const inHelpMenu = helpMenuRef.current?.contains(target) ?? false;
+      if (!inSessionMenu && !inHelpMenu) {
         setHeaderMenu(null);
         setRenaming(false);
       }
@@ -3264,8 +3268,8 @@ export function ConversationPane() {
   };
 
   const headerControls = (
-    <div className="flex shrink-0 items-center gap-1">
-      <div className="relative">
+    <div className="nex-no-drag flex shrink-0 items-center gap-1">
+      <div className="relative" ref={helpMenuRef}>
         <button
           type="button"
           data-testid="header-help-btn"

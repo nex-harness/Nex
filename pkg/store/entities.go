@@ -473,7 +473,7 @@ func (s *Store) ForkSession(ctx context.Context, sourceSessionID string, upToSeq
 		if base == "" {
 			base = "Session"
 		}
-		title = base + " (branch)"
+		title = "branch of " + base
 	}
 
 	now := time.Now().UnixMilli()
