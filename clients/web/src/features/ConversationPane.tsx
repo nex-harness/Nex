@@ -890,8 +890,10 @@ function WorkGroup({
 }) {
   const activeTool = [...item.toolCalls].reverse().find((tc) => tc.status === 'running');
   const stepCount = item.toolCalls.length + (item.thinking ? 1 : 0);
+  // Keep collapsed WorkGroup height stable: do not pop transient `running` tools in and out below the header.
+  // Only permanent attention items (errors or image attachments) stay pinned outside.
   const isProminentTool = (tc: ToolCallCard) =>
-    tc.status === 'running' || tc.status === 'error' || Boolean(tc.images && tc.images.length > 0);
+    tc.status === 'error' || Boolean(tc.images && tc.images.length > 0);
   const visibleTools = item.toolCalls.filter(isProminentTool);
   const hiddenTools = item.toolCalls.filter((tc) => !isProminentTool(tc));
 
@@ -921,33 +923,42 @@ function WorkGroup({
     <div className="min-w-0">
       <button
         type="button"
+        data-testid="workgroup-header"
         onClick={onToggle}
-        className="inline-flex items-center gap-2 py-0.5 text-ui-base text-foreground-subtle transition-colors hover:text-foreground"
+        className="flex min-h-7 w-full max-w-full items-center gap-2 py-0.5 text-left text-ui-base text-foreground-subtle transition-colors hover:text-foreground"
       >
-        {hasThinking && !activeTool && (
-          <Sparkles className="size-4 shrink-0 text-foreground-subtlest" />
-        )}
+        <span className="flex size-4 shrink-0 items-center justify-center">
+          {item.streaming ? (
+            <LoaderCircle className="size-3.5 animate-spin text-foreground-subtlest" />
+          ) : hasThinking && !hasTools ? (
+            <Sparkles className="size-3.5 text-foreground-subtlest" />
+          ) : (
+            <Check className="size-3.5 text-foreground-subtlest" />
+          )}
+        </span>
         {item.streaming ? (
-          <span className="animated-gradient-text">{shimmerText}</span>
+          <span className="max-w-[18rem] shrink-0 truncate animated-gradient-text">{shimmerText}</span>
         ) : (
-          <span>{completedLabel}</span>
+          <span className="shrink-0 truncate">{completedLabel}</span>
         )}
         {item.streaming && hiddenTools.length > 0 && !open && (
-          <span className="rounded-md bg-tag px-1.5 py-0.5 text-ui-xs text-foreground-subtlest">
+          <span className="shrink-0 rounded-md bg-tag px-1.5 py-0.5 text-ui-xs tabular-nums text-foreground-subtlest">
             {hiddenTools.length}
           </span>
         )}
         <ChevronRight className={`size-3.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+        {!open && item.streaming && hasThinking && !activeTool && latestThinkingLine && (
+          <span
+            data-testid="workgroup-thinking-inline"
+            className="min-w-0 flex-1 truncate text-ui-xs text-foreground-subtlest"
+          >
+            {latestThinkingLine}
+          </span>
+        )}
       </button>
 
-      {!open && item.streaming && hasThinking && !activeTool && latestThinkingLine && (
-        <div className="ml-6 mt-0.5 max-w-2xl truncate text-ui-xs text-foreground-subtlest">
-          {latestThinkingLine}
-        </div>
-      )}
-
       {open && (
-        <div className="nex-collapsible" data-open={true}>
+        <div data-testid="workgroup-body" className="nex-collapsible" data-open={true}>
           <div className="nex-collapsible-inner">
             <div className="ml-1.5 mb-3 mt-2 space-y-2 border-l border-border pl-3.5">
               {hasThinking && (

@@ -2415,41 +2415,78 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     }
   });
 
-  it('renders Browser settings section with runner probe/install and built-in Browser subagent model selector', () => {
-    useNexStore.setState({
-      authEnabled: false,
-      authenticated: true,
-      locale: 'zh-CN',
-      mainView: 'settings',
-      settingsSection: 'browser',
-      runners: [
-        {
-          id: 'runner_1',
-          name: 'Local Runner',
-          status: 'online',
-          hostname: 'macbook.local',
-          os: 'darwin',
-          arch: 'arm64',
-          workspace_root: '/tmp/ws',
-        } as never,
-      ],
-      browserProbes: {},
+  it('renders Browser settings section with runner probe/install and built-in Browser subagent model selector', async () => {
+    const origProbe = useNexStore.getState().probeRunnerBrowser;
+    const probeMock = vi.fn(async (runnerId: string) => {
+      const readyRes = {
+        status: 'ready',
+        browser_name: 'Google Chrome',
+        version: 'Google Chrome 158.0.8127.89',
+        executable_path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      };
+      useNexStore.setState((s) => ({
+        browserProbes: { ...s.browserProbes, [runnerId]: readyRes },
+      }));
+      return readyRes;
     });
 
-    const { rerender } = render(<App />);
-    expect(screen.getByTestId('settings-browser-section')).toBeTruthy();
-    expect(screen.getByTestId('browser-mode-select')).toBeTruthy();
-    expect(screen.getByTestId('browser-runner-probe-runner_1')).toBeTruthy();
-    expect(screen.getByTestId('browser-runner-install-runner_1')).toBeTruthy();
+    try {
+      useNexStore.setState({
+        authEnabled: false,
+        authenticated: true,
+        locale: 'zh-CN',
+        mainView: 'settings',
+        settingsSection: 'browser',
+        runners: [
+          {
+            id: 'runner_1',
+            name: 'Local Runner',
+            status: 'online',
+            hostname: 'macbook.local',
+            os: 'darwin',
+            arch: 'arm64',
+            workspace_root: '/tmp/ws',
+          } as never,
+        ],
+        browserProbes: {},
+        probeRunnerBrowser: probeMock,
+      });
 
-    act(() => {
-      useNexStore.setState({ settingsSection: 'agents', agentProfiles: [] });
-    });
-    rerender(<App />);
+      const { rerender } = render(<App />);
+      expect(screen.getByTestId('settings-browser-section')).toBeTruthy();
+      expect(screen.getByTestId('browser-mode-select')).toBeTruthy();
+      expect(screen.getByTestId('browser-runner-probe-runner_1')).toBeTruthy();
 
-    const browserModelSelect = screen.getByTestId('builtin-subagent-browser-model-select') as HTMLSelectElement;
-    expect(browserModelSelect).toBeTruthy();
-    expect(browserModelSelect.value).toBe('');
+      await waitFor(() => {
+        expect(probeMock).toHaveBeenCalledWith('runner_1');
+        expect(screen.getByTestId('browser-runner-active-runner_1')).toBeTruthy();
+      });
+
+      const activeInfo = screen.getByTestId('browser-runner-active-runner_1');
+      expect(activeInfo.textContent).toContain('Google Chrome 158.0.8127.89');
+      expect(activeInfo.textContent).toContain('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+      expect(screen.queryByTestId('browser-runner-install-runner_1')).toBeNull();
+
+      act(() => {
+        useNexStore.setState({
+          browserProbes: {
+            runner_1: { status: 'missing_binary' },
+          },
+        });
+      });
+      expect(screen.getByTestId('browser-runner-install-runner_1')).toBeTruthy();
+
+      act(() => {
+        useNexStore.setState({ settingsSection: 'agents', agentProfiles: [] });
+      });
+      rerender(<App />);
+
+      const browserModelSelect = screen.getByTestId('builtin-subagent-browser-model-select') as HTMLSelectElement;
+      expect(browserModelSelect).toBeTruthy();
+      expect(browserModelSelect.value).toBe('');
+    } finally {
+      useNexStore.setState({ probeRunnerBrowser: origProbe });
+    }
   });
 
   it('detects mygo desktop/mobile hosts via window.mygo and invokes typed NexHost IPC & lifecycle events', async () => {
@@ -5166,5 +5203,136 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     } finally {
       sendSpy.mockRestore();
     }
+  });
+
+  it('keeps collapsed WorkGroup fixed-height without popping running tools and splits post-prose tool steps chronologically', () => {
+    const sid = 'sess_workgroup_stable_1';
+    let stream = applySessionEvent(emptyStreamState(), 'run_mac', {
+      session_id: sid,
+      seq: 1,
+      turn_idx: 0,
+      event_type: 'agent_start',
+      payload: {},
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 2,
+      turn_idx: 0,
+      event_type: 'message_end',
+      payload: { message: { role: 'user', content: [{ type: 'text', text: 'Investigate' }] } },
+    });
+    // Step 1: thinking + text ("机制基本都收集齐了。") + tool call
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 3,
+      turn_idx: 1,
+      event_type: 'message_start',
+      payload: {},
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 4,
+      turn_idx: 1,
+      event_type: 'message_update',
+      payload: { delta_kind: 'thinking', delta: 'Checking step 1' },
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 5,
+      turn_idx: 1,
+      event_type: 'message_update',
+      payload: { delta_kind: 'text', delta: '机制基本都收集齐了。' },
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 6,
+      turn_idx: 1,
+      event_type: 'message_end',
+      payload: {
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'Checking step 1' },
+            { type: 'text', text: '机制基本都收集齐了。' },
+            { type: 'tool_call', tool_call_id: 'tc_1', tool_name: 'read', arguments: { file_path: 'a.go' } },
+          ],
+        },
+      },
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 7,
+      turn_idx: 1,
+      event_type: 'tool_execution_end',
+      payload: { tool_call_id: 'tc_1', tool_name: 'read', tool_result: { output: 'ok', is_error: false } },
+    });
+
+    // Step 2: new message_start AFTER visible prose -> splits into a new assistant block below prose!
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 8,
+      turn_idx: 2,
+      event_type: 'message_start',
+      payload: {},
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 9,
+      turn_idx: 2,
+      event_type: 'message_end',
+      payload: {
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'tool_call', tool_call_id: 'tc_2', tool_name: 'bash', arguments: { command: 'go test ./...' } },
+          ],
+        },
+      },
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 10,
+      turn_idx: 2,
+      event_type: 'tool_execution_start',
+      payload: { tool_call_id: 'tc_2', tool_name: 'bash' },
+    });
+
+    // Expect user + step1 assistant (prose) + step2 assistant (running tool)
+    expect(stream.items).toHaveLength(3);
+    expect(stream.items[1]?.text).toBe('机制基本都收集齐了。');
+    expect(stream.items[1]?.streaming).toBe(false);
+    expect(stream.items[2]?.toolCalls[0]?.id).toBe('tc_2');
+    expect(stream.items[2]?.toolCalls[0]?.status).toBe('running');
+
+    useNexStore.setState({
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      locale: 'zh-CN',
+      mainView: 'workspace',
+      activeSessionId: sid,
+      selectedRunnerId: 'run_mac',
+      sessions: [
+        {
+          id: sid,
+          runner_id: 'run_mac',
+          title: 'Stable WorkGroup',
+          workspace_path: '/tmp/ws',
+          status: 'running',
+          created_at: 1000,
+          updated_at: 2000,
+        } as never,
+      ],
+      streams: { [sid]: stream },
+    });
+
+    render(<App />);
+    // Collapsed WorkGroup does not expand body or pop ordinary running bash tool outside
+    expect(screen.queryByTestId('workgroup-body')).toBeNull();
+    const headers = screen.getAllByTestId('workgroup-header');
+    expect(headers).toHaveLength(2);
+    // Click second WorkGroup header to inspect its running bash tool inside workgroup-body
+    fireEvent.click(headers[1]!);
+    expect(screen.getByTestId('workgroup-body').textContent).toContain('go test ./...');
   });
 });

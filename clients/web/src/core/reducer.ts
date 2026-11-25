@@ -402,9 +402,27 @@ export function applySessionEvent(
       break;
     }
 
-    case 'message_start':
-      cloneOrAppendTailAssistant();
+    case 'message_start': {
+      const lastIdx = items.length - 1;
+      const tail = lastIdx >= 0 ? items[lastIdx] : undefined;
+      if (tail && tail.role === 'assistant' && tail.text.trim().length > 0) {
+        const nextItems = items.slice();
+        nextItems[lastIdx] = { ...tail, streaming: false };
+        nextItems.push({
+          id: `ast_${ev.seq || Date.now()}_${nextItems.length}`,
+          startSeq: ev.seq > 0 ? ev.seq : undefined,
+          role: 'assistant',
+          text: '',
+          thinking: '',
+          toolCalls: [],
+          streaming: true,
+        });
+        items = nextItems;
+      } else {
+        cloneOrAppendTailAssistant();
+      }
       break;
+    }
 
     case 'message_update': {
       const target = cloneOrAppendTailAssistant();
@@ -494,6 +512,28 @@ export function applySessionEvent(
           }
         }
       } else if (msg.role === 'assistant') {
+        const lastIdx = items.length - 1;
+        const rawTail = lastIdx >= 0 ? items[lastIdx] : undefined;
+        if (
+          rawTail &&
+          rawTail.role === 'assistant' &&
+          Boolean(rawTail.seq) &&
+          rawTail.seq !== ev.seq &&
+          rawTail.text.trim().length > 0
+        ) {
+          const nextItems = items.slice();
+          nextItems[lastIdx] = { ...rawTail, streaming: false };
+          nextItems.push({
+            id: `ast_${ev.seq || Date.now()}_${nextItems.length}`,
+            startSeq: ev.seq > 0 ? ev.seq : undefined,
+            role: 'assistant',
+            text: '',
+            thinking: '',
+            toolCalls: [],
+            streaming: true,
+          });
+          items = nextItems;
+        }
         const target = cloneOrAppendTailAssistant();
         if (ev.seq) {
           target.seq = ev.seq;
