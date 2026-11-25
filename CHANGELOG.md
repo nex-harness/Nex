@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-24
+
+### Added
+- **About Modal**: Added About Nex modal in the Help menu displaying brand logo, version, conditional debug build hash, and keyboard shortcuts.
+- **Stream Resilience & Error Banner**: Added resettable stream idle timeout, zero-delta retry, and a compact ZCode-style stream error banner with Show details, Copy, and Dismiss controls.
+- **Inline Compaction Divider & Context Meter Refresh**: Rendered inline collapsible compaction dividers in the conversation timeline and preserved post-compaction context breakdown, inline inspection, and turn tick rail cues.
+- **Detached Background Tasks**: Decoupled background `bash` and subagents from foreground abort with per-task stop controls.
+- **Agent & Tool Performance**: Capped large-window compaction thresholds, spilled `bash` output at 16KB, and accelerated `grep` using `rg` when available.
+- **Web UI Ergonomics**: Auto-linked bare `http(s)://` URLs in Markdown rendering and collapsed thinking/tool execution details by default during streaming with a 1-line thinking preview.
+
+### Changed
+- **Docker Build Performance**: Switched to native `BUILDPLATFORM` Go cross-compilation, BuildKit GHA cache, `node:24-bookworm-slim` web-builder, and `.dockerignore` (reducing Docker CI build time by ~92%).
+- **Branch Session Naming**: Prefixed forked session titles with `branch of ` instead of trailing `(branch)`.
+- **Running Timer**: Displayed whole-second elapsed duration (`1s`, `2s`) instead of tenths of a second.
+
+### Fixed
+- **Orphaned Sessions & Subagent Abort**: Reconciled orphaned running sessions, cascaded abort to subagents, finalized child sessions before parent `agent_end`, and sealed dangling tool calls.
+- **Runner Status & Auth**: Fixed stale runner online status, legacy update detection, succeeded badge TTL, and co-located local runner auth.
+- **Telemetry & Reload Timer**: Ordered session turn telemetry chronologically by `recorded_at` and normalized event timestamps on reload so running timers do not reset.
+- **Web UI**: Fixed Help menu outside-click handling so "About Nex" opens reliably, isolated composer image attachments per session, and removed accidental `$` prefix before skill names in Settings → Skills.
+- **Skills Discovery**: Parsed YAML multiline block scalars (`|` and `>`) in `SKILL.md` frontmatter.
+- **Build Scripts**: Used POSIX `wc -c` in `gen-runner-manifest.sh` for Alpine BusyBox compatibility.
+
 ## [0.2.0] - 2026-11-24
 
 ### Added
