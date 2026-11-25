@@ -495,6 +495,40 @@ function isHorizontalRule(trimmed: string): boolean {
 
 const LIST_LINE_RE = /^(\s*)([-*+]|\d+\.)\s+(.*)$/;
 
+function renderPlainWithAutoLinks(text: string, keyPrefix: string): ReactNode {
+  if (!text || !text.includes('://')) return text;
+  const parts = text.split(/(https?:\/\/[^\s<>()[\]"'`]+)/g);
+  if (parts.length === 1) return text;
+  return parts.map((part, idx) => {
+    if (!part) return null;
+    if (/^https?:\/\//.test(part)) {
+      let url = part;
+      let trailing = '';
+      while (url.length > 0 && /[.,;:!?，。；：！？）】》」』"'’”]$/.test(url)) {
+        trailing = url.slice(-1) + trailing;
+        url = url.slice(0, -1);
+      }
+      if (!url || url === 'http://' || url === 'https://') {
+        return <span key={`${keyPrefix}-u-${idx}`}>{part}</span>;
+      }
+      return (
+        <span key={`${keyPrefix}-u-${idx}`}>
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-icon-blue underline decoration-dotted underline-offset-4 hover:opacity-80 break-all"
+          >
+            {url}
+          </a>
+          {trailing}
+        </span>
+      );
+    }
+    return <span key={`${keyPrefix}-t-${idx}`}>{part}</span>;
+  });
+}
+
 function renderInline(text: string, depth = 0): ReactNode[] {
   if (!text) return [];
   const tokens = text.split(/(`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~|\*(?!\s)[^*\n]+(?<!\s)\*|!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\))/g);
@@ -604,7 +638,7 @@ function renderInline(text: string, depth = 0): ReactNode[] {
         </a>
       );
     }
-    return tok;
+    return <span key={i}>{renderPlainWithAutoLinks(tok, `${depth}-${i}`)}</span>;
   });
 }
 

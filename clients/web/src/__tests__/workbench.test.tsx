@@ -4757,8 +4757,13 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
 
     const { rerender } = render(<App />);
     const banner = screen.getByTestId('stream-error-banner');
-    expect(banner.textContent).toContain('请求中断');
     expect(banner.textContent).toContain('upstream stream idle timeout: no events received for 1m30s');
+    expect(screen.getByTestId('stream-error-details-btn')).toBeTruthy();
+    expect(screen.getByTestId('stream-error-copy-btn')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('stream-error-details-btn'));
+    expect(screen.getByTestId('stream-error-details').textContent).toContain(
+      'upstream stream idle timeout: no events received for 1m30s',
+    );
 
     const restarted = applySessionEvent(stream, 'run_mac', {
       session_id: sid,

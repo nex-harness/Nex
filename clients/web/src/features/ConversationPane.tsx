@@ -890,6 +890,15 @@ function WorkGroup({
   const visibleTools = item.toolCalls.filter(isProminentTool);
   const hiddenTools = item.toolCalls.filter((tc) => !isProminentTool(tc));
 
+  const latestThinkingLine = useMemo(() => {
+    if (!item.thinking) return '';
+    const lines = item.thinking
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    return lines.length > 0 ? truncateText(lines[lines.length - 1], 120) : '';
+  }, [item.thinking]);
+
   const shimmerText = activeTool
     ? toolActivityLabel(activeTool, locale)
     : item.thinking
@@ -918,8 +927,19 @@ function WorkGroup({
         ) : (
           <span>{completedLabel}</span>
         )}
+        {item.streaming && hiddenTools.length > 0 && !open && (
+          <span className="rounded-md bg-tag px-1.5 py-0.5 text-ui-xs text-foreground-subtlest">
+            {hiddenTools.length}
+          </span>
+        )}
         <ChevronRight className={`size-3.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
       </button>
+
+      {!open && item.streaming && hasThinking && !activeTool && latestThinkingLine && (
+        <div className="ml-6 mt-0.5 max-w-2xl truncate text-ui-xs text-foreground-subtlest">
+          {latestThinkingLine}
+        </div>
+      )}
 
       {open && (
         <div className="nex-collapsible" data-open={true}>
@@ -2652,6 +2672,81 @@ function formatCompactTokenCount(tokens?: number): string {
   return String(tokens);
 }
 
+function StreamErrorBanner({
+  error,
+  locale,
+}: {
+  error: string;
+  locale: LocaleCode;
+}) {
+  const [dismissedFor, setDismissedFor] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  if (!error || dismissedFor === error) return null;
+
+  const firstLine = error.replace(/\s+/g, ' ').trim();
+  const handleCopy = () => {
+    void navigator.clipboard?.writeText(error);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <div
+      data-testid="stream-error-banner"
+      className="rounded-2xl border border-border bg-surface/75 px-3.5 py-2.5 text-ui-sm text-foreground shadow-xs"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <Info className="size-4 shrink-0 text-foreground-subtle" />
+        <div
+          className="min-w-0 flex-1 truncate text-ui-sm text-foreground"
+          title={firstLine}
+        >
+          {firstLine}
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            data-testid="stream-error-details-btn"
+            onClick={() => setDetailsOpen((v) => !v)}
+            className="h-7 rounded-lg border border-border bg-background/60 px-2.5 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover"
+          >
+            {formatMsg(locale, detailsOpen ? 'chat.streamError.hideDetails' : 'chat.streamError.showDetails')}
+          </button>
+          <button
+            type="button"
+            data-testid="stream-error-copy-btn"
+            onClick={handleCopy}
+            className="inline-flex h-7 items-center gap-1 rounded-lg border border-border bg-background/60 px-2.5 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover"
+          >
+            {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5 text-foreground-subtle" />}
+            <span>{formatMsg(locale, copied ? 'chat.streamError.copied' : 'chat.streamError.copy')}</span>
+          </button>
+          <button
+            type="button"
+            data-testid="stream-error-dismiss-btn"
+            onClick={() => setDismissedFor(error)}
+            aria-label={formatMsg(locale, 'chat.streamError.dismiss')}
+            title={formatMsg(locale, 'chat.streamError.dismiss')}
+            className="flex size-7 items-center justify-center rounded-lg border border-border bg-background/60 text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      </div>
+      {detailsOpen && (
+        <pre
+          data-testid="stream-error-details"
+          className="mt-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-xl border border-border/80 bg-background/70 p-2.5 font-mono text-ui-xs text-foreground-subtle"
+        >
+          {error}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 function CompactionDivider({
   item,
   locale,
@@ -2757,7 +2852,7 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
   const forkSession = useNexStore((s) => s.forkSession);
   const rewindSessionFiles = useNexStore((s) => s.rewindSessionFiles);
   const expandThinking = useNexStore((s) => s.preferences.expand_thinking);
-  const defaultOpen = Boolean(item.streaming) || Boolean(expandThinking && item.thinking);
+  const defaultOpen = Boolean(expandThinking && item.thinking);
   const workExpanded = manualOpen ?? defaultOpen;
   const hasExitPlanCall = item.toolCalls.some((tc) => tc.name === 'exit_plan_mode');
   const hasFileMutations = item.toolCalls.some((tc) => tc.name === 'write' || tc.name === 'edit');
@@ -3713,16 +3808,7 @@ export function ConversationPane() {
                 className="pt-0.5"
               />
               {!currentStream.running && currentStream.lastError && (
-                <div
-                  data-testid="stream-error-banner"
-                  className="flex items-start gap-2.5 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-ui-sm text-destructive"
-                >
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                  <div className="min-w-0 space-y-0.5">
-                    <div className="font-medium">{formatMsg(locale, 'chat.streamError.title')}</div>
-                    <div className="break-all font-mono text-ui-xs opacity-90">{currentStream.lastError}</div>
-                  </div>
-                </div>
+                <StreamErrorBanner error={currentStream.lastError} locale={locale} />
               )}
             </div>
           )}
