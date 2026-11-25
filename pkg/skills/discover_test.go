@@ -125,3 +125,22 @@ description: Deploy Repo A safely
 		t.Fatalf("expected 2 visible prompt skills in wsB, got %d: %+v", len(promptB), promptB)
 	}
 }
+
+func TestSplitFrontmatterYAMLBlockScalars(t *testing.T) {
+	rawLiteral := "---\nname: kimi-webbridge\ndescription: |\n  First line of literal description.\n  Second line of literal description.\nlicense: MIT\n---\n# Body\n"
+	meta, _ := splitFrontmatter(rawLiteral)
+	wantLiteral := "First line of literal description.\nSecond line of literal description."
+	if meta["description"] != wantLiteral {
+		t.Fatalf("literal block mismatch: got %q, want %q", meta["description"], wantLiteral)
+	}
+	if meta["license"] != "MIT" {
+		t.Fatalf("expected license MIT after block scalar, got %q", meta["license"])
+	}
+
+	rawFolded := "---\nname: home-assistant\ndescription: >\n  Control smart home devices\n  via Home Assistant REST API.\n---\n# Body\n"
+	meta2, _ := splitFrontmatter(rawFolded)
+	wantFolded := "Control smart home devices via Home Assistant REST API."
+	if meta2["description"] != wantFolded {
+		t.Fatalf("folded block mismatch: got %q, want %q", meta2["description"], wantFolded)
+	}
+}

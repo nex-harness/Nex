@@ -276,20 +276,90 @@ func splitFrontmatter(raw string) (map[string]string, string) {
 	if endIdx < 0 {
 		return meta, trimmed
 	}
-	for _, line := range lines[1:endIdx] {
+	fmLines := lines[1:endIdx]
+	for i := 0; i < len(fmLines); i++ {
+		line := strings.TrimRight(fmLines[i], "\r")
+		// Skip indented continuation lines that aren't part of a block scalar we already consumed.
+		if len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
+			continue
+		}
 		colon := strings.IndexByte(line, ':')
 		if colon <= 0 {
 			continue
 		}
 		k := strings.ToLower(strings.TrimSpace(line[:colon]))
 		v := strings.TrimSpace(line[colon+1:])
-		v = strings.Trim(v, `"'`)
-		if k != "" && v != "" {
+		if k == "" {
+			continue
+		}
+		// Handle YAML block scalars: |, |-, |+, >, >-, >+
+		if isYAMLBlockScalar(v) {
+			fold := strings.HasPrefix(v, ">")
+			var blockLines []string
+			for i+1 < len(fmLines) {
+				next := strings.TrimRight(fmLines[i+1], "\r")
+				if strings.TrimSpace(next) == "" {
+					blockLines = append(blockLines, "")
+					i++
+					continue
+				}
+				if next[0] == ' ' || next[0] == '\t' {
+					blockLines = append(blockLines, strings.TrimSpace(next))
+					i++
+					continue
+				}
+				break
+			}
+			v = joinYAMLBlockLines(blockLines, fold)
+		} else {
+			v = strings.Trim(v, `"'`)
+		}
+		if v != "" {
 			meta[k] = v
 		}
 	}
 	body := strings.Join(lines[endIdx+1:], "\n")
 	return meta, body
+}
+
+func isYAMLBlockScalar(v string) bool {
+	switch v {
+	case "|", "|-", "|+", ">", ">-", ">+":
+		return true
+	default:
+		return false
+	}
+}
+
+func joinYAMLBlockLines(lines []string, fold bool) string {
+	// Trim leading/trailing empty lines.
+	start := 0
+	for start < len(lines) && lines[start] == "" {
+		start++
+	}
+	end := len(lines)
+	for end > start && lines[end-1] == "" {
+		end--
+	}
+	lines = lines[start:end]
+	if len(lines) == 0 {
+		return ""
+	}
+	if !fold {
+		return strings.Join(lines, "\n")
+	}
+	var b strings.Builder
+	for idx, l := range lines {
+		if idx > 0 {
+			if l == "" || lines[idx-1] == "" {
+				b.WriteByte('\n')
+			} else {
+				b.WriteByte(' ')
+			}
+		}
+		b.WriteString(l)
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func firstMeaningfulLine(body string) string {
