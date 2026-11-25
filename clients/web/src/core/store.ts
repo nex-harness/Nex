@@ -1910,7 +1910,12 @@ export const useNexStore = create<AppState>((set, get) => ({
       if (prevStream?.running && prevStream.runStartedAt && (!st.runStartedAt || prevStream.runStartedAt < st.runStartedAt)) {
         st = { ...st, runStartedAt: prevStream.runStartedAt };
       } else if (!st.runStartedAt) {
-        st = { ...st, runStartedAt: meta?.last_active_at || Date.now() };
+        const fallbackTs = meta?.last_active_at
+          ? meta.last_active_at < 1e12
+            ? meta.last_active_at * 1000
+            : meta.last_active_at
+          : Date.now();
+        st = { ...st, runStartedAt: fallbackTs };
       }
     }
     if (tels && tels.length > 0) {

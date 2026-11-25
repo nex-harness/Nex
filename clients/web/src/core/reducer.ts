@@ -370,11 +370,11 @@ export function applySessionEvent(
 
   const eventTimestamp = (fallbackNow = Date.now()): number => {
     if (typeof ev.created_at === 'number' && Number.isFinite(ev.created_at) && ev.created_at > 0) {
-      return ev.created_at;
+      return ev.created_at < 1e12 ? ev.created_at * 1000 : ev.created_at;
     }
     const msgObj = p.message as { timestamp?: unknown } | undefined;
     if (msgObj && typeof msgObj.timestamp === 'number' && Number.isFinite(msgObj.timestamp) && msgObj.timestamp > 0) {
-      return msgObj.timestamp;
+      return msgObj.timestamp < 1e12 ? msgObj.timestamp * 1000 : msgObj.timestamp;
     }
     return fallbackNow;
   };

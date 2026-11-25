@@ -35,7 +35,7 @@ export interface ChatLoadingProps {
 
 /**
  * Nex-aligned turn-tail working indicator: 3x3 pixel spinner, shimmering label,
- * and self-ticking 100ms elapsed timer (keeps history turn rows from re-rendering).
+ * and self-ticking 1s elapsed timer (keeps history turn rows from re-rendering).
  */
 export function ChatLoading({ loading, startedAt, locale, className = '' }: ChatLoadingProps) {
   const [elapsedMs, setElapsedMs] = useState(() =>
@@ -50,7 +50,7 @@ export function ChatLoading({ loading, startedAt, locale, className = '' }: Chat
     const baseStarted = startedAt || Date.now();
     const update = () => setElapsedMs(Math.max(0, Date.now() - baseStarted));
     update();
-    const timer = window.setInterval(update, 100);
+    const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
   }, [loading, startedAt]);
 

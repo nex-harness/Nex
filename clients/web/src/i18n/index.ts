@@ -103,16 +103,16 @@ export function formatRelativeTimeShort(ts: number, locale: LocaleCode): string 
   return `${Math.floor(diffSec / 86400)}d`;
 }
 
-/** Formats running task duration with tenth-of-a-second precision (Nex parity). */
+/** Formats running task duration with whole-second precision (1s, 2s, 1m 5s). */
 export function formatRunningWorkDuration(durationMs: number, locale: LocaleCode): string {
-  const tenths = Math.max(0, Math.round(durationMs / 100));
-  const hours = Math.floor(tenths / 36000);
-  const minutes = Math.floor((tenths % 36000) / 600);
-  const seconds = (tenths % 600) / 10;
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
   const sep = locale === 'zh-CN' ? ' ' : '';
   const parts: string[] = [];
   if (hours) parts.push(`${hours}${sep}${formatMsg(locale, 'chat.duration.hour')}`);
   if (hours || minutes) parts.push(`${minutes}${sep}${formatMsg(locale, 'chat.duration.minute')}`);
-  parts.push(`${seconds.toFixed(1)}${sep}${formatMsg(locale, 'chat.duration.second')}`);
+  parts.push(`${seconds}${sep}${formatMsg(locale, 'chat.duration.second')}`);
   return parts.join(' ');
 }
