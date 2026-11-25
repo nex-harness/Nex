@@ -254,7 +254,7 @@ export function SkillsManagerSection({ onFlash }: { onFlash: (msg: string) => vo
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="font-mono text-ui-base font-medium text-foreground">
-                  ${sk.name}
+                  {sk.name}
                 </span>
                 <ScopePillBadge
                   scope={sk.scope}
