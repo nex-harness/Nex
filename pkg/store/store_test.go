@@ -454,3 +454,84 @@ func TestListSessionTelemetryOrdersChronologicallyAcrossTurns(t *testing.T) {
 			got[0].TotalContextTokens, got[0].TurnIdx, got[1].TotalContextTokens, got[1].TurnIdx)
 	}
 }
+
+func TestTruncateSessionEventsAlsoTruncatesTelemetry(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	_, err = st.CreateOrUpdateSession(ctx, SessionRecord{
+		ID:         "sess_trunc_tel",
+		RunnerID:   "run_local",
+		Title:      "Truncate Telemetry",
+		ModelID:    "auto/gemini-4-neon",
+		ProviderID: "openai",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ev1, err := st.AppendSessionEvent(ctx, SessionEvent{
+		SessionID: "sess_trunc_tel",
+		TurnIdx:   1,
+		EventType: "message_end",
+		Payload:   []byte(`{"message":{"role":"user","content":[{"type":"text","text":"turn 1"}]}}`),
+		CreatedAt: 1000_000,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RecordTurnTelemetry(ctx, TurnTelemetry{
+		SessionID:          "sess_trunc_tel",
+		TurnIdx:            1,
+		RunnerID:           "run_local",
+		ProviderID:         "openai",
+		ModelID:            "auto/gemini-4-neon",
+		TotalContextTokens: 12000,
+		RecordedAt:         1000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ev2, err := st.AppendSessionEvent(ctx, SessionEvent{
+		SessionID: "sess_trunc_tel",
+		TurnIdx:   2,
+		EventType: "message_end",
+		Payload:   []byte(`{"message":{"role":"user","content":[{"type":"text","text":"turn 2"}]}}`),
+		CreatedAt: 2000_000,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RecordTurnTelemetry(ctx, TurnTelemetry{
+		SessionID:          "sess_trunc_tel",
+		TurnIdx:            2,
+		RunnerID:           "run_local",
+		ProviderID:         "openai",
+		ModelID:            "auto/gemini-4-neon",
+		TotalContextTokens: 45000,
+		RecordedAt:         2000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := st.TruncateSessionEventsFrom(ctx, "sess_trunc_tel", ev2.Seq); err != nil {
+		t.Fatalf("TruncateSessionEventsFrom: %v", err)
+	}
+
+	evs, err := st.ListSessionEventsAfter(ctx, "sess_trunc_tel", 0)
+	if err != nil || len(evs) != 1 || evs[0].Seq != ev1.Seq {
+		t.Fatalf("expected only ev1 remaining, got %+v err=%v", evs, err)
+	}
+	tels, err := st.ListSessionTelemetry(ctx, "sess_trunc_tel")
+	if err != nil || len(tels) != 1 || tels[0].TotalContextTokens != 12000 {
+		t.Fatalf("expected only turn 1 telemetry (12000) remaining, got %+v err=%v", tels, err)
+	}
+	sess, err := st.GetSession(ctx, "sess_trunc_tel")
+	if err != nil || sess.LatestContextTokens != 12000 {
+		t.Fatalf("expected session LatestContextTokens restored to 12000, got %+v err=%v", sess, err)
+	}
+}

@@ -671,10 +671,12 @@ function UserBubble({
   text,
   images,
   seq,
+  canEdit = true,
 }: {
   text: string;
   images?: ChatTurnItem['images'];
   seq?: number;
+  canEdit?: boolean;
 }) {
   const locale = useNexStore((s) => s.locale);
   const activeSessionId = useNexStore((s) => s.activeSessionId);
@@ -821,22 +823,25 @@ function UserBubble({
           {copied ? <Check className="nex-reaction-pop size-3 text-success" /> : <Copy className="size-3" />}
           <span>{copied ? (formatMsg(locale, 'common.copied')) : formatMsg(locale, 'common.copy')}</span>
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (activeSessionId && seq && seq > 0) {
-              setEditDraft(displayText);
-              setEditing(true);
-            } else {
-              setComposerText(displayText);
-            }
-          }}
-          title={formatMsg(locale, 'chat.editInComposer')}
-          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground"
-        >
-          <Pencil className="size-3" />
-          <span>{formatMsg(locale, 'common.edit')}</span>
-        </button>
+        {canEdit && (
+          <button
+            type="button"
+            data-testid={seq ? `edit-msg-${seq}` : undefined}
+            onClick={() => {
+              if (activeSessionId && seq && seq > 0) {
+                setEditDraft(displayText);
+                setEditing(true);
+              } else {
+                setComposerText(displayText);
+              }
+            }}
+            title={formatMsg(locale, 'chat.editInComposer')}
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground"
+          >
+            <Pencil className="size-3" />
+            <span>{formatMsg(locale, 'common.edit')}</span>
+          </button>
+        )}
         {activeSessionId && seq && seq > 0 && (
           <button
             type="button"
@@ -2831,11 +2836,13 @@ const LOAD_MORE_TURNS_STEP = 24;
 const MemoTurnItem = memo(function MemoTurnItemImpl({
   item,
   isLast,
+  canEdit = true,
   locale,
   registerRef,
 }: {
   item: ChatTurnItem;
   isLast: boolean;
+  canEdit?: boolean;
   locale: LocaleCode;
   registerRef: (id: string, el: HTMLDivElement | null) => void;
 }) {
@@ -2869,7 +2876,7 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
       }`}
     >
       {item.role === 'user' ? (
-        <UserBubble text={item.text} images={item.images} seq={item.seq} />
+        <UserBubble text={item.text} images={item.images} seq={item.seq} canEdit={canEdit} />
       ) : item.role === 'compaction' ? (
         <CompactionDivider item={item} locale={locale} />
       ) : (
@@ -3792,15 +3799,20 @@ export function ConversationPane() {
                   )}
                 </div>
               )}
-              {visibleItems.map((item, idx) => (
-                <MemoTurnItem
-                  key={item.id}
-                  item={item}
-                  isLast={hiddenTurnCount + idx === items.length - 1}
-                  locale={locale}
-                  registerRef={registerTurnRef}
-                />
-              ))}
+              {visibleItems.map((item, idx) => {
+                const fullIdx = hiddenTurnCount + idx;
+                const canEditTurn = !(lastCompactionIdx >= 0 && fullIdx < lastCompactionIdx);
+                return (
+                  <MemoTurnItem
+                    key={item.id}
+                    item={item}
+                    isLast={fullIdx === items.length - 1}
+                    canEdit={canEditTurn}
+                    locale={locale}
+                    registerRef={registerTurnRef}
+                  />
+                );
+              })}
               <ChatLoading
                 loading={Boolean(currentStream.running && !isCompacting && !currentStream.pendingApproval && !currentStream.pendingUIPrompt)}
                 startedAt={currentStream.runStartedAt}

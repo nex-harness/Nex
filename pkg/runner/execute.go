@@ -329,7 +329,16 @@ func (n *Node) ExecutePrompt(
 
 	prov, provID, modelID, modelMeta, err := n.resolveProviderAndModel(parentCtx, p.ProviderID, p.ModelID)
 	if err != nil {
-		if p.SessionID != "" && n.IsOnline() {
+		if p.SessionID != "" {
+			if strings.TrimSpace(p.Text) != "" {
+				userMsg := ai.NewUserTextMessage(p.Text)
+				if rawUser, mErr := json.Marshal(map[string]any{
+					"type":    string(agent.EventMessageEnd),
+					"message": userMsg,
+				}); mErr == nil {
+					n.recordAndEmitSessionEvent(context.Background(), p.SessionID, 0, string(agent.EventMessageEnd), rawUser, nil)
+				}
+			}
 			errPayload, _ := json.Marshal(map[string]any{
 				"type":   string(agent.EventAgentEnd),
 				"reason": "error",

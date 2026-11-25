@@ -58,6 +58,9 @@ const MAX_CACHED_COMPOSER_DRAFTS = 48;
 const UNREAD_SESSIONS_STORAGE_KEY = 'nex.unread.sessions';
 const DRAFT_MODEL_STORAGE_KEY = 'nex.draftModel';
 const DRAFT_EFFORT_STORAGE_KEY = 'nex.draftThinkingEffort';
+const FOLLOW_UP_QUEUES_STORAGE_KEY = 'nex.follow_up_queues.v1';
+const PENDING_PROMPTS_STORAGE_KEY = 'nex.pending_prompts.v1';
+const PENDING_PROMPT_TTL_MS = 10 * 60 * 1000;
 const SESSION_EFFORTS_STORAGE_KEY = 'nex.sessionEfforts';
 const DEFAULT_NEW_SESSION_EFFORT: ThinkingEffort = 'high';
 
@@ -132,6 +135,88 @@ function resolveSessionEffort(
 
 function persistUnreadSessions(next: Record<string, boolean>): void {
   safeStorageSet(UNREAD_SESSIONS_STORAGE_KEY, JSON.stringify(next));
+}
+
+function readPersistedFollowUpQueues(): Record<string, QueuedFollowUp[]> {
+  try {
+    const raw = safeStorageGet(FOLLOW_UP_QUEUES_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, QueuedFollowUp[]>;
+    if (!parsed || typeof parsed !== 'object') return {};
+    const out: Record<string, QueuedFollowUp[]> = {};
+    for (const [sid, list] of Object.entries(parsed)) {
+      if (sid && Array.isArray(list) && list.length > 0) {
+        out[sid] = list.filter((it) => it && typeof it.id === 'string' && typeof it.text === 'string');
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function persistFollowUpQueues(next: Record<string, QueuedFollowUp[]>): void {
+  const compact: Record<string, QueuedFollowUp[]> = {};
+  for (const [sid, list] of Object.entries(next)) {
+    if (sid && Array.isArray(list) && list.length > 0) {
+      compact[sid] = list;
+    }
+  }
+  if (Object.keys(compact).length === 0) {
+    safeStorageRemove(FOLLOW_UP_QUEUES_STORAGE_KEY);
+  } else {
+    safeStorageSet(FOLLOW_UP_QUEUES_STORAGE_KEY, JSON.stringify(compact));
+  }
+}
+
+interface PendingUserPromptEntry {
+  text: string;
+  createdAt: number;
+}
+
+function readPendingUserPrompts(): Record<string, PendingUserPromptEntry> {
+  try {
+    const raw = safeStorageGet(PENDING_PROMPTS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, PendingUserPromptEntry>;
+    if (!parsed || typeof parsed !== 'object') return {};
+    const now = Date.now();
+    const out: Record<string, PendingUserPromptEntry> = {};
+    for (const [sid, entry] of Object.entries(parsed)) {
+      if (
+        sid &&
+        entry &&
+        typeof entry.text === 'string' &&
+        typeof entry.createdAt === 'number' &&
+        now - entry.createdAt <= PENDING_PROMPT_TTL_MS
+      ) {
+        out[sid] = entry;
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function setPendingUserPrompt(sessionId: string, text: string): void {
+  const trimmed = text.trim();
+  if (!sessionId || !trimmed || /^\/compact(?:\s|$)/i.test(trimmed)) return;
+  const current = readPendingUserPrompts();
+  current[sessionId] = { text: trimmed, createdAt: Date.now() };
+  safeStorageSet(PENDING_PROMPTS_STORAGE_KEY, JSON.stringify(current));
+}
+
+function clearPendingUserPrompt(sessionId: string): void {
+  if (!sessionId) return;
+  const current = readPendingUserPrompts();
+  if (!(sessionId in current)) return;
+  delete current[sessionId];
+  if (Object.keys(current).length === 0) {
+    safeStorageRemove(PENDING_PROMPTS_STORAGE_KEY);
+  } else {
+    safeStorageSet(PENDING_PROMPTS_STORAGE_KEY, JSON.stringify(current));
+  }
 }
 
 function isViewingSession(state: { mainView: string; activeSessionId: string }, sid: string): boolean {
@@ -768,7 +853,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   composerAttachmentsBySession: {},
 
   streams: {},
-  followUpQueues: {},
+  followUpQueues: readPersistedFollowUpQueues(),
   gitSummary: null,
   gitDiffLoading: false,
 
@@ -1482,6 +1567,12 @@ export const useNexStore = create<AppState>((set, get) => ({
                 continue;
               }
               cur = applySessionEvent(cur, group.runnerId, raw);
+              if (raw.event_type === 'message_end') {
+                const msgRole = (raw.payload as { message?: { role?: string } } | undefined)?.message?.role;
+                if (msgRole === 'user') {
+                  clearPendingUserPrompt(sid);
+                }
+              }
               if (raw.event_type === 'agent_start' && nextSessions.some((s) => s.id === sid && s.status !== 'running')) {
                 nextSessions = nextSessions.map((s) => (s.id === sid ? { ...s, status: 'running' } : s));
               }
@@ -1520,16 +1611,21 @@ export const useNexStore = create<AppState>((set, get) => ({
           const q = get().followUpQueues[sid];
           if (q && q.length > 0) {
             const [nextItem, ...rest] = q;
-            set((st) => ({
-              followUpQueues: {
+            set((st) => {
+              const nextQueues = {
                 ...st.followUpQueues,
                 [sid]: rest,
-              },
-              streams: {
-                ...st.streams,
-                [sid]: appendOptimisticUserPrompt(st.streams[sid], nextItem.text),
-              },
-            }));
+              };
+              persistFollowUpQueues(nextQueues);
+              return {
+                followUpQueues: nextQueues,
+                streams: {
+                  ...st.streams,
+                  [sid]: appendOptimisticUserPrompt(st.streams[sid], nextItem.text),
+                },
+              };
+            });
+            setPendingUserPrompt(sid, nextItem.text);
             const stNow = get();
             const sessMeta = stNow.sessions.find((it) => it.id === sid);
             const boundModel = stNow.sessionModels[sid];
@@ -1944,6 +2040,21 @@ export const useNexStore = create<AppState>((set, get) => ({
         st.turnTelemetries = sortedTels;
       }
     }
+    const pendingPrompt = readPendingUserPrompts()[sessionId];
+    if (pendingPrompt) {
+      const targetText = pendingPrompt.text.trim();
+      const alreadyConfirmed = st.items.some(
+        (it) => it.role === 'user' && it.text.trim() === targetText,
+      );
+      if (alreadyConfirmed) {
+        clearPendingUserPrompt(sessionId);
+      } else {
+        st = appendOptimisticUserPrompt(st, pendingPrompt.text);
+        if (meta && meta.status !== 'running') {
+          st = { ...st, running: false, runStartedAt: undefined };
+        }
+      }
+    }
     set((s) => {
       const bound = s.sessionModels[sessionId];
       const latestMeta = s.sessions.find((it) => it.id === sessionId);
@@ -2097,12 +2208,14 @@ export const useNexStore = create<AppState>((set, get) => ({
           text,
           createdAt: Date.now(),
         };
-        set((prev) => ({
-          followUpQueues: {
+        set((prev) => {
+          const nextQueues = {
             ...prev.followUpQueues,
             [sessionId]: [...(prev.followUpQueues[sessionId] || []), entry],
-          },
-        }));
+          };
+          persistFollowUpQueues(nextQueues);
+          return { followUpQueues: nextQueues };
+        });
       }
       if (overrideText === undefined) {
         persistComposerDraft(sessionId, '');
@@ -2209,6 +2322,7 @@ export const useNexStore = create<AppState>((set, get) => ({
           }))
         : undefined;
 
+    setPendingUserPrompt(sessionId, promptText);
     set((prev) => ({
       streams: {
         ...prev.streams,
@@ -2249,12 +2363,14 @@ export const useNexStore = create<AppState>((set, get) => ({
   },
 
   removeFollowUp: (sessionId, id) => {
-    set((prev) => ({
-      followUpQueues: {
+    set((prev) => {
+      const nextQueues = {
         ...prev.followUpQueues,
         [sessionId]: (prev.followUpQueues[sessionId] || []).filter((item) => item.id !== id),
-      },
-    }));
+      };
+      persistFollowUpQueues(nextQueues);
+      return { followUpQueues: nextQueues };
+    });
   },
 
   promoteFollowUpToSteer: (sessionId, id) => {
@@ -2262,12 +2378,14 @@ export const useNexStore = create<AppState>((set, get) => ({
     const list = s.followUpQueues[sessionId] || [];
     const target = list.find((item) => item.id === id);
     if (!target) return;
-    set((prev) => ({
-      followUpQueues: {
+    set((prev) => {
+      const nextQueues = {
         ...prev.followUpQueues,
         [sessionId]: (prev.followUpQueues[sessionId] || []).filter((item) => item.id !== id),
-      },
-    }));
+      };
+      persistFollowUpQueues(nextQueues);
+      return { followUpQueues: nextQueues };
+    });
     const cur = s.streams[sessionId];
     if (cur?.running) {
       wsClient.sendEnvelope('session.steer', { text: target.text }, { session_id: sessionId, runner_id: s.selectedRunnerId });

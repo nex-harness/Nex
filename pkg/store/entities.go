@@ -445,18 +445,44 @@ func (s *Store) ListSessionEventsAfter(ctx context.Context, sessionID string, af
 	return queryEventsFromDB(ctx, s.mainDB, sessionID, afterSeq)
 }
 
-// TruncateSessionEventsFrom deletes all session_events with seq >= fromSeq (and resets updated_at)
-// so a user can edit a previously sent message in-place and re-run from that point.
+// TruncateSessionEventsFrom deletes all session_events with seq >= fromSeq (alongside
+// corresponding turn_telemetry rows recorded at or after the truncated cutoff) and refreshes
+// latest_context_tokens / updated_at so editing a message rolls back the timeline cleanly.
 func (s *Store) TruncateSessionEventsFrom(ctx context.Context, sessionID string, fromSeq uint64) (int64, error) {
 	if fromSeq == 0 {
 		return 0, nil
 	}
+	var cutoffMs int64
+	_ = s.mainDB.QueryRowContext(
+		ctx,
+		`SELECT COALESCE(MIN(created_at), 0) FROM session_events WHERE session_id = ? AND seq >= ?`,
+		sessionID, fromSeq,
+	).Scan(&cutoffMs)
+
 	res, err := s.mainDB.ExecContext(ctx, `DELETE FROM session_events WHERE session_id = ? AND seq >= ?`, sessionID, fromSeq)
 	if err != nil {
 		return 0, err
 	}
 	n, _ := res.RowsAffected()
-	_, _ = s.mainDB.ExecContext(ctx, `UPDATE sessions SET updated_at = ? WHERE id = ?`, time.Now().UnixMilli(), sessionID)
+
+	if cutoffMs > 0 {
+		_, _ = s.mainDB.ExecContext(
+			ctx,
+			`DELETE FROM turn_telemetry WHERE session_id = ? AND recorded_at >= ?`,
+			sessionID, cutoffMs/1000,
+		)
+	}
+	var latestTokens int
+	_ = s.mainDB.QueryRowContext(
+		ctx,
+		`SELECT COALESCE((SELECT total_context_tokens FROM turn_telemetry WHERE session_id = ? ORDER BY recorded_at DESC, rowid DESC LIMIT 1), 0)`,
+		sessionID,
+	).Scan(&latestTokens)
+	_, _ = s.mainDB.ExecContext(
+		ctx,
+		`UPDATE sessions SET latest_context_tokens = ?, updated_at = ? WHERE id = ?`,
+		latestTokens, time.Now().UnixMilli(), sessionID,
+	)
 	return n, nil
 }
 

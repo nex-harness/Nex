@@ -5031,4 +5031,140 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     fireEvent.click(screen.getByTestId('context-cat-messages'));
     expect(screen.getAllByText(/Auth refactor summary/).length).toBeGreaterThanOrEqual(2);
   });
+
+  it('hides Edit button on pre-compaction user bubbles while keeping Fork/Copy and post-compaction Edit', () => {
+    const sid = 'sess_precompact_edit_1';
+    let stream = applySessionEvent(emptyStreamState(), 'run_mac', {
+      session_id: sid,
+      seq: 1,
+      turn_idx: 0,
+      event_type: 'message_end',
+      payload: { message: { role: 'user', content: [{ type: 'text', text: 'Pre-compaction prompt' }] } },
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 2,
+      turn_idx: 0,
+      event_type: 'compaction',
+      payload: {
+        reason: 'manual',
+        compaction: {
+          status: 'completed',
+          reason: 'manual',
+          before_messages: 10,
+          after_messages: 2,
+          before_tokens: 50000,
+          after_tokens: 1500,
+          summary: 'Compacted earlier turns',
+        },
+      },
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 3,
+      turn_idx: 0,
+      event_type: 'message_end',
+      payload: { message: { role: 'user', content: [{ type: 'text', text: 'Post-compaction prompt' }] } },
+    });
+
+    useNexStore.setState({
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      locale: 'zh-CN',
+      mainView: 'workspace',
+      activeSessionId: sid,
+      selectedRunnerId: 'run_mac',
+      sessions: [
+        {
+          id: sid,
+          runner_id: 'run_mac',
+          title: 'Edit guard',
+          workspace_path: '/tmp/ws',
+          status: 'idle',
+          created_at: 1000,
+          updated_at: 2000,
+        } as never,
+      ],
+      streams: { [sid]: stream },
+    });
+
+    render(<App />);
+    // Pre-compaction message hides Edit while keeping Fork; post-compaction keeps Edit & Fork
+    expect(screen.queryByTestId('edit-msg-1')).toBeNull();
+    expect(screen.getByTestId('edit-msg-3')).toBeTruthy();
+    expect(screen.getByTestId('fork-before-1')).toBeTruthy();
+    expect(screen.getByTestId('fork-before-3')).toBeTruthy();
+  });
+
+  it('persists unconfirmed pending prompt across selectSession reload and clears after server confirms it', async () => {
+    const sid = 'sess_pending_refresh_1';
+    const sendSpy = vi.spyOn(wsClient, 'sendEnvelope').mockImplementation(() => 'env_pending');
+    try {
+      useNexStore.setState({
+        activeSessionId: sid,
+        selectedRunnerId: 'run_mac',
+        selectedProviderId: 'openai',
+        selectedModelId: 'gpt-5',
+        models: [
+          {
+            id: 'gpt-5',
+            provider_id: 'openai',
+            display_name: 'GPT-5',
+            source: 'custom',
+            context_window: 200000,
+            max_output_tokens: 16384,
+            supports_vision: false,
+            supports_pdf: false,
+            supports_tools: true,
+            supports_reasoning: true,
+            supports_caching: false,
+            pricing: { input_per_1m: 0, output_per_1m: 0, cache_read_per_1m: 0, cache_write_per_1m: 0 },
+          },
+        ],
+        sessions: [
+          {
+            id: sid,
+            runner_id: 'run_mac',
+            title: 'Pending test',
+            workspace_path: '/tmp/ws',
+            status: 'running',
+            provider_id: 'openai',
+            model_id: 'gpt-5',
+            created_at: 1000,
+            updated_at: 2000,
+          } as never,
+        ],
+        streams: { [sid]: emptyStreamState() },
+      });
+
+      useNexStore.setState({ composerText: 'Keep me across refresh' });
+      useNexStore.getState().sendPromptOrSteer();
+
+      // Simulate page refresh where server DB does not yet contain the user message_end event
+      await useNexStore.getState().selectSession(sid, { preloaded: [[], []] });
+      let items = useNexStore.getState().streams[sid]?.items || [];
+      expect(items.some((it) => it.role === 'user' && it.text === 'Keep me across refresh')).toBe(true);
+
+      // Once server events include the confirmed user message_end, pending cache is cleared cleanly
+      await useNexStore.getState().selectSession(sid, {
+        preloaded: [
+          [
+            {
+              session_id: sid,
+              seq: 1,
+              turn_idx: 0,
+              event_type: 'message_end',
+              payload: { message: { role: 'user', content: [{ type: 'text', text: 'Keep me across refresh' }] } },
+            },
+          ],
+          [],
+        ],
+      });
+      items = useNexStore.getState().streams[sid]?.items || [];
+      expect(items.filter((it) => it.role === 'user' && it.text === 'Keep me across refresh')).toHaveLength(1);
+    } finally {
+      sendSpy.mockRestore();
+    }
+  });
 });
