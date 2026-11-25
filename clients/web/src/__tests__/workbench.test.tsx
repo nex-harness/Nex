@@ -4564,6 +4564,20 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       if (url.includes('/api/v1/health')) {
         return new Response(JSON.stringify(healthPayload), { status: 200 });
       }
+      if (url.includes('/api/v1/updates/check')) {
+        return new Response(
+          JSON.stringify({
+            checked_at: Date.now(),
+            release_url: 'https://github.com/nex-harness/Nex/releases/tag/v0.4.0',
+            latest_version: 'v0.4.0',
+            server_version: healthPayload.version,
+            server_is_dev: healthPayload.is_dev,
+            server_has_update: !healthPayload.is_dev,
+            client_download_url: 'https://example.com/Nex-v0.4.0.dmg',
+          }),
+          { status: 200 },
+        );
+      }
       return new Response(JSON.stringify([]), { status: 200 });
     }) as typeof fetch;
 
@@ -4604,6 +4618,14 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       });
       expect(screen.queryByTestId('about-build-sha')).toBeNull();
       expect(screen.queryByTestId('about-debug-badge')).toBeNull();
+
+      // 3. Clicking Check for Updates displays available update and download/release actions
+      fireEvent.click(screen.getByTestId('about-check-updates-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('about-update-available').textContent).toContain('v0.4.0');
+      });
+      expect(screen.getByTestId('about-download-desktop-btn')).toBeTruthy();
+      expect(screen.getByTestId('about-view-release-btn')).toBeTruthy();
     } finally {
       globalThis.fetch = origFetch;
     }

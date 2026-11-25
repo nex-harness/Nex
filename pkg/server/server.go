@@ -39,6 +39,7 @@ type Config struct {
 	Version                    string          // Server build version string
 	BuildSHA                   string          // Server short commit hash (exposed for debug/about diagnostics)
 	ReleaseManifestURL         string          // Optional URL pointing to GitHub/Gitea Release manifest.json / version.json
+	AppReleaseAPIURL           string          // Optional URL overriding GitHub Releases latest API for server/desktop update checks
 	MinRunnerProtocolVersion   int             // Minimum runner protocol_version required (defaults to protocol.MinRunnerProtocolVersion)
 	RequiredRunnerCapabilities []string        // Optional capabilities required for compatibility gating
 	StaticFS                   fs.FS           // Optional embedded clients/web/dist filesystem
@@ -127,6 +128,7 @@ type Server struct {
 	pendingRPC       map[string]chan protocol.Envelope
 	modelsCache      modelsDevCache
 	releaseCache     releaseManifestCache
+	appUpdateCache   appUpdateCache
 	dlTokensMu       sync.Mutex
 	dlTokens         map[string]time.Time
 

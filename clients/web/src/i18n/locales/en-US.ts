@@ -1232,6 +1232,16 @@ export const enUS = {
   "about.commandPalette": "Search & commands",
   "about.copyHash": "Copy build hash",
   "about.copiedHash": "Copied",
+  "about.desktopVersion": "Desktop App",
+  "about.checkUpdates": "Check for Updates",
+  "about.checkingUpdates": "Checking…",
+  "about.upToDate": "You're up to date ({version})",
+  "about.updateAvailable": "Update available: {version}",
+  "about.serverUpdateAvailable": "Server update available ({current} → {latest})",
+  "about.desktopUpdateAvailable": "Desktop update available ({current} → {latest})",
+  "about.downloadDesktop": "Download Installer",
+  "about.viewRelease": "View Release",
+  "about.checkFailed": "Update check failed: {error}",
 } as const;
 
 export type MessageKey = keyof typeof enUS;

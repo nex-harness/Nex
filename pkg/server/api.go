@@ -27,6 +27,7 @@ func (s *Server) registerRoutes() {
 
 	// REST API v1
 	s.mux.HandleFunc("/api/v1/health", s.handleHealth)
+	s.mux.HandleFunc("/api/v1/updates/check", s.handleUpdatesCheck)
 	s.mux.HandleFunc("/api/v1/auth/status", s.handleAuthStatus)
 	s.mux.HandleFunc("/api/v1/auth/login", s.handleAuthLogin)
 	s.mux.HandleFunc("/api/v1/auth/logout", s.handleAuthLogout)
