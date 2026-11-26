@@ -44,6 +44,7 @@ export function CommandPaletteModal() {
   const locale = useNexStore((s) => s.locale);
   const activeSessionId = useNexStore((s) => s.activeSessionId);
   const sessions = useNexStore((s) => s.sessions);
+  const runners = useNexStore((s) => s.runners);
   const permissionMode = useNexStore((s) => s.permissionMode);
   const preferences = useNexStore((s) => s.preferences);
 
@@ -73,6 +74,14 @@ export function CommandPaletteModal() {
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }, [open]);
 
+  const runnerNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of runners) {
+      map.set(r.id, r.name || r.hostname || r.id);
+    }
+    return map;
+  }, [runners]);
+
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -90,11 +99,34 @@ export function CommandPaletteModal() {
       return;
     }
 
+    const tokens = trimmed.toLowerCase().split(/\s+/).filter(Boolean);
+    const localHits: SessionSearchHit[] = sessions
+      .filter((s) => {
+        const rName = runnerNameById.get(s.runner_id) || '';
+        const haystack = `${s.title} ${s.workspace_path || ''} ${rName} ${s.runner_id}`.toLowerCase();
+        return tokens.every((tok) => haystack.includes(tok));
+      })
+      .slice(0, 12)
+      .map((s) => ({
+        session: s,
+        match_type: 'title',
+        snippet: s.workspace_path || '',
+      }));
+    setHits(localHits);
+
     setSearching(true);
     const timer = window.setTimeout(async () => {
       try {
         const res = await searchSessions(trimmed);
-        if (!cancelled) setHits(res);
+        if (cancelled) return;
+        const seen = new Set<string>();
+        const merged: SessionSearchHit[] = [];
+        for (const h of [...localHits, ...res]) {
+          if (!h?.session?.id || seen.has(h.session.id)) continue;
+          seen.add(h.session.id);
+          merged.push(h);
+        }
+        setHits(merged);
       } finally {
         if (!cancelled) setSearching(false);
       }
@@ -104,7 +136,7 @@ export function CommandPaletteModal() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [open, query, sessions, searchSessions]);
+  }, [open, query, sessions, searchSessions, runnerNameById]);
 
   const commands = useMemo<PaletteItem[]>(() => {
     const closeAnd = (fn: () => void | Promise<void>) => () => {
@@ -257,25 +289,27 @@ export function CommandPaletteModal() {
   ]);
 
   const sessionItems = useMemo<PaletteItem[]>(() => {
-    return hits.map((hit) => ({
-      id: `sess-${hit.session.id}`,
-      section: 'session',
-      title: hit.session.title || hit.session.id,
-      subtitle:
-        hit.match_type === 'message' && hit.snippet
-          ? hit.snippet
-          : leafName(hit.session.workspace_path) || hit.session.runner_id,
-      badge:
-        hit.match_type === 'message'
-          ? formatMsg(locale, 'palette.messageMatch')
-          : leafName(hit.session.workspace_path) || undefined,
-      icon: MessageSquare,
-      onSelect: () => {
-        setOpen(false);
-        void selectSession(hit.session.id);
-      },
-    }));
-  }, [hits, locale, selectSession, setOpen]);
+    return hits.map((hit) => {
+      const rName = runnerNameById.get(hit.session.runner_id) || hit.session.runner_id;
+      const wsLeaf = leafName(hit.session.workspace_path);
+      const ctxSubtitle = [rName, wsLeaf].filter(Boolean).join(' · ');
+      return {
+        id: `sess-${hit.session.id}`,
+        section: 'session',
+        title: hit.session.title || hit.session.id,
+        subtitle: hit.match_type === 'message' && hit.snippet ? hit.snippet : ctxSubtitle,
+        badge:
+          hit.match_type === 'message'
+            ? formatMsg(locale, 'palette.messageMatch')
+            : ctxSubtitle || undefined,
+        icon: MessageSquare,
+        onSelect: () => {
+          setOpen(false);
+          void selectSession(hit.session.id);
+        },
+      };
+    });
+  }, [hits, locale, runnerNameById, selectSession, setOpen]);
 
   const flatItems = useMemo(() => [...sessionItems, ...commands], [sessionItems, commands]);
 

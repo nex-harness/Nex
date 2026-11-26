@@ -5749,4 +5749,170 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       useNexStore.setState({ refreshRegistries: origRefreshReg, refreshInitialData: origRefreshInit });
     }
   });
+
+  it('organizes sidebar with runner filter pills, active/unread promotion, recency-sorted smart-collapsing projects, and recent time buckets', () => {
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    useNexStore.setState({
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      locale: 'zh-CN',
+      mainView: 'workspace',
+      activeSessionId: 'sess_ws2',
+      selectedRunnerId: 'run_mac',
+      pinnedSessionIds: {},
+      unreadSessionIds: { sess_unread: true },
+      runners: [
+        {
+          id: 'run_mac',
+          name: 'macM4',
+          hostname: 'macmini',
+          os: 'darwin',
+          arch: 'arm64',
+          shell: 'zsh',
+          tags: [],
+          synced_config_rev: 1,
+          status: 'online',
+          workspace_default: '/Users/tylinux',
+          version: 'ec6bb8b',
+          last_seen_at: now,
+        },
+        {
+          id: 'run_hk',
+          name: 'hk',
+          hostname: 'hk-box',
+          os: 'linux',
+          arch: 'amd64',
+          shell: 'bash',
+          tags: [],
+          synced_config_rev: 1,
+          status: 'online',
+          workspace_default: '/home/tylinux',
+          version: '29e196c-dev',
+          last_seen_at: now,
+        },
+      ],
+      sessions: [
+        {
+          id: 'sess_unread',
+          runner_id: 'run_hk',
+          depth: 0,
+          title: 'HK Proxy Test',
+          workspace_path: '/home/tylinux/docs',
+          agent_profile_slug: 'main',
+          model_id: 'm1',
+          provider_id: 'p1',
+          permission_mode: 'interactive',
+          status: 'idle',
+          latest_context_tokens: 0,
+          context_window_limit: 128000,
+          created_at: now - 5 * dayMs,
+          updated_at: now - 10_000,
+          last_active_at: now - 10_000,
+        },
+        {
+          id: 'sess_ws1',
+          runner_id: 'run_mac',
+          depth: 0,
+          title: 'Newest Project Chat',
+          workspace_path: '/Users/tylinux/Projects/Nex-v3',
+          agent_profile_slug: 'main',
+          model_id: 'm1',
+          provider_id: 'p1',
+          permission_mode: 'interactive',
+          status: 'idle',
+          latest_context_tokens: 0,
+          context_window_limit: 128000,
+          created_at: now - 20_000,
+          updated_at: now - 20_000,
+          last_active_at: now - 20_000,
+        },
+        {
+          id: 'sess_ws2',
+          runner_id: 'run_mac',
+          depth: 0,
+          title: 'Yesterday Chat',
+          workspace_path: '/Users/tylinux/Projects/Zeta',
+          agent_profile_slug: 'main',
+          model_id: 'm1',
+          provider_id: 'p1',
+          permission_mode: 'interactive',
+          status: 'idle',
+          latest_context_tokens: 0,
+          context_window_limit: 128000,
+          created_at: now - dayMs,
+          updated_at: now - dayMs,
+          last_active_at: now - dayMs,
+        },
+        {
+          id: 'sess_ws3',
+          runner_id: 'run_mac',
+          depth: 0,
+          title: 'Old Alpha Chat',
+          workspace_path: '/Users/tylinux/Projects/Alpha',
+          agent_profile_slug: 'main',
+          model_id: 'm1',
+          provider_id: 'p1',
+          permission_mode: 'interactive',
+          status: 'idle',
+          latest_context_tokens: 0,
+          context_window_limit: 128000,
+          created_at: now - 10 * dayMs,
+          updated_at: now - 10 * dayMs,
+          last_active_at: now - 10 * dayMs,
+        },
+      ],
+      streams: {},
+    });
+
+    try {
+      render(<App />);
+
+      // 1. Runner filter pills appear when 2+ runners exist
+      expect(screen.getByTestId('sidebar-runner-filter')).toBeTruthy();
+      expect(screen.getByTestId('sidebar-runner-pill-run_mac')).toBeTruthy();
+      expect(screen.getByTestId('sidebar-runner-pill-run_hk')).toBeTruthy();
+
+      // 2. Unread session is promoted into Active & Unread section with runner · workspace context
+      const activeSec = screen.getByTestId('sidebar-active-section');
+      expect(activeSec.textContent).toContain('HK Proxy Test');
+      expect(activeSec.textContent).toContain('hk · docs');
+
+      // 3. Alpha (10 days old) auto-collapses because index >= 2 and not active, while Nex-v3 & Zeta stay expanded
+      const alphaGroup = screen.getByTestId('project-group-run_mac::/Users/tylinux/Projects/Alpha');
+      expect(alphaGroup.getAttribute('data-collapsed')).toBe('true');
+      const nexGroup = screen.getByTestId('project-group-run_mac::/Users/tylinux/Projects/Nex-v3');
+      expect(nexGroup.getAttribute('data-collapsed')).toBe('false');
+
+      // 4. Clicking hk pill filters sidebar exclusively to hk sessions
+      fireEvent.click(screen.getByTestId('sidebar-runner-pill-run_hk'));
+      expect(screen.queryByTestId('session-row-sess_ws1')).toBeNull();
+      expect(screen.getByTestId('session-row-sess_unread')).toBeTruthy();
+
+      // Switch back to All runners
+      fireEvent.click(screen.getByTestId('sidebar-runner-pill-all'));
+      expect(screen.getByTestId('session-row-sess_ws1')).toBeTruthy();
+
+      // 5. Recent mode organizes sessions into time buckets (今天 / 昨天 / 更早)
+      fireEvent.click(screen.getByTestId('sidebar-mode-recent'));
+      const recentView = screen.getByTestId('sidebar-recent-view');
+      expect(recentView.textContent).toContain('今天');
+      expect(recentView.textContent).toContain('昨天');
+      expect(recentView.textContent).toContain('更早');
+
+      // 6. Multi-token search (`hk docs`) matches across runner + workspace
+      fireEvent.click(screen.getByTestId('sidebar-search-toggle'));
+      fireEvent.change(screen.getByTestId('sidebar-search-input'), { target: { value: 'hk docs' } });
+      expect(screen.getByTestId('session-row-sess_unread')).toBeTruthy();
+      expect(screen.queryByTestId('session-row-sess_ws1')).toBeNull();
+    } finally {
+      useNexStore.setState({ unreadSessionIds: {} });
+      try {
+        window.localStorage.removeItem('nex.sidebar.group_mode.v1');
+      } catch {
+        // ignore
+      }
+    }
+  });
 });

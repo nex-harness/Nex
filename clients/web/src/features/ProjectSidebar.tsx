@@ -5,10 +5,10 @@ import {
   Blocks,
   CalendarClock,
   Check,
+  ChevronRight,
   CirclePlus,
   CloudOff,
   Folder,
-  ListFilter,
   PanelLeftClose,
   Pencil,
   Pin,
@@ -31,7 +31,30 @@ const FADE_MASK = {
   maskImage: 'linear-gradient(to right, black 82%, transparent 100%)',
 };
 
-const TASKS_PER_PROJECT = 8;
+const TASKS_PER_PROJECT = 4;
+const SIDEBAR_GROUP_MODE_KEY = 'nex.sidebar.group_mode.v1';
+
+function readPersistedGroupMode(): 'project' | 'recent' {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const v = window.localStorage.getItem(SIDEBAR_GROUP_MODE_KEY);
+      if (v === 'recent' || v === 'project') return v;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return 'project';
+}
+
+function persistGroupMode(mode: 'project' | 'recent') {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(SIDEBAR_GROUP_MODE_KEY, mode);
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
 
 interface ProjectGroup {
   key: string;
@@ -40,7 +63,15 @@ interface ProjectGroup {
   runnerStatus?: 'online' | 'offline';
   workspacePath: string;
   name: string;
+  latestAt: number;
   sessions: SessionRecord[];
+}
+
+interface RunnerTab {
+  id: string;
+  name: string;
+  status: 'online' | 'offline';
+  hasAttention: boolean;
 }
 
 type SessionIndicatorState = 'awaiting' | 'running' | 'error' | 'unread' | 'idle';
@@ -118,6 +149,8 @@ export function ProjectSidebar() {
   const settingsSection = useNexStore((s) => s.settingsSection);
   const runners = useNexStore((s) => s.runners);
   const sessions = useNexStore((s) => s.sessions);
+  const streams = useNexStore((s) => s.streams);
+  const unreadSessionIds = useNexStore((s) => s.unreadSessionIds);
   const activeSessionId = useNexStore((s) => s.activeSessionId);
   const pinnedSessionIds = useNexStore((s) => s.pinnedSessionIds);
   const startNewSession = useNexStore((s) => s.startNewSession);
@@ -150,11 +183,17 @@ export function ProjectSidebar() {
 
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
-  const [groupMode, setGroupMode] = useState<'project' | 'recent'>('project');
+  const [selectedRunnerFilter, setSelectedRunnerFilter] = useState<string>('all');
+  const [groupMode, setGroupMode] = useState<'project' | 'recent'>(() => readPersistedGroupMode());
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [groupOpenOverrides, setGroupOpenOverrides] = useState<Record<string, boolean>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
+
+  const switchGroupMode = (mode: 'project' | 'recent') => {
+    setGroupMode(mode);
+    persistGroupMode(mode);
+  };
 
   const runnerById = useMemo(() => {
     const map = new Map<string, { name: string; status: 'online' | 'offline' }>();
@@ -164,19 +203,69 @@ export function ProjectSidebar() {
     return map;
   }, [runners]);
 
-  const filteredSessions = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter((s) => {
-      const rName = runnerById.get(s.runner_id)?.name || '';
-      return (
-        s.title.toLowerCase().includes(q) ||
-        (s.workspace_path || '').toLowerCase().includes(q) ||
-        s.runner_id.toLowerCase().includes(q) ||
-        rName.toLowerCase().includes(q)
-      );
+  const isSessionAttention = (s: SessionRecord): boolean => {
+    const st = streams[s.id];
+    if (st?.pendingUIPrompt || st?.pendingApproval) return true;
+    if (st ? st.running : s.status === 'running') return true;
+    return Boolean(unreadSessionIds[s.id]);
+  };
+
+  const runnerTabs = useMemo<RunnerTab[]>(() => {
+    const map = new Map<string, RunnerTab>();
+    for (const r of runners) {
+      map.set(r.id, {
+        id: r.id,
+        name: r.name || r.hostname || r.id,
+        status: r.status,
+        hasAttention: false,
+      });
+    }
+    for (const s of sessions) {
+      if (!s.runner_id) continue;
+      const existing = map.get(s.runner_id);
+      const attn = isSessionAttention(s);
+      if (existing) {
+        if (attn) existing.hasAttention = true;
+      } else {
+        map.set(s.runner_id, {
+          id: s.runner_id,
+          name: s.runner_id,
+          status: 'offline',
+          hasAttention: attn,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.status !== b.status) return a.status === 'online' ? -1 : 1;
+      return a.name.localeCompare(b.name);
     });
-  }, [sessions, search, runnerById]);
+  }, [runners, sessions, streams, unreadSessionIds]);
+
+  const effectiveRunnerFilter =
+    selectedRunnerFilter !== 'all' && runnerTabs.some((r) => r.id === selectedRunnerFilter)
+      ? selectedRunnerFilter
+      : 'all';
+
+  const filteredSessions = useMemo(() => {
+    const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return sessions.filter((s) => {
+      if (effectiveRunnerFilter !== 'all' && s.runner_id !== effectiveRunnerFilter) {
+        return false;
+      }
+      if (tokens.length === 0) return true;
+      const rName = runnerById.get(s.runner_id)?.name || '';
+      const haystack = `${s.title} ${s.workspace_path || ''} ${rName} ${s.runner_id}`.toLowerCase();
+      return tokens.every((tok) => haystack.includes(tok));
+    });
+  }, [sessions, search, runnerById, effectiveRunnerFilter]);
+
+  const attentionSessions = useMemo(() => {
+    return filteredSessions
+      .filter((s) => !pinnedSessionIds[s.id] && isSessionAttention(s))
+      .sort((a, b) => (b.last_active_at || b.updated_at) - (a.last_active_at || a.updated_at));
+  }, [filteredSessions, pinnedSessionIds, streams, unreadSessionIds]);
+
+  const attentionIdSet = useMemo(() => new Set(attentionSessions.map((s) => s.id)), [attentionSessions]);
 
   const pinnedSessions = useMemo(
     () => filteredSessions.filter((s) => pinnedSessionIds[s.id]),
@@ -186,28 +275,81 @@ export function ProjectSidebar() {
   const groups = useMemo<ProjectGroup[]>(() => {
     const map = new Map<string, ProjectGroup>();
     for (const sess of filteredSessions) {
-      if (pinnedSessionIds[sess.id]) continue;
       const key = `${sess.runner_id}::${sess.workspace_path || ''}`;
-      const existing = map.get(key);
-      if (existing) {
-        existing.sessions.push(sess);
-        continue;
+      const ts = sess.last_active_at || sess.updated_at || sess.created_at || 0;
+      const hiddenFromGroup = Boolean(pinnedSessionIds[sess.id] || attentionIdSet.has(sess.id));
+      let grp = map.get(key);
+      if (!grp) {
+        const runnerMeta = runnerById.get(sess.runner_id);
+        grp = {
+          key,
+          runnerId: sess.runner_id,
+          runnerName: runnerMeta?.name || sess.runner_id || '',
+          runnerStatus: runnerMeta?.status,
+          workspacePath: sess.workspace_path || '',
+          name: projectLeaf(sess.workspace_path || '', sess.runner_id || 'Workspace'),
+          latestAt: ts,
+          sessions: [],
+        };
+        map.set(key, grp);
+      } else if (ts > grp.latestAt) {
+        grp.latestAt = ts;
       }
-      const runnerMeta = runnerById.get(sess.runner_id);
-      map.set(key, {
-        key,
-        runnerId: sess.runner_id,
-        runnerName: runnerMeta?.name || sess.runner_id || '',
-        runnerStatus: runnerMeta?.status,
-        workspacePath: sess.workspace_path || '',
-        name: projectLeaf(sess.workspace_path || '', sess.runner_id || 'Workspace'),
-        sessions: [sess],
-      });
+      if (!hiddenFromGroup) {
+        grp.sessions.push(sess);
+      }
     }
-    return Array.from(map.values()).sort(
-      (a, b) => a.name.localeCompare(b.name) || a.runnerName.localeCompare(b.runnerName),
-    );
-  }, [filteredSessions, pinnedSessionIds, runnerById]);
+    const list = Array.from(map.values());
+    for (const grp of list) {
+      grp.sessions.sort((a, b) => (b.last_active_at || b.updated_at) - (a.last_active_at || a.updated_at));
+    }
+    return list.sort((a, b) => {
+      if (b.latestAt !== a.latestAt) return b.latestAt - a.latestAt;
+      return a.name.localeCompare(b.name) || a.runnerName.localeCompare(b.runnerName);
+    });
+  }, [filteredSessions, pinnedSessionIds, attentionIdSet, runnerById]);
+
+  const recentBuckets = useMemo(() => {
+    const items = filteredSessions
+      .filter((s) => !pinnedSessionIds[s.id] && !attentionIdSet.has(s.id))
+      .sort((a, b) => (b.last_active_at || b.updated_at) - (a.last_active_at || a.updated_at));
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const startOfYesterday = startOfToday - dayMs;
+    const startOf7Days = startOfToday - 6 * dayMs;
+
+    const buckets: Array<{ key: 'today' | 'yesterday' | 'week' | 'earlier'; label: string; sessions: SessionRecord[] }> = [
+      { key: 'today', label: formatMsg(locale, 'sidebar.bucketToday'), sessions: [] },
+      { key: 'yesterday', label: formatMsg(locale, 'sidebar.bucketYesterday'), sessions: [] },
+      { key: 'week', label: formatMsg(locale, 'sidebar.bucketLast7Days'), sessions: [] },
+      { key: 'earlier', label: formatMsg(locale, 'sidebar.bucketEarlier'), sessions: [] },
+    ];
+
+    for (const s of items) {
+      const ts = s.last_active_at || s.updated_at || s.created_at || 0;
+      if (ts >= startOfToday) {
+        buckets[0].sessions.push(s);
+      } else if (ts >= startOfYesterday) {
+        buckets[1].sessions.push(s);
+      } else if (ts >= startOf7Days) {
+        buckets[2].sessions.push(s);
+      } else {
+        buckets[3].sessions.push(s);
+      }
+    }
+    return buckets.filter((b) => b.sessions.length > 0);
+  }, [filteredSessions, pinnedSessionIds, attentionIdSet, locale]);
+
+  const formatSessionContext = (sess: SessionRecord): string => {
+    const wsLeaf = sess.workspace_path ? projectLeaf(sess.workspace_path, '') : '';
+    const rName = runnerById.get(sess.runner_id)?.name || sess.runner_id || '';
+    if (effectiveRunnerFilter !== 'all') {
+      return wsLeaf;
+    }
+    return [rName, wsLeaf].filter(Boolean).join(' · ');
+  };
 
   const commitRename = async (id: string) => {
     if (editingTitle.trim()) {
@@ -250,7 +392,7 @@ export function ProjectSidebar() {
     </div>
   );
 
-  const renderSessionRow = (sess: SessionRecord, indent = true) => {
+  const renderSessionRow = (sess: SessionRecord, indent = true, contextLabel?: string) => {
     if (editingId === sess.id) return renderEditingRow(sess);
 
     const active = mainView === 'workspace' && sess.id === activeSessionId;
@@ -261,9 +403,9 @@ export function ProjectSidebar() {
         key={sess.id}
         data-testid={`session-row-${sess.id}`}
         onClick={() => handleSelectSession(sess.id)}
-        className={`group relative flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg pr-2 transition-colors ${
-          indent ? 'pl-6' : 'pl-2'
-        } ${
+        className={`group relative flex cursor-pointer items-center justify-between gap-2 rounded-lg pr-2 transition-colors ${
+          contextLabel ? 'min-h-8 py-1.5' : 'h-8'
+        } ${indent ? 'pl-6' : 'pl-2'} ${
           active ? 'bg-selected font-medium text-foreground' : 'text-foreground-subtle hover:bg-hover hover:text-foreground'
         }`}
       >
@@ -274,8 +416,15 @@ export function ProjectSidebar() {
         )}
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           {!indent && <SessionStatusDot sessionId={sess.id} status={sess.status} />}
-          <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-ui-base" style={FADE_MASK}>
-            {sess.title}
+          <span className="min-w-0 flex-1">
+            <span className="block overflow-hidden whitespace-nowrap text-ui-base" style={FADE_MASK}>
+              {sess.title}
+            </span>
+            {contextLabel && (
+              <span className="block truncate text-[11px] leading-tight text-foreground-subtlest">
+                {contextLabel}
+              </span>
+            )}
           </span>
         </span>
 
@@ -360,23 +509,39 @@ export function ProjectSidebar() {
     );
   };
 
-  const renderGroup = (group: ProjectGroup) => {
-    const collapsed = Boolean(collapsedGroups[group.key]);
+  const isGroupExpanded = (group: ProjectGroup, idx: number): boolean => {
+    if (search.trim() !== '') return true;
+    const override = groupOpenOverrides[group.key];
+    if (typeof override === 'boolean') return override;
+    if (activeSessionId && group.sessions.some((s) => s.id === activeSessionId)) return true;
+    return idx < 2;
+  };
+
+  const renderGroup = (group: ProjectGroup, idx: number) => {
+    const expanded = isGroupExpanded(group, idx);
+    const collapsed = !expanded;
     const showAll = Boolean(expandedGroups[group.key]);
     const shown = showAll ? group.sessions : group.sessions.slice(0, TASKS_PER_PROJECT);
-    const hasMore = group.sessions.length > TASKS_PER_PROJECT;
+    const remainingCount = group.sessions.length - TASKS_PER_PROJECT;
+    const hasMore = remainingCount > 0;
 
     return (
       <div key={group.key} className="space-y-0.5">
         <div
           data-testid={`project-group-${group.key}`}
+          data-collapsed={collapsed ? 'true' : 'false'}
           className="group flex h-8 cursor-pointer items-center justify-between gap-1.5 rounded-lg px-2 transition-colors hover:bg-hover"
-          onClick={() => setCollapsedGroups((p) => ({ ...p, [group.key]: !p[group.key] }))}
+          onClick={() => setGroupOpenOverrides((p) => ({ ...p, [group.key]: collapsed }))}
         >
-          <span className="flex min-w-0 flex-1 items-center gap-2 text-ui-base text-foreground">
-            <Folder className="size-4 shrink-0 text-foreground-subtle transition-transform duration-150 group-hover:scale-105" />
+          <span className="flex min-w-0 flex-1 items-center gap-1.5 text-ui-base text-foreground">
+            <ChevronRight
+              className={`size-3 shrink-0 text-foreground-subtlest transition-transform duration-150 ${
+                expanded ? 'rotate-90' : ''
+              }`}
+            />
+            <Folder className="size-3.5 shrink-0 text-foreground-subtle transition-transform duration-150 group-hover:scale-105" />
             <span className="truncate">{group.name}</span>
-            {group.runnerName && (
+            {effectiveRunnerFilter === 'all' && group.runnerName && (
               <span
                 data-testid={`project-runner-badge-${group.key}`}
                 title={group.workspacePath ? `${group.runnerName}: ${group.workspacePath}` : group.runnerName}
@@ -392,20 +557,27 @@ export function ProjectSidebar() {
               </span>
             )}
           </span>
-          <button
-            type="button"
-            title={formatMsg(locale, 'sidebar.newTask')}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleStartNewSession(group.runnerId, group.workspacePath);
-            }}
-            className="flex size-5 shrink-0 items-center justify-center rounded-md text-foreground-subtle opacity-0 transition-all hover:bg-selected hover:text-foreground group-hover:opacity-100"
-          >
-            <Plus className="size-3.5" />
-          </button>
+          <div className="flex shrink-0 items-center">
+            {collapsed && group.sessions.length > 0 && (
+              <span className="px-1 text-ui-xs tabular-nums text-foreground-subtlest group-hover:hidden">
+                {group.sessions.length}
+              </span>
+            )}
+            <button
+              type="button"
+              title={formatMsg(locale, 'sidebar.newTask')}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleStartNewSession(group.runnerId, group.workspacePath);
+              }}
+              className="flex size-5 shrink-0 items-center justify-center rounded-md text-foreground-subtle opacity-0 transition-all hover:bg-selected hover:text-foreground group-hover:opacity-100"
+            >
+              <Plus className="size-3.5" />
+            </button>
+          </div>
         </div>
 
-        <div className="nex-collapsible" data-open={!collapsed}>
+        <div className="nex-collapsible" data-open={expanded}>
           <div className="nex-collapsible-inner">
             <div className="space-y-0.5">
               {group.sessions.length === 0 ? (
@@ -425,11 +597,11 @@ export function ProjectSidebar() {
                 <button
                   type="button"
                   onClick={() => setExpandedGroups((p) => ({ ...p, [group.key]: !p[group.key] }))}
-                  className="flex h-7 w-full items-center rounded-lg pl-5 pr-2 text-left text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground-subtle"
+                  className="flex h-7 w-full items-center rounded-lg pl-6 pr-2 text-left text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground-subtle"
                 >
                   {showAll
                     ? formatMsg(locale, 'sidebar.showLess')
-                    : formatMsg(locale, 'sidebar.showMore')}
+                    : formatMsg(locale, 'sidebar.showMoreCount', { count: remainingCount })}
                 </button>
               )}
             </div>
@@ -479,7 +651,7 @@ export function ProjectSidebar() {
         <button
           type="button"
           data-testid="new-session-btn"
-          onClick={() => handleStartNewSession()}
+          onClick={() => handleStartNewSession(effectiveRunnerFilter !== 'all' ? effectiveRunnerFilter : undefined)}
           className="flex h-8 w-full items-center justify-between rounded-lg px-2.5 transition-colors hover:bg-hover"
         >
           <span className="flex items-center gap-2.5 text-ui-base font-normal text-foreground">
@@ -525,12 +697,39 @@ export function ProjectSidebar() {
         </button>
       </div>
 
-      {/* Task List Header */}
-      <div className="mx-3 flex shrink-0 items-center justify-between border-t border-border/70 pb-1 pt-3">
-        <span className="text-ui-sm font-medium text-foreground-subtle">{taskListLabel}</span>
-        <div className="flex items-center gap-0.5">
+      {/* Task List Header + Segmented View Switcher */}
+      <div className="mx-3 flex shrink-0 items-center justify-between gap-2 border-t border-border/70 pb-1.5 pt-2.5">
+        <span className="truncate text-ui-sm font-medium text-foreground-subtle">{taskListLabel}</span>
+        <div className="flex shrink-0 items-center gap-1">
+          <div className="inline-flex items-center rounded-md border border-border/70 bg-surface/60 p-0.5 text-[11px]">
+            <button
+              type="button"
+              data-testid="sidebar-mode-project"
+              onClick={() => switchGroupMode('project')}
+              className={`rounded px-1.5 py-0.5 font-medium transition-colors ${
+                groupMode === 'project'
+                  ? 'bg-background text-foreground shadow-2xs'
+                  : 'text-foreground-subtlest hover:text-foreground-subtle'
+              }`}
+            >
+              {formatMsg(locale, 'sidebar.modeProject')}
+            </button>
+            <button
+              type="button"
+              data-testid="sidebar-mode-recent"
+              onClick={() => switchGroupMode('recent')}
+              className={`rounded px-1.5 py-0.5 font-medium transition-colors ${
+                groupMode === 'recent'
+                  ? 'bg-background text-foreground shadow-2xs'
+                  : 'text-foreground-subtlest hover:text-foreground-subtle'
+              }`}
+            >
+              {formatMsg(locale, 'sidebar.modeRecent')}
+            </button>
+          </div>
           <button
             type="button"
+            data-testid="sidebar-search-toggle"
             title={formatMsg(locale, 'sidebar.search')}
             onClick={() => {
               setSearchOpen((v) => {
@@ -544,24 +743,65 @@ export function ProjectSidebar() {
           >
             <Search className="size-3.5" />
           </button>
-          <button
-            type="button"
-            title={formatMsg(locale, groupMode === 'project' ? 'project.viewByProject' : 'project.viewRecentlyUpdated')}
-            onClick={() => setGroupMode((m) => (m === 'project' ? 'recent' : 'project'))}
-            className={`flex size-6 items-center justify-center rounded-md transition-colors hover:bg-hover ${
-              groupMode === 'recent' ? 'text-foreground' : 'text-foreground-subtlest hover:text-foreground-subtle'
-            }`}
-          >
-            <ListFilter className="size-3.5" />
-          </button>
         </div>
       </div>
+
+      {/* Runner Filter Pill Bar (auto-shown when 2+ runners exist) */}
+      {runnerTabs.length > 1 && (
+        <div
+          data-testid="sidebar-runner-filter"
+          className="mx-3 mb-1.5 flex shrink-0 items-center gap-1 overflow-x-auto pb-0.5"
+        >
+          <button
+            type="button"
+            data-testid="sidebar-runner-pill-all"
+            onClick={() => setSelectedRunnerFilter('all')}
+            className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+              effectiveRunnerFilter === 'all'
+                ? 'bg-foreground text-background'
+                : 'bg-surface text-foreground-subtle hover:bg-hover hover:text-foreground'
+            }`}
+          >
+            {formatMsg(locale, 'sidebar.allRunners')}
+          </button>
+          {runnerTabs.map((rt) => {
+            const active = effectiveRunnerFilter === rt.id;
+            return (
+              <button
+                key={rt.id}
+                type="button"
+                data-testid={`sidebar-runner-pill-${rt.id}`}
+                onClick={() => setSelectedRunnerFilter(active ? 'all' : rt.id)}
+                className={`inline-flex max-w-[110px] shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                  active
+                    ? 'bg-foreground text-background'
+                    : 'bg-surface text-foreground-subtle hover:bg-hover hover:text-foreground'
+                }`}
+              >
+                <span
+                  className={`size-1.5 shrink-0 rounded-full ${
+                    rt.status === 'online'
+                      ? rt.hasAttention
+                        ? 'animate-pulse bg-emerald-400'
+                        : 'bg-success'
+                      : active
+                        ? 'bg-background/50'
+                        : 'bg-foreground-subtlest/50'
+                  }`}
+                />
+                <span className="truncate">{rt.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {searchOpen && (
         <div className="nex-popover-down mx-3 mb-1 flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2">
           <Search className="size-3 shrink-0 text-foreground-subtlest" />
           <input
             autoFocus
+            data-testid="sidebar-search-input"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={formatMsg(locale, 'sidebar.search')}
@@ -581,6 +821,15 @@ export function ProjectSidebar() {
 
       {/* Task Sections */}
       <div className="flex-1 space-y-3 overflow-y-auto px-2 py-1">
+        {attentionSessions.length > 0 && (
+          <div data-testid="sidebar-active-section" className="space-y-0.5">
+            <div className="px-2 pb-1 text-ui-xs font-medium text-foreground-subtlest">
+              {formatMsg(locale, 'sidebar.activeSection')}
+            </div>
+            {attentionSessions.map((s) => renderSessionRow(s, false, formatSessionContext(s)))}
+          </div>
+        )}
+
         {pinnedSessions.length > 0 && (
           <div className="space-y-0.5">
             <div className="px-2 pb-1 text-ui-xs font-medium text-foreground-subtlest">
@@ -591,33 +840,38 @@ export function ProjectSidebar() {
         )}
 
         {groupMode === 'recent' ? (
-          <div className="space-y-0.5">
-            <div className="px-2 pb-1 text-ui-xs font-medium text-foreground-subtlest">
-              {formatMsg(locale, 'project.viewRecentlyUpdated')}
-            </div>
-            {filteredSessions.filter((s) => !pinnedSessionIds[s.id]).length === 0 ? (
+          recentBuckets.length === 0 ? (
+            attentionSessions.length === 0 &&
+            pinnedSessions.length === 0 && (
               <div className="px-3 py-6 text-center text-ui-sm text-foreground-subtlest">
                 {formatMsg(locale, 'taskList.noTasks')}
               </div>
-            ) : (
-              [...filteredSessions]
-                .filter((s) => !pinnedSessionIds[s.id])
-                .sort((a, b) => (b.last_active_at || b.updated_at) - (a.last_active_at || a.updated_at))
-                .map((s) => renderSessionRow(s, false))
-            )}
-          </div>
+            )
+          ) : (
+            <div data-testid="sidebar-recent-view" className="space-y-3">
+              {recentBuckets.map((bucket) => (
+                <div key={bucket.key} className="space-y-0.5">
+                  <div className="px-2 pb-0.5 text-ui-xs font-medium text-foreground-subtlest">
+                    {bucket.label}
+                  </div>
+                  {bucket.sessions.map((s) => renderSessionRow(s, false, formatSessionContext(s)))}
+                </div>
+              ))}
+            </div>
+          )
+        ) : groups.length === 0 ? (
+          attentionSessions.length === 0 &&
+          pinnedSessions.length === 0 && (
+            <div className="px-3 py-6 text-center text-ui-sm text-foreground-subtlest">
+              {formatMsg(locale, 'taskList.noTasks')}
+            </div>
+          )
         ) : (
-          <div className="space-y-3">
-            <div className="px-2 text-ui-xs font-medium text-foreground-subtlest">
+          <div className="space-y-1">
+            <div className="px-2 pb-0.5 text-ui-xs font-medium text-foreground-subtlest">
               {formatMsg(locale, 'sidebar.projects')}
             </div>
-            {groups.length === 0 ? (
-              <div className="px-3 py-6 text-center text-ui-sm text-foreground-subtlest">
-                {formatMsg(locale, 'taskList.noTasks')}
-              </div>
-            ) : (
-              groups.map(renderGroup)
-            )}
+            {groups.map((grp, idx) => renderGroup(grp, idx))}
           </div>
         )}
       </div>
