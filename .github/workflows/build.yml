@@ -67,7 +67,7 @@ jobs:
         run: |
           mkdir -p dist/artifacts
 
-          # Package server distributions (each includes bundled multi-platform runners & version.json)
+          # Package server distributions (lightweight: nex-server binary + configs, no bundled runners)
           SKIP_WEB=1 ./scripts/package-server.sh linux amd64
           SKIP_WEB=1 ./scripts/package-server.sh linux arm64
           SKIP_WEB=1 ./scripts/package-server.sh darwin arm64

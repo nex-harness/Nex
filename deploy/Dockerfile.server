@@ -26,46 +26,29 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go mod download
 
-# Stage 3: Build bundled multi-platform nex-runner binaries ONCE (shared by amd64 & arm64 images)
-FROM go-base AS runners-builder
-ARG VERSION=dev
-ARG COMMIT_SHA=unknown
-COPY cmd ./cmd
-COPY pkg ./pkg
-COPY scripts/gen-runner-manifest.sh ./scripts/gen-runner-manifest.sh
-COPY --from=web-builder /src/pkg/webui/dist ./pkg/webui/dist
-
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    mkdir -p /out/runners && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-linux-amd64 ./cmd/nex-runner && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-linux-arm64 ./cmd/nex-runner && \
-    CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-darwin-arm64 ./cmd/nex-runner && \
-    CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-darwin-amd64 ./cmd/nex-runner && \
-    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/runners/nex-runner-windows-amd64.exe ./cmd/nex-runner && \
-    VERSION="${VERSION}" COMMIT_SHA="${COMMIT_SHA}" bash ./scripts/gen-runner-manifest.sh /out/runners
-
-# Stage 4: Cross-compile target nex-server natively on host (zero QEMU overhead)
-FROM runners-builder AS server-builder
+# Stage 3: Cross-compile target nex-server natively on host (zero QEMU overhead)
+FROM go-base AS server-builder
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 ARG VERSION=dev
 ARG COMMIT_SHA=unknown
+COPY cmd ./cmd
+COPY pkg ./pkg
+COPY --from=web-builder /src/pkg/webui/dist ./pkg/webui/dist
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
+    mkdir -p /out && \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${COMMIT_SHA}" -o /out/nex-server ./cmd/nex-server
 
-# Stage 5: Minimal runtime image
+# Stage 4: Minimal runtime image
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata && \
-    mkdir -p /data /opt/nex-v3/runners
+    mkdir -p /data
 
 COPY --from=server-builder /out/nex-server /usr/local/bin/nex-server
-COPY --from=runners-builder /out/runners /opt/nex-v3/runners
 
-ENV NEX_RUNNERS_DIR=/opt/nex-v3/runners
 VOLUME ["/data"]
 EXPOSE 8080
 

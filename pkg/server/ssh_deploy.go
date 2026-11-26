@@ -1020,6 +1020,81 @@ func buildDarwinLaunchAgentPlist(label, binPath, runnerID, name, wsURL, workspac
 	return sb.String()
 }
 
+const defaultGitHubReleaseDownloadBase = "https://github.com/nex-harness/Nex/releases"
+
+// runnerReleaseDownloadURL builds the GitHub Release download URL for a runner binary
+// matching the current Server version (e.g. v0.3.0 -> .../releases/download/v0.3.0/nex-runner-linux-amd64).
+// For dev/unversioned servers, it falls back to .../releases/latest/download/nex-runner-<os>-<arch>.
+func (s *Server) runnerReleaseDownloadURL(targetOS, targetArch string) string {
+	fileName := runnerBinaryFileName(targetOS, targetArch)
+	base := strings.TrimRight(strings.TrimSpace(os.Getenv("NEX_RUNNER_RELEASE_BASE_URL")), "/")
+	if base != "" {
+		return base + "/" + fileName
+	}
+	ver := strings.TrimSpace(s.cfg.Version)
+	if ver == "" || ver == "dev" || strings.Contains(strings.ToLower(ver), "dev") {
+		return defaultGitHubReleaseDownloadBase + "/latest/download/" + fileName
+	}
+	tag := ver
+	if !strings.HasPrefix(tag, "v") {
+		tag = "v" + tag
+	}
+	return fmt.Sprintf("%s/download/%s/%s", defaultGitHubReleaseDownloadBase, tag, fileName)
+}
+
+// downloadRunnerBinaryFromRelease downloads the matching nex-runner binary from GitHub Release
+// into the server's local staged binaries directory so it can be uploaded via SCP.
+func (s *Server) downloadRunnerBinaryFromRelease(ctx context.Context, targetOS, targetArch string, logf func(string, ...any)) (string, error) {
+	url := s.runnerReleaseDownloadURL(targetOS, targetArch)
+	fileName := runnerBinaryFileName(targetOS, targetArch)
+	dir := s.sshBinariesDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("create staged binaries dir: %w", err)
+	}
+	dest := filepath.Join(dir, fileName)
+	tmp := dest + fmt.Sprintf(".dl-%d", time.Now().UnixNano())
+
+	logf("Downloading runner binary locally from %s ...", url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Nex-Server/"+strings.TrimSpace(s.cfg.Version))
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("download runner binary from %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("download runner binary from %s returned HTTP %d", url, resp.StatusCode)
+	}
+
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return "", err
+	}
+	n, copyErr := io.Copy(f, resp.Body)
+	closeErr := f.Close()
+	if copyErr != nil {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("write downloaded runner binary: %w", copyErr)
+	}
+	if closeErr != nil {
+		_ = os.Remove(tmp)
+		return "", closeErr
+	}
+	if n == 0 {
+		_ = os.Remove(tmp)
+		return "", fmt.Errorf("downloaded runner binary from %s is empty", url)
+	}
+	if err := os.Rename(tmp, dest); err != nil {
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	logf("Downloaded %s (%d bytes) to local cache.", fileName, n)
+	return dest, nil
+}
+
 func (s *Server) resolveOrBuildRunnerBinary(ctx context.Context, targetOS, targetArch string, logBuf *strings.Builder) (string, error) {
 	logf := func(format string, args ...any) {
 		if logBuf != nil {
@@ -1056,7 +1131,14 @@ func (s *Server) resolveOrBuildRunnerBinary(ctx context.Context, targetOS, targe
 		}
 	}
 
-	// 3. If running inside a Go source tree with cmd/nex-runner, cross-compile cleanly (CGO_ENABLED=0)!
+	// 3. Download matching version from GitHub Release into local cache (for SCP upload)
+	if downloaded, dlErr := s.downloadRunnerBinaryFromRelease(ctx, targetOS, targetArch, logf); dlErr == nil {
+		return downloaded, nil
+	} else {
+		logf("GitHub Release download failed: %v", dlErr)
+	}
+
+	// 4. If running inside a Go source tree with cmd/nex-runner, cross-compile cleanly (CGO_ENABLED=0)!
 	staged := filepath.Join(s.sshBinariesDir(), fileName)
 	if _, err := os.Stat("cmd/nex-runner/main.go"); err == nil {
 		if _, goErr := exec.LookPath("go"); goErr == nil {
@@ -1133,7 +1215,7 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 
 	installDir, workspace, binName := resolveRemotePaths(*target, info)
 
-	wsURL, httpBase := resolveServerEndpointsForRemote(r, s.cfg.PublicBaseURL, target.ServerWSURL)
+	wsURL, _ := resolveServerEndpointsForRemote(r, s.cfg.PublicBaseURL, target.ServerWSURL)
 	logf("Install dir: %s | Workspace: %s | Runner WS target: %s", installDir, workspace, wsURL)
 
 	remoteBinDir := joinRemotePath(installDir, "bin", info.OS)
@@ -1163,20 +1245,12 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	// Step 3: Deliver binary via SCP OR Remote Install
+	// Step 3: Deliver binary via Remote Download (GitHub Release / custom URL) OR Local Download + SCP
 	if target.InstallMode == "remote_install" {
 		dlURL := strings.TrimSpace(target.DownloadURL)
 		if dlURL == "" {
-			// Ensure binary is available on this Server and issue a 5-min one-time download token
-			if _, bErr := s.resolveOrBuildRunnerBinary(ctx, info.OS, info.Arch, &logBuf); bErr != nil {
-				logf("Error: %v", bErr)
-				_ = s.store.UpdateSSHTargetStatus(r.Context(), id, "error", bErr.Error(), logBuf.String(), 0)
-				writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": bErr.Error(), "log": logBuf.String()})
-				return
-			}
-			tok := issueBinaryDownloadToken(info.OS, info.Arch)
-			dlURL = fmt.Sprintf("%s/api/v1/ssh/binary?os=%s&arch=%s&dl_token=%s", httpBase, info.OS, info.Arch, tok)
-			logf("Remote installing from Nex server binary endpoint (%s/%s)...", info.OS, info.Arch)
+			dlURL = s.runnerReleaseDownloadURL(info.OS, info.Arch)
+			logf("Remote downloading runner (%s/%s) directly from GitHub Release: %s", info.OS, info.Arch, dlURL)
 		} else {
 			dlURL = strings.ReplaceAll(dlURL, "{os}", info.OS)
 			dlURL = strings.ReplaceAll(dlURL, "{arch}", info.Arch)

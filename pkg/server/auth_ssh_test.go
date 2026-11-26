@@ -343,3 +343,57 @@ func TestRemoteOSArchResolutionAndBundledRunners(t *testing.T) {
 		t.Fatalf("DELETE /api/v1/runners/run_stale_tmp expected 200, got %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestRunnerReleaseDownloadURLAndLocalDownload(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	// 1. Versioned server maps 0.2.0 -> v0.2.0 tag
+	srv, err := New(Config{Store: st, Version: "0.2.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := srv.runnerReleaseDownloadURL("linux", "arm64")
+	want := "https://github.com/nex-harness/Nex/releases/download/v0.2.0/nex-runner-linux-arm64"
+	if got != want {
+		t.Fatalf("runnerReleaseDownloadURL(0.2.0) = %q, want %q", got, want)
+	}
+
+	// 2. Dev server falls back to releases/latest/download
+	srvDev, err := New(Config{Store: st, Version: "0.2.0-dev+abc1234"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotDev := srvDev.runnerReleaseDownloadURL("windows", "amd64")
+	wantDev := "https://github.com/nex-harness/Nex/releases/latest/download/nex-runner-windows-amd64.exe"
+	if gotDev != wantDev {
+		t.Fatalf("runnerReleaseDownloadURL(dev) = %q, want %q", gotDev, wantDev)
+	}
+
+	// 3. Local download via NEX_RUNNER_RELEASE_BASE_URL caches binary for SCP upload
+	mockRel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/nex-runner-linux-amd64" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte("ELF-MOCK-RUNNER-BINARY"))
+	}))
+	defer mockRel.Close()
+	t.Setenv("NEX_RUNNER_RELEASE_BASE_URL", mockRel.URL)
+
+	srvDL, err := New(Config{Store: st, Version: "0.3.0", HTTPClient: mockRel.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err := srvDL.downloadRunnerBinaryFromRelease(t.Context(), "linux", "amd64", func(string, ...any) {})
+	if err != nil {
+		t.Fatalf("downloadRunnerBinaryFromRelease failed: %v", err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil || string(b) != "ELF-MOCK-RUNNER-BINARY" {
+		t.Fatalf("unexpected downloaded binary content: %q err=%v", string(b), err)
+	}
+}
