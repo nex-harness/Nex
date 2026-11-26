@@ -750,7 +750,7 @@ export function ProjectSidebar() {
       {runnerTabs.length > 1 && (
         <div
           data-testid="sidebar-runner-filter"
-          className="nex-no-scrollbar mx-2.5 mb-2 flex shrink-0 flex-wrap items-center gap-1"
+          className="nex-no-scrollbar mx-2.5 mb-2 flex shrink-0 flex-wrap items-center gap-1.5"
         >
           <button
             type="button"
@@ -758,8 +758,8 @@ export function ProjectSidebar() {
             onClick={() => setSelectedRunnerFilter('all')}
             className={`rounded-md px-2 py-0.5 text-[11.5px] transition-all ${
               effectiveRunnerFilter === 'all'
-                ? 'bg-background font-medium text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-border/70'
-                : 'text-foreground-subtle hover:bg-hover hover:text-foreground'
+                ? 'bg-background font-medium text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-border-hover'
+                : 'bg-background/45 text-foreground-subtle ring-1 ring-border/60 hover:bg-background/80 hover:text-foreground'
             }`}
           >
             {formatMsg(locale, 'sidebar.allRunners')}
@@ -774,8 +774,8 @@ export function ProjectSidebar() {
                 onClick={() => setSelectedRunnerFilter(active ? 'all' : rt.id)}
                 className={`inline-flex max-w-[120px] items-center gap-1.5 rounded-md px-2 py-0.5 text-[11.5px] transition-all ${
                   active
-                    ? 'bg-background font-medium text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-border/70'
-                    : 'text-foreground-subtle hover:bg-hover hover:text-foreground'
+                    ? 'bg-background font-medium text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-border-hover'
+                    : 'bg-background/45 text-foreground-subtle ring-1 ring-border/60 hover:bg-background/80 hover:text-foreground'
                 }`}
               >
                 <span
