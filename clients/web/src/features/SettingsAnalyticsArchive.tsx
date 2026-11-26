@@ -444,7 +444,12 @@ function MetricCard({
 }
 
 export function UsageAnalyticsSection() {
-  const { locale, runners, selectedRunnerId, todaySummary } = useNexStore();
+  const { locale, runners, providers, selectedRunnerId, todaySummary } = useNexStore();
+
+  const providerNameById = new Map<string, string>();
+  for (const p of providers) {
+    providerNameById.set(p.id, p.name || p.id);
+  }
 
   const [runnerFilter, setRunnerFilter] = useState<string>('');
   const [windowTab, setWindowTab] = useState<'today' | '7d' | '30d'>('today');
@@ -562,8 +567,8 @@ export function UsageAnalyticsSection() {
                   <div className="flex flex-wrap items-center justify-between gap-2 text-ui-sm">
                     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                       <span className="font-mono font-medium text-foreground">{m.model_id}</span>
-                      <span className="shrink-0 rounded-md border border-border bg-surface px-1.5 py-0.5 font-mono text-ui-xs text-foreground-subtle">
-                        {m.provider_id}
+                      <span className="shrink-0 rounded-md border border-border bg-surface px-1.5 py-0.5 text-ui-xs text-foreground-subtle">
+                        {providerNameById.get(m.provider_id) || m.provider_id}
                       </span>
                       <span className="text-ui-xs text-foreground-subtlest">
                         {formatMsg(locale, 'analytics.turns', { turn_count: m.turn_count })}

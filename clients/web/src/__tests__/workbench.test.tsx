@@ -3603,8 +3603,12 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       expect(screen.getByTestId('runner-version-run_win_stale').textContent).toBe('v0.1.1');
 
       const removeBtn = screen.getByTestId('remove-runner-run_win_stale');
+      fireEvent.click(removeBtn);
+      expect(screen.getByTestId('confirm-delete-runner-modal')).toBeTruthy();
+      expect(deletedIds).toEqual([]);
+
       await act(async () => {
-        fireEvent.click(removeBtn);
+        fireEvent.click(screen.getByTestId('confirm-delete-runner-btn'));
       });
 
       expect(deletedIds).toEqual(['run_win_stale']);
@@ -6218,6 +6222,105 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       expect(screen.getByTestId('usage-bar-1')).toBeTruthy();
       fireEvent.click(screen.getByTestId('usage-chart-metric-cost'));
       expect(screen.getByTestId('usage-chart-inspector').textContent).toContain('$0.1000');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it('shows Edit model modal without redundant inline rename, hides Provider ID, and renders provider names in Usage Analytics', async () => {
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/api/v1/stats')) {
+        return new Response(
+          JSON.stringify({
+            window: 'today',
+            turn_count: 2,
+            input_tokens: 1000,
+            output_tokens: 500,
+            cache_read_tokens: 200,
+            cache_write_tokens: 0,
+            total_tokens: 1700,
+            cache_hit_rate_pct: 16.6,
+            estimated_cost_usd: 0.012,
+            cache_saved_usd: 0.002,
+            by_source_tokens: { chat: 1700, subagent: 0, cron: 0 },
+            models: [
+              {
+                provider_id: 'custom_gw_1',
+                model_id: 'gpt-5',
+                turn_count: 2,
+                total_tokens: 1700,
+                estimated_cost_usd: 0.012,
+                cache_saved_usd: 0.002,
+              },
+            ],
+            series: [],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as typeof fetch;
+
+    try {
+      useNexStore.setState({
+        serverConnectRequired: false,
+        authEnabled: false,
+        authenticated: true,
+        locale: 'zh-CN',
+        mainView: 'settings',
+        settingsSection: 'providers',
+        providers: [
+          {
+            id: 'custom_gw_1',
+            name: 'My OpenAI Gateway',
+            driver: 'openai_responses',
+            base_url: 'https://example.com/v1',
+            api_key: 'sk-test',
+            proxy_mode: 'direct',
+            enabled: true,
+          },
+        ],
+        models: [
+          {
+            id: 'gpt-5',
+            provider_id: 'custom_gw_1',
+            display_name: 'GPT-5',
+            source: 'custom',
+            context_window: 400000,
+            max_output_tokens: 32000,
+            supports_vision: true,
+            supports_pdf: true,
+            supports_tools: true,
+            supports_reasoning: true,
+            supports_caching: true,
+            pricing: { input_per_1m: 1, output_per_1m: 2, cache_read_per_1m: 0.1, cache_write_per_1m: 0 },
+          },
+        ],
+      });
+
+      render(<App />);
+
+      // Provider ID input stays hidden even when expanding Advanced
+      fireEvent.click(screen.getByText('高级选项'));
+      expect(screen.queryByText('供应商 ID')).toBeNull();
+
+      // Clicking configure opens "编辑模型" (not "手动添加模型") and omits inline Pencil rename button
+      expect(screen.queryByTitle('重命名显示名称')).toBeNull();
+      fireEvent.click(screen.getByTestId('edit-model-gpt-5'));
+      expect(screen.getByTestId('model-modal-title').textContent).toBe('编辑模型');
+      expect(screen.getByText('PDF')).toBeTruthy();
+      expect(screen.getByText('Tools')).toBeTruthy();
+      expect(screen.getByText('Prompt Cache')).toBeTruthy();
+      fireEvent.click(screen.getByText('取消'));
+
+      // Switching to Usage Analytics displays friendly provider name instead of raw provider_id
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('settings-nav-usage'));
+      });
+      expect(screen.getByText('My OpenAI Gateway')).toBeTruthy();
+      expect(screen.queryByText('custom_gw_1')).toBeNull();
     } finally {
       globalThis.fetch = origFetch;
     }

@@ -22,7 +22,6 @@ import {
   Moon,
   Package,
   Palette,
-  Pencil,
   Plus,
   Radio,
   RefreshCw,
@@ -1452,7 +1451,10 @@ function ProvidersAndModelsSection({
   const [newCtxWin, setNewCtxWin] = useState(128_000);
   const [newMaxOut, setNewMaxOut] = useState(16_384);
   const [newSupportsVision, setNewSupportsVision] = useState(true);
+  const [newSupportsPDF, setNewSupportsPDF] = useState(false);
+  const [newSupportsTools, setNewSupportsTools] = useState(true);
   const [newSupportsReasoning, setNewSupportsReasoning] = useState(true);
+  const [newSupportsCaching, setNewSupportsCaching] = useState(true);
   const [newReasoningLevels, setNewReasoningLevels] = useState('');
   const [newReasoningMap, setNewReasoningMap] = useState('');
   const [editingModel, setEditingModel] = useState<ModelMeta | null>(null);
@@ -1470,8 +1472,6 @@ function ProvidersAndModelsSection({
   const [syncing, setSyncing] = useState(false);
   const [hiddenModelIds, setHiddenModelIds] = useState<Record<string, boolean>>({});
   const [draggingModelId, setDraggingModelId] = useState<string | null>(null);
-  const [renamingModelId, setRenamingModelId] = useState<string | null>(null);
-  const [renameModelDraft, setRenameModelDraft] = useState('');
 
   useEffect(() => {
     if (draft) return;
@@ -1572,7 +1572,10 @@ function ProvidersAndModelsSection({
         if (res.meta.context_window > 0) setNewCtxWin(res.meta.context_window);
         if (res.meta.max_output_tokens > 0) setNewMaxOut(res.meta.max_output_tokens);
         setNewSupportsVision(Boolean(res.meta.supports_vision));
+        setNewSupportsPDF(Boolean(res.meta.supports_pdf));
+        setNewSupportsTools(res.meta.supports_tools ?? true);
         setNewSupportsReasoning(Boolean(res.meta.supports_reasoning));
+        setNewSupportsCaching(Boolean(res.meta.supports_caching));
         setNewReasoningLevels((res.meta.reasoning_levels || []).join(', '));
         onFlash(formatMsg(locale, 'settings.loadedMetadataFor', { id: res.meta.id }));
       } else {
@@ -1742,7 +1745,10 @@ function ProvidersAndModelsSection({
     setNewCtxWin(128_000);
     setNewMaxOut(16_384);
     setNewSupportsVision(true);
+    setNewSupportsPDF(false);
+    setNewSupportsTools(true);
     setNewSupportsReasoning(true);
+    setNewSupportsCaching(true);
     setNewReasoningLevels('');
     setNewReasoningMap('');
     setShowAddModel(true);
@@ -1756,7 +1762,10 @@ function ProvidersAndModelsSection({
     setNewCtxWin(m.context_window || 128_000);
     setNewMaxOut(m.max_output_tokens || 16_384);
     setNewSupportsVision(Boolean(m.supports_vision));
+    setNewSupportsPDF(Boolean(m.supports_pdf));
+    setNewSupportsTools(m.supports_tools ?? true);
     setNewSupportsReasoning(Boolean(m.supports_reasoning));
+    setNewSupportsCaching(Boolean(m.supports_caching));
     setNewReasoningLevels((m.reasoning_levels || []).join(', '));
     setNewReasoningMap(formatReasoningMapInput(m.reasoning_map));
     setShowAddModel(true);
@@ -1783,9 +1792,10 @@ function ProvidersAndModelsSection({
         context_window: newCtxWin,
         max_output_tokens: newMaxOut,
         supports_vision: newSupportsVision,
-        supports_tools: baseMeta?.supports_tools ?? true,
+        supports_pdf: newSupportsPDF,
+        supports_tools: newSupportsTools,
         supports_reasoning: newSupportsReasoning || Boolean(parsedLevels && parsedLevels.length >= 2),
-        supports_caching: baseMeta?.supports_caching ?? true,
+        supports_caching: newSupportsCaching,
         reasoning_levels: parsedLevels,
         reasoning_map: parsedMap,
       }),
@@ -1812,18 +1822,6 @@ function ProvidersAndModelsSection({
     }).catch(() => {});
     await refreshInitialData();
     onFlash(formatMsg(locale, 'settings.deleted', { id: m.id }));
-  };
-
-  const renameModel = async (m: ModelMeta, nextName: string) => {
-    const clean = nextName.trim();
-    setRenamingModelId(null);
-    if (!clean || clean === (m.display_name || m.id)) return;
-    await apiFetch('/api/v1/models', {
-      method: 'POST',
-      body: JSON.stringify({ ...m, display_name: clean }),
-    }).catch(() => {});
-    await refreshInitialData();
-    onFlash(formatMsg(locale, 'settings.renamedModelTo', { clean }));
   };
 
   const providerModels = (() => {
@@ -2054,39 +2052,25 @@ function ProvidersAndModelsSection({
                 </label>
 
                 {showAdvanced ? (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <label className="block space-y-1.5">
-                      <span className="text-ui-xs text-foreground-subtle">
-                        {formatMsg(locale, 'settings.providerId')}
-                      </span>
-                      <input
-                        value={draft.id}
-                        onChange={(e) => setDraft({ ...draft, id: e.target.value })}
-                        onBlur={() => void persistDraft()}
-                        placeholder="custom-gateway"
-                        className={settingsMonoInputClass}
-                      />
-                    </label>
-                    <label className="block space-y-1.5">
-                      <span className="text-ui-xs text-foreground-subtle">
-                        {formatMsg(locale, 'settings.credentialRouting')}
-                      </span>
-                      <select
-                        value={draft.proxyMode}
-                        onChange={(e) => {
-                          const proxyMode = e.target.value as ProviderRecord['proxy_mode'];
-                          setDraft({ ...draft, proxyMode });
-                          void persistDraft({ proxyMode });
-                        }}
-                        className={settingsSelectClass}
-                      >
-                        <option value="direct">{formatMsg(locale, 'settings.direct')}</option>
-                        <option value="server_proxy">
-                          {formatMsg(locale, 'settings.serverProxy')}
-                        </option>
-                      </select>
-                    </label>
-                  </div>
+                  <label className="block space-y-1.5">
+                    <span className="text-ui-xs text-foreground-subtle">
+                      {formatMsg(locale, 'settings.credentialRouting')}
+                    </span>
+                    <select
+                      value={draft.proxyMode}
+                      onChange={(e) => {
+                        const proxyMode = e.target.value as ProviderRecord['proxy_mode'];
+                        setDraft({ ...draft, proxyMode });
+                        void persistDraft({ proxyMode });
+                      }}
+                      className={settingsSelectClass}
+                    >
+                      <option value="direct">{formatMsg(locale, 'settings.direct')}</option>
+                      <option value="server_proxy">
+                        {formatMsg(locale, 'settings.serverProxy')}
+                      </option>
+                    </select>
+                  </label>
                 ) : null}
 
                 <button
@@ -2240,8 +2224,10 @@ function ProvidersAndModelsSection({
                   <div className="nex-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]">
                     <div className="nex-dialog-content w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-xl">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-ui-lg font-semibold text-foreground">
-                          {formatMsg(locale, 'settings.addModelManually')}
+                        <h3 data-testid="model-modal-title" className="text-ui-lg font-semibold text-foreground">
+                          {editingModel
+                            ? formatMsg(locale, 'settings.editModel')
+                            : formatMsg(locale, 'settings.addModelManually')}
                         </h3>
                         <button
                           type="button"
@@ -2257,9 +2243,10 @@ function ProvidersAndModelsSection({
                           <span className="text-ui-xs text-foreground-subtle">Model ID</span>
                           <input
                             value={newModelId}
+                            disabled={Boolean(editingModel)}
                             onChange={(e) => setNewModelId(e.target.value)}
                             placeholder="e.g. cli/glm-5.3"
-                            className={settingsMonoInputClass}
+                            className={`${settingsMonoInputClass} disabled:opacity-60`}
                           />
                         </label>
                         <label className="block space-y-1">
@@ -2297,7 +2284,7 @@ function ProvidersAndModelsSection({
                             />
                           </label>
                         </div>
-                        <div className="flex items-center gap-4 pt-1 text-ui-xs text-foreground">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1 text-ui-xs text-foreground">
                           <label className="flex items-center gap-1.5">
                             <input
                               type="checkbox"
@@ -2309,10 +2296,34 @@ function ProvidersAndModelsSection({
                           <label className="flex items-center gap-1.5">
                             <input
                               type="checkbox"
+                              checked={newSupportsPDF}
+                              onChange={(e) => setNewSupportsPDF(e.target.checked)}
+                            />
+                            <span>PDF</span>
+                          </label>
+                          <label className="flex items-center gap-1.5">
+                            <input
+                              type="checkbox"
+                              checked={newSupportsTools}
+                              onChange={(e) => setNewSupportsTools(e.target.checked)}
+                            />
+                            <span>Tools</span>
+                          </label>
+                          <label className="flex items-center gap-1.5">
+                            <input
+                              type="checkbox"
                               checked={newSupportsReasoning}
                               onChange={(e) => setNewSupportsReasoning(e.target.checked)}
                             />
                             <span>Reasoning</span>
+                          </label>
+                          <label className="flex items-center gap-1.5">
+                            <input
+                              type="checkbox"
+                              checked={newSupportsCaching}
+                              onChange={(e) => setNewSupportsCaching(e.target.checked)}
+                            />
+                            <span>Prompt Cache</span>
                           </label>
                         </div>
                         {newSupportsReasoning && (
@@ -2384,7 +2395,6 @@ function ProvidersAndModelsSection({
                     {providerModels.map((m) => {
                       const visible = !hiddenModelKeys[`${m.provider_id}::${m.id}`];
                       const testRes = testResults[m.id];
-                      const isRenaming = renamingModelId === m.id;
                       return (
                         <div
                           key={m.id}
@@ -2417,23 +2427,9 @@ function ProvidersAndModelsSection({
                         >
                           <div className="flex min-w-0 items-center gap-1.5">
                             <GripVertical className="size-3.5 shrink-0 cursor-grab text-foreground-subtlest" />
-                            {isRenaming ? (
-                              <input
-                                autoFocus
-                                value={renameModelDraft}
-                                onChange={(e) => setRenameModelDraft(e.target.value)}
-                                onBlur={() => void renameModel(m, renameModelDraft)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') void renameModel(m, renameModelDraft);
-                                  if (e.key === 'Escape') setRenamingModelId(null);
-                                }}
-                                className="h-7 w-44 rounded-md border border-border bg-input px-2 text-ui-sm text-foreground focus:border-primary focus:outline-none"
-                              />
-                            ) : (
-                              <span className="truncate font-mono text-ui-base text-foreground">
-                                {m.display_name && m.display_name !== m.id ? m.display_name : m.id}
-                              </span>
-                            )}
+                            <span className="truncate font-mono text-ui-base text-foreground">
+                              {m.display_name && m.display_name !== m.id ? m.display_name : m.id}
+                            </span>
                             <ModelBadge>{contextLabel(m.context_window)}</ModelBadge>
                             {m.supports_vision ? <ModelBadge>Vision</ModelBadge> : null}
                             {m.supports_reasoning ? <ModelBadge>Reasoning</ModelBadge> : null}
@@ -2451,22 +2447,12 @@ function ProvidersAndModelsSection({
                             )}
                             <button
                               type="button"
+                              data-testid={`edit-model-${m.id}`}
                               onClick={() => openEditModelDialog(m)}
-                              title={formatMsg(locale, 'settings.configureModelReasoningLevels')}
+                              title={formatMsg(locale, 'settings.editModel')}
                               className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
                             >
                               <SlidersHorizontal className="size-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRenamingModelId(m.id);
-                                setRenameModelDraft(m.display_name || m.id);
-                              }}
-                              title={formatMsg(locale, 'settings.renameDisplayName')}
-                              className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
-                            >
-                              <Pencil className="size-3.5" />
                             </button>
                             <button
                               type="button"

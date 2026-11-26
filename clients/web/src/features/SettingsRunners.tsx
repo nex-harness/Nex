@@ -484,6 +484,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
   };
 
   const [removingRunnerIds, setRemovingRunnerIds] = useState<Record<string, boolean>>({});
+  const [pendingDeleteRunner, setPendingDeleteRunner] = useState<{ id: string; name: string } | null>(null);
   const [upgradingRunnerIds, setUpgradingRunnerIds] = useState<Record<string, boolean>>({});
   const [upgradingAll, setUpgradingAll] = useState(false);
   const [renamingRunnerId, setRenamingRunnerId] = useState<string | null>(null);
@@ -1010,7 +1011,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       disabled={removing}
                       title={formatMsg(locale, 'runners.removeRunner')}
                       aria-label={formatMsg(locale, 'runners.removeRunner')}
-                      onClick={() => void removeRunner(r)}
+                      onClick={() => setPendingDeleteRunner({ id: r.id, name: r.name || r.id })}
                       className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg disabled:opacity-50"
                     >
                       {removing ? (
@@ -1567,6 +1568,46 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {pendingDeleteRunner && (
+        <div
+          data-testid="confirm-delete-runner-modal"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setPendingDeleteRunner(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]"
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-popover p-5 text-foreground shadow-2xl">
+            <h3 className="text-ui-lg font-semibold text-foreground">
+              {formatMsg(locale, 'runners.confirmRemoveTitle')}
+            </h3>
+            <p className="mt-2 text-ui-sm leading-relaxed text-foreground-subtle">
+              {formatMsg(locale, 'runners.confirmRemoveDesc', { name: pendingDeleteRunner.name })}
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteRunner(null)}
+                className="h-8 rounded-lg border border-border bg-card px-3 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+              >
+                {formatMsg(locale, 'common.cancel')}
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-delete-runner-btn"
+                onClick={() => {
+                  const target = pendingDeleteRunner;
+                  setPendingDeleteRunner(null);
+                  if (target) void removeRunner(target);
+                }}
+                className="h-8 rounded-lg bg-destructive px-3.5 text-ui-sm font-medium text-white transition-opacity hover:opacity-90"
+              >
+                {formatMsg(locale, 'runners.removeRunner')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
