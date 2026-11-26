@@ -278,11 +278,16 @@ export function InlineQuestionCard({ prompt }: { prompt: PendingUIPrompt }) {
     });
   };
 
-  const handleSubmit = () => {
-    if (!allAnswered) return;
+  const submitDrafts = (draftsToSubmit: QuestionAnswerDraft[]) => {
+    const ready = questions.every(
+      (q, idx) =>
+        resolveQuestionAnswer(q, draftsToSubmit[idx] || { selectedIndices: [], customText: '', useCustom: false })
+          .length > 0,
+    );
+    if (!ready) return;
     if (questions.length === 1) {
       const q = questions[0];
-      const d = drafts[0] || { selectedIndices: [], customText: '', useCustom: false };
+      const d = draftsToSubmit[0] || { selectedIndices: [], customText: '', useCustom: false };
       if (q.kind === 'confirm') {
         const confirmed = d.selectedIndices.includes(0);
         resolveUIPrompt(prompt.requestId, confirmed, confirmed ? 'yes' : 'no');
@@ -294,29 +299,51 @@ export function InlineQuestionCard({ prompt }: { prompt: PendingUIPrompt }) {
 
     const answers = questions.map((q, idx) => ({
       question: q.question,
-      answer: resolveQuestionAnswer(q, drafts[idx] || { selectedIndices: [], customText: '', useCustom: false }),
+      answer: resolveQuestionAnswer(q, draftsToSubmit[idx] || { selectedIndices: [], customText: '', useCustom: false }),
     }));
     resolveUIPrompt(prompt.requestId, true, JSON.stringify({ answers }));
   };
 
-  const selectOptionRow = (optIdx: number) => {
+  const handleSubmit = () => submitDrafts(drafts);
+
+  const selectOptionRow = (optIdx: number, autoAdvance = false) => {
     setFocusedRow(optIdx);
-    updateDraft(pageIdx, (prev) => {
-      if (currentQ.multiSelect) {
-        const exists = prev.selectedIndices.includes(optIdx);
-        return {
-          ...prev,
-          selectedIndices: exists
-            ? prev.selectedIndices.filter((i) => i !== optIdx)
-            : [...prev.selectedIndices, optIdx].sort((a, b) => a - b),
-        };
-      }
-      return {
-        ...prev,
-        selectedIndices: [optIdx],
-        useCustom: false,
+    const next = drafts.slice();
+    const base = next[pageIdx] || { selectedIndices: [], customText: '', useCustom: false };
+    if (currentQ.multiSelect) {
+      const exists = base.selectedIndices.includes(optIdx);
+      next[pageIdx] = {
+        ...base,
+        selectedIndices: exists
+          ? base.selectedIndices.filter((i) => i !== optIdx)
+          : [...base.selectedIndices, optIdx].sort((a, b) => a - b),
       };
-    });
+      setDrafts(next);
+      return;
+    }
+
+    next[pageIdx] = {
+      ...base,
+      selectedIndices: [optIdx],
+      useCustom: false,
+    };
+    setDrafts(next);
+
+    if (autoAdvance) {
+      if (pageIdx < questions.length - 1) {
+        setPageIdx(pageIdx + 1);
+        return;
+      }
+      const firstUnanswered = questions.findIndex(
+        (q, idx) =>
+          resolveQuestionAnswer(q, next[idx] || { selectedIndices: [], customText: '', useCustom: false }).length === 0,
+      );
+      if (firstUnanswered === -1) {
+        submitDrafts(next);
+      } else {
+        setPageIdx(firstUnanswered);
+      }
+    }
   };
 
   const focusRowElement = (rowIdx: number) => {
@@ -384,7 +411,7 @@ export function InlineQuestionCard({ prompt }: { prompt: PendingUIPrompt }) {
           }
           return;
         }
-        selectOptionRow(focusedRow);
+        selectOptionRow(focusedRow, e.key === 'Enter');
       }
     }
   };
@@ -469,7 +496,7 @@ export function InlineQuestionCard({ prompt }: { prompt: PendingUIPrompt }) {
               role="option"
               aria-selected={isSelected}
               data-testid={`question-option-${idx}`}
-              onClick={() => selectOptionRow(idx)}
+              onClick={() => selectOptionRow(idx, true)}
               onFocus={() => setFocusedRow(idx)}
               className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors outline-none ${
                 isSelected

@@ -29,6 +29,19 @@ type ModelUsageItem struct {
 	CacheSavedUSD    float64 `json:"cache_saved_usd"`
 }
 
+// UsageTimePoint represents a single hourly or daily time bucket in UsageSummary.Series.
+type UsageTimePoint struct {
+	BucketUnixSec    int64   `json:"bucket_unix_sec"`
+	Label            string  `json:"label"`
+	TurnCount        int     `json:"turn_count"`
+	InputTokens      int     `json:"input_tokens"`
+	OutputTokens     int     `json:"output_tokens"`
+	CacheReadTokens  int     `json:"cache_read_tokens"`
+	CacheWriteTokens int     `json:"cache_write_tokens"`
+	TotalTokens      int     `json:"total_tokens"`
+	EstimatedCostUSD float64 `json:"estimated_cost_usd"`
+}
+
 // UsageSummary aggregates token consumption, cache efficiency, model breakdown, and cost for a Runner or globally.
 type UsageSummary struct {
 	RunnerID         string           `json:"runner_id,omitempty"` // Empty means global across all runners
@@ -45,6 +58,7 @@ type UsageSummary struct {
 	CacheSavedUSD    float64          `json:"cache_saved_usd"`
 	BySourceTokens   map[string]int   `json:"by_source_tokens"`
 	Models           []ModelUsageItem `json:"models"`
+	Series           []UsageTimePoint `json:"series"`
 }
 
 func windowStartUnix(window UsageWindow, now time.Time, loc *time.Location) int64 {
@@ -158,5 +172,97 @@ func (s *Store) QueryUsageSummary(ctx context.Context, runnerID string, window U
 		return summary.Models[i].TotalTokens > summary.Models[j].TotalTokens
 	})
 
+	summary.Series = s.buildUsageSeries(ctx, runnerID, window, sinceBucket, now, loc)
+
 	return summary, nil
+}
+
+func (s *Store) buildUsageSeries(ctx context.Context, runnerID string, window UsageWindow, sinceBucket int64, now time.Time, loc *time.Location) []UsageTimePoint {
+	if loc == nil {
+		loc = time.Local
+	}
+	localNow := now.In(loc)
+	todayMidnight := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, loc)
+
+	hourly := window != Window7D && window != Window30D
+	var slots []UsageTimePoint
+	slotIndexByKey := make(map[string]int)
+
+	if hourly {
+		slots = make([]UsageTimePoint, 0, 24)
+		for i := 0; i < 24; i++ {
+			st := todayMidnight.Add(time.Duration(i) * time.Hour)
+			key := st.Format("2006-01-02T15")
+			slotIndexByKey[key] = len(slots)
+			slots = append(slots, UsageTimePoint{
+				BucketUnixSec: st.Unix(),
+				Label:         st.Format("15:04"),
+			})
+		}
+	} else {
+		days := 7
+		if window == Window30D {
+			days = 30
+		}
+		slots = make([]UsageTimePoint, 0, days)
+		for i := days - 1; i >= 0; i-- {
+			st := todayMidnight.AddDate(0, 0, -i)
+			key := st.Format("2006-01-02")
+			slotIndexByKey[key] = len(slots)
+			slots = append(slots, UsageTimePoint{
+				BucketUnixSec: st.Unix(),
+				Label:         st.Format("01-02"),
+			})
+		}
+	}
+
+	q := `
+		SELECT hour_bucket,
+		       SUM(turn_count), SUM(input_tokens), SUM(output_tokens),
+		       SUM(cache_read_tokens), SUM(cache_write_tokens),
+		       SUM(estimated_cost_usd)
+		FROM usage_rollups_hourly
+		WHERE hour_bucket >= ?
+	`
+	args := []any{sinceBucket}
+	if runnerID != "" {
+		q += ` AND runner_id = ?`
+		args = append(args, runnerID)
+	}
+	q += ` GROUP BY hour_bucket ORDER BY hour_bucket ASC`
+
+	rows, err := s.mainDB.QueryContext(ctx, q, args...)
+	if err != nil {
+		return slots
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var hourBucket int64
+		var turns, inTok, outTok, cRead, cWrite int
+		var cost float64
+		if err := rows.Scan(&hourBucket, &turns, &inTok, &outTok, &cRead, &cWrite, &cost); err != nil {
+			continue
+		}
+		bt := time.Unix(hourBucket, 0).In(loc)
+		var key string
+		if hourly {
+			key = bt.Format("2006-01-02T15")
+		} else {
+			key = bt.Format("2006-01-02")
+		}
+		idx, ok := slotIndexByKey[key]
+		if !ok {
+			continue
+		}
+		tot := inTok + outTok + cRead + cWrite
+		slots[idx].TurnCount += turns
+		slots[idx].InputTokens += inTok
+		slots[idx].OutputTokens += outTok
+		slots[idx].CacheReadTokens += cRead
+		slots[idx].CacheWriteTokens += cWrite
+		slots[idx].TotalTokens += tot
+		slots[idx].EstimatedCostUSD += cost
+	}
+	return slots
 }

@@ -191,13 +191,9 @@ func New(cfg Config) (*Server, error) {
 		s.relay = relay.New(relay.Config{AuthToken: cfg.RelayToken})
 	}
 
-	// Seed default embedded models if models table is currently empty
 	ctx := context.Background()
 	// Reset any stale 'online' runners persisted before a previous server restart/crash.
 	_ = s.store.MarkAllRunnersOffline(ctx)
-	if existing, err := s.store.ListModels(ctx, ""); err == nil && len(existing) == 0 {
-		_ = s.seedBuiltInProvidersAndModels(ctx)
-	}
 
 	s.registerRoutes()
 
@@ -236,21 +232,6 @@ func (s *Server) RemoteManager() *remote.HostManager {
 func (s *Server) Close() error {
 	if s.remoteMgr != nil {
 		return s.remoteMgr.Close()
-	}
-	return nil
-}
-
-func (s *Server) seedBuiltInProvidersAndModels(ctx context.Context) error {
-	_ = s.store.UpsertProvider(ctx, store.ProviderRecord{
-		ID: "anthropic", Name: "Anthropic", Driver: ai.DriverAnthropic,
-		BaseURL: "https://api.anthropic.com/v1", ProxyMode: "direct", Enabled: true,
-	})
-	_ = s.store.UpsertProvider(ctx, store.ProviderRecord{
-		ID: "openai", Name: "OpenAI Codex", Driver: ai.DriverOpenAIResponses,
-		BaseURL: "https://api.openai.com/v1", ProxyMode: "direct", Enabled: true,
-	})
-	if seed, err := ai.EmbeddedModelsCatalog(); err == nil {
-		_ = s.store.UpsertModelsBatch(ctx, seed, false)
 	}
 	return nil
 }

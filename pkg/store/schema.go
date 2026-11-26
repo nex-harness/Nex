@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS models (
 CREATE TABLE IF NOT EXISTS runners (
     id                  TEXT PRIMARY KEY,
     name                TEXT NOT NULL,
+    name_customized     INTEGER NOT NULL DEFAULT 0,
     hostname            TEXT NOT NULL DEFAULT '',
     os                  TEXT NOT NULL DEFAULT '',
     arch                TEXT NOT NULL DEFAULT '',

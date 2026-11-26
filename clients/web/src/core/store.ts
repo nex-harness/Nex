@@ -610,6 +610,7 @@ export interface AppState {
   ) => Promise<void>;
   startNewSession: (runnerId?: string, workspacePath?: string) => void;
   renameSession: (sessionId: string, newTitle: string) => Promise<void>;
+  renameRunner: (runnerId: string, name: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   forkSession: (
     sessionId: string,
@@ -846,7 +847,7 @@ export const useNexStore = create<AppState>((set, get) => ({
     const saved = decodeStoredEffort(safeStorageGet(DRAFT_EFFORT_STORAGE_KEY));
     return saved !== undefined ? saved : DEFAULT_NEW_SESSION_EFFORT;
   })(),
-  permissionMode: 'full_access',
+  permissionMode: 'interactive',
   activeSessionId: '',
   composerText: readPersistedComposerDraft(''),
   composerAttachments: [],
@@ -2113,6 +2114,20 @@ export const useNexStore = create<AppState>((set, get) => ({
       body: JSON.stringify({ title: newTitle }),
     });
     await get().refreshInitialData();
+  },
+
+  renameRunner: async (runnerId, name) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      throw new Error('Runner name is required');
+    }
+    const updated = await apiFetch<RunnerRecord>(`/api/v1/runners/${encodeURIComponent(runnerId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name: trimmed }),
+    });
+    set((s) => ({
+      runners: s.runners.map((r) => (r.id === runnerId ? { ...r, ...updated, name: updated.name || trimmed } : r)),
+    }));
   },
 
   deleteSession: async (sessionId) => {

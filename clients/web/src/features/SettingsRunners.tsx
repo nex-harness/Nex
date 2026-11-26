@@ -153,7 +153,7 @@ function formatRunnerUpdatePhase(locale: LocaleCode, phase?: string, progress?: 
 }
 
 export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {
-  const { locale, runners, sshTargets, refreshInitialData, refreshRegistries, triggerRunnerUpdate, triggerAllRunnersUpdate } = useNexStore();
+  const { locale, runners, sshTargets, refreshInitialData, refreshRegistries, renameRunner, triggerRunnerUpdate, triggerAllRunnersUpdate } = useNexStore();
 
   const [copied, setCopied] = useState(false);
   const [manualModalOpen, setManualModalOpen] = useState(false);
@@ -486,6 +486,9 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
   const [removingRunnerIds, setRemovingRunnerIds] = useState<Record<string, boolean>>({});
   const [upgradingRunnerIds, setUpgradingRunnerIds] = useState<Record<string, boolean>>({});
   const [upgradingAll, setUpgradingAll] = useState(false);
+  const [renamingRunnerId, setRenamingRunnerId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [renameBusyId, setRenameBusyId] = useState<string | null>(null);
   const [openMenuKey, setOpenMenuKey] = useState<string | null>(null);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -541,6 +544,28 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
       }
     } finally {
       setUpgradingAll(false);
+    }
+  };
+
+  const submitRunnerRename = async (r: RunnerRecord) => {
+    const trimmed = renameDraft.trim();
+    if (!trimmed || trimmed === r.name) {
+      setRenamingRunnerId(null);
+      return;
+    }
+    setRenameBusyId(r.id);
+    try {
+      await renameRunner(r.id, trimmed);
+      setRenamingRunnerId(null);
+      onFlash(formatMsg(locale, 'runners.renamedSuccess', { name: trimmed }));
+    } catch (err) {
+      onFlash(
+        formatMsg(locale, 'runners.renameFailed', {
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    } finally {
+      setRenameBusyId(null);
     }
   };
 
@@ -736,7 +761,67 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                         r.status === 'online' ? 'bg-success' : 'bg-foreground-subtlest'
                       }`}
                     />
-                    <span className="truncate text-ui-base font-medium text-foreground">{r.name}</span>
+                    {renamingRunnerId === r.id ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void submitRunnerRename(r);
+                        }}
+                        className="inline-flex items-center gap-1"
+                      >
+                        <input
+                          type="text"
+                          autoFocus
+                          data-testid={`rename-runner-input-${r.id}`}
+                          value={renameDraft}
+                          disabled={renameBusyId === r.id}
+                          maxLength={80}
+                          placeholder={formatMsg(locale, 'runners.renamePlaceholder')}
+                          onChange={(e) => setRenameDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              e.preventDefault();
+                              setRenamingRunnerId(null);
+                            }
+                          }}
+                          className={`${settingsInputClass} h-7 w-44 px-2 text-ui-sm`}
+                        />
+                        <button
+                          type="submit"
+                          data-testid={`save-runner-name-${r.id}`}
+                          disabled={renameBusyId === r.id || !renameDraft.trim()}
+                          aria-label={formatMsg(locale, 'common.save')}
+                          className="flex size-7 items-center justify-center rounded-md bg-foreground text-background transition-opacity hover:opacity-90 disabled:opacity-40"
+                        >
+                          {renameBusyId === r.id ? <LoaderCircle className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRenamingRunnerId(null)}
+                          aria-label={formatMsg(locale, 'common.cancel')}
+                          className="flex size-7 items-center justify-center rounded-md border border-border text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </form>
+                    ) : (
+                      <>
+                        <span className="truncate text-ui-base font-medium text-foreground">{r.name}</span>
+                        <button
+                          type="button"
+                          data-testid={`rename-runner-${r.id}`}
+                          title={formatMsg(locale, 'runners.rename')}
+                          aria-label={formatMsg(locale, 'runners.rename')}
+                          onClick={() => {
+                            setRenamingRunnerId(r.id);
+                            setRenameDraft(r.name);
+                          }}
+                          className="flex size-6 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
+                        >
+                          <Pencil className="size-3" />
+                        </button>
+                      </>
+                    )}
                     <span
                       className={`rounded-md px-1.5 py-0.5 text-ui-xs font-medium ${
                         r.status === 'online'

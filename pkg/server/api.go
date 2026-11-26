@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nex-harness/nex/pkg/ai"
 	"github.com/nex-harness/nex/pkg/protocol"
@@ -589,6 +591,50 @@ func (s *Server) handleRunnerSubroutes(w http.ResponseWriter, r *http.Request) {
 	runnerID, action, _ := strings.Cut(rest, "/")
 	if runnerID == "" {
 		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if action == "" && (r.Method == http.MethodPatch || r.Method == http.MethodPut) {
+		var body struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+		trimmed := strings.TrimSpace(body.Name)
+		if trimmed == "" {
+			writeErr(w, http.StatusBadRequest, fmt.Errorf("name is required"))
+			return
+		}
+		if utf8.RuneCountInString(trimmed) > 80 {
+			writeErr(w, http.StatusBadRequest, fmt.Errorf("name must be 80 characters or fewer"))
+			return
+		}
+		if err := s.store.RenameRunner(r.Context(), runnerID, trimmed); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeErr(w, http.StatusNotFound, fmt.Errorf("runner not found"))
+				return
+			}
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		rec, err := s.store.GetRunner(r.Context(), runnerID)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		rec.AuthToken = ""
+		s.mu.RLock()
+		_, isOnline := s.runners[runnerID]
+		s.mu.RUnlock()
+		if isOnline {
+			rec.Status = "online"
+		} else {
+			rec.Status = "offline"
+		}
+		s.enrichRunnerRecord(r.Context(), rec)
+		s.broadcastRunnerStatus(r.Context(), runnerID, rec.Status)
+		writeJSON(w, http.StatusOK, rec)
 		return
 	}
 	if action == "" && r.Method == http.MethodDelete {

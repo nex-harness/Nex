@@ -4,7 +4,7 @@ import { emptyStreamState } from './core/reducer';
 import { readPersistedSessionId, readPersistedViewState, useNexStore } from './core/store';
 import { AuthGate } from './features/AuthGate';
 import { CommandPaletteModal } from './features/CommandPaletteModal';
-import { ApprovalModal, UIPromptModal } from './features/ControlModals';
+import { ApprovalModal } from './features/ControlModals';
 import { ConversationPane } from './features/ConversationPane';
 import { DesktopTopOverlay } from './features/DesktopTopOverlay';
 import { GhosttyTerminal } from './features/GhosttyTerminal';
@@ -35,9 +35,6 @@ export function App() {
   // Subscribe ONLY to blocking modal states so App shell NEVER re-renders on text/tool streaming frames!
   const pendingApproval = useNexStore((s) =>
     s.activeSessionId ? s.streams[s.activeSessionId]?.pendingApproval || null : null,
-  );
-  const pendingUIPrompt = useNexStore((s) =>
-    s.activeSessionId ? s.streams[s.activeSessionId]?.pendingUIPrompt || null : null,
   );
 
   const [sidebarWidth, setSidebarWidth] = useState(260);
@@ -169,7 +166,6 @@ export function App() {
         <ImagePreviewModal />
         <NotificationToastStack />
         {pendingApproval && <ApprovalModal approval={pendingApproval} />}
-        {pendingUIPrompt && <UIPromptModal prompt={pendingUIPrompt} />}
       </div>
     );
   }

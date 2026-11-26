@@ -6017,4 +6017,209 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       globalThis.fetch = origFetch;
     }
   });
+
+  it('auto-advances and auto-submits single-select question options, and hides question card in Settings', () => {
+    const origResolve = useNexStore.getState().resolveUIPrompt;
+    const resolveSpy = vi.fn(async () => {});
+    const now = Date.now();
+    try {
+      useNexStore.setState({
+        serverConnectRequired: false,
+        authEnabled: false,
+        authenticated: true,
+        mainView: 'workspace',
+        activeSessionId: 'sess_q_auto',
+        runners: [
+          {
+            id: 'run_1',
+            name: 'Local',
+            hostname: 'local-mac',
+            os: 'darwin',
+            arch: 'arm64',
+            shell: 'zsh',
+            version: '1.0',
+            tags: [],
+            status: 'online',
+            last_seen_at: now,
+            synced_config_rev: 1,
+            workspace_default: '/tmp/ws',
+          },
+        ],
+        sessions: [
+          {
+            id: 'sess_q_auto',
+            runner_id: 'run_1',
+            depth: 0,
+            title: 'Auto Question',
+            workspace_path: '/tmp/ws',
+            agent_profile_slug: 'main',
+            model_id: 'm1',
+            provider_id: 'p1',
+            permission_mode: 'interactive',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: now,
+            updated_at: now,
+            last_active_at: now,
+          },
+        ],
+        resolveUIPrompt: resolveSpy,
+        streams: {
+          sess_q_auto: {
+            ...emptyStreamState(),
+            pendingUIPrompt: {
+              requestId: 'uip_auto_1',
+              sessionId: 'sess_q_auto',
+              runnerId: 'run_1',
+              kind: 'select',
+              title: 'Choose language?',
+              questions: [
+                {
+                  header: 'Step 1',
+                  question: 'Choose language?',
+                  kind: 'select',
+                  options: [{ label: 'Go' }, { label: 'Rust' }],
+                },
+                {
+                  header: 'Step 2',
+                  question: 'Choose mode?',
+                  kind: 'select',
+                  options: [{ label: 'Fast' }, { label: 'Thorough' }],
+                },
+              ],
+            },
+          },
+        },
+      });
+
+      render(<App />);
+      expect(screen.getByTestId('question-pager-indicator').textContent).toBe('1 / 2');
+
+      // Clicking single-select option on page 1 auto-advances to page 2
+      fireEvent.click(screen.getByTestId('question-option-0'));
+      expect(screen.getByTestId('question-pager-indicator').textContent).toBe('2 / 2');
+      expect(resolveSpy).not.toHaveBeenCalled();
+
+      // Clicking single-select option on final page auto-submits both answers
+      fireEvent.click(screen.getByTestId('question-option-1'));
+      expect(resolveSpy).toHaveBeenCalledWith(
+        'uip_auto_1',
+        true,
+        JSON.stringify({
+          answers: [
+            { question: 'Choose language?', answer: 'Go' },
+            { question: 'Choose mode?', answer: 'Thorough' },
+          ],
+        }),
+      );
+
+      // Switching to Settings hides the question modal overlay completely
+      fireEvent.click(screen.getByTestId('sidebar-settings-btn'));
+      expect(screen.queryByTestId('inline-question-card')).toBeNull();
+    } finally {
+      useNexStore.setState({ resolveUIPrompt: origResolve });
+    }
+  });
+
+  it('renames a connected runner inline and renders interactive usage analytics trend chart', async () => {
+    const origFetch = globalThis.fetch;
+    const patchCalls: Array<{ url: string; body: string }> = [];
+    const now = Date.now();
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'PATCH' && url.includes('/api/v1/runners/run_hk')) {
+        const body = String(init?.body || '');
+        patchCalls.push({ url, body });
+        return new Response(
+          JSON.stringify({
+            id: 'run_hk',
+            name: 'HK Edge Relay',
+            os: 'linux',
+            arch: 'amd64',
+            shell: 'bash',
+            version: '1.0',
+            tags: [],
+            status: 'online',
+            last_seen_at: now,
+            synced_config_rev: 2,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (url.includes('/api/v1/stats')) {
+        return new Response(
+          JSON.stringify({
+            window: '7d',
+            turn_count: 5,
+            input_tokens: 12000,
+            output_tokens: 3000,
+            cache_read_tokens: 8000,
+            cache_write_tokens: 500,
+            total_tokens: 23500,
+            cache_hit_rate_pct: 39.0,
+            estimated_cost_usd: 0.1425,
+            cache_saved_usd: 0.041,
+            by_source_tokens: { chat: 20000, subagent: 3500, cron: 0 },
+            models: [],
+            series: [
+              { bucket_unix_sec: 1, label: '11-21', turn_count: 2, input_tokens: 4000, output_tokens: 1000, cache_read_tokens: 2000, cache_write_tokens: 0, total_tokens: 7000, estimated_cost_usd: 0.0425 },
+              { bucket_unix_sec: 2, label: '11-22', turn_count: 3, input_tokens: 8000, output_tokens: 2000, cache_read_tokens: 6000, cache_write_tokens: 500, total_tokens: 16500, estimated_cost_usd: 0.1 },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as typeof fetch;
+
+    try {
+      useNexStore.setState({
+        serverConnectRequired: false,
+        authEnabled: false,
+        authenticated: true,
+        mainView: 'settings',
+        settingsSection: 'runners',
+        runners: [
+          {
+            id: 'run_hk',
+            name: 'hk-node',
+            hostname: 'hk-vps',
+            os: 'linux',
+            arch: 'amd64',
+            shell: 'bash',
+            version: '1.0',
+            tags: [],
+            status: 'online',
+            last_seen_at: now,
+            synced_config_rev: 2,
+            workspace_default: '/home/tylinux',
+          },
+        ],
+      });
+
+      render(<App />);
+      fireEvent.click(screen.getByTestId('rename-runner-run_hk'));
+      const input = screen.getByTestId('rename-runner-input-run_hk') as HTMLInputElement;
+      fireEvent.change(input, { target: { value: 'HK Edge Relay' } });
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('save-runner-name-run_hk'));
+      });
+      expect(patchCalls.some((c) => c.body.includes('"HK Edge Relay"'))).toBe(true);
+      expect(useNexStore.getState().runners[0].name).toBe('HK Edge Relay');
+
+      // Switch to Usage Analytics tab -> chart renders with series and switches metrics
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('settings-nav-usage'));
+      });
+      expect(screen.getByTestId('usage-trend-chart')).toBeTruthy();
+      expect(screen.getByTestId('usage-bar-0')).toBeTruthy();
+      expect(screen.getByTestId('usage-bar-1')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('usage-chart-metric-cost'));
+      expect(screen.getByTestId('usage-chart-inspector').textContent).toContain('$0.1000');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });

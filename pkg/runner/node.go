@@ -166,20 +166,6 @@ func NewNode(cfg Config) (*Node, error) {
 		return nil, err
 	}
 
-	// Ensure embedded model catalog exists locally for offline cost/window resolution
-	ctx := context.Background()
-	if existing, err := st.ListModels(ctx, ""); err == nil && len(existing) == 0 {
-		_ = st.UpsertProvider(ctx, store.ProviderRecord{
-			ID: "anthropic", Name: "Anthropic", Driver: ai.DriverAnthropic, BaseURL: "https://api.anthropic.com/v1", Enabled: true,
-		})
-		_ = st.UpsertProvider(ctx, store.ProviderRecord{
-			ID: "openai", Name: "OpenAI Codex", Driver: ai.DriverOpenAIResponses, BaseURL: "https://api.openai.com/v1", Enabled: true,
-		})
-		if seed, err := ai.EmbeddedModelsCatalog(); err == nil {
-			_ = st.UpsertModelsBatch(ctx, seed, false)
-		}
-	}
-
 	hc := cfg.HTTPClient
 	if hc == nil {
 		hc = &http.Client{Timeout: 5 * time.Minute}
@@ -215,7 +201,7 @@ func NewNode(cfg Config) (*Node, error) {
 		pendingRPC:      make(map[string]chan protocol.Envelope),
 	}
 	n.updater = newUpdater(n)
-	n.reconcileOrphanedLocalSessions(ctx)
+	n.reconcileOrphanedLocalSessions(context.Background())
 	return n, nil
 }
 

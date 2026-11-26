@@ -71,6 +71,7 @@ func Open(dataDir string) (*Store, error) {
 	_, _ = mainDB.Exec(`ALTER TABLE sessions ADD COLUMN thinking_effort TEXT NOT NULL DEFAULT ''`)
 	_, _ = archiveDB.Exec(`ALTER TABLE sessions ADD COLUMN thinking_effort TEXT NOT NULL DEFAULT ''`)
 	_, _ = mainDB.Exec(`ALTER TABLE cron_jobs ADD COLUMN credential_ids_json TEXT NOT NULL DEFAULT '[]'`)
+	_, _ = mainDB.Exec(`ALTER TABLE runners ADD COLUMN name_customized INTEGER NOT NULL DEFAULT 0`)
 
 	vaultKey, err := loadOrCreateVaultKey(dataDir)
 	if err != nil {

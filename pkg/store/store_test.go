@@ -198,10 +198,30 @@ func TestStoreBlobsRegistriesArchiveAndStats(t *testing.T) {
 	if err != nil || todayStats.TurnCount != 1 || math.Abs(todayStats.EstimatedCostUSD-0.072) > 1e-6 {
 		t.Fatalf("today stats mismatch: %+v err=%v", todayStats, err)
 	}
+	if len(todayStats.Series) != 24 {
+		t.Fatalf("expected 24 hourly series points for WindowToday, got %d", len(todayStats.Series))
+	}
+	seriesTodayTok := 0
+	for _, pt := range todayStats.Series {
+		seriesTodayTok += pt.TotalTokens
+	}
+	if seriesTodayTok != todayStats.TotalTokens {
+		t.Fatalf("today series total tokens %d != summary %d", seriesTodayTok, todayStats.TotalTokens)
+	}
 
 	weekStats, err := st.QueryUsageSummary(ctx, "run_mac", Window7D, now, shanghai)
 	if err != nil || weekStats.TurnCount != 2 || len(weekStats.Models) != 2 {
 		t.Fatalf("7d stats mismatch: %+v err=%v", weekStats, err)
+	}
+	if len(weekStats.Series) != 7 {
+		t.Fatalf("expected 7 daily series points for Window7D, got %d", len(weekStats.Series))
+	}
+	seriesWeekTok := 0
+	for _, pt := range weekStats.Series {
+		seriesWeekTok += pt.TotalTokens
+	}
+	if seriesWeekTok != weekStats.TotalTokens {
+		t.Fatalf("7d series total tokens %d != summary %d", seriesWeekTok, weekStats.TotalTokens)
 	}
 
 	// 7. Cold/Hot Physical Archive -> Unarchive -> Permanent Delete with CAS Blob GC!

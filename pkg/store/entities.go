@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -59,13 +60,31 @@ func (s *Store) UpsertRunner(ctx context.Context, r RunnerRecord) error {
 		INSERT INTO runners (id, name, hostname, os, arch, shell, version, tags_json, status, last_seen_at, synced_config_rev, auth_token, workspace_default, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			name=excluded.name, hostname=excluded.hostname, os=excluded.os, arch=excluded.arch,
+			name=CASE WHEN runners.name_customized = 1 AND runners.name != '' THEN runners.name ELSE excluded.name END,
+			hostname=excluded.hostname, os=excluded.os, arch=excluded.arch,
 			shell=excluded.shell, version=excluded.version, tags_json=excluded.tags_json,
 			status=excluded.status, last_seen_at=excluded.last_seen_at,
 			synced_config_rev=excluded.synced_config_rev,
 			auth_token=CASE WHEN excluded.auth_token != '' THEN excluded.auth_token ELSE runners.auth_token END,
 			workspace_default=CASE WHEN excluded.workspace_default != '' THEN excluded.workspace_default ELSE runners.workspace_default END
 	`, r.ID, r.Name, r.Hostname, r.OS, r.Arch, r.Shell, r.Version, string(tagsJSON), r.Status, r.LastSeenAt, r.SyncedConfigRev, r.AuthToken, r.WorkspaceDefault, r.CreatedAt)
+	return err
+}
+
+// RenameRunner sets a user-customized display name for an existing runner and marks it sticky across reconnects.
+func (s *Store) RenameRunner(ctx context.Context, id, name string) error {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return fmt.Errorf("runner name cannot be empty")
+	}
+	res, err := s.mainDB.ExecContext(ctx, `UPDATE runners SET name = ?, name_customized = 1 WHERE id = ?`, trimmed, id)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err == nil && affected == 0 {
+		return sql.ErrNoRows
+	}
 	return err
 }
 

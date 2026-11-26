@@ -637,6 +637,18 @@ export interface WorkbenchTab {
   closable: boolean;
 }
 
+export interface UsageTimePoint {
+  bucket_unix_sec: number;
+  label: string;
+  turn_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+}
+
 export interface UsageSummary {
   runner_id?: string;
   window: 'today' | '7d' | '30d';
@@ -658,6 +670,7 @@ export interface UsageSummary {
     estimated_cost_usd: number;
     cache_saved_usd: number;
   }>;
+  series?: UsageTimePoint[];
 }
 
 export interface MemoryRecord {

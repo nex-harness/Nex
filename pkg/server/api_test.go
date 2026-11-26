@@ -222,7 +222,7 @@ func TestRunnerBrowseDirsEndpointAndCRUDRoutes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, ts, _ := newTestServer(t, http.DefaultClient)
+	_, ts, st := newTestServer(t, http.DefaultClient)
 
 	// Offline runner returns 502
 	offResp, err := http.Get(ts.URL + "/api/v1/runners/offline-r/dirs")
@@ -297,9 +297,31 @@ func TestRunnerBrowseDirsEndpointAndCRUDRoutes(t *testing.T) {
 		t.Fatalf("expected project-a and project-b in browse response: %s", string(dirRaw))
 	}
 
-	// Cover Runners list, Session PATCH/GET/DELETE, Stats, Providers/Agents/Skills/Plugins/MCP CRUD + DELETE
+	// Cover Runners list + rename + sticky name across UpsertRunner, Session PATCH/GET/DELETE, Stats, Providers/Agents/Skills/Plugins/MCP CRUD + DELETE
 	runResp, _ := http.Get(ts.URL + "/api/v1/runners")
 	_ = runResp.Body.Close()
+
+	renameReq, _ := http.NewRequest(http.MethodPatch, ts.URL+"/api/v1/runners/run_browse_1", bytes.NewReader([]byte(`{"name":"Custom Studio Box"}`)))
+	renameResp, err := http.DefaultClient.Do(renameReq)
+	if err != nil || renameResp.StatusCode != http.StatusOK {
+		t.Fatalf("PATCH runner rename failed: %v %v", renameResp, err)
+	}
+	var renamedRunner store.RunnerRecord
+	_ = json.NewDecoder(renameResp.Body).Decode(&renamedRunner)
+	_ = renameResp.Body.Close()
+	if renamedRunner.Name != "Custom Studio Box" {
+		t.Fatalf("expected renamed runner name 'Custom Studio Box', got %q", renamedRunner.Name)
+	}
+	// Simulate runner reconnect reporting original hostname/name; custom name must stay sticky
+	if err := st.UpsertRunner(ctx, store.RunnerRecord{
+		ID: "run_browse_1", Name: "OrigBoxName", Status: "online", LastSeenAt: time.Now().UnixMilli(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	reloadedRunner, err := st.GetRunner(ctx, "run_browse_1")
+	if err != nil || reloadedRunner.Name != "Custom Studio Box" {
+		t.Fatalf("expected sticky runner name 'Custom Studio Box' after upsert, got %+v err=%v", reloadedRunner, err)
+	}
 
 	_ = postJSON(t, ts.URL+"/api/v1/sessions", store.SessionRecord{ID: "s_crud", RunnerID: "run_browse_1", Title: "Init"})
 	patchReq, _ := http.NewRequest(http.MethodPatch, ts.URL+"/api/v1/sessions/s_crud", bytes.NewReader([]byte(`{"title":"Renamed","permission_mode":"read_only"}`)))
