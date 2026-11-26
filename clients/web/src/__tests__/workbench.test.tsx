@@ -1392,25 +1392,20 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       expect(screen.getByTestId('web-password-new')).toBeTruthy();
       expect(screen.getByTestId('web-logout-btn')).toBeTruthy();
 
-      // 5. Remote Devices (Runners) Settings exposes SSH targets + Add SSH modal (SCP & Remote Install)
+      // 5. Remote Devices (Runners) Settings exposes unified Connect via SSH + Manual Join + Refresh toolbar and modals
       useNexStore.setState({
         settingsSection: 'runners',
-        sshTargets: [
-          {
-            id: 'ssh_rb1',
-            name: 'RemoteBuilder',
-            ssh_alias: 'remotebuilder',
-            host: '192.168.123.42',
-            port: 22,
-            username: 'tylinux',
-            auth_method: 'key',
-            install_mode: 'scp',
-            last_status: 'idle',
-          },
-        ],
+        sshTargets: [],
       });
       rerender(<App />);
-      expect(screen.getByTestId('ssh-target-ssh_rb1')).toBeTruthy();
+      expect(screen.queryByTestId('ssh-target-ssh_rb1')).toBeNull();
+      expect(screen.getByTestId('manual-join-btn')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('manual-join-btn'));
+      expect(screen.getByTestId('manual-join-modal')).toBeTruthy();
+      expect(screen.getByTestId('runner-manual-join-cmd')).toBeTruthy();
+      fireEvent.mouseDown(screen.getByTestId('manual-join-modal-backdrop'));
+      expect(screen.queryByTestId('manual-join-modal')).toBeNull();
+
       fireEvent.click(screen.getByTestId('add-ssh-server-btn'));
       const modal = screen.getByTestId('ssh-server-modal');
       expect(modal).toBeTruthy();
@@ -5676,6 +5671,82 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       expect(JSON.parse(req!.body || '{}')).toMatchObject({ mode: 'immediate', force: true });
     } finally {
       globalThis.fetch = origFetch;
+    }
+  });
+
+  it('keeps SSH modal open with error on deploy failure and closes modal + refreshes connected runners on success', async () => {
+    let deployAttempt = 0;
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = (init?.method || 'GET').toUpperCase();
+      if (url.includes('/api/v1/ssh/targets') && method === 'POST' && !url.includes('/deploy')) {
+        return new Response(
+          JSON.stringify({
+            id: 'ssh_new_1',
+            name: '10.0.0.55',
+            host: '10.0.0.55',
+            port: 22,
+            username: 'root',
+            auth_method: 'key',
+            install_mode: 'scp',
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes('/api/v1/ssh/targets/ssh_new_1/deploy') && method === 'POST') {
+        deployAttempt += 1;
+        if (deployAttempt === 1) {
+          return new Response(
+            JSON.stringify({ ok: false, error: 'ssh handshake failed: permission denied', log: 'Permission denied (publickey).' }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ ok: true, log: 'started nex-runner' }), { status: 200 });
+      }
+      return new Response(JSON.stringify([]), { status: 200 });
+    }) as typeof fetch;
+
+    const origRefreshReg = useNexStore.getState().refreshRegistries;
+    const origRefreshInit = useNexStore.getState().refreshInitialData;
+    const refreshRegSpy = vi.fn().mockResolvedValue(undefined);
+    const refreshInitSpy = vi.fn().mockResolvedValue(undefined);
+    useNexStore.setState({
+      refreshRegistries: refreshRegSpy as never,
+      refreshInitialData: refreshInitSpy as never,
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      locale: 'zh-CN',
+      mainView: 'settings',
+      settingsSection: 'runners',
+      runners: [],
+      sshTargets: [],
+    });
+
+    try {
+      render(<App />);
+      fireEvent.click(screen.getByTestId('add-ssh-server-btn'));
+      fireEvent.change(screen.getByTestId('ssh-host-input'), { target: { value: '10.0.0.55' } });
+
+      // 1. First deploy fails -> modal stays open and displays inline error + log
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('ssh-save-deploy-btn'));
+      });
+      expect(screen.getByTestId('ssh-server-modal')).toBeTruthy();
+      const errBox = screen.getByTestId('ssh-modal-error');
+      expect(errBox.textContent).toContain('ssh handshake failed: permission denied');
+      expect(errBox.textContent).toContain('Permission denied (publickey).');
+
+      // 2. Retry succeeds -> modal closes and connected runners refresh
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('ssh-save-deploy-btn'));
+      });
+      expect(screen.queryByTestId('ssh-server-modal')).toBeNull();
+      expect(refreshInitSpy).toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = origFetch;
+      useNexStore.setState({ refreshRegistries: origRefreshReg, refreshInitialData: origRefreshInit });
     }
   });
 });

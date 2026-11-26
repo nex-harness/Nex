@@ -156,13 +156,14 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
   const { locale, runners, sshTargets, refreshInitialData, refreshRegistries, triggerRunnerUpdate, triggerAllRunnersUpdate } = useNexStore();
 
   const [copied, setCopied] = useState(false);
-  const [manualOpen, setManualOpen] = useState(false);
+  const [manualModalOpen, setManualModalOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<SSHFormState>(EMPTY_FORM);
   const [showPwd, setShowPwd] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [pasteNotice, setPasteNotice] = useState('');
   const [formError, setFormError] = useState('');
+  const [deployLog, setDeployLog] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [configHosts, setConfigHosts] = useState<SSHConfigHost[]>([]);
@@ -296,6 +297,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
   const openCreateModal = () => {
     setForm(EMPTY_FORM);
     setFormError('');
+    setDeployLog('');
     setPasteNotice('');
     setAdvancedOpen(false);
     setShowPwd(false);
@@ -324,6 +326,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
       download_url: t.download_url || '',
     });
     setFormError('');
+    setDeployLog('');
     setPasteNotice('');
     setAdvancedOpen(Boolean(t.workspace_path || t.server_ws_url || (t.install_dir && t.install_dir !== '~/.nex-runner')));
     setShowPwd(false);
@@ -380,6 +383,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
     }
     setSaving(true);
     setFormError('');
+    setDeployLog('');
     try {
       const saved = await apiFetch<SSHTargetRecord>('/api/v1/ssh/targets', {
         method: 'POST',
@@ -400,11 +404,30 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
           download_url: form.download_url.trim(),
         }),
       });
-      await refreshRegistries();
-      setModalOpen(false);
-      onFlash(formatMsg(locale, 'runners.savedSshServer', { name: saved.name }));
-      if (deployAfterSave && saved?.id) {
-        void runTargetAction(saved, 'deploy');
+      if (saved?.id) {
+        setForm((prev) => ({ ...prev, id: saved.id }));
+      }
+
+      if (!deployAfterSave || !saved?.id) {
+        await refreshRegistries();
+        setModalOpen(false);
+        onFlash(formatMsg(locale, 'runners.savedSshServer', { name: saved.name }));
+        return;
+      }
+
+      const res = await apiFetch<{ ok?: boolean; error?: string; log?: string }>(
+        `/api/v1/ssh/targets/${encodeURIComponent(saved.id)}/deploy`,
+        { method: 'POST' },
+      );
+      if (res?.ok) {
+        await Promise.all([refreshRegistries(), refreshInitialData()]);
+        window.setTimeout(() => void refreshInitialData(), 1500);
+        setModalOpen(false);
+        onFlash(formatMsg(locale, 'runners.deployedStartedRunnerOn', { name: saved.name }));
+      } else {
+        setFormError(res?.error || formatMsg(locale, 'runners.unknownError'));
+        setDeployLog(res?.log || '');
+        void refreshRegistries();
       }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : String(err));
@@ -458,11 +481,6 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
         return next;
       });
     }
-  };
-
-  const deleteTarget = async (id: string) => {
-    await apiFetch(`/api/v1/ssh/targets/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    await refreshRegistries();
   };
 
   const [removingRunnerIds, setRemovingRunnerIds] = useState<Record<string, boolean>>({});
@@ -545,23 +563,15 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
 
   const livePreview = `${form.username.trim() || 'user'}@${form.host.trim() || 'host'}:${form.port.trim() || '22'}`;
 
-  // Map each connected runner to its matching SSH target (by name or hostname),
-  // and track which SSH targets have been merged into a Connected Runner row so
-  // they are not duplicated in the SSH Targets section above.
+  // Map each connected runner to its matching SSH target (by name or hostname).
   const matchSshTargetForRunner = (r: (typeof runners)[number]): (typeof sshTargets)[number] | undefined =>
     sshTargets.find(
       (t) =>
         t.name.toLowerCase() === r.name.toLowerCase() ||
         (Boolean(r.hostname) && t.host.toLowerCase() === r.hostname!.toLowerCase()),
     );
-  const matchedSshTargetIds = new Set<string>();
-  for (const r of runners) {
-    const matched = matchSshTargetForRunner(r);
-    if (matched) matchedSshTargetIds.add(matched.id);
-  }
-  const standaloneSshTargets = sshTargets.filter((t) => !matchedSshTargetIds.has(t.id));
 
-  const renderSshActionButtons = (t: (typeof sshTargets)[number], isOnline: boolean, compact = false) => {
+  const renderSshActionButtons = (t: (typeof sshTargets)[number], isOnline: boolean) => {
     const busy = busyById[t.id];
     const logOpen = Boolean(expandedLogs[t.id]);
     return (
@@ -630,116 +640,28 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
         >
           <Pencil className="size-3.5" />
         </button>
-        {!compact && (
-          <button
-            type="button"
-            onClick={() => void deleteTarget(t.id)}
-            aria-label={formatMsg(locale, 'runners.deleteSshServer')}
-            className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
-          >
-            <Trash2 className="size-3.5" />
-          </button>
-        )}
       </>
     );
   };
 
   return (
     <div className="space-y-6">
-      {/* Top Action Bar & SSH Targets Section (only show standalone targets not yet matched to a runner, or empty state) */}
+      {/* Connected Runners + Unified Actions Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <SectionHeading
-          title={formatMsg(locale, 'runners.sshRemoteServers', { length: standaloneSshTargets.length })}
-          description={
-            formatMsg(locale, 'runners.configureRemoteHostsViaSsh')
-          }
-        />
-        <button
-          type="button"
-          data-testid="add-ssh-server-btn"
-          onClick={openCreateModal}
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-foreground px-3 text-ui-sm font-medium text-background transition-opacity hover:opacity-90"
-        >
-          <Plus className="size-3.5" />
-          <span>{formatMsg(locale, 'runners.addSshServer')}</span>
-        </button>
-      </div>
-
-      {standaloneSshTargets.length > 0 && (
-      <SettingsGroupCard>
-        {standaloneSshTargets.map((t) => {
-            const logOpen = Boolean(expandedLogs[t.id]);
-
-            return (
-              <div key={t.id} data-testid={`ssh-target-${t.id}`} className="px-5 py-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`size-2 shrink-0 rounded-full ${
-                          t.last_status === 'error'
-                            ? 'bg-destructive'
-                            : 'bg-foreground-subtlest'
-                        }`}
-                      />
-                      <span className="truncate text-ui-base font-medium text-foreground">{t.name}</span>
-                      <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-[11px] text-foreground-subtle">
-                        {t.username ? `${t.username}@` : ''}
-                        {t.host}:{t.port || 22}
-                      </span>
-                      <span className="rounded-md border border-border bg-surface px-1.5 py-0.5 text-[11px] font-medium text-foreground-subtle">
-                        {t.install_mode === 'remote_install'
-                          ? formatMsg(locale, 'runners.remoteInstall')
-                          : formatMsg(locale, 'runners.scpUpload')}
-                      </span>
-                      {t.ssh_alias && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-brand-blue/10 px-1.5 py-0.5 font-mono text-[11px] text-brand-blue">
-                          <Link2 className="size-3" />
-                          {t.ssh_alias}
-                        </span>
-                      )}
-                    </div>
-                    {t.last_error ? (
-                      <p className="truncate text-ui-xs text-destructive">{t.last_error}</p>
-                    ) : t.workspace_path ? (
-                      <p className="truncate font-mono text-ui-xs text-foreground-subtlest">
-                        {t.workspace_path}
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                    {renderSshActionButtons(t, false)}
-                  </div>
-                </div>
-
-                {logOpen && t.last_log && (
-                  <pre className="mt-3 max-h-56 overflow-auto rounded-lg border border-border bg-surface p-3 font-mono text-[11px] leading-relaxed text-foreground-subtle whitespace-pre-wrap">
-                    {t.last_log}
-                  </pre>
-                )}
-              </div>
-            );
-          })}
-      </SettingsGroupCard>
-      )}
-
-      {/* Connected Runners */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
         <SectionHeading
           title={formatMsg(locale, 'runners.connectedRunners', { length: runners.length })}
           description={
             formatMsg(locale, 'runners.liveReverseConnectedRunnersPlatform')
           }
         />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {upgradableCount > 0 && (
             <button
               type="button"
               data-testid="update-all-runners-btn"
               disabled={upgradingAll}
               onClick={() => void triggerAllUpgrades()}
-              className="inline-flex h-7 items-center gap-1 rounded-md border border-brand-blue/30 bg-brand-blue/10 px-2.5 text-ui-xs font-medium text-brand-blue transition-colors hover:bg-brand-blue/20 disabled:opacity-50"
+              className="inline-flex h-8 items-center gap-1 rounded-lg border border-brand-blue/30 bg-brand-blue/10 px-2.5 text-ui-xs font-medium text-brand-blue transition-colors hover:bg-brand-blue/20 disabled:opacity-50"
             >
               {upgradingAll ? <LoaderCircle className="size-3 animate-spin" /> : <ArrowUpCircle className="size-3" />}
               <span>
@@ -751,8 +673,26 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
           )}
           <button
             type="button"
+            data-testid="add-ssh-server-btn"
+            onClick={openCreateModal}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-foreground px-3 text-ui-xs font-medium text-background transition-opacity hover:opacity-90"
+          >
+            <Plus className="size-3.5" />
+            <span>{formatMsg(locale, 'runners.connectViaSsh')}</span>
+          </button>
+          <button
+            type="button"
+            data-testid="manual-join-btn"
+            onClick={() => setManualModalOpen(true)}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover"
+          >
+            <Terminal className="size-3.5" />
+            <span>{formatMsg(locale, 'runners.manualJoin')}</span>
+          </button>
+          <button
+            type="button"
             onClick={() => void refreshInitialData()}
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+            className="inline-flex h-8 items-center gap-1 rounded-lg border border-border bg-card px-2.5 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
           >
             <RefreshCw className="size-3" />
             <span>{formatMsg(locale, 'common.refresh')}</span>
@@ -935,7 +875,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       <button
                         type="button"
                         onClick={() => {
-                          setManualOpen(true);
+                          setManualModalOpen(true);
                           void navigator.clipboard?.writeText(joinCmd);
                           onFlash(formatMsg(locale, 'common.copied'));
                         }}
@@ -974,7 +914,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                   )}
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-1.5">
-                  {matchedSsh && renderSshActionButtons(matchedSsh, r.status === 'online', true)}
+                  {matchedSsh && renderSshActionButtons(matchedSsh, r.status === 'online')}
                   <span className="font-mono text-ui-xs tabular-nums text-foreground-subtlest">
                     rev #{r.synced_config_rev}
                   </span>
@@ -1006,165 +946,181 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
         )}
       </SettingsGroupCard>
 
-      {/* Collapsible Manual Join Command */}
-      <SettingsGroupCard>
-        <button
-          type="button"
-          onClick={() => setManualOpen((v) => !v)}
-          className="flex w-full items-center justify-between px-5 py-3.5 text-left transition-colors hover:bg-hover/40"
+      {/* Manual Join Steps Modal */}
+      {manualModalOpen && (
+        <div
+          data-testid="manual-join-modal-backdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setManualModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 pt-[8vh] pb-8 backdrop-blur-[2px]"
         >
-          <span className="flex items-center gap-2 text-ui-sm font-medium text-foreground">
-            {manualOpen ? <ChevronDown className="size-4 text-foreground-subtlest" /> : <ChevronRight className="size-4 text-foreground-subtlest" />}
-            <span>{formatMsg(locale, 'runners.manualRunnerJoinCommand')}</span>
-          </span>
-          <span className="text-ui-xs text-foreground-subtlest">
-            {formatMsg(locale, 'runners.forNatFirewalledHosts')}
-          </span>
-        </button>
-        {manualOpen && (
-          <div className="space-y-4 border-t border-border px-5 py-4">
-            {runnerAuth && (
-              <div
-                data-testid="runner-auth-panel"
-                className="space-y-2.5 rounded-lg border border-border bg-surface/60 p-3.5"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="text-ui-xs font-medium text-foreground">
-                      {formatMsg(locale, 'runners.authSectionTitle')}
-                    </div>
-                    <div className="text-ui-xs text-foreground-subtlest">
-                      {runnerAuth.env_managed
-                        ? formatMsg(locale, 'runners.requireAuthEnvManaged')
-                        : formatMsg(locale, 'runners.authSectionDesc')}
-                    </div>
-                  </div>
-                  <label className="inline-flex items-center gap-2 text-ui-xs text-foreground">
-                    <input
-                      type="checkbox"
-                      data-testid="runner-require-auth-toggle"
-                      checked={runnerAuth.require_auth}
-                      disabled={authBusy || runnerAuth.env_managed}
-                      onChange={(e) => void toggleRequireAuth(e.target.checked)}
-                      className="accent-brand-blue"
-                    />
-                    <span>{formatMsg(locale, 'runners.requireAuthLabel')}</span>
-                  </label>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-ui-xs text-foreground-subtle">
-                    {formatMsg(locale, 'runners.pairingSecretLabel')}:
-                  </span>
-                  <code
-                    data-testid="runner-pairing-secret-val"
-                    className="flex-1 truncate rounded border border-border bg-card px-2 py-1 font-mono text-ui-xs text-foreground"
-                  >
-                    {showPairingSecret
-                      ? runnerAuth.pairing_secret
-                      : `${runnerAuth.pairing_secret.slice(0, 6)}••••••••${runnerAuth.pairing_secret.slice(-4)}`}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={() => setShowPairingSecret((v) => !v)}
-                    className="flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2 text-ui-xs text-foreground-subtle hover:bg-hover hover:text-foreground"
-                  >
-                    {showPairingSecret ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
-                  </button>
-                  {!runnerAuth.env_managed && (
-                    <button
-                      type="button"
-                      data-testid="runner-rotate-secret-btn"
-                      disabled={authBusy}
-                      onClick={() => void rotatePairingSecret()}
-                      className="flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-ui-xs text-foreground transition-colors hover:bg-hover disabled:opacity-50"
-                    >
-                      <KeyRound className="size-3" />
-                      <span>{formatMsg(locale, 'runners.rotateSecretBtn')}</span>
-                    </button>
-                  )}
-                </div>
+          <div
+            data-testid="manual-join-modal"
+            className="w-full max-w-[600px] overflow-hidden rounded-2xl border border-border bg-popover text-foreground shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+              <div className="min-w-0">
+                <h2 className="text-ui-lg font-semibold text-foreground">
+                  {formatMsg(locale, 'runners.manualRunnerJoinCommand')}
+                </h2>
+                <p className="mt-0.5 text-ui-xs text-foreground-subtlest">
+                  {formatMsg(locale, 'runners.forNatFirewalledHosts')}
+                </p>
               </div>
-            )}
-
-            <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2">
-              <code data-testid="runner-manual-join-cmd" className="truncate font-mono text-ui-sm text-foreground">
-                {joinCmd}
-              </code>
               <button
                 type="button"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(joinCmd);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1500);
-                }}
-                className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-ui-xs text-foreground transition-colors hover:bg-hover"
+                onClick={() => setManualModalOpen(false)}
+                className="flex size-7 items-center justify-center rounded-lg text-foreground-subtlest hover:bg-hover hover:text-foreground"
               >
-                {copied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
-                <span>{copied ? (formatMsg(locale, 'common.copied')) : formatMsg(locale, 'runners.copyCommand')}</span>
+                <X className="size-4" />
               </button>
             </div>
 
-            <div className="space-y-2 rounded-lg border border-border bg-surface/40 p-3.5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="text-ui-xs font-medium text-foreground">
-                    {formatMsg(locale, 'runners.relayPairTitle')}
-                  </div>
-                  <div className="text-ui-xs text-foreground-subtlest">
-                    {formatMsg(locale, 'runners.relayPairDesc')}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  data-testid="generate-relay-pair-cmd-btn"
-                  disabled={relayPairLoading}
-                  onClick={() => void generateRelayPairCommand()}
-                  className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-ui-xs text-foreground transition-colors hover:bg-hover disabled:opacity-50"
+            <div className="max-h-[75vh] space-y-4 overflow-y-auto px-5 py-4">
+              {runnerAuth && (
+                <div
+                  data-testid="runner-auth-panel"
+                  className="space-y-2.5 rounded-lg border border-border bg-surface/60 p-3.5"
                 >
-                  {relayPairLoading ? <LoaderCircle className="size-3 animate-spin" /> : <Link2 className="size-3" />}
-                  <span>
-                    {relayPairLoading
-                      ? formatMsg(locale, 'runners.generatingRelayPair')
-                      : formatMsg(locale, 'runners.generateRelayPairBtn')}
-                  </span>
-                </button>
-              </div>
-              {relayPairCmd && (
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2">
-                  <code data-testid="runner-relay-pair-cmd" className="truncate font-mono text-ui-xs text-foreground">
-                    {relayPairCmd}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(relayPairCmd);
-                      setRelayCopied(true);
-                      setTimeout(() => setRelayCopied(false), 1500);
-                    }}
-                    className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2.5 py-1 text-ui-xs text-foreground transition-colors hover:bg-hover"
-                  >
-                    {relayCopied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
-                    <span>{relayCopied ? formatMsg(locale, 'common.copied') : formatMsg(locale, 'runners.copyCommand')}</span>
-                  </button>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-ui-xs font-medium text-foreground">
+                        {formatMsg(locale, 'runners.authSectionTitle')}
+                      </div>
+                      <div className="text-ui-xs text-foreground-subtlest">
+                        {runnerAuth.env_managed
+                          ? formatMsg(locale, 'runners.requireAuthEnvManaged')
+                          : formatMsg(locale, 'runners.authSectionDesc')}
+                      </div>
+                    </div>
+                    <label className="inline-flex items-center gap-2 text-ui-xs text-foreground">
+                      <input
+                        type="checkbox"
+                        data-testid="runner-require-auth-toggle"
+                        checked={runnerAuth.require_auth}
+                        disabled={authBusy || runnerAuth.env_managed}
+                        onChange={(e) => void toggleRequireAuth(e.target.checked)}
+                        className="accent-brand-blue"
+                      />
+                      <span>{formatMsg(locale, 'runners.requireAuthLabel')}</span>
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-ui-xs text-foreground-subtle">
+                      {formatMsg(locale, 'runners.pairingSecretLabel')}:
+                    </span>
+                    <code
+                      data-testid="runner-pairing-secret-val"
+                      className="flex-1 truncate rounded border border-border bg-card px-2 py-1 font-mono text-ui-xs text-foreground"
+                    >
+                      {showPairingSecret
+                        ? runnerAuth.pairing_secret
+                        : `${runnerAuth.pairing_secret.slice(0, 6)}••••••••${runnerAuth.pairing_secret.slice(-4)}`}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => setShowPairingSecret((v) => !v)}
+                      className="flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2 text-ui-xs text-foreground-subtle hover:bg-hover hover:text-foreground"
+                    >
+                      {showPairingSecret ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+                    </button>
+                    {!runnerAuth.env_managed && (
+                      <button
+                        type="button"
+                        data-testid="runner-rotate-secret-btn"
+                        disabled={authBusy}
+                        onClick={() => void rotatePairingSecret()}
+                        className="flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-ui-xs text-foreground transition-colors hover:bg-hover disabled:opacity-50"
+                      >
+                        <KeyRound className="size-3" />
+                        <span>{formatMsg(locale, 'runners.rotateSecretBtn')}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
+
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+                <code data-testid="runner-manual-join-cmd" className="truncate font-mono text-ui-sm text-foreground">
+                  {joinCmd}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(joinCmd);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  }}
+                  className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-ui-xs text-foreground transition-colors hover:bg-hover"
+                >
+                  {copied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
+                  <span>{copied ? (formatMsg(locale, 'common.copied')) : formatMsg(locale, 'runners.copyCommand')}</span>
+                </button>
+              </div>
+
+              <div className="space-y-2 rounded-lg border border-border bg-surface/40 p-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-ui-xs font-medium text-foreground">
+                      {formatMsg(locale, 'runners.relayPairTitle')}
+                    </div>
+                    <div className="text-ui-xs text-foreground-subtlest">
+                      {formatMsg(locale, 'runners.relayPairDesc')}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="generate-relay-pair-cmd-btn"
+                    disabled={relayPairLoading}
+                    onClick={() => void generateRelayPairCommand()}
+                    className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-ui-xs text-foreground transition-colors hover:bg-hover disabled:opacity-50"
+                  >
+                    {relayPairLoading ? <LoaderCircle className="size-3 animate-spin" /> : <Link2 className="size-3" />}
+                    <span>
+                      {relayPairLoading
+                        ? formatMsg(locale, 'runners.generatingRelayPair')
+                        : formatMsg(locale, 'runners.generateRelayPairBtn')}
+                    </span>
+                  </button>
+                </div>
+                {relayPairCmd && (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2">
+                    <code data-testid="runner-relay-pair-cmd" className="truncate font-mono text-ui-xs text-foreground">
+                      {relayPairCmd}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(relayPairCmd);
+                        setRelayCopied(true);
+                        setTimeout(() => setRelayCopied(false), 1500);
+                      }}
+                      className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2.5 py-1 text-ui-xs text-foreground transition-colors hover:bg-hover"
+                    >
+                      {relayCopied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
+                      <span>{relayCopied ? formatMsg(locale, 'common.copied') : formatMsg(locale, 'runners.copyCommand')}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        )}
-      </SettingsGroupCard>
+        </div>
+      )}
 
       {/* Nex-Aligned New / Edit SSH Connection Modal */}
       {modalOpen && (
         <div
           data-testid="ssh-server-modal-backdrop"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setModalOpen(false);
+            if (e.target === e.currentTarget && !saving) setModalOpen(false);
           }}
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 pt-[8vh] pb-8 backdrop-blur-[2px]"
         >
           <form
             data-testid="ssh-server-modal"
-            onSubmit={(e) => void submitForm(e, false)}
+            onSubmit={(e) => void submitForm(e, !form.id)}
             className="w-full max-w-[540px] overflow-hidden rounded-2xl border border-border bg-popover text-foreground shadow-2xl"
           >
             {/* Header + Live Target Preview */}
@@ -1181,8 +1137,9 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
               </div>
               <button
                 type="button"
+                disabled={saving}
                 onClick={() => setModalOpen(false)}
-                className="flex size-7 items-center justify-center rounded-lg text-foreground-subtlest hover:bg-hover hover:text-foreground"
+                className="flex size-7 items-center justify-center rounded-lg text-foreground-subtlest hover:bg-hover hover:text-foreground disabled:opacity-50"
               >
                 <X className="size-4" />
               </button>
@@ -1264,9 +1221,17 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                 </div>
               </div>
 
-              {formError && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive-surface px-3 py-2 text-ui-xs text-destructive-surface-fg">
-                  {formError}
+              {(formError || deployLog) && (
+                <div
+                  data-testid="ssh-modal-error"
+                  className="space-y-2 rounded-lg border border-destructive/30 bg-destructive-surface px-3 py-2 text-ui-xs text-destructive-surface-fg"
+                >
+                  {formError && <div className="font-medium break-words">{formError}</div>}
+                  {deployLog && (
+                    <pre className="max-h-40 overflow-auto rounded border border-destructive/20 bg-background/60 p-2 font-mono text-[11px] leading-relaxed text-foreground-subtle whitespace-pre-wrap">
+                      {deployLog}
+                    </pre>
+                  )}
                 </div>
               )}
 
@@ -1513,19 +1478,22 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
             <div className="flex items-center justify-end gap-2 border-t border-border bg-surface/40 px-5 py-3.5">
               <button
                 type="button"
+                disabled={saving}
                 onClick={() => setModalOpen(false)}
-                className="h-8 rounded-lg border border-border bg-card px-3 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+                className="h-8 rounded-lg border border-border bg-card px-3 text-ui-sm text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground disabled:opacity-50"
               >
                 {formatMsg(locale, 'common.cancel')}
               </button>
-              <button
-                type="submit"
-                data-testid="ssh-save-btn"
-                disabled={saving}
-                className="h-8 rounded-lg border border-border bg-card px-3 text-ui-sm font-medium text-foreground transition-colors hover:bg-hover disabled:opacity-50"
-              >
-                {formatMsg(locale, 'common.save2')}
-              </button>
+              {form.id && (
+                <button
+                  type="submit"
+                  data-testid="ssh-save-btn"
+                  disabled={saving}
+                  className="h-8 rounded-lg border border-border bg-card px-3 text-ui-sm font-medium text-foreground transition-colors hover:bg-hover disabled:opacity-50"
+                >
+                  {formatMsg(locale, 'common.save2')}
+                </button>
+              )}
               <button
                 type="button"
                 data-testid="ssh-save-deploy-btn"
@@ -1534,7 +1502,13 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                 className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3.5 text-ui-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 {saving && <LoaderCircle className="size-3.5 animate-spin" />}
-                <span>{formatMsg(locale, 'runners.saveDeploy')}</span>
+                <span>
+                  {saving
+                    ? formatMsg(locale, 'runners.connectingAndDeploying')
+                    : form.id
+                      ? formatMsg(locale, 'runners.saveDeploy')
+                      : formatMsg(locale, 'runners.connectAndJoin')}
+                </span>
               </button>
             </div>
           </form>
