@@ -6,8 +6,11 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/egoist/mygo"
 	"github.com/nex-harness/nex/pkg/runner"
 	"github.com/nex-harness/nex/pkg/server"
 	"github.com/nex-harness/nex/pkg/store"
@@ -15,6 +18,28 @@ import (
 )
 
 const supportsLocalMode = true
+
+func embeddedAppVersion() string {
+	v := strings.TrimSpace(mygo.App.Version())
+	if v == "" {
+		return "dev"
+	}
+	return v
+}
+
+func resolveDefaultWorkspace(workspaceDir string) string {
+	ws := strings.TrimSpace(workspaceDir)
+	if ws != "" && ws != "/" {
+		return ws
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		return home
+	}
+	if ws != "" {
+		return ws
+	}
+	return "."
+}
 
 // AllInOneInstance manages an optional embedded Control Plane Server + local embedded Runner
 // inside the Desktop host process ("Single-Machine Out-of-the-Box Mode" from Spec 02 Section 5).
@@ -50,10 +75,14 @@ func StartAllInOne(ctx context.Context, baseDataDir, workspaceDir, listenAddr st
 		return nil, err
 	}
 
+	appVer := embeddedAppVersion()
+	effectiveWorkspace := resolveDefaultWorkspace(workspaceDir)
+
 	cpSrv, err := server.New(server.Config{
 		Store:      srvStore,
 		ListenPort: listenPort,
 		StaticFS:   webui.DistFS(),
+		Version:    appVer,
 	})
 	if err != nil {
 		_ = srvStore.Close()
@@ -69,9 +98,10 @@ func StartAllInOne(ctx context.Context, baseDataDir, workspaceDir, listenAddr st
 	node, err := runner.NewNode(runner.Config{
 		RunnerID:         "run_desktop_embedded",
 		Name:             "Local Embedded Runner",
+		Version:          appVer,
 		ServerWSURL:      "ws://" + actualAddr + "/ws/runner",
 		DataDir:          filepath.Join(baseDataDir, "runner"),
-		WorkspaceDefault: workspaceDir,
+		WorkspaceDefault: effectiveWorkspace,
 	})
 	if err != nil {
 		_ = httpSrv.Close()

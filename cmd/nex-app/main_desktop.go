@@ -19,11 +19,14 @@ import (
 
 func main() {
 	home, _ := os.UserHomeDir()
-	cwd, _ := os.Getwd()
+	defaultWorkspace := home
+	if defaultWorkspace == "" {
+		defaultWorkspace, _ = os.Getwd()
+	}
 
 	defaultDataDir := filepath.Join(home, ".nex-desktop")
 	dataDir := flag.String("data-dir", "", "Desktop app local data directory")
-	workspace := flag.String("workspace", cwd, "Default workspace directory for embedded Runner")
+	workspace := flag.String("workspace", defaultWorkspace, "Default workspace directory for embedded Runner")
 	addr := flag.String("addr", "127.0.0.1:18080", "Headless workbench listen address (with -open=false)")
 	openWindow := flag.Bool("open", true, "Launch native mygo desktop window (false runs headless all-in-one daemon)")
 	serverURL := flag.String("server", "", "Connect to an explicit remote nex-server URL (http:// or https://)")

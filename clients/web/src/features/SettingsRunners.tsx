@@ -918,21 +918,23 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                   <span className="font-mono text-ui-xs tabular-nums text-foreground-subtlest">
                     rev #{r.synced_config_rev}
                   </span>
-                  <button
-                    type="button"
-                    data-testid={`remove-runner-${r.id}`}
-                    disabled={removing}
-                    title={formatMsg(locale, 'runners.removeRunner')}
-                    aria-label={formatMsg(locale, 'runners.removeRunner')}
-                    onClick={() => void removeRunner(r)}
-                    className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg disabled:opacity-50"
-                  >
-                    {removing ? (
-                      <LoaderCircle className="size-3.5 animate-spin" />
-                    ) : (
-                      <Trash2 className="size-3.5" />
-                    )}
-                  </button>
+                  {r.id !== 'run_desktop_embedded' && (
+                    <button
+                      type="button"
+                      data-testid={`remove-runner-${r.id}`}
+                      disabled={removing}
+                      title={formatMsg(locale, 'runners.removeRunner')}
+                      aria-label={formatMsg(locale, 'runners.removeRunner')}
+                      onClick={() => void removeRunner(r)}
+                      className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg disabled:opacity-50"
+                    >
+                      {removing ? (
+                        <LoaderCircle className="size-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="size-3.5" />
+                      )}
+                    </button>
+                  )}
                 </div>
                 </div>
                 {matchedSsh && sshLogOpen && matchedSsh.last_log && (
