@@ -698,17 +698,17 @@ export function ProjectSidebar() {
       </div>
 
       {/* Task List Header + Segmented View Switcher */}
-      <div className="mx-3 flex shrink-0 items-center justify-between gap-2 border-t border-border/70 pb-1.5 pt-2.5">
+      <div className="mx-2.5 flex shrink-0 items-center justify-between gap-2 border-t border-border/70 px-0.5 pb-1.5 pt-2.5">
         <span className="truncate text-ui-sm font-medium text-foreground-subtle">{taskListLabel}</span>
         <div className="flex shrink-0 items-center gap-1">
-          <div className="inline-flex items-center rounded-md border border-border/70 bg-surface/60 p-0.5 text-[11px]">
+          <div className="inline-flex h-6 items-center rounded-md bg-selected/75 p-0.5 text-[11px]">
             <button
               type="button"
               data-testid="sidebar-mode-project"
               onClick={() => switchGroupMode('project')}
-              className={`rounded px-1.5 py-0.5 font-medium transition-colors ${
+              className={`rounded-[4px] px-1.5 py-0.5 font-medium transition-all ${
                 groupMode === 'project'
-                  ? 'bg-background text-foreground shadow-2xs'
+                  ? 'bg-background text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
                   : 'text-foreground-subtlest hover:text-foreground-subtle'
               }`}
             >
@@ -718,9 +718,9 @@ export function ProjectSidebar() {
               type="button"
               data-testid="sidebar-mode-recent"
               onClick={() => switchGroupMode('recent')}
-              className={`rounded px-1.5 py-0.5 font-medium transition-colors ${
+              className={`rounded-[4px] px-1.5 py-0.5 font-medium transition-all ${
                 groupMode === 'recent'
-                  ? 'bg-background text-foreground shadow-2xs'
+                  ? 'bg-background text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
                   : 'text-foreground-subtlest hover:text-foreground-subtle'
               }`}
             >
@@ -738,7 +738,7 @@ export function ProjectSidebar() {
               });
             }}
             className={`flex size-6 items-center justify-center rounded-md transition-colors hover:bg-hover ${
-              searchOpen ? 'text-foreground' : 'text-foreground-subtlest hover:text-foreground-subtle'
+              searchOpen ? 'bg-hover text-foreground' : 'text-foreground-subtlest hover:text-foreground-subtle'
             }`}
           >
             <Search className="size-3.5" />
@@ -746,20 +746,20 @@ export function ProjectSidebar() {
         </div>
       </div>
 
-      {/* Runner Filter Pill Bar (auto-shown when 2+ runners exist) */}
+      {/* Runner Filter Chips (auto-shown when 2+ runners exist) */}
       {runnerTabs.length > 1 && (
         <div
           data-testid="sidebar-runner-filter"
-          className="mx-3 mb-1.5 flex shrink-0 items-center gap-1 overflow-x-auto pb-0.5"
+          className="nex-no-scrollbar mx-2.5 mb-2 flex shrink-0 flex-wrap items-center gap-1"
         >
           <button
             type="button"
             data-testid="sidebar-runner-pill-all"
             onClick={() => setSelectedRunnerFilter('all')}
-            className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+            className={`rounded-md px-2 py-0.5 text-[11.5px] transition-all ${
               effectiveRunnerFilter === 'all'
-                ? 'bg-foreground text-background'
-                : 'bg-surface text-foreground-subtle hover:bg-hover hover:text-foreground'
+                ? 'bg-background font-medium text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-border/70'
+                : 'text-foreground-subtle hover:bg-hover hover:text-foreground'
             }`}
           >
             {formatMsg(locale, 'sidebar.allRunners')}
@@ -772,21 +772,19 @@ export function ProjectSidebar() {
                 type="button"
                 data-testid={`sidebar-runner-pill-${rt.id}`}
                 onClick={() => setSelectedRunnerFilter(active ? 'all' : rt.id)}
-                className={`inline-flex max-w-[110px] shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                className={`inline-flex max-w-[120px] items-center gap-1.5 rounded-md px-2 py-0.5 text-[11.5px] transition-all ${
                   active
-                    ? 'bg-foreground text-background'
-                    : 'bg-surface text-foreground-subtle hover:bg-hover hover:text-foreground'
+                    ? 'bg-background font-medium text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-border/70'
+                    : 'text-foreground-subtle hover:bg-hover hover:text-foreground'
                 }`}
               >
                 <span
                   className={`size-1.5 shrink-0 rounded-full ${
                     rt.status === 'online'
                       ? rt.hasAttention
-                        ? 'animate-pulse bg-emerald-400'
+                        ? 'animate-pulse bg-success'
                         : 'bg-success'
-                      : active
-                        ? 'bg-background/50'
-                        : 'bg-foreground-subtlest/50'
+                      : 'bg-foreground-subtlest/50'
                   }`}
                 />
                 <span className="truncate">{rt.name}</span>
@@ -868,9 +866,11 @@ export function ProjectSidebar() {
           )
         ) : (
           <div className="space-y-1">
-            <div className="px-2 pb-0.5 text-ui-xs font-medium text-foreground-subtlest">
-              {formatMsg(locale, 'sidebar.projects')}
-            </div>
+            {(attentionSessions.length > 0 || pinnedSessions.length > 0) && (
+              <div className="px-2 pb-0.5 text-ui-xs font-medium text-foreground-subtlest">
+                {formatMsg(locale, 'sidebar.projects')}
+              </div>
+            )}
             {groups.map((grp, idx) => renderGroup(grp, idx))}
           </div>
         )}

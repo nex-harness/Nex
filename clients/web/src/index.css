@@ -743,6 +743,15 @@ pre,
   background: var(--color-foreground-subtlest);
 }
 
+.nex-no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.nex-no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Native desktop titlebar drag regions & mobile safe-area inset helpers */
 .nex-drag-region {
   --app-region: drag;
