@@ -1415,7 +1415,7 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       expect((screen.getByTestId('ssh-workspace-input') as HTMLInputElement).placeholder).toBe('$HOME');
       expect(screen.getByTestId('ssh-import-config-btn')).toBeTruthy();
       fireEvent.click(screen.getByTestId('ssh-mode-remote_install'));
-      expect(screen.getByTestId('ssh-download-url-input')).toBeTruthy();
+      expect(screen.queryByTestId('ssh-download-url-input')).toBeNull();
     } finally {
       useNexStore.setState({ bootstrap: origBootstrap, authEnabled: false, authenticated: true });
     }
@@ -5998,8 +5998,10 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       });
 
       render(<App />);
+      // Tinted mode applies dark-mode contrast classes (`dark:text-`)
       expect(screen.getByTestId('sidebar-runner-pill-run_hk').className).toContain('dark:text-');
 
+      // Switch to Settings -> Appearance and pick Minimal ("极简边框")
       fireEvent.click(screen.getByTestId('sidebar-settings-btn'));
       fireEvent.click(screen.getByTestId('settings-nav-appearance'));
       await act(async () => {
@@ -6008,6 +6010,7 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       expect(useNexStore.getState().preferences.runner_badge_style).toBe('neutral');
       expect(putBodies.some((b) => b.includes('"runner_badge_style":"neutral"'))).toBe(true);
 
+      // Return to workspace -> pill switches to neutral hairline border style
       fireEvent.click(screen.getByTestId('settings-back-btn'));
       expect(screen.getByTestId('sidebar-runner-pill-run_hk').className).toContain('bg-background/45');
     } finally {

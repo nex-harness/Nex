@@ -1381,44 +1381,12 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                   </div>
                 </div>
 
-                {form.install_mode === 'scp' ? (
-                  <div className="space-y-2">
-                    <p className="text-ui-xs leading-relaxed text-foreground-subtle">
-                      {formatMsg(locale, 'runners.probesRemoteOsArchAuto')}
-                    </p>
-                    {stagedBinaries.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                        <span className="text-[11px] text-foreground-subtlest">
-                          {formatMsg(locale, 'runners.bundledRunners')}
-                        </span>
-                        {stagedBinaries.map((b) => (
-                          <span
-                            key={`${b.os}/${b.arch}`}
-                            title={formatBytesShort(b.size_bytes)}
-                            className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-foreground-subtle"
-                          >
-                            {b.os}/{b.arch}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-ui-xs leading-relaxed text-foreground-subtle">
-                      {formatMsg(locale, 'runners.runsCurlWgetOnThe')}
-                    </p>
-                    <input
-                      data-testid="ssh-download-url-input"
-                      value={form.download_url}
-                      onChange={(e) => setForm((p) => ({ ...p, download_url: e.target.value }))}
-                      placeholder={
-                        formatMsg(locale, 'runners.optionalHttpsReleasesExampleCom')
-                      }
-                      className={settingsMonoInputClass}
-                    />
-                  </div>
-                )}
+                <p className="text-ui-xs leading-relaxed text-foreground-subtle">
+                  {formatMsg(
+                    locale,
+                    form.install_mode === 'scp' ? 'runners.probesRemoteOsArchAuto' : 'runners.runsCurlWgetOnThe',
+                  )}
+                </p>
               </div>
 
               {/* Collapsible Advanced Options */}

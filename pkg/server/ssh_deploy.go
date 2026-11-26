@@ -1245,17 +1245,10 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	// Step 3: Deliver binary via Remote Download (GitHub Release / custom URL) OR Local Download + SCP
+	// Step 3: Deliver binary via Remote Download (GitHub Release) OR Local Download + SCP
 	if target.InstallMode == "remote_install" {
-		dlURL := strings.TrimSpace(target.DownloadURL)
-		if dlURL == "" {
-			dlURL = s.runnerReleaseDownloadURL(info.OS, info.Arch)
-			logf("Remote downloading runner (%s/%s) directly from GitHub Release: %s", info.OS, info.Arch, dlURL)
-		} else {
-			dlURL = strings.ReplaceAll(dlURL, "{os}", info.OS)
-			dlURL = strings.ReplaceAll(dlURL, "{arch}", info.Arch)
-			logf("Remote installing from URL: %s", dlURL)
-		}
+		dlURL := s.runnerReleaseDownloadURL(info.OS, info.Arch)
+		logf("Remote downloading runner (%s/%s) from GitHub Release: %s", info.OS, info.Arch, dlURL)
 
 		var dlCmd string
 		if info.OS == "windows" {
