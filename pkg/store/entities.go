@@ -38,6 +38,7 @@ type RunnerRecord struct {
 	TargetVersion   string   `json:"target_version,omitempty"`
 	UpdatePhase     string   `json:"update_phase,omitempty"`
 	UpdateProgress  int      `json:"update_progress,omitempty"`
+	UpdateMessage   string   `json:"update_message,omitempty"`
 	UpdateError     string   `json:"update_error,omitempty"`
 	Incompatible    bool     `json:"incompatible,omitempty"`
 }

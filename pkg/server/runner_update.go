@@ -120,6 +120,7 @@ type runnerRuntimeMeta struct {
 	Incompatible    bool
 	UpdatePhase          string
 	UpdateProgress       int
+	UpdateMessage        string
 	UpdateError          string
 	UpdatePhaseUpdatedAt time.Time
 	Online               bool
@@ -446,6 +447,7 @@ func (s *Server) getRunnerRuntimeMetaCopy(runnerID string) *runnerRuntimeMeta {
 	if cp.UpdatePhase == "succeeded" && !cp.UpdatePhaseUpdatedAt.IsZero() && time.Since(cp.UpdatePhaseUpdatedAt) >= runnerSucceededBadgeTTL {
 		cp.UpdatePhase = ""
 		cp.UpdateProgress = 0
+		cp.UpdateMessage = ""
 	}
 	return &cp
 }
@@ -492,6 +494,7 @@ func (s *Server) enrichRunnerRecord(ctx context.Context, rec *store.RunnerRecord
 	rec.TargetVersion = meta.TargetVersion
 	rec.UpdatePhase = meta.UpdatePhase
 	rec.UpdateProgress = meta.UpdateProgress
+	rec.UpdateMessage = meta.UpdateMessage
 	rec.UpdateError = meta.UpdateError
 	rec.Incompatible = meta.Incompatible
 }
@@ -792,6 +795,7 @@ func (s *Server) dispatchRunnerUpdate(ctx context.Context, runnerID, mode string
 	cur.DownloadURLs = append([]string(nil), meta.DownloadURLs...)
 	cur.UpdatePhase = "queued"
 	cur.UpdateProgress = 0
+	cur.UpdateMessage = ""
 	cur.UpdateError = ""
 	s.mu.Unlock()
 

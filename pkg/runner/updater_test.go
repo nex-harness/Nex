@@ -362,3 +362,171 @@ func TestUpdaterWatchdogRollbackAndCooldown(t *testing.T) {
 		t.Fatal("expected cooldown to suppress automatic retry for failed SHA-256")
 	}
 }
+
+func TestUpdaterManualForceSkipsIdlePTYsButAutoWaits(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	bin := []byte("valid-binary")
+	sum := sha256.Sum256(bin)
+	wantSHA := hex.EncodeToString(sum[:])
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(bin)
+	}))
+	defer srv.Close()
+
+	node, err := NewNode(Config{
+		RunnerID:    "run_pty_drain",
+		ServerWSURL: "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws/runner",
+		DataDir:     t.TempDir(),
+		Version:     "0.1.0",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer node.Close()
+
+	// Lingering idle PTY (like an old shell left open) with zero active turns
+	node.mu.Lock()
+	node.activePTYs["pty_stale"] = true
+	node.mu.Unlock()
+
+	// 1. Auto update (Force: false) must wait while PTY is open
+	autoSwapped := make(chan struct{}, 1)
+	node.updater.drainPollInterval = 10 * time.Millisecond
+	node.updater.smokeCheckFn = func(ctx context.Context, binPath string) error { return nil }
+	node.updater.swapAndRestartFn = func(ctx context.Context, currentExe, stagedPath, backupPath string, state *UpdateState) error {
+		close(autoSwapped)
+		return nil
+	}
+	node.updater.TriggerAsync(ctx, protocol.RunnerUpdatePayload{
+		RequestID:      "req_auto_pty",
+		TargetVersion:  "0.2.0",
+		ExpectedSHA256: wantSHA,
+		DownloadURLs:   []string{"/api/v1/runners/binary/darwin/arm64"},
+		Mode:           "when_idle",
+		Force:          false,
+	})
+
+	select {
+	case <-autoSwapped:
+		t.Fatal("auto update must wait for open PTY")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	// Escalating to manual/immediate breaks through and finishes swap
+	node.updater.TriggerAsync(ctx, protocol.RunnerUpdatePayload{
+		RequestID:      "req_force_escalate",
+		TargetVersion:  "0.2.0",
+		ExpectedSHA256: wantSHA,
+		DownloadURLs:   []string{"/api/v1/runners/binary/darwin/arm64"},
+		Mode:           "immediate",
+		Force:          true,
+	})
+	select {
+	case <-autoSwapped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for escalated swap")
+	}
+
+	// 2. Fresh manual upgrade (Force: true, Mode: when_idle) with lingering PTY and 0 turns proceeds immediately
+	manualSwapped := make(chan struct{}, 1)
+	node.updater.swapAndRestartFn = func(ctx context.Context, currentExe, stagedPath, backupPath string, state *UpdateState) error {
+		close(manualSwapped)
+		return nil
+	}
+	// Wait until updater goroutine clears updating=false
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		node.updater.mu.Lock()
+		busy := node.updater.updating
+		node.updater.mu.Unlock()
+		if !busy {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	node.updater.TriggerAsync(ctx, protocol.RunnerUpdatePayload{
+		RequestID:      "req_manual_pty",
+		TargetVersion:  "0.2.0",
+		ExpectedSHA256: wantSHA,
+		DownloadURLs:   []string{"/api/v1/runners/binary/darwin/arm64"},
+		Mode:           "when_idle",
+		Force:          true,
+	})
+	select {
+	case <-manualSwapped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected manual force upgrade to bypass lingering idle PTY")
+	}
+}
+
+func TestUpdaterImmediateEscalatesWhileDrainingTurns(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	bin := []byte("valid-binary")
+	sum := sha256.Sum256(bin)
+	wantSHA := hex.EncodeToString(sum[:])
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(bin)
+	}))
+	defer srv.Close()
+
+	node, err := NewNode(Config{
+		RunnerID:    "run_escalate_turns",
+		ServerWSURL: "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws/runner",
+		DataDir:     t.TempDir(),
+		Version:     "0.1.0",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer node.Close()
+
+	node.mu.Lock()
+	node.activeTurns = 1
+	node.mu.Unlock()
+
+	swapped := make(chan struct{}, 1)
+	node.updater.drainPollInterval = 10 * time.Millisecond
+	node.updater.smokeCheckFn = func(ctx context.Context, binPath string) error { return nil }
+	node.updater.swapAndRestartFn = func(ctx context.Context, currentExe, stagedPath, backupPath string, state *UpdateState) error {
+		close(swapped)
+		return nil
+	}
+
+	node.updater.TriggerAsync(ctx, protocol.RunnerUpdatePayload{
+		RequestID:      "req_turn_drain",
+		TargetVersion:  "0.2.0",
+		ExpectedSHA256: wantSHA,
+		DownloadURLs:   []string{"/api/v1/runners/binary/darwin/arm64"},
+		Mode:           "when_idle",
+		Force:          true,
+	})
+
+	deadline := time.Now().Add(time.Second)
+	for !node.IsDraining() && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !node.IsDraining() {
+		t.Fatal("expected runner to enter draining")
+	}
+
+	// User clicks Update Now -> Mode=immediate escalates past activeTurns draining
+	node.updater.TriggerAsync(ctx, protocol.RunnerUpdatePayload{
+		RequestID:      "req_turn_now",
+		TargetVersion:  "0.2.0",
+		ExpectedSHA256: wantSHA,
+		DownloadURLs:   []string{"/api/v1/runners/binary/darwin/arm64"},
+		Mode:           "immediate",
+		Force:          true,
+	})
+	select {
+	case <-swapped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for immediate escalation during draining")
+	}
+}

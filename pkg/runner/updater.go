@@ -56,11 +56,12 @@ type Updater struct {
 	watchdogTimeout   time.Duration
 	cooldownDuration  time.Duration
 
-	mu             sync.Mutex
-	updating       bool
-	watchdogCancel context.CancelFunc
-	watchdogDone   bool
-	lastWelcome    *protocol.RunnerWelcomePayload
+	mu               sync.Mutex
+	updating         bool
+	forceImmediateCh chan struct{}
+	watchdogCancel   context.CancelFunc
+	watchdogDone     bool
+	lastWelcome      *protocol.RunnerWelcomePayload
 }
 
 func newUpdater(n *Node) *Updater {
@@ -74,6 +75,7 @@ func newUpdater(n *Node) *Updater {
 		drainTimeout:      defaultDrainTimeout,
 		watchdogTimeout:   defaultWatchdogTimeout,
 		cooldownDuration:  defaultRollbackCooldown,
+		forceImmediateCh:  make(chan struct{}, 1),
 	}
 }
 
@@ -230,6 +232,12 @@ func (u *Updater) TriggerAsync(ctx context.Context, payload protocol.RunnerUpdat
 	u.mu.Lock()
 	if u.updating {
 		u.mu.Unlock()
+		if strings.TrimSpace(payload.Mode) == "immediate" && u.forceImmediateCh != nil {
+			select {
+			case u.forceImmediateCh <- struct{}{}:
+			default:
+			}
+		}
 		return
 	}
 	u.updating = true
@@ -238,12 +246,29 @@ func (u *Updater) TriggerAsync(ctx context.Context, payload protocol.RunnerUpdat
 	go u.runUpdate(ctx, payload)
 }
 
+func (u *Updater) blockingWorkload(includeAux bool) (int, string) {
+	w := u.node.ActiveWorkload()
+	if includeAux {
+		return w.Total(), w.Describe(true)
+	}
+	return w.Turns, w.Describe(false)
+}
+
 func (u *Updater) runUpdate(ctx context.Context, payload protocol.RunnerUpdatePayload) {
 	defer func() {
 		u.mu.Lock()
 		u.updating = false
 		u.mu.Unlock()
 	}()
+
+drainForceCh:
+	for {
+		select {
+		case <-u.forceImmediateCh:
+		default:
+			break drainForceCh
+		}
+	}
 
 	mode := strings.TrimSpace(payload.Mode)
 	if mode == "" {
@@ -258,14 +283,21 @@ func (u *Updater) runUpdate(ctx context.Context, payload protocol.RunnerUpdatePa
 		}
 	}()
 
-	if mode == "when_idle" && u.node.ActiveWorkCount() > 0 {
+	// Manual upgrades (Force: true) only drain active AI turns/sessions so lingering idle
+	// PTYs or browser tabs never stall user-triggered upgrades for 10 minutes.
+	includeAux := !payload.Force
+	if count, desc := u.blockingWorkload(includeAux); mode == "when_idle" && count > 0 {
+		msg := "waiting for active tasks to become idle"
+		if desc != "" {
+			msg = "waiting for " + desc
+		}
 		u.emitStatus(ctx, protocol.RunnerUpdateStatusPayload{
 			RequestID:     payload.RequestID,
 			Phase:         "draining",
 			TargetVersion: payload.TargetVersion,
-			Message:       "waiting for active tasks to become idle",
+			Message:       msg,
 		})
-		if err := u.waitForIdle(ctx); err != nil {
+		if err := u.waitForIdle(ctx, includeAux); err != nil {
 			u.emitStatus(ctx, protocol.RunnerUpdateStatusPayload{
 				RequestID:     payload.RequestID,
 				Phase:         "failed",
@@ -377,20 +409,26 @@ func (u *Updater) runUpdate(ctx context.Context, payload protocol.RunnerUpdatePa
 	}
 }
 
-func (u *Updater) waitForIdle(ctx context.Context) error {
+func (u *Updater) waitForIdle(ctx context.Context, includeAux bool) error {
 	deadline := time.NewTimer(u.drainTimeout)
 	defer deadline.Stop()
 	ticker := time.NewTicker(u.drainPollInterval)
 	defer ticker.Stop()
 
 	for {
-		if u.node.ActiveWorkCount() == 0 {
+		count, desc := u.blockingWorkload(includeAux)
+		if count == 0 {
 			return nil
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-u.forceImmediateCh:
+			return nil
 		case <-deadline.C:
+			if desc != "" {
+				return fmt.Errorf("timed out waiting for runner workload to become idle (still active: %s)", desc)
+			}
 			return errors.New("timed out waiting for runner workload to become idle")
 		case <-ticker.C:
 		}

@@ -128,6 +128,7 @@ type Node struct {
 	pendingUI       map[string]chan protocol.UIResolvePayload
 	pendingRPC      map[string]chan protocol.Envelope
 	memoryCfg       protocol.MemoryConfigSync
+	goalCfg         protocol.GoalConfigSync
 }
 
 // NewNode initializes an autonomous Runner and its local SQLite + CAS store.
@@ -498,26 +499,64 @@ func (n *Node) SetDraining(v bool) {
 	n.mu.Unlock()
 }
 
-// ActiveWorkCount returns the count of active turns, sessions, PTYs, and browser sessions.
-func (n *Node) ActiveWorkCount() int {
-	n.mu.Lock()
-	count := n.activeTurns
-	if len(n.activeSessions) > count {
-		count = len(n.activeSessions)
+// WorkloadSummary breaks down currently active work on a runner node.
+type WorkloadSummary struct {
+	Turns    int
+	PTYs     int
+	Browsers int
+}
+
+// Total returns the combined count of active turns, PTYs, and browser sessions.
+func (w WorkloadSummary) Total() int {
+	return w.Turns + w.PTYs + w.Browsers
+}
+
+// Describe formats non-zero active workload items for draining diagnostics.
+func (w WorkloadSummary) Describe(includeAux bool) string {
+	var parts []string
+	if w.Turns > 0 {
+		parts = append(parts, fmt.Sprintf("%d active turn(s)", w.Turns))
 	}
-	ptyCount := len(n.activePTYs)
+	if includeAux {
+		if w.PTYs > 0 {
+			parts = append(parts, fmt.Sprintf("%d terminal(s)", w.PTYs))
+		}
+		if w.Browsers > 0 {
+			parts = append(parts, fmt.Sprintf("%d browser session(s)", w.Browsers))
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+// ActiveWorkload returns the structured count of active turns, PTYs, and browser sessions.
+func (n *Node) ActiveWorkload() WorkloadSummary {
+	n.mu.Lock()
+	turns := n.activeTurns
+	if len(n.activeSessions) > turns {
+		turns = len(n.activeSessions)
+	}
+	ptys := len(n.activePTYs)
 	n.mu.Unlock()
 
 	if c, ok := n.cfg.PTY.(activeWorkCounter); ok {
-		if v := c.ActiveCount(); v > ptyCount {
-			ptyCount = v
+		if v := c.ActiveCount(); v > ptys {
+			ptys = v
 		}
 	}
-	count += ptyCount
+	browsers := 0
 	if c, ok := n.cfg.Browser.(activeWorkCounter); ok {
-		count += c.ActiveCount()
+		browsers = c.ActiveCount()
 	}
-	return count
+	return WorkloadSummary{
+		Turns:    turns,
+		PTYs:     ptys,
+		Browsers: browsers,
+	}
+}
+
+// ActiveWorkCount returns the count of active turns, sessions, PTYs, and browser sessions.
+func (n *Node) ActiveWorkCount() int {
+	return n.ActiveWorkload().Total()
 }
 
 // Close shuts down active sessions, detached background tasks, PTYs, and the local store.
@@ -866,6 +905,23 @@ func (n *Node) ApplyConfigSnapshot(ctx context.Context, snap *protocol.ConfigSna
 		prefs.JevAutoApproveEnabled = ms.JevAutoApproveEnabled
 		prefs.JevAutoRouterEnabled = ms.JevAutoRouterEnabled
 		_ = n.store.SaveUserPreferences(ctx, prefs)
+	}
+	if snap.GoalSettings != nil {
+		n.mu.Lock()
+		n.goalCfg = *snap.GoalSettings
+		n.mu.Unlock()
+		if n.store != nil {
+			prefs, err := n.store.GetUserPreferences(ctx)
+			if err != nil {
+				prefs = store.DefaultUserPreferences()
+			}
+			prefs.GoalMaxRounds = snap.GoalSettings.MaxRounds
+			prefs.GoalMaxTurnsPerRound = snap.GoalSettings.MaxTurnsPerRound
+			prefs.GoalMaxConsecutiveNoProgress = snap.GoalSettings.MaxConsecutiveNoProgress
+			prefs.GoalVerifierProviderID = snap.GoalSettings.VerifierProviderID
+			prefs.GoalVerifierModelID = snap.GoalSettings.VerifierModelID
+			_ = n.store.SaveUserPreferences(ctx, prefs)
+		}
 	}
 	if snap.GlobalInstructions != nil {
 		prefs, err := n.store.GetUserPreferences(ctx)

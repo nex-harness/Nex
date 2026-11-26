@@ -203,9 +203,11 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 				if cur := s.runnerMeta[hello.RunnerID]; cur != nil {
 					cur.UpdatePhase = st.Phase
 					cur.UpdateProgress = st.ProgressPct
+					cur.UpdateMessage = st.Message
 					cur.UpdateError = st.Error
 					cur.UpdatePhaseUpdatedAt = time.Now()
 					if st.Phase == "succeeded" {
+						cur.UpdateMessage = ""
 						cur.UpdateError = ""
 					}
 				}
@@ -223,6 +225,7 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 						if cur != nil && cur.UpdatePhase == "succeeded" && time.Since(cur.UpdatePhaseUpdatedAt) >= runnerSucceededBadgeTTL {
 							cur.UpdatePhase = ""
 							cur.UpdateProgress = 0
+							cur.UpdateMessage = ""
 							changed = true
 						}
 						online := s.runners[rid] != nil

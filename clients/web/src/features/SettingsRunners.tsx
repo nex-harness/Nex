@@ -841,6 +841,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     {phaseLabel && (
                       <span
                         data-testid={`runner-update-phase-${r.id}`}
+                        title={r.update_message || undefined}
                         className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs font-medium ${
                           r.update_phase === 'failed' || r.update_phase === 'rolled_back'
                             ? 'bg-destructive-surface text-destructive-surface-fg'
@@ -942,6 +943,29 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       >
                         <Copy className="size-3" />
                         <span>{formatMsg(locale, 'runners.copyJoinCommandBtn')}</span>
+                      </button>
+                    </div>
+                  )}
+                  {r.status === 'online' && r.update_phase === 'draining' && (
+                    <div
+                      data-testid={`runner-draining-hint-${r.id}`}
+                      className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-blue/30 bg-brand-blue/10 px-3 py-1.5 text-ui-xs text-brand-blue"
+                    >
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <LoaderCircle className="size-3.5 shrink-0 animate-spin" />
+                        <span className="truncate font-medium">
+                          {r.update_message || formatMsg(locale, 'runners.phase.draining')}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid={`force-upgrade-runner-${r.id}`}
+                        disabled={upgrading}
+                        onClick={() => void triggerSingleUpgrade(r, 'immediate')}
+                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-brand-blue/40 bg-card px-2 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover disabled:opacity-50"
+                      >
+                        <ArrowUpCircle className="size-3" />
+                        <span>{formatMsg(locale, 'runners.updateNowBtn')}</span>
                       </button>
                     </div>
                   )}

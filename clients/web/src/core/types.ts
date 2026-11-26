@@ -22,6 +22,7 @@ export interface RunnerRecord {
   target_version?: string;
   update_phase?: string;
   update_progress?: number;
+  update_message?: string;
   update_error?: string;
   incompatible?: boolean;
 }
@@ -114,6 +115,11 @@ export interface UserPreferences {
   classifier_providers?: MultimodalProviderProfile[];
   active_classifier_provider_id?: string;
   active_classifier_model_id?: string;
+  goal_max_rounds?: number;
+  goal_max_turns_per_round?: number;
+  goal_max_consecutive_no_progress?: number;
+  goal_verifier_provider_id?: string;
+  goal_verifier_model_id?: string;
 }
 
 export type ClientNotificationKind =
@@ -363,15 +369,45 @@ export interface TodoItem {
   priority?: 'high' | 'medium' | 'low';
 }
 
+export type GoalPhase =
+  | 'started'
+  | 'round_start'
+  | 'verifying'
+  | 'round_verified'
+  | 'completed'
+  | 'failed'
+  | 'aborted'
+  | 'max_rounds'
+  | 'blocked';
+
 export interface GoalEntry {
   id: string;
   index: number;
   title: string;
-  status: 'running' | 'completed';
+  status: 'running' | 'completed' | 'failed' | 'aborted' | 'blocked';
+  phase?: GoalPhase;
+  round?: number;
+  maxRounds?: number;
+  lastVerdict?: string;
+  missingItems?: string[];
+  error?: string;
   startedAt: number;
   completedAt?: number;
   completedTodos: number;
   totalTodos: number;
+}
+
+export interface GoalDividerCard {
+  goalId: string;
+  phase: GoalPhase;
+  round?: number;
+  maxRounds?: number;
+  achieved?: boolean;
+  verdict?: string;
+  missingItems?: string[];
+  nextStep?: string;
+  error?: string;
+  objective?: string;
 }
 
 export interface ToolCallCard {
@@ -417,12 +453,13 @@ export interface ChatTurnItem {
   id: string;
   seq?: number;
   startSeq?: number;
-  role: 'user' | 'assistant' | 'compaction';
+  role: 'user' | 'assistant' | 'compaction' | 'goal';
   text: string;
   thinking: string;
   images?: ChatImageBlock[];
   toolCalls: ToolCallCard[];
   compaction?: CompactionCard;
+  goalDivider?: GoalDividerCard;
   streaming?: boolean;
   optimistic?: boolean;
 }
