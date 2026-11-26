@@ -256,6 +256,7 @@ Produce a concise, high-density structured handoff summary of the conversation h
 Include these sections (omit empty ones):
 ## Goal & Constraints
 - User's core objective, requirements, and explicit preferences/constraints.
+- If an active /goal objective is in progress, preserve the exact <untrusted_objective>, verified evidence collected so far, and any unresolved verification gaps.
 
 ## Key Decisions & Findings
 - Architectural choices, root causes found, important file paths and symbol names.

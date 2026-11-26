@@ -399,6 +399,31 @@ func TestFormatGoalTurnPrompt(t *testing.T) {
 	if GoalDisplaySummary("") != "Goal" {
 		t.Fatal("empty goal summary should fall back to a neutral label")
 	}
+
+	meta := FormatActiveGoalMetaSection("Ship v2", 2, 8, []string{"Run integration tests"})
+	for _, want := range []string{
+		"# Active Goal",
+		"2 / 8",
+		"<untrusted_objective>",
+		"Ship v2",
+		"Run integration tests",
+	} {
+		if !strings.Contains(meta, want) {
+			t.Fatalf("FormatActiveGoalMetaSection missing %q:\n%s", want, meta)
+		}
+	}
+
+	fb := FormatGoalVerificationFeedback(2, 8, "Missing tests", []string{"Run tests"}, "Run go test ./...")
+	for _, want := range []string{
+		`<goal-verification-feedback round="2" max_rounds="8">`,
+		"Missing tests",
+		"- Run tests",
+		"Recommended next step: Run go test ./...",
+	} {
+		if !strings.Contains(fb, want) {
+			t.Fatalf("FormatGoalVerificationFeedback missing %q:\n%s", want, fb)
+		}
+	}
 }
 
 func TestBuildSystemSectionsPlanModeAndMultiLevelAgentsCLAUDE(t *testing.T) {

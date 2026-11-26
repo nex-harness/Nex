@@ -212,6 +212,15 @@ type MultimodalConfigSync struct {
 	JevAutoRouterEnabled       bool                              `json:"jev_auto_router_enabled,omitempty"`
 }
 
+// GoalConfigSync carries Goal Mode runtime settings from Server to Runner.
+type GoalConfigSync struct {
+	MaxRounds                int    `json:"max_rounds,omitempty"`
+	MaxTurnsPerRound         int    `json:"max_turns_per_round,omitempty"`
+	MaxConsecutiveNoProgress int    `json:"max_consecutive_no_progress,omitempty"`
+	VerifierProviderID       string `json:"verifier_provider_id,omitempty"`
+	VerifierModelID          string `json:"verifier_model_id,omitempty"`
+}
+
 // ConfigSnapshot carries centralized configuration down to an autonomous Runner.
 type ConfigSnapshot struct {
 	ConfigRev            int64                                `json:"config_rev"`
@@ -231,6 +240,7 @@ type ConfigSnapshot struct {
 	MemorySettings       *MemoryConfigSync                    `json:"memory_settings,omitempty"`
 	BrowserSettings      *BrowserConfigSync                   `json:"browser_settings,omitempty"`
 	MultimodalSettings   *MultimodalConfigSync                `json:"multimodal_settings,omitempty"`
+	GoalSettings         *GoalConfigSync                      `json:"goal_settings,omitempty"`
 	GlobalInstructions   *string                              `json:"global_instructions,omitempty"`
 }
 

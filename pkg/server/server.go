@@ -430,6 +430,13 @@ func (s *Server) buildConfigSnapshot(ctx context.Context, runnerID string) (*pro
 			JevAutoApproveEnabled:      prefs.JevAutoApproveEnabled,
 			JevAutoRouterEnabled:       prefs.JevAutoRouterEnabled,
 		},
+		GoalSettings: &protocol.GoalConfigSync{
+			MaxRounds:                prefs.GoalMaxRounds,
+			MaxTurnsPerRound:         prefs.GoalMaxTurnsPerRound,
+			MaxConsecutiveNoProgress: prefs.GoalMaxConsecutiveNoProgress,
+			VerifierProviderID:       prefs.GoalVerifierProviderID,
+			VerifierModelID:          prefs.GoalVerifierModelID,
+		},
 	}, nil
 }
 

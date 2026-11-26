@@ -3,7 +3,9 @@ import {
   ChatTurnItem,
   CompactionCard,
   ContextCategoryItem,
+  GoalDividerCard,
   GoalEntry,
+  GoalPhase,
   PendingApproval,
   PendingUIPrompt,
   TodoItem,
@@ -397,7 +399,154 @@ export function applySessionEvent(
       }
       if (goals.some((g) => g.status === 'running')) {
         const completedAt = eventTimestamp();
-        goals = goals.map((g) => (g.status === 'running' ? { ...g, status: 'completed', completedAt } : g));
+        const reason = String(p.reason || '').trim().toLowerCase();
+        const errText = typeof p.error === 'string' && p.error.trim() ? p.error.trim() : undefined;
+        const terminalStatus: GoalEntry['status'] =
+          reason === 'aborted' ? 'aborted' : errText || reason === 'error' ? 'failed' : 'completed';
+        goals = goals.map((g) =>
+          g.status === 'running'
+            ? {
+                ...g,
+                status: terminalStatus,
+                phase: terminalStatus,
+                ...(errText ? { error: errText } : {}),
+                completedAt,
+              }
+            : g,
+        );
+      }
+      break;
+    }
+
+    case 'goal_lifecycle': {
+      const g = p.goal && typeof p.goal === 'object' ? (p.goal as Record<string, unknown>) : null;
+      if (!g) break;
+      const goalId = String(g.goal_id || `goal_${ev.seq || goals.length + 1}`);
+      const phase = String(g.phase || 'started') as GoalPhase;
+      const objective = String(g.objective || '').trim() || undefined;
+      const round = typeof g.round === 'number' && g.round > 0 ? g.round : undefined;
+      const maxRounds = typeof g.max_rounds === 'number' && g.max_rounds > 0 ? g.max_rounds : undefined;
+      const achieved = typeof g.achieved === 'boolean' ? g.achieved : undefined;
+      const verdict = String(g.verdict || '').trim() || undefined;
+      const missingItems = Array.isArray(g.missing_items)
+        ? g.missing_items.map((x) => String(x || '').trim()).filter(Boolean)
+        : undefined;
+      const nextStep = String(g.next_step || '').trim() || undefined;
+      const errMsg = String(g.error || p.error || '').trim() || undefined;
+
+      const mappedStatus: GoalEntry['status'] =
+        phase === 'completed'
+          ? 'completed'
+          : phase === 'failed' || phase === 'max_rounds'
+            ? 'failed'
+            : phase === 'aborted'
+              ? 'aborted'
+              : phase === 'blocked'
+                ? 'blocked'
+                : 'running';
+
+      const counts = countTodos(todos);
+      const existingIdx = goals.findIndex((it) => it.id === goalId);
+      const ts = eventTimestamp();
+      if (existingIdx >= 0) {
+        const nextGoals = goals.slice();
+        const prevGoal = nextGoals[existingIdx];
+        nextGoals[existingIdx] = {
+          ...prevGoal,
+          title: objective || prevGoal.title,
+          status: mappedStatus,
+          phase,
+          round: round ?? prevGoal.round,
+          maxRounds: maxRounds ?? prevGoal.maxRounds,
+          lastVerdict: verdict ?? prevGoal.lastVerdict,
+          missingItems: missingItems ?? (achieved ? undefined : prevGoal.missingItems),
+          error: errMsg ?? prevGoal.error,
+          completedTodos: counts.completed,
+          totalTodos: counts.total,
+          completedAt: mappedStatus !== 'running' ? ts : prevGoal.completedAt,
+        };
+        goals = nextGoals;
+      } else {
+        let nextGoals = goals;
+        const lastGoal = nextGoals[nextGoals.length - 1];
+        if (lastGoal && lastGoal.status === 'running') {
+          nextGoals = nextGoals.slice();
+          nextGoals[nextGoals.length - 1] = { ...lastGoal, status: 'completed', completedAt: ts };
+        }
+        goals = [
+          ...nextGoals,
+          {
+            id: goalId,
+            index: nextGoals.length + 1,
+            title: objective || 'Goal',
+            status: mappedStatus,
+            phase,
+            round,
+            maxRounds,
+            lastVerdict: verdict,
+            missingItems,
+            error: errMsg,
+            startedAt: ts,
+            completedAt: mappedStatus !== 'running' ? ts : undefined,
+            completedTodos: counts.completed,
+            totalTodos: counts.total,
+          },
+        ];
+      }
+
+      if (phase !== 'started') {
+        const card: GoalDividerCard = {
+          goalId,
+          phase,
+          round,
+          maxRounds,
+          achieved,
+          verdict,
+          missingItems,
+          nextStep,
+          error: errMsg,
+          objective,
+        };
+        const nextItems = items.slice();
+        const tail = nextItems[nextItems.length - 1];
+        const canUpdateTail =
+          tail &&
+          tail.role === 'goal' &&
+          tail.goalDivider?.goalId === goalId &&
+          ((phase === 'round_verified' &&
+            tail.goalDivider.phase === 'verifying' &&
+            tail.goalDivider.round === round) ||
+            ((phase === 'completed' ||
+              phase === 'max_rounds' ||
+              phase === 'failed' ||
+              phase === 'aborted' ||
+              phase === 'blocked') &&
+              (tail.goalDivider.phase === 'round_verified' || tail.goalDivider.phase === 'verifying') &&
+              (!round || tail.goalDivider.round === round)));
+
+        if (canUpdateTail) {
+          nextItems[nextItems.length - 1] = {
+            ...tail,
+            seq: ev.seq > 0 ? ev.seq : tail.seq,
+            goalDivider: {
+              ...tail.goalDivider,
+              ...card,
+            },
+            streaming: false,
+          };
+        } else {
+          nextItems.push({
+            id: `goal_div_${ev.seq || Date.now()}_${nextItems.length}`,
+            seq: ev.seq > 0 ? ev.seq : undefined,
+            role: 'goal',
+            text: '',
+            thinking: '',
+            toolCalls: [],
+            goalDivider: card,
+            streaming: phase === 'verifying',
+          });
+        }
+        items = nextItems;
       }
       break;
     }
@@ -450,6 +599,9 @@ export function applySessionEvent(
           .filter((b) => b.type === 'text')
           .map((b) => String(b.text || ''))
           .join('');
+        if (/^<goal-verification-feedback\b/i.test(text.trim())) {
+          break;
+        }
         const images = (msg.content || [])
           .filter((b) => b.type === 'image')
           .map((b) => ({
@@ -490,7 +642,11 @@ export function applySessionEvent(
           const goalTitle = parseGoalTitle(text);
           if (goalTitle) {
             const lastGoal = goals[goals.length - 1];
-            if (!lastGoal || lastGoal.title !== goalTitle) {
+            const alreadyActive =
+              lastGoal &&
+              (lastGoal.title === goalTitle ||
+                (lastGoal.status === 'running' && lastGoal.id.startsWith('goal_')));
+            if (!alreadyActive) {
               if (lastGoal && lastGoal.status === 'running') {
                 goals = goals.slice();
                 goals[goals.length - 1] = { ...lastGoal, status: 'completed', completedAt: eventTimestamp() };

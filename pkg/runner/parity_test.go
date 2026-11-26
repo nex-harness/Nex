@@ -265,3 +265,117 @@ func TestRunnerPlanModePromptAndReadOnlyBashAllowed(t *testing.T) {
 		t.Fatal("expected write tool to be blocked in Plan Mode")
 	}
 }
+
+func TestGoalModeMultiRoundEndToEndPersistence(t *testing.T) {
+	ctx := context.Background()
+	verifyCount := 0
+	var sawFeedback bool
+
+	prov := &parityScriptProvider{
+		handler: func(_ int, req *ai.StreamRequest) *ai.Message {
+			if strings.Contains(req.SystemPrompt, "skeptical verification judge") {
+				verifyCount++
+				if verifyCount == 1 {
+					return &ai.Message{
+						Role: ai.RoleAssistant,
+						Content: []ai.ContentBlock{ai.TextBlock(`{
+							"achieved": false,
+							"confidence": "high",
+							"summary": "Output file not created yet.",
+							"missing_items": ["Create result.txt"],
+							"next_step": "Write result.txt"
+						}`)},
+					}
+				}
+				return &ai.Message{
+					Role: ai.RoleAssistant,
+					Content: []ai.ContentBlock{ai.TextBlock(`{
+						"achieved": true,
+						"confidence": "high",
+						"summary": "result.txt written and verified."
+					}`)},
+				}
+			}
+
+			for _, m := range req.Messages {
+				if m.Role == ai.RoleUser && strings.Contains(m.PlainText(), "<goal-verification-feedback") {
+					sawFeedback = true
+				}
+			}
+
+			last := req.Messages[len(req.Messages)-1]
+			if last.Role == ai.RoleUser {
+				return &ai.Message{
+					Role: ai.RoleAssistant,
+					Content: []ai.ContentBlock{{
+						Type:       ai.BlockToolCall,
+						ToolCallID: "tc_bash_" + strings.Repeat("1", verifyCount+1),
+						ToolName:   "bash",
+						Arguments:  json.RawMessage(`{"command":"printf ok > result.txt"}`),
+					}},
+				}
+			}
+			return &ai.Message{Role: ai.RoleAssistant, Content: []ai.ContentBlock{ai.TextBlock("Round complete.")}}
+		},
+	}
+
+	node, err := NewNode(Config{
+		RunnerID:         "run_goal_e2e",
+		DataDir:          t.TempDir(),
+		WorkspaceDefault: t.TempDir(),
+		ProviderOverride: prov,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer node.Close()
+
+	node.ApplyConfigSnapshot(ctx, &protocol.ConfigSnapshot{
+		GoalSettings: &protocol.GoalConfigSync{
+			MaxRounds:                4,
+			MaxTurnsPerRound:         20,
+			MaxConsecutiveNoProgress: 2,
+		},
+	})
+
+	sessID := "sess_goal_e2e_1"
+	_, err = node.ExecutePrompt(ctx, protocol.PromptPayload{
+		SessionID:      sessID,
+		PermissionMode: string(agent.PermissionFullAccess),
+		Text:           "/goal Create result.txt",
+	}, "chat", false)
+	if err != nil {
+		t.Fatalf("ExecutePrompt /goal failed: %v", err)
+	}
+	if verifyCount != 2 || !sawFeedback {
+		t.Fatalf("expected 2 verification rounds with feedback injection, verifyCount=%d sawFeedback=%v", verifyCount, sawFeedback)
+	}
+
+	evs, err := node.Store().ListSessionEventsAfter(ctx, sessID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var phases []string
+	var agentStarts, agentEnds int
+	for _, ev := range evs {
+		switch ev.EventType {
+		case string(agent.EventAgentStart):
+			agentStarts++
+		case string(agent.EventAgentEnd):
+			agentEnds++
+		case string(agent.EventGoalLifecycle):
+			var parsed struct {
+				Goal *agent.GoalLifecycleInfo `json:"goal"`
+			}
+			if json.Unmarshal(ev.Payload, &parsed) == nil && parsed.Goal != nil {
+				phases = append(phases, parsed.Goal.Phase)
+			}
+		}
+	}
+	if agentStarts != 1 || agentEnds != 1 {
+		t.Fatalf("expected 1 agent_start and 1 agent_end, got starts=%d ends=%d", agentStarts, agentEnds)
+	}
+	if len(phases) == 0 || phases[len(phases)-1] != "completed" {
+		t.Fatalf("expected persisted goal_lifecycle ending in completed, got %v", phases)
+	}
+}

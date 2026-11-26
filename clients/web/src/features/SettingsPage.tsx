@@ -398,6 +398,8 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
     logoutWeb,
     refreshInitialData,
     updateThemeQuick,
+    providers,
+    models,
   } = useNexStore();
 
   const [autoArchiveEnabled, setAutoArchiveEnabled] = useState(
@@ -523,12 +525,26 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
   };
 
   const savePreferences = async (patch: Partial<UserPreferences>) => {
+    const next = { ...preferences, ...patch };
+    useNexStore.setState({ preferences: next });
     await apiFetch('/api/v1/preferences', {
       method: 'PUT',
-      body: JSON.stringify({ ...preferences, ...patch }),
+      body: JSON.stringify(next),
     }).catch(() => {});
     await refreshInitialData();
   };
+
+  const enabledProviderIds = new Set(providers.filter((p) => p.enabled).map((p) => p.id));
+  const selectableGoalVerifierModels = models.filter(
+    (m) => enabledProviderIds.size === 0 || enabledProviderIds.has(m.provider_id),
+  );
+  const goalMaxRounds = preferences.goal_max_rounds ?? 8;
+  const goalMaxTurnsPerRound = preferences.goal_max_turns_per_round ?? 40;
+  const goalMaxNoProgress = preferences.goal_max_consecutive_no_progress ?? 2;
+  const goalVerifierValue =
+    preferences.goal_verifier_provider_id && preferences.goal_verifier_model_id
+      ? `${preferences.goal_verifier_provider_id}::${preferences.goal_verifier_model_id}`
+      : '';
 
   const toggleAutoArchive = (enabled: boolean) => {
     setAutoArchiveEnabled(enabled);
@@ -892,6 +908,97 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
             </select>
           </SettingsRow>
         ) : null}
+      </SettingsGroupCard>
+
+      <SectionHeading
+        title={formatMsg(locale, 'settings.goal.title')}
+        description={formatMsg(locale, 'settings.goal.desc')}
+      />
+
+      <SettingsGroupCard>
+        <SettingsRow
+          label={formatMsg(locale, 'settings.goal.maxRounds')}
+          description={formatMsg(locale, 'settings.goal.maxRoundsDesc')}
+        >
+          <input
+            type="number"
+            min={1}
+            max={30}
+            data-testid="settings-goal-max-rounds"
+            value={goalMaxRounds}
+            onChange={(e) => {
+              const raw = Number(e.target.value);
+              const clamped = Number.isFinite(raw) ? Math.max(1, Math.min(30, Math.round(raw))) : 8;
+              void savePreferences({ goal_max_rounds: clamped });
+            }}
+            className={`${settingsInputClass} w-24 text-right tabular-nums`}
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          label={formatMsg(locale, 'settings.goal.maxTurnsPerRound')}
+          description={formatMsg(locale, 'settings.goal.maxTurnsPerRoundDesc')}
+        >
+          <input
+            type="number"
+            min={10}
+            max={100}
+            data-testid="settings-goal-max-turns"
+            value={goalMaxTurnsPerRound}
+            onChange={(e) => {
+              const raw = Number(e.target.value);
+              const clamped = Number.isFinite(raw) ? Math.max(10, Math.min(100, Math.round(raw))) : 40;
+              void savePreferences({ goal_max_turns_per_round: clamped });
+            }}
+            className={`${settingsInputClass} w-24 text-right tabular-nums`}
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          label={formatMsg(locale, 'settings.goal.maxNoProgress')}
+          description={formatMsg(locale, 'settings.goal.maxNoProgressDesc')}
+        >
+          <input
+            type="number"
+            min={1}
+            max={5}
+            data-testid="settings-goal-max-no-progress"
+            value={goalMaxNoProgress}
+            onChange={(e) => {
+              const raw = Number(e.target.value);
+              const clamped = Number.isFinite(raw) ? Math.max(1, Math.min(5, Math.round(raw))) : 2;
+              void savePreferences({ goal_max_consecutive_no_progress: clamped });
+            }}
+            className={`${settingsInputClass} w-24 text-right tabular-nums`}
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          label={formatMsg(locale, 'settings.goal.verifierModel')}
+          description={formatMsg(locale, 'settings.goal.verifierModelDesc')}
+        >
+          <select
+            data-testid="settings-goal-verifier-model"
+            value={goalVerifierValue}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (!val) {
+                void savePreferences({ goal_verifier_provider_id: '', goal_verifier_model_id: '' });
+              } else {
+                const [pid, mid] = val.split('::');
+                void savePreferences({ goal_verifier_provider_id: pid, goal_verifier_model_id: mid });
+              }
+            }}
+            className={settingsSelectClass}
+          >
+            <option value="">{formatMsg(locale, 'capabilities.followActiveSessionModel')}</option>
+            {selectableGoalVerifierModels.map((m) => (
+              <option key={`${m.provider_id}::${m.id}`} value={`${m.provider_id}::${m.id}`}>
+                {m.display_name || m.id} ({m.provider_id})
+              </option>
+            ))}
+          </select>
+        </SettingsRow>
       </SettingsGroupCard>
 
       <SectionHeading

@@ -128,6 +128,7 @@ type Node struct {
 	pendingUI       map[string]chan protocol.UIResolvePayload
 	pendingRPC      map[string]chan protocol.Envelope
 	memoryCfg       protocol.MemoryConfigSync
+	goalCfg         protocol.GoalConfigSync
 }
 
 // NewNode initializes an autonomous Runner and its local SQLite + CAS store.
@@ -904,6 +905,23 @@ func (n *Node) ApplyConfigSnapshot(ctx context.Context, snap *protocol.ConfigSna
 		prefs.JevAutoApproveEnabled = ms.JevAutoApproveEnabled
 		prefs.JevAutoRouterEnabled = ms.JevAutoRouterEnabled
 		_ = n.store.SaveUserPreferences(ctx, prefs)
+	}
+	if snap.GoalSettings != nil {
+		n.mu.Lock()
+		n.goalCfg = *snap.GoalSettings
+		n.mu.Unlock()
+		if n.store != nil {
+			prefs, err := n.store.GetUserPreferences(ctx)
+			if err != nil {
+				prefs = store.DefaultUserPreferences()
+			}
+			prefs.GoalMaxRounds = snap.GoalSettings.MaxRounds
+			prefs.GoalMaxTurnsPerRound = snap.GoalSettings.MaxTurnsPerRound
+			prefs.GoalMaxConsecutiveNoProgress = snap.GoalSettings.MaxConsecutiveNoProgress
+			prefs.GoalVerifierProviderID = snap.GoalSettings.VerifierProviderID
+			prefs.GoalVerifierModelID = snap.GoalSettings.VerifierModelID
+			_ = n.store.SaveUserPreferences(ctx, prefs)
+		}
 	}
 	if snap.GlobalInstructions != nil {
 		prefs, err := n.store.GetUserPreferences(ctx)

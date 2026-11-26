@@ -175,6 +175,49 @@ func TestModelEndpointsFetchLookupTestAndDelete(t *testing.T) {
 	}
 }
 
+func TestPreferencesGoalSettingsClampingAndSnapshot(t *testing.T) {
+	srv, ts, _ := newTestServer(t, http.DefaultClient)
+
+	putBody := `{
+		"goal_max_rounds": 99,
+		"goal_max_turns_per_round": 5,
+		"goal_max_consecutive_no_progress": 9,
+		"goal_verifier_provider_id": " anthropic ",
+		"goal_verifier_model_id": " claude-sonnet-4-5 "
+	}`
+	req, err := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/preferences", strings.NewReader(putBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT /api/v1/preferences status=%d", resp.StatusCode)
+	}
+	var saved store.UserPreferences
+	if err := json.NewDecoder(resp.Body).Decode(&saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.GoalMaxRounds != 30 || saved.GoalMaxTurnsPerRound != 10 || saved.GoalMaxConsecutiveNoProgress != 5 ||
+		saved.GoalVerifierProviderID != "anthropic" || saved.GoalVerifierModelID != "claude-sonnet-4-5" {
+		t.Fatalf("unexpected clamped goal prefs: %+v", saved)
+	}
+
+	snap, err := srv.buildConfigSnapshot(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.GoalSettings == nil || snap.GoalSettings.MaxRounds != 30 || snap.GoalSettings.MaxTurnsPerRound != 10 ||
+		snap.GoalSettings.MaxConsecutiveNoProgress != 5 || snap.GoalSettings.VerifierProviderID != "anthropic" ||
+		snap.GoalSettings.VerifierModelID != "claude-sonnet-4-5" {
+		t.Fatalf("unexpected ConfigSnapshot.GoalSettings: %+v", snap.GoalSettings)
+	}
+}
+
 func TestRunnerBrowseDirsEndpointAndCRUDRoutes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

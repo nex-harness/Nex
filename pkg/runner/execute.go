@@ -229,6 +229,45 @@ func (n *Node) resolveProviderAndModel(ctx context.Context, provID, modelID stri
 	return p, chosenProv.ID, modelID, meta, nil
 }
 
+func (n *Node) resolveGoalConfig(ctx context.Context, fallbackProv ai.Provider, fallbackModel string) agent.GoalConfig {
+	n.mu.Lock()
+	synced := n.goalCfg
+	n.mu.Unlock()
+
+	if synced.MaxRounds == 0 && synced.MaxTurnsPerRound == 0 && synced.MaxConsecutiveNoProgress == 0 &&
+		synced.VerifierProviderID == "" && synced.VerifierModelID == "" && n.store != nil {
+		if prefs, err := n.store.GetUserPreferences(ctx); err == nil {
+			synced = protocol.GoalConfigSync{
+				MaxRounds:                prefs.GoalMaxRounds,
+				MaxTurnsPerRound:         prefs.GoalMaxTurnsPerRound,
+				MaxConsecutiveNoProgress: prefs.GoalMaxConsecutiveNoProgress,
+				VerifierProviderID:       prefs.GoalVerifierProviderID,
+				VerifierModelID:          prefs.GoalVerifierModelID,
+			}
+		}
+	}
+
+	cfg := agent.NormalizeGoalConfig(agent.GoalConfig{
+		MaxRounds:                synced.MaxRounds,
+		MaxTurnsPerRound:         synced.MaxTurnsPerRound,
+		MaxConsecutiveNoProgress: synced.MaxConsecutiveNoProgress,
+		VerifierProvider:         fallbackProv,
+		VerifierModel:            fallbackModel,
+	})
+
+	if synced.VerifierProviderID != "" || synced.VerifierModelID != "" {
+		if n.cfg.ProviderOverride == nil {
+			if vp, _, vm, _, err := n.resolveProviderAndModel(ctx, synced.VerifierProviderID, synced.VerifierModelID); err == nil && vp != nil {
+				cfg.VerifierProvider = vp
+				cfg.VerifierModel = vm
+			}
+		} else if synced.VerifierModelID != "" {
+			cfg.VerifierModel = synced.VerifierModelID
+		}
+	}
+	return cfg
+}
+
 func (n *Node) loadSessionMessages(ctx context.Context, sessionID string) []ai.Message {
 	evs, err := n.store.ListSessionEventsAfter(ctx, sessionID, 0)
 	if err != nil {
@@ -629,7 +668,13 @@ func (n *Node) ExecutePrompt(
 		coalMu.Unlock()
 	}()
 
-	loop := agent.NewLoop(agent.LoopConfig{
+	goalObjective, isGoal := prompts.ParseGoalCommand(p.Text)
+	var goalCfg agent.GoalConfig
+	if isGoal {
+		goalCfg = n.resolveGoalConfig(parentCtx, prov, modelID)
+	}
+
+	loopCfg := agent.LoopConfig{
 		SessionID:       sessRec.ID,
 		RunnerID:        n.cfg.RunnerID,
 		ProviderID:      provID,
@@ -689,7 +734,12 @@ func (n *Node) ExecutePrompt(
 				flushPendingLocked()
 			})
 		},
-	}, history)
+	}
+	if isGoal {
+		loopCfg.MaxTurns = goalCfg.MaxTurnsPerRound
+		loopCfg.SuppressAgentLifecycle = true
+	}
+	loop := agent.NewLoop(loopCfg, history)
 
 	n.mu.Lock()
 	n.activeSessions[sessRec.ID] = &activeSession{record: *sessRec, loop: loop, cancel: cancel}
@@ -710,7 +760,13 @@ func (n *Node) ExecutePrompt(
 	blocks = append(blocks, p.Images...)
 	userMsg := ai.Message{Role: ai.RoleUser, Content: blocks}
 
-	reply, runErr := loop.Run(runCtx, &userMsg)
+	var reply *ai.Message
+	var runErr error
+	if isGoal {
+		reply, runErr = agent.RunGoal(runCtx, loop, goalObjective, userMsg, goalCfg)
+	} else {
+		reply, runErr = loop.Run(runCtx, &userMsg)
+	}
 	if runErr == nil && sessRec.Depth == 0 && triggerSource == "chat" && n.cfg.ProviderOverride == nil {
 		assistantSummary := ""
 		if reply != nil {

@@ -24,13 +24,24 @@ func TestStoreBlobsRegistriesArchiveAndStats(t *testing.T) {
 
 	// 1. Preferences & Config Revision
 	prefs := DefaultUserPreferences()
+	if prefs.GoalMaxRounds != 8 || prefs.GoalMaxTurnsPerRound != 40 || prefs.GoalMaxConsecutiveNoProgress != 2 {
+		t.Fatalf("unexpected default goal preferences: %+v", prefs)
+	}
 	prefs.AutoArchiveAfterDays = 14
 	prefs.Theme = "light"
+	prefs.GoalMaxRounds = 12
+	prefs.GoalMaxTurnsPerRound = 50
+	prefs.GoalMaxConsecutiveNoProgress = 3
+	prefs.GoalVerifierProviderID = "anthropic"
+	prefs.GoalVerifierModelID = "claude-sonnet-4-5"
 	if err := st.SaveUserPreferences(ctx, prefs); err != nil {
 		t.Fatal(err)
 	}
 	gotPrefs, err := st.GetUserPreferences(ctx)
-	if err != nil || gotPrefs.AutoArchiveAfterDays != 14 || gotPrefs.Theme != "light" {
+	if err != nil || gotPrefs.AutoArchiveAfterDays != 14 || gotPrefs.Theme != "light" ||
+		gotPrefs.GoalMaxRounds != 12 || gotPrefs.GoalMaxTurnsPerRound != 50 ||
+		gotPrefs.GoalMaxConsecutiveNoProgress != 3 ||
+		gotPrefs.GoalVerifierProviderID != "anthropic" || gotPrefs.GoalVerifierModelID != "claude-sonnet-4-5" {
 		t.Fatalf("prefs mismatch: %+v err=%v", gotPrefs, err)
 	}
 

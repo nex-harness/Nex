@@ -5449,6 +5449,171 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     }
   });
 
+  it('tracks goal_lifecycle phases, renders inline GoalDivider, hides verification feedback bubbles, and fixes agent_end error status', () => {
+    const sid = 'sess_goal_lifecycle_ui_1';
+    let stream = applySessionEvent(emptyStreamState(), 'run_mac', {
+      session_id: sid,
+      seq: 1,
+      turn_idx: 0,
+      event_type: 'agent_start',
+      payload: {},
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 2,
+      turn_idx: 0,
+      event_type: 'goal_lifecycle',
+      payload: {
+        goal: {
+          goal_id: 'goal_abc123',
+          phase: 'started',
+          objective: 'Ship goal mode',
+          round: 0,
+          max_rounds: 8,
+        },
+      },
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 3,
+      turn_idx: 1,
+      event_type: 'goal_lifecycle',
+      payload: {
+        goal: {
+          goal_id: 'goal_abc123',
+          phase: 'round_start',
+          objective: 'Ship goal mode',
+          round: 1,
+          max_rounds: 8,
+        },
+      },
+    });
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 4,
+      turn_idx: 1,
+      event_type: 'message_end',
+      payload: {
+        message: { role: 'user', content: [{ type: 'text', text: '<untrusted_objective>\nShip goal mode\n</untrusted_objective>' }] },
+      },
+    });
+    // Should not duplicate GoalEntry when message_end arrives after goal_lifecycle(started)
+    expect(stream.goals).toHaveLength(1);
+    expect(stream.goals[0]?.id).toBe('goal_abc123');
+
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 5,
+      turn_idx: 1,
+      event_type: 'goal_lifecycle',
+      payload: {
+        goal: {
+          goal_id: 'goal_abc123',
+          phase: 'verifying',
+          objective: 'Ship goal mode',
+          round: 1,
+          max_rounds: 8,
+        },
+      },
+    });
+    expect(stream.goals[0]?.phase).toBe('verifying');
+
+    // round_verified updates the verifying divider in place!
+    const itemsBeforeVerify = stream.items.length;
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 6,
+      turn_idx: 1,
+      event_type: 'goal_lifecycle',
+      payload: {
+        goal: {
+          goal_id: 'goal_abc123',
+          phase: 'round_verified',
+          objective: 'Ship goal mode',
+          round: 1,
+          max_rounds: 8,
+          achieved: false,
+          verdict: 'Tests have not run yet.',
+          missing_items: ['Run npm test'],
+          next_step: 'Run the test suite',
+        },
+      },
+    });
+    expect(stream.items.length).toBe(itemsBeforeVerify);
+    expect(stream.goals[0]?.lastVerdict).toBe('Tests have not run yet.');
+
+    // <goal-verification-feedback> user message injected between rounds is NOT shown as a raw user bubble
+    stream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 7,
+      turn_idx: 2,
+      event_type: 'message_end',
+      payload: {
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: '<goal-verification-feedback round="1" max_rounds="8">\nNot yet\n</goal-verification-feedback>' }],
+        },
+      },
+    });
+    expect(stream.items.some((it) => it.role === 'user' && it.text.includes('goal-verification-feedback'))).toBe(false);
+
+    useNexStore.setState({
+      serverConnectRequired: false,
+      authEnabled: false,
+      authenticated: true,
+      locale: 'zh-CN',
+      mainView: 'workspace',
+      activeSessionId: sid,
+      selectedRunnerId: 'run_mac',
+      sessions: [
+        {
+          id: sid,
+          runner_id: 'run_mac',
+          title: 'Ship goal mode',
+          workspace_path: '/tmp/ws',
+          status: 'running',
+          created_at: 1000,
+          updated_at: 2000,
+        } as never,
+      ],
+      streams: { [sid]: stream },
+    });
+
+    render(<App />);
+    const dividers = screen.getAllByTestId('goal-divider');
+    expect(dividers.length).toBe(2);
+    expect(dividers[1]?.getAttribute('data-phase')).toBe('round_verified');
+    expect(dividers[1]?.textContent).toContain('尚未达标（剩余 1 项）');
+    // Expand missing items panel
+    fireEvent.click(screen.getByTestId('goal-toggle-details'));
+    expect(screen.getByTestId('goal-details-panel').textContent).toContain('Run npm test');
+
+    // Status panel shows real round badge + running stop button instead of static Pause
+    expect(screen.getByTestId('status-panel-goal-round').textContent).toContain('第 1/8 轮');
+    expect(screen.getByTestId('status-panel-goal-stop')).toBeTruthy();
+
+    // agent_end with error MUST mark running goal failed, NOT completed!
+    const failedStream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 8,
+      turn_idx: 2,
+      event_type: 'agent_end',
+      payload: { reason: 'error', error: 'provider timeout' },
+    });
+    expect(failedStream.goals[0]?.status).toBe('failed');
+    expect(failedStream.goals[0]?.error).toBe('provider timeout');
+
+    // agent_end with aborted MUST mark running goal aborted
+    const abortedStream = applySessionEvent(stream, 'run_mac', {
+      session_id: sid,
+      seq: 8,
+      turn_idx: 2,
+      event_type: 'agent_end',
+      payload: { reason: 'aborted' },
+    });
+    expect(abortedStream.goals[0]?.status).toBe('aborted');
+  });
+
   it('shows draining workload detail and Force/Immediate upgrade action on draining runners', async () => {
     const fetchCalls: Array<{ url: string; method: string; body?: string }> = [];
     const origFetch = globalThis.fetch;

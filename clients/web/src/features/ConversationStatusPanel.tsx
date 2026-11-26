@@ -1,4 +1,6 @@
 import {
+  AlertCircle,
+  AlertTriangle,
   ArrowRight,
   Bot,
   Check,
@@ -11,10 +13,11 @@ import {
   FileDiff,
   GitBranch,
   GitCommitHorizontal,
+  LoaderCircle,
   Maximize2,
   Minimize2,
-  Pause,
   RefreshCw,
+  Square,
   SquareTerminal,
   Target,
 } from 'lucide-react';
@@ -340,23 +343,54 @@ export function ConversationStatusPanel({
     setCommitOpen(false);
   };
 
-  const renderGoalRow = (g: GoalEntry, active: boolean) => (
-    <div key={g.id} className="flex items-start gap-2">
-      {active ? (
-        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border border-success text-[10px] font-semibold text-success">
-          {g.index}
-        </span>
-      ) : (
-        <Target className="mt-0.5 size-4 shrink-0 text-foreground-subtlest" />
-      )}
-      <span className="line-clamp-2 flex-1 text-ui-base leading-snug text-foreground">{g.title}</span>
-      {g.totalTodos > 0 && (
-        <span className="shrink-0 pt-0.5 tabular-nums text-ui-sm text-foreground-subtlest">
-          {g.completedTodos}/{g.totalTodos}
-        </span>
-      )}
-    </div>
-  );
+  const renderGoalRow = (g: GoalEntry, active: boolean) => {
+    const statusBorder =
+      g.status === 'failed'
+        ? 'border-destructive text-destructive'
+        : g.status === 'aborted' || g.status === 'blocked'
+          ? 'border-amber-500 text-amber-500'
+          : g.status === 'running'
+            ? 'border-primary text-primary'
+            : 'border-success text-success';
+    return (
+      <div key={g.id} className="space-y-1">
+        <div className="flex items-start gap-2">
+          {active ? (
+            <span className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold ${statusBorder}`}>
+              {g.index}
+            </span>
+          ) : (
+            <Target className="mt-0.5 size-4 shrink-0 text-foreground-subtlest" />
+          )}
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <span className="line-clamp-2 block text-ui-base leading-snug text-foreground">{g.title}</span>
+            {active && (g.lastVerdict || g.error) && (
+              <span
+                data-testid="status-panel-goal-verdict"
+                className={`line-clamp-2 block text-ui-xs leading-snug ${g.error ? 'text-destructive/90' : 'text-foreground-subtle'}`}
+              >
+                {g.error || g.lastVerdict}
+              </span>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5 pt-0.5 tabular-nums text-ui-xs text-foreground-subtlest">
+            {g.round && g.round > 0 && (
+              <span data-testid="status-panel-goal-round" className="rounded bg-surface px-1.5 py-0.5 font-mono text-[11px] text-foreground-subtle">
+                {g.maxRounds
+                  ? formatMsg(locale, 'chat.goal.roundLabel', { round: g.round, max: g.maxRounds })
+                  : formatMsg(locale, 'chat.goal.roundSimple', { round: g.round })}
+              </span>
+            )}
+            {g.totalTodos > 0 && (
+              <span>
+                {g.completedTodos}/{g.totalTodos}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const activeGoal = goals.length > 0 ? goals[goals.length - 1] : null;
   const earlierGoals = goals.slice(0, Math.max(0, goals.length - 1)).reverse();
@@ -586,17 +620,58 @@ export function ConversationStatusPanel({
 
               {/* 2. Goal */}
               {hasGoal && (
-                <section className={`space-y-2 ${firstSection !== 'goal' ? 'border-t border-border pt-3' : ''}`}>
-                  <div className={`flex items-center gap-1.5 ${firstSection === 'goal' ? 'min-h-6 pr-14' : ''}`}>
-                    <span className="text-ui-sm font-medium text-foreground-subtle">
-                      {formatMsg(locale, 'chat.statusPanel.goal')}
-                    </span>
-                    <span className="tabular-nums text-ui-sm text-foreground-subtlest">{goalElapsed}</span>
-                    <span className="text-ui-sm text-foreground-subtlest">·</span>
-                    {activeGoal?.status === 'running' ? (
-                      <Pause className="size-3.5 shrink-0 text-foreground-subtle" />
-                    ) : (
-                      <CheckCircle2 className="size-4 shrink-0 text-success" />
+                <section
+                  data-testid="status-panel-goal-section"
+                  className={`space-y-2 ${firstSection !== 'goal' ? 'border-t border-border pt-3' : ''}`}
+                >
+                  <div className={`flex items-center justify-between gap-1.5 ${firstSection === 'goal' ? 'min-h-6 pr-14' : ''}`}>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="text-ui-sm font-medium text-foreground-subtle">
+                        {formatMsg(locale, 'chat.statusPanel.goal')}
+                      </span>
+                      <span className="tabular-nums text-ui-sm text-foreground-subtlest">{goalElapsed}</span>
+                      <span className="text-ui-sm text-foreground-subtlest">·</span>
+                      {activeGoal?.status === 'running' ? (
+                        <span className="inline-flex items-center gap-1 text-ui-xs text-primary">
+                          <LoaderCircle className="size-3.5 shrink-0 animate-spin" />
+                          <span>
+                            {activeGoal.phase === 'verifying'
+                              ? formatMsg(locale, 'chat.goal.statusVerifying')
+                              : formatMsg(locale, 'chat.goal.statusRunning')}
+                          </span>
+                        </span>
+                      ) : activeGoal?.status === 'failed' ? (
+                        <span className="inline-flex items-center gap-1 text-ui-xs text-destructive">
+                          <AlertCircle className="size-3.5 shrink-0" />
+                          <span>{formatMsg(locale, 'chat.goal.statusFailed')}</span>
+                        </span>
+                      ) : activeGoal?.status === 'aborted' || activeGoal?.status === 'blocked' ? (
+                        <span className="inline-flex items-center gap-1 text-ui-xs text-amber-500">
+                          <AlertTriangle className="size-3.5 shrink-0" />
+                          <span>
+                            {activeGoal.status === 'blocked'
+                              ? formatMsg(locale, 'chat.goal.statusBlocked')
+                              : formatMsg(locale, 'chat.goal.statusAborted')}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-ui-xs text-success">
+                          <CheckCircle2 className="size-3.5 shrink-0" />
+                          <span>{formatMsg(locale, 'chat.goal.statusCompleted')}</span>
+                        </span>
+                      )}
+                    </div>
+                    {activeGoal?.status === 'running' && (
+                      <button
+                        type="button"
+                        data-testid="status-panel-goal-stop"
+                        title={formatMsg(locale, 'chat.goal.stop')}
+                        onClick={() => void abortActiveSession()}
+                        className="inline-flex h-5 items-center gap-1 rounded border border-border bg-surface px-1.5 text-[11px] font-medium text-foreground-subtle transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Square className="size-2.5 fill-current" />
+                        <span>{formatMsg(locale, 'chat.statusPanel.stopTask')}</span>
+                      </button>
                     )}
                   </div>
 

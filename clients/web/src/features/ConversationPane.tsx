@@ -1,4 +1,5 @@
 import {
+  AlertCircle,
   AlertTriangle,
   Archive,
   ArrowUp,
@@ -46,6 +47,7 @@ import {
   Sparkles,
   Square,
   SquareTerminal,
+  Target,
   X,
   Zap,
 } from 'lucide-react';
@@ -2840,6 +2842,130 @@ function CompactionDivider({
   );
 }
 
+function GoalDivider({
+  item,
+  locale,
+}: {
+  item: ChatTurnItem;
+  locale: LocaleCode;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const g = item.goalDivider;
+  if (!g) return null;
+
+  const round = g.round ?? 1;
+  const maxRounds = g.maxRounds ?? 8;
+  const missingCount = g.missingItems?.length ?? 0;
+  const hasDetails = Boolean(g.verdict || missingCount > 0 || g.nextStep || g.error);
+
+  let label: string;
+  let icon = <Target className="size-3.5 text-foreground-subtle" />;
+  let toneClass = 'border-border bg-surface text-foreground-subtle';
+
+  switch (g.phase) {
+    case 'round_start':
+      label = formatMsg(locale, 'chat.goal.roundStarted', { round, max: maxRounds });
+      break;
+    case 'verifying':
+      label = `${formatMsg(locale, 'chat.goal.roundLabel', { round, max: maxRounds })} · ${formatMsg(locale, 'chat.goal.verifying')}`;
+      icon = <LoaderCircle className="size-3.5 animate-spin text-primary" />;
+      toneClass = 'border-primary/30 bg-primary/8 text-foreground';
+      break;
+    case 'round_verified':
+      if (g.achieved) {
+        label = `${formatMsg(locale, 'chat.goal.roundLabel', { round, max: maxRounds })} · ${formatMsg(locale, 'chat.goal.achieved')}`;
+        icon = <Check className="size-3.5 text-success" />;
+        toneClass = 'border-success/30 bg-success/8 text-foreground';
+      } else {
+        const notMet =
+          missingCount > 0
+            ? formatMsg(locale, 'chat.goal.notYetMet', { count: missingCount })
+            : formatMsg(locale, 'chat.goal.notYetMetPlain');
+        label = `${formatMsg(locale, 'chat.goal.roundLabel', { round, max: maxRounds })} · ${notMet}`;
+        icon = <RotateCcw className="size-3.5 text-amber-500" />;
+        toneClass = 'border-amber-500/30 bg-amber-500/8 text-foreground';
+      }
+      break;
+    case 'completed':
+      label = `${formatMsg(locale, 'chat.goal.roundLabel', { round, max: maxRounds })} · ${formatMsg(locale, 'chat.goal.achieved')}`;
+      icon = <Check className="size-3.5 text-success" />;
+      toneClass = 'border-success/35 bg-success/10 text-foreground';
+      break;
+    case 'max_rounds':
+      label = formatMsg(locale, 'chat.goal.maxRounds', { max: maxRounds });
+      icon = <AlertTriangle className="size-3.5 text-amber-500" />;
+      toneClass = 'border-amber-500/30 bg-amber-500/10 text-foreground';
+      break;
+    case 'blocked':
+      label = formatMsg(locale, 'chat.goal.blocked');
+      icon = <AlertTriangle className="size-3.5 text-amber-500" />;
+      toneClass = 'border-amber-500/30 bg-amber-500/10 text-foreground';
+      break;
+    case 'aborted':
+      label = formatMsg(locale, 'chat.goal.aborted');
+      icon = <AlertTriangle className="size-3.5 text-amber-500" />;
+      toneClass = 'border-amber-500/30 bg-amber-500/10 text-foreground';
+      break;
+    case 'failed':
+      label = formatMsg(locale, 'chat.goal.failed');
+      icon = <AlertCircle className="size-3.5 text-destructive" />;
+      toneClass = 'border-destructive/30 bg-destructive/10 text-foreground';
+      break;
+    default:
+      label = formatMsg(locale, 'chat.goal.roundLabel', { round, max: maxRounds });
+  }
+
+  return (
+    <div data-testid="goal-divider" data-phase={g.phase} data-round={round} className="w-full py-1">
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-border/80" />
+        {hasDetails ? (
+          <button
+            type="button"
+            data-testid="goal-toggle-details"
+            onClick={() => setDetailsOpen((v) => !v)}
+            className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-ui-xs transition-colors hover:bg-hover ${toneClass}`}
+          >
+            {icon}
+            <span>{label}</span>
+            <ChevronDown
+              className={`size-3.5 text-foreground-subtlest transition-transform ${detailsOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+        ) : (
+          <div className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-ui-xs ${toneClass}`}>
+            {icon}
+            <span>{label}</span>
+          </div>
+        )}
+        <div className="h-px flex-1 bg-border/80" />
+      </div>
+      {detailsOpen && hasDetails && (
+        <div
+          data-testid="goal-details-panel"
+          className="mt-2 space-y-1.5 rounded-xl border border-border bg-surface/60 px-3.5 py-2.5 text-ui-xs text-foreground-subtle"
+        >
+          {g.verdict && <div className="text-foreground">{g.verdict}</div>}
+          {g.error && <div className="font-mono text-destructive/90">{g.error}</div>}
+          {missingCount > 0 && (
+            <ul className="list-disc space-y-0.5 pl-4">
+              {g.missingItems?.map((m, idx) => (
+                <li key={idx}>{m}</li>
+              ))}
+            </ul>
+          )}
+          {g.nextStep && (
+            <div className="text-foreground-subtlest">
+              <span className="font-medium text-foreground-subtle">{formatMsg(locale, 'chat.goal.nextStep')}: </span>
+              {g.nextStep}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const EMPTY_STREAM = emptyStreamState();
 const INITIAL_VISIBLE_TURNS = 24;
 const LOAD_MORE_TURNS_STEP = 24;
@@ -2883,13 +3009,19 @@ const MemoTurnItem = memo(function MemoTurnItemImpl({
       ref={(el) => registerRef(item.id, el)}
       style={{ contain: 'layout style' }}
       className={`flex flex-col ${
-        item.role === 'user' ? 'items-end' : item.role === 'compaction' ? 'items-stretch' : 'items-start'
+        item.role === 'user'
+          ? 'items-end'
+          : item.role === 'compaction' || item.role === 'goal'
+            ? 'items-stretch'
+            : 'items-start'
       }`}
     >
       {item.role === 'user' ? (
         <UserBubble text={item.text} images={item.images} seq={item.seq} canEdit={canEdit} />
       ) : item.role === 'compaction' ? (
         <CompactionDivider item={item} locale={locale} />
+      ) : item.role === 'goal' ? (
+        <GoalDivider item={item} locale={locale} />
       ) : (
         <div className={`group/assistant min-w-0 w-full space-y-4 ${item.streaming ? 'nex-stream-in' : ''}`}>
           {(item.thinking || item.toolCalls.length > 0) && (

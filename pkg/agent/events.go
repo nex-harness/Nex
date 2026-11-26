@@ -31,7 +31,22 @@ const (
 	EventSubagentProgress       EventType = "subagent_progress"
 	EventBackgroundTasksUpdated EventType = "background_tasks_updated"
 	EventCompaction             EventType = "compaction"
+	EventGoalLifecycle          EventType = "goal_lifecycle"
 )
+
+// GoalLifecycleInfo carries structured lifecycle and verification metadata for EventGoalLifecycle.
+type GoalLifecycleInfo struct {
+	GoalID       string   `json:"goal_id"`
+	Phase        string   `json:"phase"` // "started" | "round_start" | "verifying" | "round_verified" | "completed" | "failed" | "aborted" | "max_rounds" | "blocked"
+	Objective    string   `json:"objective,omitempty"`
+	Round        int      `json:"round,omitempty"`
+	MaxRounds    int      `json:"max_rounds,omitempty"`
+	Achieved     *bool    `json:"achieved,omitempty"`
+	Verdict      string   `json:"verdict,omitempty"`
+	MissingItems []string `json:"missing_items,omitempty"`
+	NextStep     string   `json:"next_step,omitempty"`
+	Error        string   `json:"error,omitempty"`
+}
 
 // CompactionInfo carries structured lifecycle and token-delta metadata for EventCompaction.
 type CompactionInfo struct {
@@ -61,6 +76,7 @@ type Event struct {
 	Reason            string               `json:"reason,omitempty"`
 	Compaction        *CompactionInfo      `json:"compaction,omitempty"`
 	CompactedMessages []ai.Message         `json:"compacted_messages,omitempty"`
+	Goal              *GoalLifecycleInfo   `json:"goal,omitempty"`
 	Telemetry         *store.TurnTelemetry `json:"telemetry,omitempty"`
 	UIStatusKey   string               `json:"ui_status_key,omitempty"`
 	UIStatusBadge string               `json:"ui_status_badge,omitempty"`

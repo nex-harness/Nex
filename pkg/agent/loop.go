@@ -37,9 +37,10 @@ type LoopConfig struct {
 	TriggerSource      string // "chat" | "subagent" | "cron"
 	MaxRetries         int           // 0 defaults to 3; <0 disables retries
 	RetryBaseDelay     time.Duration // backoff base duration
-	StreamIdleTimeout  time.Duration // 0 defaults to DefaultStreamIdleTimeout (90s); <0 disables idle watchdog
-	DisableAutoCompact bool
-	Tools              []tools.Tool
+	StreamIdleTimeout      time.Duration // 0 defaults to DefaultStreamIdleTimeout (90s); <0 disables idle watchdog
+	DisableAutoCompact     bool
+	SuppressAgentLifecycle bool // when true, outer orchestrator (e.g., RunGoal) emits EventAgentStart/EventAgentEnd
+	Tools                  []tools.Tool
 	Approver           Approver
 	Hooks              Hooks
 	Store              *store.Store
@@ -161,6 +162,30 @@ func (l *Loop) appendMessage(m ai.Message) {
 	l.mu.Unlock()
 }
 
+// UpsertSystemSection inserts or replaces a dynamic SystemSection matched by Name.
+// Callers use this to update volatile meta_context sections (such as active_goal)
+// across outer rounds without mutating the cached core system prompt.
+func (l *Loop) UpsertSystemSection(sec ai.SystemSection) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i := range l.cfg.SystemSections {
+		if sec.Name != "" && l.cfg.SystemSections[i].Name == sec.Name {
+			l.cfg.SystemSections[i] = sec
+			return
+		}
+	}
+	l.cfg.SystemSections = append(l.cfg.SystemSections, sec)
+}
+
+// IsToolReadOnly reports whether the named tool considers args read-only.
+func (l *Loop) IsToolReadOnly(name string, args json.RawMessage) bool {
+	return l.isCallReadOnly(ai.ContentBlock{
+		Type:      ai.BlockToolCall,
+		ToolName:  name,
+		Arguments: args,
+	})
+}
+
 func (l *Loop) emit(ev Event) {
 	if l.cfg.OnEvent != nil {
 		l.emitMu.Lock()
@@ -185,8 +210,10 @@ func (l *Loop) Run(ctx context.Context, promptMsg *ai.Message) (*ai.Message, err
 		l.mu.Unlock()
 	}()
 
-	l.emit(Event{Type: EventAgentStart})
-	defer l.emit(Event{Type: EventAgentEnd})
+	if !l.cfg.SuppressAgentLifecycle {
+		l.emit(Event{Type: EventAgentStart})
+		defer l.emit(Event{Type: EventAgentEnd})
+	}
 
 	if promptMsg != nil {
 		m := *promptMsg
@@ -222,7 +249,10 @@ func (l *Loop) Run(ctx context.Context, promptMsg *ai.Message) (*ai.Message, err
 		l.mu.Unlock()
 
 		// Resolve SystemSections (allowing optional plugin SystemPromptHook mutations)
-		activeSections := l.cfg.SystemSections
+		l.mu.Lock()
+		activeSections := make([]ai.SystemSection, len(l.cfg.SystemSections))
+		copy(activeSections, l.cfg.SystemSections)
+		l.mu.Unlock()
 		if sph, ok := l.cfg.Hooks.(SystemPromptHook); ok && sph != nil {
 			if modSecs, sErr := sph.OnSystemPrompt(ctx, activeSections); sErr == nil {
 				activeSections = modSecs

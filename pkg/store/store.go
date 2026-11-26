@@ -174,30 +174,40 @@ type UserPreferences struct {
 	ActiveClassifierProviderID string                      `json:"active_classifier_provider_id,omitempty"` // Single active classifier provider ID
 	ActiveClassifierModelID    string                      `json:"active_classifier_model_id,omitempty"`    // Single active classifier model ID
 	GlobalInstructions         string                      `json:"global_instructions,omitempty"`           // Global AGENTS.md content appended to all sessions
+	GoalMaxRounds                int                         `json:"goal_max_rounds"`
+	GoalMaxTurnsPerRound         int                         `json:"goal_max_turns_per_round"`
+	GoalMaxConsecutiveNoProgress int                         `json:"goal_max_consecutive_no_progress"`
+	GoalVerifierProviderID       string                      `json:"goal_verifier_provider_id"`
+	GoalVerifierModelID          string                      `json:"goal_verifier_model_id"`
 }
 
 func DefaultUserPreferences() UserPreferences {
 	return UserPreferences{
-		Theme:                 "dark",
-		CodeTheme:             "github-dark",
-		FontFamily:            "Inter, system-ui, sans-serif",
-		MonoFontFamily:        "JetBrains Mono, Menlo, monospace",
-		ExpandThinking:        false,
-		AutoArchiveAfterDays:  30,
-		MemoryAutoExtract:     false,
-		MemoryProviderID:      "",
-		MemoryModelID:         "",
-		BrowserEnabled:        true,
-		BrowserMode:           "managed_cdp",
-		BrowserHeadless:       true,
-		BrowserProfileMode:    "persistent",
-		BrowserAttachURL:      "",
-		BrowserExecutablePath: "",
-		BrowserDownloadMirror: "",
-		NotifyEnabled:         true,
-		NotifyOnComplete:      true,
-		NotifyOnInput:         true,
-		NotifyOnlyBackground:  true,
+		Theme:                        "dark",
+		CodeTheme:                    "github-dark",
+		FontFamily:                   "Inter, system-ui, sans-serif",
+		MonoFontFamily:               "JetBrains Mono, Menlo, monospace",
+		ExpandThinking:               false,
+		AutoArchiveAfterDays:         30,
+		MemoryAutoExtract:            false,
+		MemoryProviderID:             "",
+		MemoryModelID:                "",
+		BrowserEnabled:               true,
+		BrowserMode:                  "managed_cdp",
+		BrowserHeadless:              true,
+		BrowserProfileMode:           "persistent",
+		BrowserAttachURL:             "",
+		BrowserExecutablePath:        "",
+		BrowserDownloadMirror:        "",
+		NotifyEnabled:                true,
+		NotifyOnComplete:             true,
+		NotifyOnInput:                true,
+		NotifyOnlyBackground:         true,
+		GoalMaxRounds:                8,
+		GoalMaxTurnsPerRound:         40,
+		GoalMaxConsecutiveNoProgress: 2,
+		GoalVerifierProviderID:       "",
+		GoalVerifierModelID:          "",
 	}
 }
 
