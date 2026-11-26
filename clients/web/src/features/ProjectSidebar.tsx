@@ -34,6 +34,61 @@ const FADE_MASK = {
 const TASKS_PER_PROJECT = 4;
 const SIDEBAR_GROUP_MODE_KEY = 'nex.sidebar.group_mode.v1';
 
+interface RunnerTint {
+  idle: string;
+  active: string;
+  badge: string;
+}
+
+const RUNNER_TINT_PALETTE: RunnerTint[] = [
+  {
+    idle: 'bg-sky-500/[0.08] text-sky-800/90 ring-sky-500/20 hover:bg-sky-500/[0.14] dark:bg-sky-400/10 dark:text-sky-300 dark:ring-sky-400/20 dark:hover:bg-sky-400/15',
+    active: 'bg-sky-500/[0.16] text-sky-950 ring-sky-500/45 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:bg-sky-400/20 dark:text-sky-100 dark:ring-sky-400/45',
+    badge: 'bg-sky-500/[0.10] text-sky-800/90 ring-1 ring-sky-500/20 dark:bg-sky-400/12 dark:text-sky-300 dark:ring-sky-400/20',
+  },
+  {
+    idle: 'bg-violet-500/[0.08] text-violet-800/90 ring-violet-500/20 hover:bg-violet-500/[0.14] dark:bg-violet-400/10 dark:text-violet-300 dark:ring-violet-400/20 dark:hover:bg-violet-400/15',
+    active: 'bg-violet-500/[0.16] text-violet-950 ring-violet-500/45 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:bg-violet-400/20 dark:text-violet-100 dark:ring-violet-400/45',
+    badge: 'bg-violet-500/[0.10] text-violet-800/90 ring-1 ring-violet-500/20 dark:bg-violet-400/12 dark:text-violet-300 dark:ring-violet-400/20',
+  },
+  {
+    idle: 'bg-teal-500/[0.08] text-teal-800/90 ring-teal-500/20 hover:bg-teal-500/[0.14] dark:bg-teal-400/10 dark:text-teal-300 dark:ring-teal-400/20 dark:hover:bg-teal-400/15',
+    active: 'bg-teal-500/[0.16] text-teal-950 ring-teal-500/45 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:bg-teal-400/20 dark:text-teal-100 dark:ring-teal-400/45',
+    badge: 'bg-teal-500/[0.10] text-teal-800/90 ring-1 ring-teal-500/20 dark:bg-teal-400/12 dark:text-teal-300 dark:ring-teal-400/20',
+  },
+  {
+    idle: 'bg-amber-500/[0.09] text-amber-900/90 ring-amber-500/20 hover:bg-amber-500/[0.15] dark:bg-amber-400/10 dark:text-amber-300 dark:ring-amber-400/20 dark:hover:bg-amber-400/15',
+    active: 'bg-amber-500/[0.18] text-amber-950 ring-amber-500/45 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:bg-amber-400/20 dark:text-amber-100 dark:ring-amber-400/45',
+    badge: 'bg-amber-500/[0.11] text-amber-900/90 ring-1 ring-amber-500/20 dark:bg-amber-400/12 dark:text-amber-300 dark:ring-amber-400/20',
+  },
+  {
+    idle: 'bg-rose-500/[0.08] text-rose-800/90 ring-rose-500/20 hover:bg-rose-500/[0.14] dark:bg-rose-400/10 dark:text-rose-300 dark:ring-rose-400/20 dark:hover:bg-rose-400/15',
+    active: 'bg-rose-500/[0.16] text-rose-950 ring-rose-500/45 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:bg-rose-400/20 dark:text-rose-100 dark:ring-rose-400/45',
+    badge: 'bg-rose-500/[0.10] text-rose-800/90 ring-1 ring-rose-500/20 dark:bg-rose-400/12 dark:text-rose-300 dark:ring-rose-400/20',
+  },
+  {
+    idle: 'bg-indigo-500/[0.08] text-indigo-800/90 ring-indigo-500/20 hover:bg-indigo-500/[0.14] dark:bg-indigo-400/10 dark:text-indigo-300 dark:ring-indigo-400/20 dark:hover:bg-indigo-400/15',
+    active: 'bg-indigo-500/[0.16] text-indigo-950 ring-indigo-500/45 shadow-[0_1px_2px_rgba(0,0,0,0.06)] dark:bg-indigo-400/20 dark:text-indigo-100 dark:ring-indigo-400/45',
+    badge: 'bg-indigo-500/[0.10] text-indigo-800/90 ring-1 ring-indigo-500/20 dark:bg-indigo-400/12 dark:text-indigo-300 dark:ring-indigo-400/20',
+  },
+];
+
+const OFFLINE_RUNNER_TINT: RunnerTint = {
+  idle: 'bg-background/40 text-foreground-subtlest ring-border/55 hover:bg-background/75 hover:text-foreground-subtle',
+  active: 'bg-background text-foreground ring-border-hover shadow-[0_1px_2px_rgba(0,0,0,0.06)]',
+  badge: 'bg-tag text-foreground-subtle ring-1 ring-border/40',
+};
+
+function getRunnerTint(runnerId: string, status?: 'online' | 'offline'): RunnerTint {
+  if (status === 'offline') return OFFLINE_RUNNER_TINT;
+  let hash = 2166136261;
+  for (let i = 0; i < runnerId.length; i++) {
+    hash ^= runnerId.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return RUNNER_TINT_PALETTE[(hash >>> 0) % RUNNER_TINT_PALETTE.length];
+}
+
 function readPersistedGroupMode(): 'project' | 'recent' {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -545,7 +600,9 @@ export function ProjectSidebar() {
               <span
                 data-testid={`project-runner-badge-${group.key}`}
                 title={group.workspacePath ? `${group.runnerName}: ${group.workspacePath}` : group.runnerName}
-                className="inline-flex max-w-[96px] shrink-0 items-center gap-1 rounded bg-tag px-1.5 py-0.5 text-[11px] leading-tight text-foreground-subtle"
+                className={`inline-flex max-w-[96px] shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] leading-tight ${
+                  getRunnerTint(group.runnerId, group.runnerStatus).badge
+                }`}
               >
                 {group.runnerStatus === 'offline' && (
                   <CloudOff
@@ -766,16 +823,15 @@ export function ProjectSidebar() {
           </button>
           {runnerTabs.map((rt) => {
             const active = effectiveRunnerFilter === rt.id;
+            const tint = getRunnerTint(rt.id, rt.status);
             return (
               <button
                 key={rt.id}
                 type="button"
                 data-testid={`sidebar-runner-pill-${rt.id}`}
                 onClick={() => setSelectedRunnerFilter(active ? 'all' : rt.id)}
-                className={`inline-flex max-w-[120px] items-center gap-1.5 rounded-md px-2 py-0.5 text-[11.5px] transition-all ${
-                  active
-                    ? 'bg-background font-medium text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-border-hover'
-                    : 'bg-background/45 text-foreground-subtle ring-1 ring-border/60 hover:bg-background/80 hover:text-foreground'
+                className={`inline-flex max-w-[120px] items-center gap-1.5 rounded-md px-2 py-0.5 text-[11.5px] ring-1 transition-all ${
+                  active ? `font-medium ${tint.active}` : tint.idle
                 }`}
               >
                 <span
