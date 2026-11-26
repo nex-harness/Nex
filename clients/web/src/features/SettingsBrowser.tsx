@@ -1,8 +1,8 @@
 import { AlertTriangle, CheckCircle2, Globe, LoaderCircle, RefreshCw, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../core/protocol';
 import { useNexStore } from '../core/store';
-import { UserPreferences } from '../core/types';
+import { BrowserProbeResult, UserPreferences } from '../core/types';
 import { formatMsg } from '../i18n/messages';
 import {
   SectionHeading,
@@ -17,6 +17,15 @@ import {
 const OFFICIAL_CFT_MIRROR = '';
 const NPMMIRROR_CFT = 'https://cdn.npmmirror.com/binaries/chrome-for-testing';
 
+function formatBrowserLabel(probe: BrowserProbeResult): string {
+  if (probe.browser_name && probe.version) {
+    return probe.version.toLowerCase().includes(probe.browser_name.toLowerCase())
+      ? probe.version
+      : `${probe.browser_name} · ${probe.version}`;
+  }
+  return probe.version || probe.browser_name || '';
+}
+
 export function SettingsBrowserSection({ onFlash }: { onFlash: (msg: string) => void }) {
   const locale = useNexStore((s) => s.locale);
   const preferences = useNexStore((s) => s.preferences);
@@ -27,6 +36,9 @@ export function SettingsBrowserSection({ onFlash }: { onFlash: (msg: string) => 
   const probeRunnerBrowser = useNexStore((s) => s.probeRunnerBrowser);
   const installRunnerBrowser = useNexStore((s) => s.installRunnerBrowser);
   const clearRunnerBrowserData = useNexStore((s) => s.clearRunnerBrowserData);
+
+  const [probingRunners, setProbingRunners] = useState<Record<string, boolean>>({});
+  const autoProbedRef = useRef<Set<string>>(new Set());
 
   const [prefs, setPrefs] = useState<UserPreferences>({
     ...preferences,
@@ -56,7 +68,36 @@ export function SettingsBrowserSection({ onFlash }: { onFlash: (msg: string) => 
     }));
   }, [preferences]);
 
+  const onlineRunners = runners.filter((r) => r.status === 'online');
+  const onlineRunnerIdsKey = onlineRunners.map((r) => r.id).join(',');
+
+  const runProbe = useCallback(
+    async (runnerId: string) => {
+      setProbingRunners((prev) => ({ ...prev, [runnerId]: true }));
+      try {
+        await probeRunnerBrowser(runnerId);
+      } finally {
+        setProbingRunners((prev) => ({ ...prev, [runnerId]: false }));
+      }
+    },
+    [probeRunnerBrowser],
+  );
+
+  useEffect(() => {
+    for (const r of onlineRunners) {
+      if (!browserProbes[r.id] && !autoProbedRef.current.has(r.id)) {
+        autoProbedRef.current.add(r.id);
+        void runProbe(r.id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onlineRunnerIdsKey, runProbe]);
+
   const savePrefs = async (next: UserPreferences) => {
+    const needsReprobe =
+      (next.browser_mode || 'managed_cdp') !== (prefs.browser_mode || 'managed_cdp') ||
+      (next.browser_executable_path || '') !== (prefs.browser_executable_path || '') ||
+      (next.browser_attach_url || '') !== (prefs.browser_attach_url || '');
     setPrefs(next);
     await apiFetch('/api/v1/preferences', {
       method: 'PUT',
@@ -64,9 +105,12 @@ export function SettingsBrowserSection({ onFlash }: { onFlash: (msg: string) => 
     });
     await refreshInitialData();
     onFlash(formatMsg(locale, 'settings.browser.saved'));
+    if (needsReprobe) {
+      for (const r of onlineRunners) {
+        void runProbe(r.id);
+      }
+    }
   };
-
-  const onlineRunners = runners.filter((r) => r.status === 'online');
 
   const statusBadge = (status: string) => {
     switch (status) {
@@ -108,11 +152,6 @@ export function SettingsBrowserSection({ onFlash }: { onFlash: (msg: string) => 
 
   return (
     <div data-testid="settings-browser-section" className="space-y-6">
-      <SectionHeading
-        title={formatMsg(locale, 'settings.browser.title')}
-        description={formatMsg(locale, 'settings.browser.desc')}
-      />
-
       <SettingsGroupCard>
         <SettingsRow
           label={formatMsg(locale, 'settings.browser.enabled')}
@@ -236,7 +275,9 @@ export function SettingsBrowserSection({ onFlash }: { onFlash: (msg: string) => 
         ) : (
           onlineRunners.map((r) => {
             const probe = browserProbes[r.id];
+            const probing = Boolean(probingRunners[r.id]);
             const installing = Boolean(browserInstalling[r.id]);
+            const browserLabel = probe ? formatBrowserLabel(probe) : '';
             return (
               <div key={r.id} className="space-y-2 px-5 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -246,19 +287,27 @@ export function SettingsBrowserSection({ onFlash }: { onFlash: (msg: string) => 
                     <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-ui-xs text-foreground-subtlest">
                       {r.os}/{r.arch}
                     </span>
-                    {probe ? statusBadge(probe.status) : null}
+                    {probing && !probe ? (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-surface px-2 py-0.5 text-ui-xs font-medium text-foreground-subtle">
+                        <LoaderCircle className="size-3 animate-spin" />
+                        {formatMsg(locale, 'settings.browser.statusProbing')}
+                      </span>
+                    ) : probe ? (
+                      statusBadge(probe.status)
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
                       data-testid={`browser-runner-probe-${r.id}`}
-                      onClick={() => void probeRunnerBrowser(r.id)}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-ui-xs font-medium text-foreground hover:bg-hover"
+                      disabled={probing}
+                      onClick={() => void runProbe(r.id)}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-ui-xs font-medium text-foreground hover:bg-hover disabled:opacity-50"
                     >
-                      <RefreshCw className="size-3.5" />
+                      <RefreshCw className={`size-3.5 ${probing ? 'animate-spin' : ''}`} />
                       <span>{formatMsg(locale, 'settings.browser.probe')}</span>
                     </button>
-                    {(!probe || probe.status === 'missing_binary') && (
+                    {probe?.status === 'missing_binary' && (
                       <button
                         type="button"
                         data-testid={`browser-runner-install-${r.id}`}
@@ -326,10 +375,24 @@ export function SettingsBrowserSection({ onFlash }: { onFlash: (msg: string) => 
                     </button>
                   </div>
                 </div>
-                {probe?.version || probe?.executable_path ? (
-                  <p className="truncate font-mono text-ui-xs text-foreground-subtlest">
-                    {probe.version} {probe.executable_path ? `(${probe.executable_path})` : ''}
-                  </p>
+                {probe && (browserLabel || probe.executable_path) ? (
+                  <div
+                    data-testid={`browser-runner-active-${r.id}`}
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-xs text-foreground-subtlest"
+                  >
+                    <span>{formatMsg(locale, 'settings.browser.activeBrowser')}:</span>
+                    {browserLabel ? (
+                      <span className="font-medium text-foreground">{browserLabel}</span>
+                    ) : null}
+                    {probe.executable_path ? (
+                      <code
+                        title={probe.executable_path}
+                        className="max-w-full truncate rounded bg-surface px-1.5 py-0.5 font-mono text-ui-xs text-foreground-subtle"
+                      >
+                        {probe.executable_path}
+                      </code>
+                    ) : null}
+                  </div>
                 ) : null}
                 {probe?.suggested_command && probe.status !== 'ready' ? (
                   <pre className="overflow-x-auto rounded-lg border border-border bg-surface px-3 py-2 font-mono text-ui-xs text-foreground-subtle">
