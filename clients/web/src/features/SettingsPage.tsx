@@ -1163,7 +1163,20 @@ function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
   const [sansFont, setSansFont] = useState(preferences.font_family);
   const [monoFont, setMonoFont] = useState(preferences.mono_font_family);
   const [expandThinking, setExpandThinking] = useState(preferences.expand_thinking);
+  const [runnerBadgeStyle, setRunnerBadgeStyle] = useState<'tinted' | 'neutral'>(
+    preferences.runner_badge_style || 'tinted',
+  );
   const [saving, setSaving] = useState(false);
+
+  const chooseRunnerBadgeStyle = async (style: 'tinted' | 'neutral') => {
+    setRunnerBadgeStyle(style);
+    const nextPrefs: UserPreferences = { ...preferences, runner_badge_style: style };
+    useNexStore.setState({ preferences: nextPrefs });
+    await apiFetch('/api/v1/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(nextPrefs),
+    }).catch(() => {});
+  };
 
   const saveAppearance = async () => {
     setSaving(true);
@@ -1176,6 +1189,7 @@ function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
           font_family: sansFont.trim() || preferences.font_family,
           mono_font_family: monoFont.trim() || preferences.mono_font_family,
           expand_thinking: expandThinking,
+          runner_badge_style: runnerBadgeStyle,
         }),
       }).catch(() => {});
       await refreshInitialData();
@@ -1262,6 +1276,34 @@ function AppearanceSection({ onFlash }: { onFlash: (msg: string) => void }) {
           <span className="w-10 shrink-0 text-right font-mono text-ui-sm tabular-nums text-foreground">
             {uiFontPx}px
           </span>
+        </SettingsRow>
+
+        <SettingsRow
+          label={formatMsg(locale, 'settings.runnerBadgeStyle')}
+          description={formatMsg(locale, 'settings.runnerBadgeStyleDesc')}
+        >
+          <div className="inline-flex items-center rounded-lg bg-selected/80 p-0.5 text-ui-xs">
+            {(
+              [
+                { id: 'tinted', labelKey: 'settings.runnerBadgeStyleTinted' },
+                { id: 'neutral', labelKey: 'settings.runnerBadgeStyleNeutral' },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                data-testid={`appearance-runner-badge-${opt.id}`}
+                onClick={() => void chooseRunnerBadgeStyle(opt.id)}
+                className={`rounded-md px-2.5 py-1 font-medium transition-all ${
+                  runnerBadgeStyle === opt.id
+                    ? 'bg-background text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
+                    : 'text-foreground-subtle hover:text-foreground'
+                }`}
+              >
+                {formatMsg(locale, opt.labelKey)}
+              </button>
+            ))}
+          </div>
         </SettingsRow>
 
         <SettingsRow

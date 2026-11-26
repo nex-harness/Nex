@@ -5915,4 +5915,103 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       }
     }
   });
+
+  it('switches sidebar device badge style between tinted and neutral in Appearance settings', async () => {
+    const now = Date.now();
+    const putBodies: string[] = [];
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/api/v1/preferences') && (init?.method || '').toUpperCase() === 'PUT') {
+        putBodies.push(String(init?.body || ''));
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ items: [] }), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      useNexStore.setState({
+        serverConnectRequired: false,
+        authEnabled: false,
+        authenticated: true,
+        locale: 'zh-CN',
+        mainView: 'workspace',
+        preferences: {
+          theme: 'dark',
+          code_theme: 'github-dark',
+          font_family: 'Inter',
+          mono_font_family: 'monospace',
+          expand_thinking: false,
+          runner_badge_style: 'tinted',
+          auto_archive_after_days: 0,
+        },
+        runners: [
+          {
+            id: 'run_mac',
+            name: 'macM4',
+            hostname: 'macmini',
+            os: 'darwin',
+            arch: 'arm64',
+            shell: 'zsh',
+            tags: [],
+            synced_config_rev: 1,
+            status: 'online',
+            workspace_default: '/Users/tylinux',
+            version: 'ec6bb8b',
+            last_seen_at: now,
+          },
+          {
+            id: 'run_hk',
+            name: 'hk',
+            hostname: 'hk-box',
+            os: 'linux',
+            arch: 'amd64',
+            shell: 'bash',
+            tags: [],
+            synced_config_rev: 1,
+            status: 'online',
+            workspace_default: '/home/tylinux',
+            version: '29e196c-dev',
+            last_seen_at: now,
+          },
+        ],
+        sessions: [
+          {
+            id: 'sess_tint_1',
+            runner_id: 'run_hk',
+            depth: 0,
+            title: 'Check badge',
+            workspace_path: '/home/tylinux',
+            agent_profile_slug: 'main',
+            model_id: 'm1',
+            provider_id: 'p1',
+            permission_mode: 'interactive',
+            status: 'idle',
+            latest_context_tokens: 0,
+            context_window_limit: 128000,
+            created_at: now,
+            updated_at: now,
+            last_active_at: now,
+          },
+        ],
+        streams: {},
+      });
+
+      render(<App />);
+      expect(screen.getByTestId('sidebar-runner-pill-run_hk').className).toContain('dark:text-');
+
+      fireEvent.click(screen.getByTestId('sidebar-settings-btn'));
+      fireEvent.click(screen.getByTestId('settings-nav-appearance'));
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('appearance-runner-badge-neutral'));
+      });
+      expect(useNexStore.getState().preferences.runner_badge_style).toBe('neutral');
+      expect(putBodies.some((b) => b.includes('"runner_badge_style":"neutral"'))).toBe(true);
+
+      fireEvent.click(screen.getByTestId('settings-back-btn'));
+      expect(screen.getByTestId('sidebar-runner-pill-run_hk').className).toContain('bg-background/45');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });

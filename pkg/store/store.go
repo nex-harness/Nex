@@ -138,6 +138,7 @@ type UserPreferences struct {
 	FontFamily            string `json:"font_family"`              // UI body font
 	MonoFontFamily        string `json:"mono_font_family"`         // Code & terminal font
 	ExpandThinking        bool   `json:"expand_thinking"`          // Auto-expand thinking blocks
+	RunnerBadgeStyle      string `json:"runner_badge_style,omitempty"` // "tinted" | "neutral"
 	AutoArchiveAfterDays  int    `json:"auto_archive_after_days"`  // 0 = disabled
 	MemoryAutoExtract     bool   `json:"memory_auto_extract"`      // Background auto-extract after turns
 	MemoryProviderID      string `json:"memory_provider_id"`       // Optional dedicated provider for extract/dream
