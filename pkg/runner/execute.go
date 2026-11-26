@@ -221,7 +221,8 @@ func (n *Node) resolveProviderAndModel(ctx context.Context, provID, modelID stri
 	if streamClient == nil {
 		streamClient = n.hc
 	}
-	p, err := ai.NewProvider(chosenProv.Driver, chosenProv.BaseURL, apiKey, streamClient)
+	baseURL := resolveProviderBaseURL(*chosenProv, n.cfg.ServerWSURL)
+	p, err := ai.NewProvider(chosenProv.Driver, baseURL, apiKey, streamClient)
 	if err != nil {
 		return nil, "", "", ai.ModelMeta{}, err
 	}
@@ -900,8 +901,8 @@ type runnerSessionLookup struct {
 	node *Node
 }
 
-func (l *runnerSessionLookup) serverHTTPBase() string {
-	wsURL := strings.TrimSpace(l.node.cfg.ServerWSURL)
+func serverHTTPOrigin(serverWSURL string) string {
+	wsURL := strings.TrimSpace(serverWSURL)
 	if wsURL == "" {
 		return ""
 	}
@@ -914,6 +915,22 @@ func (l *runnerSessionLookup) serverHTTPBase() string {
 		scheme = "https"
 	}
 	return scheme + "://" + u.Host
+}
+
+// resolveProviderBaseURL rewrites server_proxy providers to use the Runner's own active
+// Server origin (/llm-proxy/{id}), so LAN runners go direct and Relay-paired runners
+// automatically reuse their local encrypted tunnel proxy without detouring.
+func resolveProviderBaseURL(prov store.ProviderRecord, serverWSURL string) string {
+	if prov.ProxyMode == "server_proxy" && strings.TrimSpace(prov.ID) != "" {
+		if origin := serverHTTPOrigin(serverWSURL); origin != "" {
+			return origin + "/llm-proxy/" + url.PathEscape(prov.ID)
+		}
+	}
+	return prov.BaseURL
+}
+
+func (l *runnerSessionLookup) serverHTTPBase() string {
+	return serverHTTPOrigin(l.node.cfg.ServerWSURL)
 }
 
 func (l *runnerSessionLookup) GetSession(ctx context.Context, id string) (*store.SessionRecord, error) {

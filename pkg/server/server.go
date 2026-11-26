@@ -113,9 +113,10 @@ func (cc *clientConn) sendBinary(ctx context.Context, frame []byte) error {
 type Server struct {
 	cfg       Config
 	store     *store.Store
-	mux       *http.ServeMux
-	client    *http.Client
-	relay     *relay.Server
+	mux          *http.ServeMux
+	client       *http.Client
+	streamClient *http.Client
+	relay        *relay.Server
 	remoteMgr *remote.HostManager
 
 	mu               sync.RWMutex
@@ -159,12 +160,25 @@ func New(cfg Config) (*Server, error) {
 	if hc == nil {
 		hc = &http.Client{Timeout: 5 * time.Minute}
 	}
+	streamHC := cfg.HTTPClient
+	if streamHC == nil {
+		var tr *http.Transport
+		if defTr, ok := http.DefaultTransport.(*http.Transport); ok && defTr != nil {
+			tr = defTr.Clone()
+			tr.ResponseHeaderTimeout = 60 * time.Second
+		}
+		streamHC = &http.Client{
+			Transport: tr,
+			Timeout:   0,
+		}
+	}
 
 	s := &Server{
 		cfg:              cfg,
 		store:            cfg.Store,
 		mux:              http.NewServeMux(),
 		client:           hc,
+		streamClient:     streamHC,
 		runners:          make(map[string]*runnerConn),
 		runnerMeta:       make(map[string]*runnerRuntimeMeta),
 		clients:          make(map[string]*clientConn),
@@ -546,7 +560,11 @@ func (s *Server) handleLLMProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resp, err := s.client.Do(upReq)
+	hc := s.streamClient
+	if hc == nil {
+		hc = s.client
+	}
+	resp, err := hc.Do(upReq)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
