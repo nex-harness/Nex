@@ -172,25 +172,6 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, err)
 			return
 		}
-		if prefs.GoalMaxRounds <= 0 {
-			prefs.GoalMaxRounds = 8
-		} else if prefs.GoalMaxRounds > 30 {
-			prefs.GoalMaxRounds = 30
-		}
-		if prefs.GoalMaxTurnsPerRound <= 0 {
-			prefs.GoalMaxTurnsPerRound = 40
-		} else if prefs.GoalMaxTurnsPerRound < 10 {
-			prefs.GoalMaxTurnsPerRound = 10
-		} else if prefs.GoalMaxTurnsPerRound > 100 {
-			prefs.GoalMaxTurnsPerRound = 100
-		}
-		if prefs.GoalMaxConsecutiveNoProgress <= 0 {
-			prefs.GoalMaxConsecutiveNoProgress = 2
-		} else if prefs.GoalMaxConsecutiveNoProgress > 5 {
-			prefs.GoalMaxConsecutiveNoProgress = 5
-		}
-		prefs.GoalVerifierProviderID = strings.TrimSpace(prefs.GoalVerifierProviderID)
-		prefs.GoalVerifierModelID = strings.TrimSpace(prefs.GoalVerifierModelID)
 		if err := s.store.SaveUserPreferences(r.Context(), prefs); err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
