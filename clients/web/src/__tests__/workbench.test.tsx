@@ -5301,12 +5301,12 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       payload: { tool_call_id: 'tc_2', tool_name: 'bash' },
     });
 
-    // Expect user + step1 assistant (prose) + step2 assistant (running tool)
-    expect(stream.items).toHaveLength(3);
-    expect(stream.items[1]?.text).toBe('机制基本都收集齐了。');
-    expect(stream.items[1]?.streaming).toBe(false);
-    expect(stream.items[2]?.toolCalls[0]?.id).toBe('tc_2');
-    expect(stream.items[2]?.toolCalls[0]?.status).toBe('running');
+    // Expect user + unified assistant item (intermediate narration folded into thinking + all tool calls)
+    expect(stream.items).toHaveLength(2);
+    expect(stream.items[1]?.thinking).toContain('机制基本都收集齐了。');
+    expect(stream.items[1]?.text).toBe('');
+    expect(stream.items[1]?.toolCalls.map((t) => t.id)).toEqual(['tc_1', 'tc_2']);
+    expect(stream.items[1]?.toolCalls[1]?.status).toBe('running');
 
     useNexStore.setState({
       serverConnectRequired: false,
@@ -5334,9 +5334,9 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     // Collapsed WorkGroup does not expand body or pop ordinary running bash tool outside
     expect(screen.queryByTestId('workgroup-body')).toBeNull();
     const headers = screen.getAllByTestId('workgroup-header');
-    expect(headers).toHaveLength(2);
-    // Click second WorkGroup header to inspect its running bash tool inside workgroup-body
-    fireEvent.click(headers[1]!);
+    expect(headers).toHaveLength(1);
+    // Click unified WorkGroup header to inspect its folded narration and running bash tool inside workgroup-body
+    fireEvent.click(headers[0]!);
     expect(screen.getByTestId('workgroup-body').textContent).toContain('go test ./...');
   });
 

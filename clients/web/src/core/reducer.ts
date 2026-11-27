@@ -552,24 +552,9 @@ export function applySessionEvent(
     }
 
     case 'message_start': {
-      const lastIdx = items.length - 1;
-      const tail = lastIdx >= 0 ? items[lastIdx] : undefined;
-      if (tail && tail.role === 'assistant' && tail.text.trim().length > 0) {
-        const nextItems = items.slice();
-        nextItems[lastIdx] = { ...tail, streaming: false };
-        nextItems.push({
-          id: `ast_${ev.seq || Date.now()}_${nextItems.length}`,
-          startSeq: ev.seq > 0 ? ev.seq : undefined,
-          role: 'assistant',
-          text: '',
-          thinking: '',
-          toolCalls: [],
-          streaming: true,
-        });
-        items = nextItems;
-      } else {
-        cloneOrAppendTailAssistant();
-      }
+      // Keep multi-step tool-calling turns grouped into a single assistant item so
+      // intermediate narration + tool calls stay inside one collapsible WorkGroup.
+      cloneOrAppendTailAssistant();
       break;
     }
 
@@ -679,51 +664,35 @@ export function applySessionEvent(
           .join('');
         const hasToolCalls = blocks.some((b) => b.type === 'tool_call');
 
-        const lastIdx = items.length - 1;
-        const rawTail = lastIdx >= 0 ? items[lastIdx] : undefined;
-        // Deduplicate: if a duplicate/replayed message_end arrives with identical text to the
-        // existing tail assistant bubble (and no new tool calls), update tail in-place instead
-        // of spawning a duplicate assistant bubble.
-        const isDuplicateTailText =
-          Boolean(rawTail && rawTail.role === 'assistant') &&
-          Boolean(stepText.trim()) &&
-          rawTail!.text.trim() === stepText.trim() &&
-          !hasToolCalls;
-
-        if (
-          !isDuplicateTailText &&
-          rawTail &&
-          rawTail.role === 'assistant' &&
-          Boolean(rawTail.seq) &&
-          rawTail.seq !== ev.seq &&
-          rawTail.text.trim().length > 0
-        ) {
-          const nextItems = items.slice();
-          nextItems[lastIdx] = { ...rawTail, streaming: false };
-          nextItems.push({
-            id: `ast_${ev.seq || Date.now()}_${nextItems.length}`,
-            startSeq: ev.seq > 0 ? ev.seq : undefined,
-            role: 'assistant',
-            text: '',
-            thinking: '',
-            toolCalls: [],
-            streaming: true,
-          });
-          items = nextItems;
-        }
         const target = cloneOrAppendTailAssistant();
         if (ev.seq) {
           target.seq = ev.seq;
         }
 
-        // Replace live delta buffer of current step cleanly without duplicating multi-step text
-        if (stepText) {
-          target.text = stepText;
-        }
-        if (stepThink) {
-          target.thinking = target.thinking && !target.thinking.includes(stepThink)
-            ? `${target.thinking}\n${stepThink}`.trim()
-            : stepThink;
+        if (hasToolCalls) {
+          // Intermediate tool-calling step (e.g. DeepSeek/Claude narration before tool calls):
+          // fold narration text into the collapsible thinking/work process instead of fragmenting
+          // the timeline into separate reply bubbles.
+          const stepNote = [stepThink.trim(), stepText.trim()].filter(Boolean).join('\n\n');
+          if (stepNote) {
+            target.thinking =
+              target.thinking && !target.thinking.includes(stepNote)
+                ? `${target.thinking}\n\n${stepNote}`.trim()
+                : stepNote;
+          }
+          // Clear live text buffer so only the final non-tool reply renders outside WorkGroup.
+          target.text = '';
+        } else {
+          // Final assistant reply for this turn
+          if (stepText) {
+            target.text = stepText;
+          }
+          if (stepThink) {
+            target.thinking =
+              target.thinking && !target.thinking.includes(stepThink)
+                ? `${target.thinking}\n\n${stepThink}`.trim()
+                : stepThink;
+          }
         }
 
         let nextTools = target.toolCalls;
