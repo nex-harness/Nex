@@ -545,6 +545,7 @@ export interface AppState {
   composerText: string;
   composerAttachments: ComposerAttachment[];
   composerAttachmentsBySession: Record<string, ComposerAttachment[]>;
+  editingMessage: { sessionId: string; seq: number; originalText: string } | null;
 
   streams: Record<string, SessionStreamState>;
   followUpQueues: Record<string, QueuedFollowUp[]>;
@@ -572,6 +573,8 @@ export interface AppState {
   closeImagePreview: () => void;
 
   setComposerText: (text: string) => void;
+  startEditingMessage: (sessionId: string, seq: number, text: string) => void;
+  cancelEditingMessage: () => void;
   addComposerAttachment: (att: ComposerAttachment) => void;
   removeComposerAttachment: (id: string) => void;
   clearComposerAttachments: () => void;
@@ -852,6 +855,7 @@ export const useNexStore = create<AppState>((set, get) => ({
   composerText: readPersistedComposerDraft(''),
   composerAttachments: [],
   composerAttachmentsBySession: {},
+  editingMessage: null,
 
   streams: {},
   followUpQueues: readPersistedFollowUpQueues(),
@@ -931,6 +935,19 @@ export const useNexStore = create<AppState>((set, get) => ({
   setComposerText: (text) => {
     persistComposerDraft(get().activeSessionId, text);
     set({ composerText: text });
+  },
+  startEditingMessage: (sessionId, seq, text) => {
+    persistComposerDraft(sessionId, text);
+    set({
+      composerText: text,
+      editingMessage: { sessionId, seq, originalText: text },
+    });
+  },
+  cancelEditingMessage: () => {
+    const cur = get();
+    if (!cur.editingMessage) return;
+    persistComposerDraft(cur.activeSessionId, '');
+    set({ composerText: '', editingMessage: null });
   },
   addComposerAttachment: (att) =>
     set((s) => {
@@ -1970,6 +1987,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         activeSessionId: sessionId,
         composerText: readPersistedComposerDraft(sessionId),
         composerAttachments: s.composerAttachmentsBySession[composerDraftKey(sessionId)] || [],
+        editingMessage: s.editingMessage?.sessionId === sessionId ? s.editingMessage : null,
         selectedProviderId: resolvedBefore.providerId,
         selectedModelId: resolvedBefore.modelId,
         thinkingEffort: nextEffort,
@@ -2097,6 +2115,7 @@ export const useNexStore = create<AppState>((set, get) => ({
         activeSessionId: '',
         composerText: readPersistedComposerDraft(''),
         composerAttachments: s.composerAttachmentsBySession[composerDraftKey('')] || [],
+        editingMessage: null,
         selectedRunnerId: runnerId || s.selectedRunnerId,
         selectedWorkspacePath: workspacePath !== undefined ? workspacePath : s.selectedWorkspacePath,
         draftProviderId: resolvedDraft.providerId,
@@ -2204,6 +2223,19 @@ export const useNexStore = create<AppState>((set, get) => ({
   sendPromptOrSteer: (overrideText, mode = 'follow_up') => {
     const s = get();
     const text = (overrideText ?? s.composerText).trim();
+    if (
+      overrideText === undefined &&
+      s.editingMessage &&
+      s.editingMessage.sessionId === s.activeSessionId
+    ) {
+      const { sessionId: editSid, seq: editSeq } = s.editingMessage;
+      set({ editingMessage: null, composerText: '' });
+      persistComposerDraft(editSid, '');
+      if (text) {
+        void get().editAndResendMessage(editSid, editSeq, text);
+      }
+      return;
+    }
     const attachments = overrideText === undefined ? s.composerAttachments : [];
     const activeModel = s.models.find(
       (m) => m.provider_id === s.selectedProviderId && m.id === s.selectedModelId,
@@ -2410,16 +2442,13 @@ export const useNexStore = create<AppState>((set, get) => ({
   },
 
   abortActiveSession: () => {
-    const { activeSessionId, selectedRunnerId, sessions, wsConnected } = get();
+    const { activeSessionId, selectedRunnerId, sessions } = get();
     if (!activeSessionId) return;
     const sess = sessions.find((s) => s.id === activeSessionId);
     const targetRunnerId = sess?.runner_id || selectedRunnerId;
     wsClient.sendEnvelope('session.abort', {}, { session_id: activeSessionId, runner_id: targetRunnerId });
-    if (!wsConnected) {
-      void apiFetch(`/api/v1/sessions/${encodeURIComponent(activeSessionId)}/abort`, { method: 'POST' })
-        .then(() => get().refreshInitialData())
-        .catch(() => {});
-    }
+    // Always also fire REST abort as a reliable fallback in case WS is reconnecting or lagging
+    void apiFetch(`/api/v1/sessions/${encodeURIComponent(activeSessionId)}/abort`, { method: 'POST' }).catch(() => {});
   },
 
   stopBackgroundTask: (taskId, sessionId) => {

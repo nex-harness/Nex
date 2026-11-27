@@ -685,12 +685,10 @@ function UserBubble({
   const sessions = useNexStore((s) => s.sessions);
   const selectSession = useNexStore((s) => s.selectSession);
   const setComposerText = useNexStore((s) => s.setComposerText);
+  const startEditingMessage = useNexStore((s) => s.startEditingMessage);
   const forkSession = useNexStore((s) => s.forkSession);
-  const editAndResendMessage = useNexStore((s) => s.editAndResendMessage);
   const openImagePreview = useNexStore((s) => s.openImagePreview);
   const [copied, setCopied] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [editDraft, setEditDraft] = useState('');
   const displayText = cleanUserDisplayText(text);
 
   const renderRichUserText = (raw: string) => {
@@ -754,67 +752,11 @@ function UserBubble({
           })}
         </div>
       )}
-      {editing ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const next = editDraft.trim();
-            setEditing(false);
-            if (!next) return;
-            if (activeSessionId && seq && seq > 0) {
-              void editAndResendMessage(activeSessionId, seq, next);
-            } else {
-              setComposerText(next);
-            }
-          }}
-          className="w-full max-w-xl space-y-2 rounded-xl border border-primary/50 bg-surface p-3"
-        >
-          <textarea
-            autoFocus
-            rows={3}
-            value={editDraft}
-            onChange={(e) => setEditDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setEditing(false);
-              } else if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                const next = editDraft.trim();
-                setEditing(false);
-                if (!next) return;
-                if (activeSessionId && seq && seq > 0) {
-                  void editAndResendMessage(activeSessionId, seq, next);
-                } else {
-                  setComposerText(next);
-                }
-              }
-            }}
-            className="w-full resize-y rounded-lg border border-border bg-input p-2 text-ui-base text-foreground outline-none focus:border-primary"
-          />
-          <div className="flex items-center justify-end gap-1.5">
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              className="h-7 rounded-lg border border-border bg-card px-2.5 text-ui-xs text-foreground-subtle hover:text-foreground"
-            >
-              {formatMsg(locale, 'common.cancel')}
-            </button>
-            <button
-              type="submit"
-              className="h-7 rounded-lg bg-primary px-3 text-ui-xs font-medium text-primary-foreground hover:opacity-90"
-            >
-              {formatMsg(locale, 'common.confirm')}
-            </button>
-          </div>
-        </form>
-      ) : (
-        displayText && (
-          <div className="max-w-full whitespace-pre-wrap break-words rounded-xl rounded-tr-xs border border-border bg-surface px-4 py-3 text-ui-base leading-[1.5] text-foreground @min-[624px]/conversation:max-w-xl">
-            {renderRichUserText(displayText)}
-          </div>
-        )
+      {displayText && (
+        <div className="max-w-full whitespace-pre-wrap break-words rounded-xl rounded-tr-xs border border-border bg-surface px-4 py-3 text-ui-base leading-[1.5] text-foreground @min-[624px]/conversation:max-w-xl">
+          {renderRichUserText(displayText)}
+        </div>
       )}
-      {!editing && (
       <div className="mt-0.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <button
           type="button"
@@ -831,11 +773,14 @@ function UserBubble({
             data-testid={seq ? `edit-msg-${seq}` : undefined}
             onClick={() => {
               if (activeSessionId && seq && seq > 0) {
-                setEditDraft(displayText);
-                setEditing(true);
+                startEditingMessage(activeSessionId, seq, displayText);
               } else {
                 setComposerText(displayText);
               }
+              window.setTimeout(() => {
+                const input = document.querySelector<HTMLTextAreaElement>('[data-testid="composer-input"]');
+                input?.focus();
+              }, 0);
             }}
             title={formatMsg(locale, 'chat.editInComposer')}
             className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-foreground-subtlest transition-colors hover:text-foreground"
@@ -857,7 +802,6 @@ function UserBubble({
           </button>
         )}
       </div>
-      )}
     </div>
   );
 }
@@ -1248,6 +1192,8 @@ function Composer({
   const modelOrder = useNexStore((s) => s.modelOrder);
   const composerAttachments = useNexStore((s) => s.composerAttachments);
   const addComposerAttachment = useNexStore((s) => s.addComposerAttachment);
+  const editingMessage = useNexStore((s) => s.editingMessage);
+  const cancelEditingMessage = useNexStore((s) => s.cancelEditingMessage);
   const removeComposerAttachment = useNexStore((s) => s.removeComposerAttachment);
   const openImagePreview = useNexStore((s) => s.openImagePreview);
   const searchWorkspaceFiles = useNexStore((s) => s.searchWorkspaceFiles);
@@ -1883,6 +1829,26 @@ function Composer({
           }
         }}
       />
+      {editingMessage && editingMessage.sessionId === activeSessionId && (
+        <div
+          data-testid="composer-editing-banner"
+          className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-primary/35 bg-primary/8 px-2.5 py-1 text-ui-xs text-foreground"
+        >
+          <span className="inline-flex items-center gap-1.5 font-medium text-primary">
+            <Pencil className="size-3 shrink-0" />
+            <span>{formatMsg(locale, 'chat.editInComposer')}</span>
+          </span>
+          <button
+            type="button"
+            data-testid="composer-cancel-edit-btn"
+            onClick={cancelEditingMessage}
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+          >
+            <X className="size-3" />
+            <span>{formatMsg(locale, 'common.cancel')}</span>
+          </button>
+        </div>
+      )}
       {attachmentStrip}
       {referencedSessionStrip}
       <textarea
@@ -2401,47 +2367,51 @@ function Composer({
           ))}
         </select>
 
-        {isRunning && !composerText.trim() ? (
-          <button
-            type="button"
-            onClick={abortActiveSession}
-            title={formatMsg(locale, 'chat.stop')}
-            className="ml-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-transform hover:opacity-90 active:scale-95"
-          >
-            <Square className="size-3.5" />
-          </button>
-        ) : (
-          <div className="ml-0.5 flex items-center gap-1">
-            {isRunning && canSend && (
-              <button
-                type="button"
-                data-testid="steer-now-btn"
-                onClick={() => sendPromptOrSteer(undefined, 'steer')}
-                title={formatMsg(locale, 'chat.steerImmediatelyAltEnter')}
-                className="flex h-7 shrink-0 items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/10 px-2 text-ui-xs font-medium text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
-              >
-                <Zap className="size-3" />
-                <span>{formatMsg(locale, 'chat.steer2')}</span>
-              </button>
-            )}
+        <div className="ml-0.5 flex items-center gap-1">
+          {isRunning && (
             <button
               type="button"
-              data-testid="send-btn"
-              disabled={!canSend}
-              onClick={() => sendPromptOrSteer(undefined, 'follow_up')}
-              title={
-                !hasValidModel
-                  ? formatMsg(locale, 'chat.model.missingTooltip')
-                  : isRunning
-                    ? formatMsg(locale, 'chat.queueFollowUpRunsAfter')
-                    : formatMsg(locale, 'chat.send')
-              }
-              className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-all hover:bg-foreground/90 active:scale-95 disabled:bg-foreground/20 disabled:text-background/70"
+              data-testid="abort-btn"
+              onClick={abortActiveSession}
+              title={formatMsg(locale, 'chat.stop')}
+              className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-transform hover:opacity-90 active:scale-95"
             >
-              <ArrowUp className="size-4" />
+              <Square className="size-3.5" />
             </button>
-          </div>
-        )}
+          )}
+          {(!isRunning || Boolean(composerText.trim()) || composerAttachments.length > 0) && (
+            <>
+              {isRunning && canSend && (
+                <button
+                  type="button"
+                  data-testid="steer-now-btn"
+                  onClick={() => sendPromptOrSteer(undefined, 'steer')}
+                  title={formatMsg(locale, 'chat.steerImmediatelyAltEnter')}
+                  className="flex h-7 shrink-0 items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/10 px-2 text-ui-xs font-medium text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+                >
+                  <Zap className="size-3" />
+                  <span>{formatMsg(locale, 'chat.steer2')}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                data-testid="send-btn"
+                disabled={!canSend}
+                onClick={() => sendPromptOrSteer(undefined, 'follow_up')}
+                title={
+                  !hasValidModel
+                    ? formatMsg(locale, 'chat.model.missingTooltip')
+                    : isRunning
+                      ? formatMsg(locale, 'chat.queueFollowUpRunsAfter')
+                      : formatMsg(locale, 'chat.send')
+                }
+                className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-all hover:bg-foreground/90 active:scale-95 disabled:bg-foreground/20 disabled:text-background/70"
+              >
+                <ArrowUp className="size-4" />
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -3644,14 +3614,14 @@ export function ConversationPane() {
             sidebarVisible ? 'pl-4' : collapsedHeaderPad
           }`}
         >
-          <div className="nex-no-drag flex min-w-0 flex-1 items-center gap-1.5">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
             {sidebarVisible && (
               <button
                 type="button"
                 data-testid="sidebar-toggle-btn"
                 onClick={toggleSidebar}
                 title={formatMsg(locale, 'chat.toggleSidebar')}
-                className="flex size-7 shrink-0 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+                className="nex-no-drag flex size-7 shrink-0 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
               >
                 <PanelLeft className="size-4" />
               </button>
@@ -3662,7 +3632,7 @@ export function ConversationPane() {
                   e.preventDefault();
                   void commitRename();
                 }}
-                className="flex min-w-0 flex-1 max-w-xl items-center gap-1"
+                className="nex-no-drag flex min-w-0 flex-1 max-w-xl items-center gap-1"
               >
                 <input
                   autoFocus
@@ -3709,13 +3679,13 @@ export function ConversationPane() {
                   setRenaming(true);
                 }}
                 title={sessionTitle}
-                className="max-w-md cursor-text truncate text-ui-base font-semibold text-foreground"
+                className="nex-no-drag max-w-md cursor-text truncate text-ui-base font-semibold text-foreground"
               >
                 {sessionTitle}
               </h1>
             )}
 
-            <div className="relative" ref={headerMenuRef}>
+            <div className="nex-no-drag relative" ref={headerMenuRef}>
               <button
                 type="button"
                 data-testid="session-menu-btn"
