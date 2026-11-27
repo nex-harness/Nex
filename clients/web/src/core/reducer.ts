@@ -668,9 +668,30 @@ export function applySessionEvent(
           }
         }
       } else if (msg.role === 'assistant') {
+        const blocks = msg.content || [];
+        const stepText = blocks
+          .filter((b) => b.type === 'text')
+          .map((b) => String(b.text || ''))
+          .join('');
+        const stepThink = blocks
+          .filter((b) => b.type === 'thinking')
+          .map((b) => String(b.thinking || ''))
+          .join('');
+        const hasToolCalls = blocks.some((b) => b.type === 'tool_call');
+
         const lastIdx = items.length - 1;
         const rawTail = lastIdx >= 0 ? items[lastIdx] : undefined;
+        // Deduplicate: if a duplicate/replayed message_end arrives with identical text to the
+        // existing tail assistant bubble (and no new tool calls), update tail in-place instead
+        // of spawning a duplicate assistant bubble.
+        const isDuplicateTailText =
+          Boolean(rawTail && rawTail.role === 'assistant') &&
+          Boolean(stepText.trim()) &&
+          rawTail!.text.trim() === stepText.trim() &&
+          !hasToolCalls;
+
         if (
+          !isDuplicateTailText &&
           rawTail &&
           rawTail.role === 'assistant' &&
           Boolean(rawTail.seq) &&
@@ -694,15 +715,6 @@ export function applySessionEvent(
         if (ev.seq) {
           target.seq = ev.seq;
         }
-        const blocks = msg.content || [];
-        const stepText = blocks
-          .filter((b) => b.type === 'text')
-          .map((b) => String(b.text || ''))
-          .join('');
-        const stepThink = blocks
-          .filter((b) => b.type === 'thinking')
-          .map((b) => String(b.thinking || ''))
-          .join('');
 
         // Replace live delta buffer of current step cleanly without duplicating multi-step text
         if (stepText) {
