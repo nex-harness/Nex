@@ -144,7 +144,11 @@ function ToolSummaryRow({ tc, dense = false }: { tc: ToolCallCard; dense?: boole
     running ? (
       <span className="shrink-0 font-normal animated-gradient-text">{formatMsg(locale, key)}</span>
     ) : (
-      <span className={`shrink-0 font-normal ${tc.status === 'error' ? 'text-destructive' : 'text-foreground'}`}>
+      <span
+        className={`shrink-0 font-normal ${
+          tc.status === 'error' ? 'text-destructive/75' : 'text-foreground-subtle'
+        }`}
+      >
         {formatMsg(locale, key)}
       </span>
     );
