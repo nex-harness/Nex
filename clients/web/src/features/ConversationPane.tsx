@@ -1202,6 +1202,8 @@ function Composer({
   const promoteFollowUpToSteer = useNexStore((s) => s.promoteFollowUpToSteer);
   const triggerRunnerUpdate = useNexStore((s) => s.triggerRunnerUpdate);
   const [upgradingRunner, setUpgradingRunner] = useState(false);
+  const imeComposingRef = useRef(false);
+  const imeCompositionEndAtRef = useRef(0);
   const activeFollowUps = activeSessionId ? followUpQueues[activeSessionId] || [] : [];
 
   useEffect(() => {
@@ -1879,7 +1881,21 @@ function Composer({
             void handleAttachFiles(imgFiles);
           }
         }}
+        onCompositionStart={() => {
+          imeComposingRef.current = true;
+        }}
+        onCompositionEnd={() => {
+          imeComposingRef.current = false;
+          imeCompositionEndAtRef.current = Date.now();
+        }}
         onKeyDown={(e) => {
+          // Safari / WKWebView (macOS app) fires compositionend *before* the confirming Enter keydown,
+          // so e.nativeEvent.isComposing is already false while keyCode===229 or within a few ms of compositionend.
+          const isIMEEvent =
+            e.nativeEvent.isComposing ||
+            imeComposingRef.current ||
+            e.keyCode === 229 ||
+            Date.now() - imeCompositionEndAtRef.current < 100;
           if (showAcPopover && acTrigger && acItemCount > 0) {
             if (e.key === 'ArrowDown' || (e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'n')) {
               e.preventDefault();
@@ -1896,7 +1912,7 @@ function Composer({
               setAcDismissed(true);
               return;
             }
-            if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey && !e.nativeEvent.isComposing) {
+            if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey && !isIMEEvent) {
               e.preventDefault();
               if (acTrigger.kind === 'slash') {
                 const chosen = filteredSlashCommands[activeAcIdx];
@@ -1911,7 +1927,7 @@ function Composer({
               return;
             }
           }
-          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+          if (e.key === 'Enter' && !e.shiftKey && !isIMEEvent) {
             e.preventDefault();
             if (canSend) {
               sendPromptOrSteer(undefined, e.altKey ? 'steer' : 'follow_up');
