@@ -850,7 +850,13 @@ export const useNexStore = create<AppState>((set, get) => ({
     const saved = decodeStoredEffort(safeStorageGet(DRAFT_EFFORT_STORAGE_KEY));
     return saved !== undefined ? saved : DEFAULT_NEW_SESSION_EFFORT;
   })(),
-  permissionMode: 'interactive',
+  permissionMode: (() => {
+    const saved = safeStorageGet('nex.permissionMode');
+    if (saved === 'full_access' || saved === 'interactive' || saved === 'read_only' || saved === 'plan') {
+      return saved;
+    }
+    return 'interactive';
+  })(),
   activeSessionId: '',
   composerText: readPersistedComposerDraft(''),
   composerAttachments: [],
@@ -1123,7 +1129,10 @@ export const useNexStore = create<AppState>((set, get) => ({
       }).catch(() => {});
     }
   },
-  setPermissionMode: (mode) => set({ permissionMode: mode }),
+  setPermissionMode: (mode) => {
+    safeStorageSet('nex.permissionMode', mode);
+    set({ permissionMode: mode });
+  },
 
   updateThemeQuick: async (theme) => {
     const nextPrefs = { ...get().preferences, theme };
