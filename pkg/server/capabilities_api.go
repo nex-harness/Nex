@@ -100,6 +100,50 @@ func (s *Server) handleSkillsDiscover(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleMCPDiscover scans the selected Runner (or local host fallback) for workspace (.mcp.json)
+// and user (~/.nex/mcp.json, ~/.claude/mcp.json) MCP server definitions.
+func (s *Server) handleMCPDiscover(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	runnerID := strings.TrimSpace(r.URL.Query().Get("runner_id"))
+	workspacePath := strings.TrimSpace(r.URL.Query().Get("workspace_path"))
+
+	targetRunner := runnerID
+	if targetRunner == "" {
+		targetRunner = s.firstOnlineRunnerID()
+	}
+
+	var discovered []codemode.DiscoveredMCPServer
+	usedRunner := ""
+	if targetRunner != "" && s.isRunnerOnline(targetRunner) {
+		if env, eErr := protocol.NewEnvelope(protocol.TypeMCPDiscover, protocol.MCPDiscoverPayload{
+			WorkspacePath: workspacePath,
+		}); eErr == nil {
+			env.RunnerID = targetRunner
+			if reply, rErr := s.callRunnerRPC(r.Context(), targetRunner, env, 8*time.Second); rErr == nil && reply.Type != protocol.TypeError {
+				if json.Unmarshal(reply.Payload, &discovered) == nil {
+					usedRunner = targetRunner
+				}
+			}
+		}
+	}
+
+	if usedRunner == "" {
+		discovered = codemode.DiscoverLocalMCPServers(workspacePath, "")
+	}
+	if discovered == nil {
+		discovered = []codemode.DiscoveredMCPServer{}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"servers":        discovered,
+		"runner_id":      usedRunner,
+		"workspace_path": store.NormalizeWorkspaceKey(workspacePath),
+	})
+}
+
 // handleSkillVisibility updates global or per-workspace visibility for a discovered skill.
 func (s *Server) handleSkillVisibility(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut && r.Method != http.MethodPost {

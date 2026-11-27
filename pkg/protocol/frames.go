@@ -59,6 +59,7 @@ const (
 	TypeMCPRemoteCall   = "mcp.remote_call"
 	TypeMCPRemoteResult = "mcp.remote_result"
 	TypeSkillsDiscover     = "skills.discover"
+	TypeMCPDiscover        = "mcp.discover"
 	TypeMCPProbe           = "mcp.probe"
 	TypeCredentialLocalSet = "credential.local_set"
 	TypeCredentialProbe    = "credential.probe"
@@ -426,6 +427,11 @@ type MCPRemoteResultPayload struct {
 
 // SkillsDiscoverPayload asks a Runner to scan its user & workspace skill directories.
 type SkillsDiscoverPayload struct {
+	WorkspacePath string `json:"workspace_path,omitempty"`
+}
+
+// MCPDiscoverPayload asks a Runner to scan its workspace (.mcp.json) and user (~/.nex/mcp.json) MCP configs.
+type MCPDiscoverPayload struct {
 	WorkspacePath string `json:"workspace_path,omitempty"`
 }
 

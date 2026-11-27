@@ -857,6 +857,8 @@ export const zhCN = {
   "mcp.searchPlaceholder": "搜索已安装的 MCP 服务…",
   "mcp.group.global": "用户 / 全局 MCP 服务",
   "mcp.group.workspace": "工作区专属 MCP 服务",
+  "mcp.group.discovered": "从 .mcp.json 自动发现",
+  "mcp.discoveredReadOnly": "自动发现",
   "mcp.emptyTitle": "暂未安装任何 MCP 服务",
   "mcp.emptyHint": "点击「安装 MCP」从常用预设一键安装、手动配置 stdio / HTTP，或粘贴 mcpServers JSON 批量导入。",
   "mcp.toolCount": "{count} 个工具",

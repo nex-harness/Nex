@@ -403,6 +403,11 @@ func (w *DefaultRuntimeWiring) PrepareSession(
 	var extraTools []tools.Tool
 	var extraSections []ai.SystemSection
 
+	// 0. Hot-discover workspace/user .mcp.json servers so newly written .mcp.json takes effect immediately
+	if localDiscovered := codemode.DiscoverLocalMCPServers(sess.WorkspacePath, ""); len(localDiscovered) > 0 {
+		w.mcpPool.MergeDiscoveredServers(localDiscovered)
+	}
+
 	// 1. Mount MCP `codemode` sandbox tool (enforcing plugin hooks + interactive approvals on every inner call!)
 	approver := &runnerApprover{node: node, sessionID: sess.ID, hasUI: hasUI}
 	cmTool := codemode.NewTool(w.mcpPool, codemode.NewSessionKV(), func(callCtx context.Context, fullName string, readOnly bool, args json.RawMessage) error {

@@ -304,6 +304,35 @@ export function MCPManagerSection({ onFlash }: { onFlash: (msg: string) => void 
   const [expandedServer, setExpandedServer] = useState<string | null>(null);
   const [probingByName, setProbingByName] = useState<Record<string, boolean>>({});
   const [probingAll, setProbingAll] = useState(false);
+  const [discoveredServers, setDiscoveredServers] = useState<
+    Array<MCPServerRecord & { source: 'workspace' | 'user'; source_path: string; source_root: string }>
+  >([]);
+  const [discovering, setDiscovering] = useState(false);
+
+  const loadDiscovered = async (wsPath: string) => {
+    setDiscovering(true);
+    try {
+      const params = new URLSearchParams();
+      if (selectedRunnerId) params.set('runner_id', selectedRunnerId);
+      if (wsPath) params.set('workspace_path', wsPath);
+      const qs = params.toString();
+      const res = await apiFetch<{
+        servers?: Array<MCPServerRecord & { source: 'workspace' | 'user'; source_path: string; source_root: string }>;
+      }>(`/api/v1/mcp/discover${qs ? `?${qs}` : ''}`);
+      if (mountedRef.current) {
+        setDiscoveredServers(Array.isArray(res?.servers) ? res.servers : []);
+      }
+    } catch {
+      if (mountedRef.current) setDiscoveredServers([]);
+    } finally {
+      if (mountedRef.current) setDiscovering(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadDiscovered(targetWorkspace || selectedWorkspacePath || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetWorkspace, selectedRunnerId, selectedWorkspacePath]);
 
   // Install / Edit modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -1028,6 +1057,79 @@ export function MCPManagerSection({ onFlash }: { onFlash: (msg: string) => void 
           ) : null}
         </div>
       )}
+
+      {/* Auto-discovered local MCP servers (.mcp.json / ~/.nex/mcp.json) */}
+      {discoveredServers.length > 0 ? (
+        <div className="space-y-3" data-testid="mcp-discovered-section">
+          <SectionHeading
+            title={`${formatMsg(locale, 'mcp.group.discovered')} (${discoveredServers.length})`}
+          />
+          <SettingsGroupCard>
+            {discoveredServers
+              .filter((d) => {
+                const q = searchQuery.trim().toLowerCase();
+                if (!q) return true;
+                return (
+                  d.name.toLowerCase().includes(q) ||
+                  (d.description || '').toLowerCase().includes(q) ||
+                  (d.source_root || '').toLowerCase().includes(q)
+                );
+              })
+              .map((d) => (
+                <div
+                  key={`${d.source}:${d.name}`}
+                  data-testid={`mcp-discovered-${d.name}`}
+                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={`inline-block size-2 shrink-0 rounded-full ${
+                          d.enabled ? 'bg-emerald-500' : 'bg-foreground-subtlest/40'
+                        }`}
+                      />
+                      <span className="font-mono text-ui-base font-medium text-foreground">{d.name}</span>
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-ui-xs text-foreground-subtle">
+                        {d.source === 'workspace' ? (
+                          <Folder className="size-3" />
+                        ) : (
+                          <UserRound className="size-3" />
+                        )}
+                        <span>
+                          {formatMsg(
+                            locale,
+                            d.source === 'workspace' ? 'skills.scope.workspace' : 'skills.scope.user',
+                          )}
+                        </span>
+                      </span>
+                      <span
+                        title={d.source_path}
+                        className="rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[11px] text-foreground-subtle"
+                      >
+                        {d.source_root}
+                      </span>
+                      <span className="rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[11px] text-foreground-subtlest">
+                        {d.transport || 'stdio'}
+                      </span>
+                    </div>
+                    {d.description ? (
+                      <p className="mt-1 truncate text-ui-sm text-foreground-subtle">{d.description}</p>
+                    ) : d.command ? (
+                      <p className="mt-0.5 truncate font-mono text-ui-xs text-foreground-subtlest">
+                        {d.command} {(d.args || []).join(' ')}
+                      </p>
+                    ) : d.url ? (
+                      <p className="mt-0.5 truncate font-mono text-ui-xs text-foreground-subtlest">{d.url}</p>
+                    ) : null}
+                  </div>
+                  <span className="text-ui-xs text-foreground-subtlest">
+                    {discovering ? '...' : formatMsg(locale, 'mcp.discoveredReadOnly')}
+                  </span>
+                </div>
+              ))}
+          </SettingsGroupCard>
+        </div>
+      ) : null}
 
       {/* Install / Edit MCP Modal */}
       {modalOpen ? (

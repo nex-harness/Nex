@@ -855,6 +855,8 @@ export const enUS = {
   "mcp.searchPlaceholder": "Search installed MCP servers…",
   "mcp.group.global": "User / Global MCP Servers",
   "mcp.group.workspace": "Workspace MCP Servers",
+  "mcp.group.discovered": "Discovered from .mcp.json",
+  "mcp.discoveredReadOnly": "Auto-discovered",
   "mcp.emptyTitle": "No MCP servers installed",
   "mcp.emptyHint": "Click \"Install MCP\" to pick from common presets, configure stdio/HTTP, or paste mcpServers JSON.",
   "mcp.toolCount": "{count} tools",

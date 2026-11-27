@@ -1157,6 +1157,20 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 			_ = n.sendEnvelope(ctx, reply)
 		}()
 
+	case protocol.TypeMCPDiscover:
+		go func() {
+			var req protocol.MCPDiscoverPayload
+			_ = json.Unmarshal(env.Payload, &req)
+			ws := strings.TrimSpace(req.WorkspacePath)
+			if ws == "" {
+				ws = n.cfg.WorkspaceDefault
+			}
+			found := codemode.DiscoverLocalMCPServers(ws, "")
+			reply, _ := protocol.NewEnvelope(protocol.TypeMCPDiscover, found)
+			reply.ReplyTo = env.ID
+			_ = n.sendEnvelope(ctx, reply)
+		}()
+
 	case protocol.TypeMCPProbe:
 		go func() {
 			var req protocol.MCPProbePayload

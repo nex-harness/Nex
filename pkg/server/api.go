@@ -69,6 +69,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/plugins", s.handlePlugins)
 	s.mux.HandleFunc("/api/v1/plugins/", s.handlePluginDelete)
 	s.mux.HandleFunc("/api/v1/mcp", s.handleMCPServers)
+	s.mux.HandleFunc("/api/v1/mcp/discover", s.handleMCPDiscover)
 	s.mux.HandleFunc("/api/v1/mcp/import", s.handleMCPImport)
 	s.mux.HandleFunc("/api/v1/mcp/", s.handleMCPSubroutes)
 	s.mux.HandleFunc("/api/v1/cron", s.handleCronJobs)
