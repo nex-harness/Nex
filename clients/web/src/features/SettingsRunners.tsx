@@ -1117,9 +1117,6 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-1.5">
                   {matchedSsh && renderSshActionButtons(matchedSsh, r.status === 'online')}
-                  <span className="font-mono text-ui-xs tabular-nums text-foreground-subtlest">
-                    rev #{r.synced_config_rev}
-                  </span>
                   {r.id !== 'run_desktop_embedded' && (
                     <button
                       type="button"
