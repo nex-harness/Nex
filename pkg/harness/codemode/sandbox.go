@@ -72,10 +72,11 @@ type ModelBridge struct {
 
 // Tool exposes the single unified `codemode` LLM tool backed by an isolated zero-privilege goja sandbox.
 type Tool struct {
-	pool        *Pool
-	kv          *SessionKV
-	authorizer  SubCallAuthorizer
-	modelBridge *ModelBridge
+	pool          *Pool
+	kv            *SessionKV
+	authorizer    SubCallAuthorizer
+	modelBridge   *ModelBridge
+	workspacePath string
 }
 
 // NewTool constructs the `codemode` tool for a session.
@@ -93,6 +94,11 @@ func NewTool(pool *Pool, kv *SessionKV, authorizer SubCallAuthorizer) *Tool {
 // SetModelBridge attaches classifier and image model resolvers to the codemode sandbox.
 func (t *Tool) SetModelBridge(b *ModelBridge) {
 	t.modelBridge = b
+}
+
+// SetWorkspacePath scopes `searchTools` discovery and workspace MCP visibility checks to a session workspace.
+func (t *Tool) SetWorkspacePath(workspacePath string) {
+	t.workspacePath = workspacePath
 }
 
 func (t *Tool) Name() string     { return "codemode" }
@@ -360,10 +366,24 @@ func (t *Tool) Execute(ctx context.Context, _ string, rawArgs json.RawMessage, o
 		return t.kv.Load(key)
 	})
 
-	_ = vm.Set("searchTools", func(query string, rawOpts map[string]any) *goja.Promise {
+	_ = vm.Set("searchTools", func(call goja.FunctionCall) goja.Value {
 		p, resolve, _ := vm.NewPromise()
-		var ns string
+		var query, ns string
 		limit := 20
+		var rawOpts map[string]any
+		if len(call.Arguments) >= 1 && call.Arguments[0] != nil && !goja.IsUndefined(call.Arguments[0]) && !goja.IsNull(call.Arguments[0]) {
+			if obj, ok := call.Arguments[0].Export().(map[string]any); ok {
+				query, _ = obj["query"].(string)
+				rawOpts = obj
+			} else {
+				query = call.Arguments[0].String()
+			}
+		}
+		if len(call.Arguments) >= 2 && call.Arguments[1] != nil && !goja.IsUndefined(call.Arguments[1]) && !goja.IsNull(call.Arguments[1]) {
+			if optsMap, ok := call.Arguments[1].Export().(map[string]any); ok {
+				rawOpts = optsMap
+			}
+		}
 		if rawOpts != nil {
 			ns, _ = rawOpts["namespace"].(string)
 			if l, ok := rawOpts["limit"].(int64); ok {
@@ -372,19 +392,31 @@ func (t *Tool) Execute(ctx context.Context, _ string, rawArgs json.RawMessage, o
 				limit = int(lf)
 			}
 		}
-		found := t.pool.SearchTools(query, ns, limit)
-		_ = resolve(found)
-		return p
+		pendingAsync++
+		go func() {
+			found := t.pool.SearchToolsCtx(execCtx, query, ns, t.workspacePath, limit)
+			vmTasks <- func() {
+				pendingAsync--
+				_ = resolve(found)
+			}
+		}()
+		return vm.ToValue(p)
 	})
 
 	_ = vm.Set("describeTool", func(fullName string) *goja.Promise {
 		p, resolve, reject := vm.NewPromise()
-		desc, err := t.pool.DescribeTool(fullName)
-		if err != nil {
-			_ = reject(vm.ToValue(err.Error()))
-		} else {
-			_ = resolve(desc)
-		}
+		pendingAsync++
+		go func() {
+			desc, err := t.pool.DescribeToolCtx(execCtx, fullName)
+			vmTasks <- func() {
+				pendingAsync--
+				if err != nil {
+					_ = reject(vm.ToValue(err.Error()))
+				} else {
+					_ = resolve(desc)
+				}
+			}
+		}()
 		return p
 	})
 

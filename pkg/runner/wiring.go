@@ -444,6 +444,7 @@ func (w *DefaultRuntimeWiring) PrepareSession(
 		}
 		return nil
 	})
+	cmTool.SetWorkspacePath(sess.WorkspacePath)
 	cmTool.SetModelBridge(&codemode.ModelBridge{
 		ResolveClassifier: node.resolveClassifierProvider,
 		ResolveImage:      node.resolveImageProvider,

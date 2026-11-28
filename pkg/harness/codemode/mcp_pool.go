@@ -205,9 +205,12 @@ type Pool struct {
 	mu           sync.Mutex
 	servers      map[string]store.MCPServerRecord
 	catalog      []ToolEntry
+	hydratedAt   map[string]time.Time
+	hydrating    map[string]chan struct{}
 	liveConns    map[string]*liveLocalConn
 	remoteCaller RemoteCaller
 	customLocal  map[string]func(ctx context.Context, toolName string, args json.RawMessage) (any, error)
+	connectFn    func(ctx context.Context, rec store.MCPServerRecord) (*mcp.ClientSession, *bytes.Buffer, error)
 	stopReaper   chan struct{}
 	closeOnce    sync.Once
 }
@@ -215,14 +218,34 @@ type Pool struct {
 // NewPool constructs a lazy-loading MCP connection pool and starts the background idle reaper.
 func NewPool(remote RemoteCaller) *Pool {
 	p := &Pool{
-		servers:     make(map[string]store.MCPServerRecord),
-		liveConns:   make(map[string]*liveLocalConn),
+		servers:      make(map[string]store.MCPServerRecord),
+		hydratedAt:   make(map[string]time.Time),
+		hydrating:    make(map[string]chan struct{}),
+		liveConns:    make(map[string]*liveLocalConn),
 		remoteCaller: remote,
-		customLocal: make(map[string]func(ctx context.Context, toolName string, args json.RawMessage) (any, error)),
-		stopReaper:  make(chan struct{}),
+		customLocal:  make(map[string]func(ctx context.Context, toolName string, args json.RawMessage) (any, error)),
+		connectFn:    connectMCPServer,
+		stopReaper:   make(chan struct{}),
 	}
 	go p.reapLoop()
 	return p
+}
+
+func mcpServerChanged(a, b store.MCPServerRecord) bool {
+	if a.Command != b.Command || a.URL != b.URL || a.Transport != b.Transport || a.HostMode != b.HostMode {
+		return true
+	}
+	return strings.Join(a.Args, "\x00") != strings.Join(b.Args, "\x00")
+}
+
+func (p *Pool) clearNamespaceCatalogLocked(namespace string) {
+	kept := make([]ToolEntry, 0, len(p.catalog))
+	for _, e := range p.catalog {
+		if e.Namespace != namespace {
+			kept = append(kept, e)
+		}
+	}
+	p.catalog = kept
 }
 
 // RegisterInProcessNamespace registers an in-process MCP namespace (useful for built-in bridges & deterministic testing).
@@ -289,11 +312,16 @@ func (p *Pool) SyncServers(records []store.MCPServerRecord) {
 		}
 	}
 
-	// Close any live connections removed from config
+	// Close any live connections removed from config & prune hydration cache
 	for name, lc := range p.liveConns {
 		if _, stillPresent := nextMap[name]; !stillPresent {
 			_ = lc.session.Close()
 			delete(p.liveConns, name)
+		}
+	}
+	for name := range p.hydratedAt {
+		if _, stillPresent := nextMap[name]; !stillPresent {
+			delete(p.hydratedAt, name)
 		}
 	}
 
@@ -301,10 +329,7 @@ func (p *Pool) SyncServers(records []store.MCPServerRecord) {
 	p.catalog = rebuilt
 }
 
-// IsNamespaceVisibleInWorkspace returns true when a namespace is enabled for workspacePath and not hidden.
-func (p *Pool) IsNamespaceVisibleInWorkspace(namespace, workspacePath string) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (p *Pool) isNamespaceVisibleLocked(namespace, workspacePath string) bool {
 	if _, inProc := p.customLocal[namespace]; inProc {
 		return true
 	}
@@ -317,6 +342,13 @@ func (p *Pool) IsNamespaceVisibleInWorkspace(namespace, workspacePath string) bo
 	}
 	vis, _ := store.IsMCPVisibleInWorkspace(srv, workspacePath)
 	return vis
+}
+
+// IsNamespaceVisibleInWorkspace returns true when a namespace is enabled for workspacePath and not hidden.
+func (p *Pool) IsNamespaceVisibleInWorkspace(namespace, workspacePath string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.isNamespaceVisibleLocked(namespace, workspacePath)
 }
 
 // NamespaceSummaryPrompt builds the ultra-compact MCP namespace summary (~few dozen tokens) for the System Prompt.
@@ -391,8 +423,154 @@ func (p *Pool) NamespaceSummaryPromptForWorkspace(workspacePath string) string {
 	return strings.TrimRight(sb.String(), "\n")
 }
 
+const (
+	hydrateRetryCooldown = 30 * time.Second
+	hydrateTimeout       = 10 * time.Second
+)
+
+func (p *Pool) namespaceHasCatalogLocked(namespace string) bool {
+	for _, t := range p.catalog {
+		if t.Namespace == namespace {
+			return true
+		}
+	}
+	return false
+}
+
+// EnsureNamespaceHydrated lazily connects to an uncached runner-local MCP server (such as one discovered
+// from .mcp.json without a pre-populated catalog cache) and populates p.catalog via tools/list.
+func (p *Pool) EnsureNamespaceHydrated(ctx context.Context, namespace string) error {
+	for {
+		p.mu.Lock()
+		if _, inProc := p.customLocal[namespace]; inProc || p.namespaceHasCatalogLocked(namespace) {
+			p.mu.Unlock()
+			return nil
+		}
+		rec, ok := p.servers[namespace]
+		if !ok || (rec.HostMode != "" && rec.HostMode != "runner_local") {
+			p.mu.Unlock()
+			return nil
+		}
+		if probedAt, ok := p.hydratedAt[namespace]; ok && time.Since(probedAt) < hydrateRetryCooldown {
+			p.mu.Unlock()
+			return nil
+		}
+		if waitCh, busy := p.hydrating[namespace]; busy {
+			p.mu.Unlock()
+			select {
+			case <-waitCh:
+				continue
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		waitCh := make(chan struct{})
+		p.hydrating[namespace] = waitCh
+		p.mu.Unlock()
+
+		hydrateCtx, cancel := context.WithTimeout(ctx, hydrateTimeout)
+		_, err := p.getOrSpawnLocalSession(hydrateCtx, rec)
+		cancel()
+
+		p.mu.Lock()
+		if err != nil {
+			p.hydratedAt[namespace] = time.Now()
+		}
+		delete(p.hydrating, namespace)
+		close(waitCh)
+		p.mu.Unlock()
+		return err
+	}
+}
+
+func (p *Pool) uncachedLocalNamespaces(workspacePath string) []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	cachedNS := make(map[string]bool)
+	for _, t := range p.catalog {
+		cachedNS[t.Namespace] = true
+	}
+	var out []string
+	for name, rec := range p.servers {
+		if rec.HostMode != "" && rec.HostMode != "runner_local" {
+			continue
+		}
+		if _, inProc := p.customLocal[name]; inProc || cachedNS[name] {
+			continue
+		}
+		if probedAt, ok := p.hydratedAt[name]; ok && time.Since(probedAt) < hydrateRetryCooldown {
+			continue
+		}
+		if workspacePath != "" && !p.isNamespaceVisibleLocked(name, workspacePath) {
+			continue
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (p *Pool) hydrateNamespacesConcurrently(ctx context.Context, namespaces []string) {
+	if len(namespaces) == 0 {
+		return
+	}
+	var wg sync.WaitGroup
+	for _, ns := range namespaces {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			_ = p.EnsureNamespaceHydrated(ctx, name)
+		}(ns)
+	}
+	wg.Wait()
+}
+
 // SearchTools searches the cached MCP catalog without starting any subprocesses.
 func (p *Pool) SearchTools(query, namespace string, limit int) []map[string]any {
+	return p.searchCatalog(query, namespace, "", limit)
+}
+
+// SearchToolsCtx searches the MCP catalog, filtering to namespaces visible in workspacePath and lazily
+// hydrating uncached runner-local MCP servers (e.g. workspace .mcp.json servers) on demand.
+func (p *Pool) SearchToolsCtx(ctx context.Context, query, namespace, workspacePath string, limit int) []map[string]any {
+	if namespace != "" {
+		_ = p.EnsureNamespaceHydrated(ctx, namespace)
+		return p.searchCatalog(query, namespace, workspacePath, limit)
+	}
+
+	uncached := p.uncachedLocalNamespaces(workspacePath)
+	if len(uncached) > 0 {
+		terms := strings.Fields(strings.ToLower(strings.TrimSpace(query)))
+		var priority []string
+		for _, ns := range uncached {
+			nsLower := strings.ToLower(ns)
+			if len(terms) == 0 {
+				priority = append(priority, ns)
+				continue
+			}
+			for _, term := range terms {
+				if strings.Contains(nsLower, term) || strings.Contains(term, nsLower) {
+					priority = append(priority, ns)
+					break
+				}
+			}
+		}
+		if len(priority) > 0 {
+			p.hydrateNamespacesConcurrently(ctx, priority)
+		}
+	}
+
+	hits := p.searchCatalog(query, namespace, workspacePath, limit)
+	if len(hits) == 0 {
+		if remaining := p.uncachedLocalNamespaces(workspacePath); len(remaining) > 0 {
+			p.hydrateNamespacesConcurrently(ctx, remaining)
+			hits = p.searchCatalog(query, namespace, workspacePath, limit)
+		}
+	}
+	return hits
+}
+
+func (p *Pool) searchCatalog(query, namespace, workspacePath string, limit int) []map[string]any {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -403,11 +581,22 @@ func (p *Pool) SearchTools(query, namespace string, limit int) []map[string]any 
 	p.mu.Lock()
 	snapshot := make([]ToolEntry, len(p.catalog))
 	copy(snapshot, p.catalog)
+	visibleNS := make(map[string]bool)
+	if workspacePath != "" {
+		for _, t := range snapshot {
+			if _, seen := visibleNS[t.Namespace]; !seen {
+				visibleNS[t.Namespace] = p.isNamespaceVisibleLocked(t.Namespace, workspacePath)
+			}
+		}
+	}
 	p.mu.Unlock()
 
-	var out []map[string]any
+	out := make([]map[string]any, 0)
 	for _, t := range snapshot {
 		if namespace != "" && t.Namespace != namespace {
+			continue
+		}
+		if workspacePath != "" && !visibleNS[t.Namespace] {
 			continue
 		}
 		hay := strings.ToLower(t.FullName + " " + t.Description)
@@ -459,6 +648,24 @@ func (p *Pool) DescribeTool(fullName string) (map[string]any, error) {
 		}
 	}
 	return nil, fmt.Errorf("MCP tool %q not found in catalog", fullName)
+}
+
+// DescribeToolCtx returns the tool schema, lazily hydrating uncached local MCP servers when needed.
+func (p *Pool) DescribeToolCtx(ctx context.Context, fullName string) (map[string]any, error) {
+	if desc, err := p.DescribeTool(fullName); err == nil {
+		return desc, nil
+	}
+	if ns, _, ok := strings.Cut(fullName, "."); ok && ns != "" {
+		if err := p.EnsureNamespaceHydrated(ctx, ns); err != nil {
+			return nil, err
+		}
+		return p.DescribeTool(fullName)
+	}
+	// If called with an unprefixed tool name, hydrate any uncached local servers before failing
+	if uncached := p.uncachedLocalNamespaces(""); len(uncached) > 0 {
+		p.hydrateNamespacesConcurrently(ctx, uncached)
+	}
+	return p.DescribeTool(fullName)
 }
 
 // LookupEntry finds a ToolEntry by namespace and toolName.
@@ -549,9 +756,13 @@ func (p *Pool) getOrSpawnLocalSession(ctx context.Context, rec store.MCPServerRe
 		p.mu.Unlock()
 		return sess, nil
 	}
+	connect := p.connectFn
 	p.mu.Unlock()
 
-	sess, _, err := connectMCPServer(ctx, rec)
+	if connect == nil {
+		connect = connectMCPServer
+	}
+	sess, _, err := connect(ctx, rec)
 	if err != nil {
 		return nil, err
 	}
@@ -573,13 +784,9 @@ func (p *Pool) getOrSpawnLocalSession(ctx context.Context, rec store.MCPServerRe
 			})
 		}
 		p.mu.Lock()
-		var kept []ToolEntry
-		for _, existing := range p.catalog {
-			if existing.Namespace != rec.Name {
-				kept = append(kept, existing)
-			}
-		}
-		p.catalog = append(kept, entries...)
+		p.clearNamespaceCatalogLocked(rec.Name)
+		p.catalog = append(p.catalog, entries...)
+		p.hydratedAt[rec.Name] = time.Now()
 		p.mu.Unlock()
 	}
 
