@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -487,7 +488,7 @@ func (u *Updater) downloadOne(ctx context.Context, targetURL string, isServerOri
 		TargetVersion: payload.TargetVersion,
 	})
 
-	dlCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	dlCtx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(dlCtx, http.MethodGet, targetURL, nil)
@@ -499,7 +500,11 @@ func (u *Updater) downloadOne(ctx context.Context, targetURL string, isServerOri
 		req.Header.Set("Authorization", "Bearer "+u.node.cfg.AuthToken)
 	}
 
-	resp, err := u.node.hc.Do(req)
+	client := u.node.streamHC
+	if client == nil {
+		client = u.node.hc
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -517,6 +522,13 @@ func (u *Updater) downloadOne(ctx context.Context, targetURL string, isServerOri
 
 	hasher := sha256.New()
 	total := resp.ContentLength
+	if total <= 0 {
+		if rawSize := strings.TrimSpace(resp.Header.Get("X-Binary-Size")); rawSize != "" {
+			if parsedSize, pErr := strconv.ParseInt(rawSize, 10, 64); pErr == nil && parsedSize > 0 {
+				total = parsedSize
+			}
+		}
+	}
 	var written int64
 	lastPct := 0
 	buf := make([]byte, 32*1024)
@@ -534,7 +546,7 @@ func (u *Updater) downloadOne(ctx context.Context, targetURL string, isServerOri
 				if pct > 85 {
 					pct = 85
 				}
-				if pct >= lastPct+10 {
+				if pct >= lastPct+5 {
 					lastPct = pct
 					u.emitStatus(ctx, protocol.RunnerUpdateStatusPayload{
 						RequestID:     payload.RequestID,

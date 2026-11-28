@@ -1,6 +1,7 @@
 package server
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -701,8 +702,20 @@ func (s *Server) handleRunnerBinaryDownload(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", runnerBinaryFileName(osNorm, archNorm)))
-	w.Header().Set("Content-Length", strconv.FormatInt(sizeBytes, 10))
 	w.Header().Set("X-Binary-SHA256", shaHex)
+	w.Header().Set("X-Binary-Size", strconv.FormatInt(sizeBytes, 10))
+	if r.Method == http.MethodGet && r.Header.Get("Range") == "" && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Add("Vary", "Accept-Encoding")
+		w.WriteHeader(http.StatusOK)
+		gw := gzipWriterPool.Get().(*gzip.Writer)
+		gw.Reset(w)
+		_, _ = io.Copy(gw, f)
+		_ = gw.Close()
+		gzipWriterPool.Put(gw)
+		return
+	}
+	w.Header().Set("Content-Length", strconv.FormatInt(sizeBytes, 10))
 	http.ServeContent(w, r, filepath.Base(binPath), info.ModTime(), f)
 }
 

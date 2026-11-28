@@ -1,14 +1,17 @@
 package server
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -368,6 +371,9 @@ func TestRunnerManifestAndBinaryDownloadAuth(t *testing.T) {
 	if okResp.Header.Get("X-Binary-SHA256") != targetSHA {
 		t.Fatalf("expected X-Binary-SHA256=%s, got %s", targetSHA, okResp.Header.Get("X-Binary-SHA256"))
 	}
+	if okResp.Header.Get("X-Binary-Size") != strconv.Itoa(len(binBytes)) {
+		t.Fatalf("expected X-Binary-Size=%d, got %s", len(binBytes), okResp.Header.Get("X-Binary-Size"))
+	}
 	if okResp.Header.Get("Content-Type") != "application/octet-stream" {
 		t.Fatalf("expected application/octet-stream, got %s", okResp.Header.Get("Content-Type"))
 	}
@@ -376,6 +382,47 @@ func TestRunnerManifestAndBinaryDownloadAuth(t *testing.T) {
 	_ = okResp.Body.Close()
 	if string(gotBuf[:n]) != string(binBytes) {
 		t.Fatalf("downloaded bytes mismatch: %q vs %q", string(gotBuf[:n]), string(binBytes))
+	}
+
+	// Explicit Accept-Encoding: gzip with DisableCompression -> returns gzip stream matching binBytes
+	rawClient := &http.Client{Transport: &http.Transport{DisableCompression: true}}
+	reqGzip, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/runners/binary/linux/amd64", nil)
+	reqGzip.Header.Set("Authorization", "Bearer pair-secret-123")
+	reqGzip.Header.Set("Accept-Encoding", "gzip")
+	gzipResp, err := rawClient.Do(reqGzip)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gzipResp.Header.Get("Content-Encoding") != "gzip" {
+		t.Fatalf("expected Content-Encoding=gzip, got %q", gzipResp.Header.Get("Content-Encoding"))
+	}
+	gr, err := gzip.NewReader(gzipResp.Body)
+	if err != nil {
+		t.Fatalf("gzip NewReader: %v", err)
+	}
+	unzipped, err := io.ReadAll(gr)
+	_ = gr.Close()
+	_ = gzipResp.Body.Close()
+	if err != nil || string(unzipped) != string(binBytes) {
+		t.Fatalf("gzipped body mismatch (err=%v): %q vs %q", err, string(unzipped), string(binBytes))
+	}
+
+	// Range request -> 206 Partial Content without gzip encoding
+	reqRange, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/runners/binary/linux/amd64", nil)
+	reqRange.Header.Set("Authorization", "Bearer pair-secret-123")
+	reqRange.Header.Set("Accept-Encoding", "gzip")
+	reqRange.Header.Set("Range", "bytes=0-3")
+	rangeResp, err := rawClient.Do(reqRange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rangeBody, _ := io.ReadAll(rangeResp.Body)
+	_ = rangeResp.Body.Close()
+	if rangeResp.StatusCode != http.StatusPartialContent || rangeResp.Header.Get("Content-Encoding") != "" {
+		t.Fatalf("expected 206 without gzip on Range request, got %d encoding=%q", rangeResp.StatusCode, rangeResp.Header.Get("Content-Encoding"))
+	}
+	if string(rangeBody) != string(binBytes[:4]) {
+		t.Fatalf("expected range bytes %q, got %q", string(binBytes[:4]), string(rangeBody))
 	}
 
 	// Query ?token= with registered runner AuthToken -> 200

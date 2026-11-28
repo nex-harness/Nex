@@ -40,7 +40,7 @@ func yamuxConfig() *yamux.Config {
 	cfg.LogOutput = io.Discard
 	cfg.EnableKeepAlive = true
 	cfg.KeepAliveInterval = 20 * time.Second
-	cfg.ConnectionWriteTimeout = 10 * time.Second
+	cfg.ConnectionWriteTimeout = 30 * time.Second
 	return cfg
 }
 
