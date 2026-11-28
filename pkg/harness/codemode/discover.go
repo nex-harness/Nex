@@ -181,6 +181,9 @@ func (p *Pool) MergeDiscoveredServers(discovered []DiscoveredMCPServer) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.discovered == nil {
+		p.discovered = make(map[string]DiscoveredMCPServer)
+	}
 	for _, d := range discovered {
 		if !d.Enabled {
 			continue
@@ -188,8 +191,12 @@ func (p *Pool) MergeDiscoveredServers(discovered []DiscoveredMCPServer) {
 		// Workspace-scoped .mcp.json takes precedence; user-scoped only fills gaps.
 		prev, exists := p.servers[d.Name]
 		if exists && d.Source != "workspace" {
+			if _, ok := p.discovered[d.Name]; !ok {
+				p.discovered[d.Name] = d
+			}
 			continue
 		}
+		p.discovered[d.Name] = d
 		if exists && mcpServerChanged(prev, d.MCPServerRecord) {
 			delete(p.hydratedAt, d.Name)
 			p.clearNamespaceCatalogLocked(d.Name)

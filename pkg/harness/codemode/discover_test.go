@@ -265,3 +265,78 @@ func TestExtraEnvExpansionMergingAndSetExtraEnvInvalidation(t *testing.T) {
 		t.Fatalf("expected SetExtraEnv change to close live conn and trigger respawn, got %d connects", connects)
 	}
 }
+
+func TestSyncServersPreservesDiscoveredMCP(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ws := t.TempDir()
+	wsJSON := `{
+		"mcpServers": {
+			"mteam": { "command": "/usr/local/bin/mcp-server-mteam" }
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(ws, ".mcp.json"), []byte(wsJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	discovered := DiscoverLocalMCPServers(ws, t.TempDir())
+	if len(discovered) != 1 || discovered[0].Name != "mteam" {
+		t.Fatalf("expected 1 mteam discovered server, got %+v", discovered)
+	}
+
+	type dlArgs struct {
+		ID string `json:"torrent_id"`
+	}
+	pool := NewPool(nil)
+	defer pool.Close()
+	pool.connectFn = func(cctx context.Context, _ store.MCPServerRecord) (*mcp.ClientSession, *bytes.Buffer, error) {
+		srv := mcp.NewServer(&mcp.Implementation{Name: "mock-mteam", Version: "1.0.0"}, nil)
+		mcp.AddTool(srv, &mcp.Tool{
+			Name:        "download_torrent",
+			Description: "Download torrent by ID",
+		}, func(ctx context.Context, req *mcp.CallToolRequest, args dlArgs) (*mcp.CallToolResult, any, error) {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: "ok:" + args.ID}},
+			}, map[string]any{"ok": true, "id": args.ID}, nil
+		})
+		srvTr, cliTr := mcp.NewInMemoryTransports()
+		if _, err := srv.Connect(ctx, srvTr, nil); err != nil {
+			return nil, nil, err
+		}
+		cli := mcp.NewClient(&mcp.Implementation{Name: "nex-test", Version: "1.0.0"}, nil)
+		cs, err := cli.Connect(cctx, cliTr, nil)
+		return cs, nil, err
+	}
+	pool.MergeDiscoveredServers(discovered)
+
+	cm := NewTool(pool, NewSessionKV(), nil)
+	cm.SetWorkspacePath(ws)
+
+	// Hydrate via searchTools
+	preArgs, _ := json.Marshal(map[string]any{
+		"code": `return await searchTools("mteam");`,
+	})
+	preRes, err := cm.Execute(ctx, "pre", preArgs, nil)
+	if err != nil || preRes.IsError || !strings.Contains(preRes.Output, "mteam.download_torrent") {
+		t.Fatalf("initial searchTools failed: err=%v out=%s", err, preRes.Output)
+	}
+
+	// Simulate mid-turn control-plane config.sync (e.g. after memory_save) containing no DB MCP records
+	pool.SyncServers(nil)
+
+	if !pool.IsNamespaceVisibleInWorkspace("mteam", ws) {
+		t.Fatalf("expected discovered mteam namespace to remain visible after SyncServers")
+	}
+
+	postArgs, _ := json.Marshal(map[string]any{
+		"code": `
+			const hits = await searchTools("mteam");
+			const res = await tools.mteam.download_torrent({ torrent_id: "311933" });
+			return { hitsCount: hits.length, res };
+		`,
+	})
+	postRes, err := cm.Execute(ctx, "post", postArgs, nil)
+	if err != nil || postRes.IsError || !strings.Contains(postRes.Output, `"hitsCount": 1`) || !strings.Contains(postRes.Output, `"ok:311933"`) {
+		t.Fatalf("post-SyncServers codemode execution failed: err=%v out=%s", err, postRes.Output)
+	}
+}

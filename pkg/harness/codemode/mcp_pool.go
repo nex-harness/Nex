@@ -249,6 +249,7 @@ type liveLocalConn struct {
 type Pool struct {
 	mu           sync.Mutex
 	servers      map[string]store.MCPServerRecord
+	discovered   map[string]DiscoveredMCPServer
 	catalog      []ToolEntry
 	hydratedAt   map[string]time.Time
 	hydrating    map[string]chan struct{}
@@ -265,6 +266,7 @@ type Pool struct {
 func NewPool(remote RemoteCaller) *Pool {
 	p := &Pool{
 		servers:      make(map[string]store.MCPServerRecord),
+		discovered:   make(map[string]DiscoveredMCPServer),
 		hydratedAt:   make(map[string]time.Time),
 		hydrating:    make(map[string]chan struct{}),
 		liveConns:    make(map[string]*liveLocalConn),
@@ -373,7 +375,7 @@ func (p *Pool) SyncServers(records []store.MCPServerRecord) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	nextMap := make(map[string]store.MCPServerRecord, len(records))
+	nextMap := make(map[string]store.MCPServerRecord, len(records)+len(p.discovered))
 	var rebuilt []ToolEntry
 	// Preserve in-process namespaces
 	for _, e := range p.catalog {
@@ -388,30 +390,61 @@ func (p *Pool) SyncServers(records []store.MCPServerRecord) {
 			continue
 		}
 		nextMap[rec.Name] = rec
+	}
+
+	// Preserve file-discovered local MCP servers (.mcp.json / user mcp.json) across control-plane config.sync updates.
+	for _, d := range p.discovered {
+		if !d.Enabled {
+			continue
+		}
+		if _, exists := nextMap[d.Name]; !exists || d.Source == "workspace" {
+			nextMap[d.Name] = d.MCPServerRecord
+		}
+	}
+
+	existingByNS := make(map[string][]ToolEntry)
+	for _, e := range p.catalog {
+		if _, inProc := p.customLocal[e.Namespace]; !inProc {
+			existingByNS[e.Namespace] = append(existingByNS[e.Namespace], e)
+		}
+	}
+
+	for name, rec := range nextMap {
 		var cached []ToolEntry
 		if len(rec.CatalogCache) > 0 {
 			_ = json.Unmarshal(rec.CatalogCache, &cached)
 		}
-		for _, t := range cached {
-			t.Namespace = rec.Name
-			t.FullName = rec.Name + "." + t.Name
-			t.HostMode = rec.HostMode
-			if len(t.InputSchema) == 0 {
-				t.InputSchema = json.RawMessage(`{"type":"object","properties":{}}`)
+		if len(cached) > 0 {
+			for _, t := range cached {
+				t.Namespace = rec.Name
+				t.FullName = rec.Name + "." + t.Name
+				t.HostMode = rec.HostMode
+				if len(t.InputSchema) == 0 {
+					t.InputSchema = json.RawMessage(`{"type":"object","properties":{}}`)
+				}
+				rebuilt = append(rebuilt, t)
 			}
-			rebuilt = append(rebuilt, t)
+			continue
+		}
+		// Keep previously hydrated catalog entries if this server configuration is unchanged.
+		if prev, existed := p.servers[name]; existed && !mcpServerChanged(prev, rec) {
+			rebuilt = append(rebuilt, existingByNS[name]...)
 		}
 	}
 
-	// Close any live connections removed from config & prune hydration cache
+	// Close any live connections removed or modified in config & prune stale hydration cache
 	for name, lc := range p.liveConns {
-		if _, stillPresent := nextMap[name]; !stillPresent {
+		nextRec, stillPresent := nextMap[name]
+		prevRec, hadPrev := p.servers[name]
+		if !stillPresent || (hadPrev && mcpServerChanged(prevRec, nextRec)) {
 			_ = lc.session.Close()
 			delete(p.liveConns, name)
 		}
 	}
 	for name := range p.hydratedAt {
-		if _, stillPresent := nextMap[name]; !stillPresent {
+		nextRec, stillPresent := nextMap[name]
+		prevRec, hadPrev := p.servers[name]
+		if !stillPresent || (hadPrev && mcpServerChanged(prevRec, nextRec)) {
 			delete(p.hydratedAt, name)
 		}
 	}
