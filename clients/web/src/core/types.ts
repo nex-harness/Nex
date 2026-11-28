@@ -30,6 +30,8 @@ export interface RunnerRecord {
   update_message?: string;
   update_error?: string;
   incompatible?: boolean;
+  latency_ms?: number;
+  latency_updated_at?: number;
 }
 
 export interface ProviderRecord {
@@ -876,6 +878,9 @@ export interface AppUpdateCheckResult {
   client_has_update?: boolean;
   client_download_url?: string;
   client_asset_name?: string;
+  staged_server_update?: boolean;
+  staged_version?: string;
+  staged_build_sha?: string;
   cached?: boolean;
   error?: string;
 }

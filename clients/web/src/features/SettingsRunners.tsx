@@ -15,6 +15,7 @@ import {
   EyeOff,
   FileCode2,
   FolderOpen,
+  Gauge,
   HardDrive,
   KeyRound,
   Link2,
@@ -257,6 +258,57 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
   const [fdaRunnerId, setFdaRunnerId] = useState<string | null>(null);
   const [fdaBusyAction, setFdaBusyAction] = useState<string | null>(null);
   const fdaRunner = fdaRunnerId ? runners.find((item) => item.id === fdaRunnerId) || null : null;
+  const [speedtestingById, setSpeedtestingById] = useState<Record<string, boolean>>({});
+  const [speedtestResults, setSpeedtestResults] = useState<
+    Record<
+      string,
+      {
+        rtt_ms: number;
+        jitter_ms: number;
+        download_mbps?: number;
+        upload_mbps?: number;
+        throughput_unsupported?: boolean;
+        measured_at: number;
+      }
+    >
+  >({});
+
+  const runRunnerSpeedtest = async (runner: RunnerRecord) => {
+    setSpeedtestingById((prev) => ({ ...prev, [runner.id]: true }));
+    try {
+      const res = await apiFetch<{
+        runner_id: string;
+        rtt_ms: number;
+        jitter_ms: number;
+        download_mbps?: number;
+        upload_mbps?: number;
+        throughput_unsupported?: boolean;
+        measured_at: number;
+      }>(`/api/v1/runners/${encodeURIComponent(runner.id)}/speedtest`, {
+        method: 'POST',
+      });
+      if (mountedRef.current && res) {
+        setSpeedtestResults((prev) => ({ ...prev, [runner.id]: res }));
+        useNexStore.setState((prev) => ({
+          runners: prev.runners.map((item) =>
+            item.id === runner.id
+              ? { ...item, latency_ms: res.rtt_ms, latency_updated_at: res.measured_at }
+              : item,
+          ),
+        }));
+      }
+    } catch (err) {
+      onFlash(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (mountedRef.current) {
+        setSpeedtestingById((prev) => {
+          const next = { ...prev };
+          delete next[runner.id];
+          return next;
+        });
+      }
+    }
+  };
 
   const triggerRunnerPermission = async (
     runner: RunnerRecord,
@@ -1105,6 +1157,21 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                         {matchedSsh.ssh_alias}
                       </span>
                     )}
+                    {r.status === 'online' && typeof r.latency_ms === 'number' && (
+                      <span
+                        data-testid={`runner-latency-${r.id}`}
+                        title={formatMsg(locale, 'runners.latencyTooltip', { ms: r.latency_ms })}
+                        className={`inline-flex items-center rounded-md px-1.5 py-0.5 font-mono text-[11px] font-medium tabular-nums ${
+                          r.latency_ms < 50
+                            ? 'bg-success-surface text-success-surface-fg'
+                            : r.latency_ms < 150
+                              ? 'border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                              : 'bg-destructive-surface text-destructive-surface-fg'
+                        }`}
+                      >
+                        {r.latency_ms}ms
+                      </span>
+                    )}
                     {phaseLabel && (
                       <span
                         data-testid={`runner-update-phase-${r.id}`}
@@ -1251,8 +1318,52 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                   {r.update_error && (
                     <p className="mt-1 truncate text-ui-xs text-destructive">{r.update_error}</p>
                   )}
+                  {speedtestResults[r.id] && (
+                    <p
+                      data-testid={`runner-speedtest-result-${r.id}`}
+                      className="mt-1.5 inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-0.5 font-mono text-[11px] text-foreground-subtle"
+                    >
+                      <Gauge className="size-3 shrink-0 text-brand-blue" />
+                      <span>
+                        {speedtestResults[r.id].throughput_unsupported ||
+                        typeof speedtestResults[r.id].download_mbps !== 'number'
+                          ? formatMsg(locale, 'runners.speedtestRttOnly', {
+                              rtt: speedtestResults[r.id].rtt_ms,
+                              jitter: speedtestResults[r.id].jitter_ms,
+                            })
+                          : formatMsg(locale, 'runners.speedtestResult', {
+                              rtt: speedtestResults[r.id].rtt_ms,
+                              jitter: speedtestResults[r.id].jitter_ms,
+                              down: speedtestResults[r.id].download_mbps!.toFixed(1),
+                              up: (speedtestResults[r.id].upload_mbps ?? 0).toFixed(1),
+                            })}
+                      </span>
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  {r.status === 'online' && (
+                    <button
+                      type="button"
+                      data-testid={`speedtest-runner-${r.id}`}
+                      disabled={Boolean(speedtestingById[r.id])}
+                      title={formatMsg(locale, 'runners.speedtest')}
+                      aria-label={formatMsg(locale, 'runners.speedtest')}
+                      onClick={() => void runRunnerSpeedtest(r)}
+                      className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2 text-ui-xs font-medium text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground disabled:opacity-50"
+                    >
+                      {speedtestingById[r.id] ? (
+                        <LoaderCircle className="size-3 animate-spin" />
+                      ) : (
+                        <Gauge className="size-3" />
+                      )}
+                      <span>
+                        {speedtestingById[r.id]
+                          ? formatMsg(locale, 'runners.speedtesting')
+                          : formatMsg(locale, 'runners.speedtest')}
+                      </span>
+                    </button>
+                  )}
                   {matchedSsh ? (
                     renderSshActionButtons(matchedSsh, r.status === 'online', r)
                   ) : (

@@ -30,6 +30,7 @@ func (s *Server) registerRoutes() {
 	// REST API v1
 	s.mux.HandleFunc("/api/v1/health", s.handleHealth)
 	s.mux.HandleFunc("/api/v1/updates/check", s.handleUpdatesCheck)
+	s.mux.HandleFunc("/api/v1/updates/apply-staged", s.handleUpdatesApplyStaged)
 	s.mux.HandleFunc("/api/v1/auth/status", s.handleAuthStatus)
 	s.mux.HandleFunc("/api/v1/auth/login", s.handleAuthLogin)
 	s.mux.HandleFunc("/api/v1/auth/logout", s.handleAuthLogout)
@@ -720,6 +721,10 @@ func (s *Server) handleRunnerSubroutes(w http.ResponseWriter, r *http.Request) {
 	}
 	if action == "permissions" {
 		s.handleRunnerPermissions(w, r, runnerID)
+		return
+	}
+	if action == "speedtest" {
+		s.handleRunnerSpeedtest(w, r, runnerID)
 		return
 	}
 	if action != "dirs" {

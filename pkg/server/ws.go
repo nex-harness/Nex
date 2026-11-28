@@ -155,6 +155,11 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 		go s.reconcileRunnerSessionsOnConnect(hello.RunnerID, rc, helloTime, activeSet)
 	}
 
+	// Periodic WebSocket Ping/Pong RTT measurement for this runner connection.
+	pingCtx, cancelPing := context.WithCancel(ctx)
+	defer cancelPing()
+	go s.runRunnerLatencyProbe(pingCtx, hello.RunnerID, rc)
+
 	for {
 		msgType, data, err := ws.Read(ctx)
 		if err != nil {

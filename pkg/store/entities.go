@@ -47,6 +47,8 @@ type RunnerRecord struct {
 	UpdateMessage   string   `json:"update_message,omitempty"`
 	UpdateError     string   `json:"update_error,omitempty"`
 	Incompatible    bool     `json:"incompatible,omitempty"`
+	LatencyMS       *int64   `json:"latency_ms,omitempty"`
+	LatencyUpdated  int64    `json:"latency_updated_at,omitempty"`
 }
 
 func (s *Store) UpsertRunner(ctx context.Context, r RunnerRecord) error {

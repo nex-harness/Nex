@@ -1004,6 +1004,24 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 		reply.ReplyTo = env.ID
 		_ = n.sendEnvelope(ctx, reply)
 
+	case protocol.TypeRunnerSpeedtest:
+		var req protocol.RunnerSpeedtestPayload
+		_ = json.Unmarshal(env.Payload, &req)
+		res := protocol.RunnerSpeedtestResultPayload{
+			Direction:     req.Direction,
+			ReceivedBytes: len(req.Payload),
+		}
+		if req.Direction == "upload" && req.ResponseBytes > 0 {
+			size := req.ResponseBytes
+			if size > 1024*1024 {
+				size = 1024 * 1024
+			}
+			res.Payload = strings.Repeat("N", size)
+		}
+		reply, _ := protocol.NewEnvelope(protocol.TypeRunnerSpeedtestResult, res)
+		reply.ReplyTo = env.ID
+		_ = n.sendEnvelope(ctx, reply)
+
 	case protocol.TypeSessionPrompt:
 		var p protocol.PromptPayload
 		if json.Unmarshal(env.Payload, &p) == nil {

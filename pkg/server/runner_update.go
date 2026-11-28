@@ -127,6 +127,8 @@ type runnerRuntimeMeta struct {
 	UpdateError          string
 	UpdatePhaseUpdatedAt time.Time
 	Online               bool
+	LatencyMS            *int64
+	LatencyUpdatedAt     int64
 }
 
 func normalizeRunnerVersionForCompare(v string) string {
@@ -503,6 +505,11 @@ func (s *Server) enrichRunnerRecord(ctx context.Context, rec *store.RunnerRecord
 	rec.UpdateMessage = meta.UpdateMessage
 	rec.UpdateError = meta.UpdateError
 	rec.Incompatible = meta.Incompatible
+	if rec.Status == "online" && meta.LatencyMS != nil {
+		v := *meta.LatencyMS
+		rec.LatencyMS = &v
+		rec.LatencyUpdated = meta.LatencyUpdatedAt
+	}
 }
 
 func fileSHA256AndSize(path string) (string, int64, error) {

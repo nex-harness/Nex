@@ -35,6 +35,8 @@ const (
 	TypeRunnerRestart          = "runner.restart"
 	TypeRunnerPermission       = "runner.permission"
 	TypeRunnerPermissionResult = "runner.permission_result"
+	TypeRunnerSpeedtest        = "runner.speedtest"
+	TypeRunnerSpeedtestResult  = "runner.speedtest_result"
 	TypeConfigSync             = "config.sync"
 	TypeOutboxAck              = "outbox.ack"
 	TypeRunnerStatus           = "runner.status"
@@ -183,6 +185,20 @@ type RunnerPermissionResultPayload struct {
 	FullDiskAccess *bool  `json:"full_disk_access,omitempty"`
 	AppPath        string `json:"app_path,omitempty"`
 	Error          string `json:"error,omitempty"`
+}
+
+// RunnerSpeedtestPayload asks a runner to measure link throughput (download = server->runner, upload = runner->server).
+type RunnerSpeedtestPayload struct {
+	Direction     string `json:"direction"`               // "download" | "upload"
+	Payload       string `json:"payload,omitempty"`       // base64/text payload for download (server->runner)
+	ResponseBytes int    `json:"response_bytes,omitempty"` // requested payload size for upload (runner->server)
+}
+
+// RunnerSpeedtestResultPayload acknowledges a speedtest probe from the runner.
+type RunnerSpeedtestResultPayload struct {
+	Direction     string `json:"direction"`
+	ReceivedBytes int    `json:"received_bytes,omitempty"`
+	Payload       string `json:"payload,omitempty"`
 }
 
 // MemoryConfigSync distributes memory automation preferences from Server to Runners.
