@@ -65,9 +65,8 @@ func (s *Server) handleRunnerInstallPS1(w http.ResponseWriter, r *http.Request) 
 	if tok != "" {
 		dlURL += "?token=" + url.QueryEscape(tok)
 	}
-	tokenArg := ""
-	if tok != "" {
-		tokenArg = fmt.Sprintf(" -token '%s'", strings.ReplaceAll(tok, "'", "''"))
+	escPS := func(v string) string {
+		return strings.ReplaceAll(v, "'", "''")
 	}
 
 	script := fmt.Sprintf(`$ErrorActionPreference = 'Stop'
@@ -76,6 +75,7 @@ $BinPath = Join-Path $InstallDir 'nex-runner.exe'
 $DataDir = Join-Path $env:USERPROFILE '.nex-runner'
 $ServerWS = '%s'
 $DownloadURL = '%s'
+$RunnerToken = '%s'
 
 Write-Host "==> Installing Nex Runner into $InstallDir ..." -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
@@ -88,14 +88,21 @@ Start-Sleep -Milliseconds 300
 Write-Host "==> Downloading nex-runner.exe ..." -ForegroundColor Cyan
 Invoke-WebRequest -Uri $DownloadURL -OutFile $BinPath -UseBasicParsing
 
-$RunnerArgs = '-server "' + $ServerWS + '" -data-dir "' + $DataDir + '" -no-uac%s'
+$RunnerArgs = '-server "' + $ServerWS + '" -data-dir "' + $DataDir + '" -no-uac'
+if ($RunnerToken) {
+    $RunnerArgs += ' -token "' + $RunnerToken + '"'
+}
 
 $IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if ($IsAdmin) {
     Write-Host "==> Registering Windows Service (Admin) ..." -ForegroundColor Cyan
     & $BinPath service stop 2>$null | Out-Null
     & $BinPath service uninstall 2>$null | Out-Null
-    & $BinPath service install -server "$ServerWS" -data-dir "$DataDir" -no-uac%s
+    $SvcInstallArgs = @('service', 'install', '-server', $ServerWS, '-data-dir', $DataDir, '-no-uac')
+    if ($RunnerToken) {
+        $SvcInstallArgs += @('-token', $RunnerToken)
+    }
+    & $BinPath @SvcInstallArgs
     & $BinPath service start
 } else {
     Write-Host "==> Registering Scheduled Task (Current User Logon, no UAC) ..." -ForegroundColor Cyan
@@ -108,7 +115,7 @@ if ($IsAdmin) {
 }
 
 Write-Host "==> Nex Runner installed and started! Check Settings -> Runners in Nex." -ForegroundColor Green
-`, strings.ReplaceAll(wsURL, "'", "''"), strings.ReplaceAll(dlURL, "'", "''"), tokenArg, tokenArg)
+`, escPS(wsURL), escPS(dlURL), escPS(tok))
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
