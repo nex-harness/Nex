@@ -30,9 +30,12 @@ type MCPProbeResult struct {
 	CheckedAt  int64       `json:"checked_at"`
 }
 
-// expandEnvPlaceholders expands ${VAR} references using os.Getenv (Pi mcp.md convention).
-func expandEnvPlaceholders(s string) string {
+// expandEnvPlaceholdersWithExtra expands ${VAR} references using extraEnv first, then os.LookupEnv.
+func expandEnvPlaceholdersWithExtra(s string, extraEnv map[string]string) string {
 	return os.Expand(s, func(key string) string {
+		if v, ok := extraEnv[key]; ok {
+			return v
+		}
 		if v, ok := os.LookupEnv(key); ok {
 			return v
 		}
@@ -40,16 +43,49 @@ func expandEnvPlaceholders(s string) string {
 	})
 }
 
+// expandEnvPlaceholders expands ${VAR} references using os.Getenv (Pi mcp.md convention).
+func expandEnvPlaceholders(s string) string {
+	return expandEnvPlaceholdersWithExtra(s, nil)
+}
+
+// mergeEnvVars overlays one or more env layers on top of base without duplicate keys.
+func mergeEnvVars(base []string, layers ...map[string]string) []string {
+	merged := make(map[string]string, len(base))
+	for _, entry := range base {
+		if k, v, ok := strings.Cut(entry, "="); ok && k != "" {
+			merged[k] = v
+		}
+	}
+	for _, layer := range layers {
+		for k, v := range layer {
+			if strings.TrimSpace(k) != "" {
+				merged[k] = v
+			}
+		}
+	}
+	keys := make([]string, 0, len(merged))
+	for k := range merged {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, k+"="+merged[k])
+	}
+	return out
+}
+
 type headerRoundTripper struct {
-	base    http.RoundTripper
-	headers map[string]string
+	base     http.RoundTripper
+	headers  map[string]string
+	extraEnv map[string]string
 }
 
 func (rt *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	clone := req.Clone(req.Context())
 	for k, v := range rt.headers {
 		if strings.TrimSpace(k) != "" {
-			clone.Header.Set(k, expandEnvPlaceholders(v))
+			clone.Header.Set(k, expandEnvPlaceholdersWithExtra(v, rt.extraEnv))
 		}
 	}
 	base := rt.base
@@ -60,16 +96,20 @@ func (rt *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 }
 
 func connectMCPServer(ctx context.Context, rec store.MCPServerRecord) (*mcp.ClientSession, *bytes.Buffer, error) {
+	return connectMCPServerWithEnv(ctx, rec, nil)
+}
+
+func connectMCPServerWithEnv(ctx context.Context, rec store.MCPServerRecord, extraEnv map[string]string) (*mcp.ClientSession, *bytes.Buffer, error) {
 	client := mcp.NewClient(&mcp.Implementation{Name: "nex-runner", Version: "0.4.0"}, nil)
 	transportKind := strings.ToLower(strings.TrimSpace(rec.Transport))
 	if transportKind == "http" || transportKind == "streamable-http" || (transportKind == "" && strings.TrimSpace(rec.URL) != "") {
-		endpoint := strings.TrimSpace(rec.URL)
+		endpoint := strings.TrimSpace(expandEnvPlaceholdersWithExtra(rec.URL, extraEnv))
 		if endpoint == "" {
 			return nil, nil, fmt.Errorf("HTTP MCP server %q has empty url", rec.Name)
 		}
 		hc := &http.Client{
 			Timeout:   30 * time.Second,
-			Transport: &headerRoundTripper{base: http.DefaultTransport, headers: rec.Headers},
+			Transport: &headerRoundTripper{base: http.DefaultTransport, headers: rec.Headers, extraEnv: extraEnv},
 		}
 		tr := &mcp.StreamableClientTransport{
 			Endpoint:             endpoint,
@@ -88,14 +128,19 @@ func connectMCPServer(ctx context.Context, rec store.MCPServerRecord) (*mcp.Clie
 	}
 	args := make([]string, len(rec.Args))
 	for i, a := range rec.Args {
-		args[i] = expandEnvPlaceholders(a)
+		args[i] = expandEnvPlaceholdersWithExtra(a, extraEnv)
 	}
-	cmd := exec.Command(expandEnvPlaceholders(rec.Command), args...)
-	envList := os.Environ()
+	cmd := exec.Command(expandEnvPlaceholdersWithExtra(rec.Command, extraEnv), args...)
+	if ws := strings.TrimSpace(rec.WorkspacePath); ws != "" {
+		if info, err := os.Stat(ws); err == nil && info.IsDir() {
+			cmd.Dir = ws
+		}
+	}
+	expandedRecEnv := make(map[string]string, len(rec.Env))
 	for k, v := range rec.Env {
-		envList = append(envList, k+"="+expandEnvPlaceholders(v))
+		expandedRecEnv[k] = expandEnvPlaceholdersWithExtra(v, extraEnv)
 	}
-	cmd.Env = envList
+	cmd.Env = mergeEnvVars(os.Environ(), extraEnv, expandedRecEnv)
 	var stderrBuf bytes.Buffer
 	cmd.Stderr = &stderrBuf
 
@@ -210,6 +255,7 @@ type Pool struct {
 	liveConns    map[string]*liveLocalConn
 	remoteCaller RemoteCaller
 	customLocal  map[string]func(ctx context.Context, toolName string, args json.RawMessage) (any, error)
+	extraEnv     map[string]string
 	connectFn    func(ctx context.Context, rec store.MCPServerRecord) (*mcp.ClientSession, *bytes.Buffer, error)
 	stopReaper   chan struct{}
 	closeOnce    sync.Once
@@ -224,11 +270,56 @@ func NewPool(remote RemoteCaller) *Pool {
 		liveConns:    make(map[string]*liveLocalConn),
 		remoteCaller: remote,
 		customLocal:  make(map[string]func(ctx context.Context, toolName string, args json.RawMessage) (any, error)),
-		connectFn:    connectMCPServer,
 		stopReaper:   make(chan struct{}),
 	}
 	go p.reapLoop()
 	return p
+}
+
+func envMapsEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if bv, ok := b[k]; !ok || bv != v {
+			return false
+		}
+	}
+	return true
+}
+
+// SetExtraEnv updates the Credentials Vault environment injected into runner-local MCP processes.
+// When the effective env changes, open local MCP sessions are closed so subsequent calls spawn with fresh credentials.
+func (p *Pool) SetExtraEnv(env map[string]string) {
+	p.mu.Lock()
+	if envMapsEqual(p.extraEnv, env) {
+		p.mu.Unlock()
+		return
+	}
+	if len(env) == 0 {
+		p.extraEnv = nil
+	} else {
+		copied := make(map[string]string, len(env))
+		for k, v := range env {
+			copied[k] = v
+		}
+		p.extraEnv = copied
+	}
+	staleConns := make([]*mcp.ClientSession, 0, len(p.liveConns))
+	for k, lc := range p.liveConns {
+		staleConns = append(staleConns, lc.session)
+		delete(p.liveConns, k)
+	}
+	for ns := range p.hydratedAt {
+		if !p.namespaceHasCatalogLocked(ns) {
+			delete(p.hydratedAt, ns)
+		}
+	}
+	p.mu.Unlock()
+
+	for _, s := range staleConns {
+		_ = s.Close()
+	}
 }
 
 func mcpServerChanged(a, b store.MCPServerRecord) bool {
@@ -757,12 +848,24 @@ func (p *Pool) getOrSpawnLocalSession(ctx context.Context, rec store.MCPServerRe
 		return sess, nil
 	}
 	connect := p.connectFn
+	var extraCopy map[string]string
+	if len(p.extraEnv) > 0 {
+		extraCopy = make(map[string]string, len(p.extraEnv))
+		for k, v := range p.extraEnv {
+			extraCopy[k] = v
+		}
+	}
 	p.mu.Unlock()
 
-	if connect == nil {
-		connect = connectMCPServer
+	var (
+		sess *mcp.ClientSession
+		err  error
+	)
+	if connect != nil {
+		sess, _, err = connect(ctx, rec)
+	} else {
+		sess, _, err = connectMCPServerWithEnv(ctx, rec, extraCopy)
 	}
-	sess, _, err := connect(ctx, rec)
 	if err != nil {
 		return nil, err
 	}

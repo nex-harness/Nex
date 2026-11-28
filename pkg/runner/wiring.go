@@ -403,10 +403,12 @@ func (w *DefaultRuntimeWiring) PrepareSession(
 	var extraTools []tools.Tool
 	var extraSections []ai.SystemSection
 
-	// 0. Hot-discover workspace/user .mcp.json servers so newly written .mcp.json takes effect immediately
+	// 0. Hot-discover workspace/user .mcp.json servers & inject effective Vault credentials into MCP processes
 	if localDiscovered := codemode.DiscoverLocalMCPServers(sess.WorkspacePath, ""); len(localDiscovered) > 0 {
 		w.mcpPool.MergeDiscoveredServers(localDiscovered)
 	}
+	credEnv, _ := node.store.ResolveEffectiveEnv(ctx, node.cfg.RunnerID, sess.WorkspacePath, "chat", nil)
+	w.mcpPool.SetExtraEnv(credEnv)
 
 	// 1. Mount MCP `codemode` sandbox tool (enforcing plugin hooks + interactive approvals on every inner call!)
 	approver := &runnerApprover{node: node, sessionID: sess.ID, hasUI: hasUI}

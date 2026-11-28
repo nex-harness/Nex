@@ -198,3 +198,70 @@ func TestLazyHydrateDiscoveredMCPInCodemode(t *testing.T) {
 		t.Fatalf("lazy describeTool failed: err=%v out=%s", err, res3.Output)
 	}
 }
+
+func TestExtraEnvExpansionMergingAndSetExtraEnvInvalidation(t *testing.T) {
+	extra := map[string]string{
+		"MTEAM_API_KEY": "vault-secret-123",
+	}
+	expanded := expandEnvPlaceholdersWithExtra("Bearer ${MTEAM_API_KEY}", extra)
+	if expanded != "Bearer vault-secret-123" {
+		t.Fatalf("expected extraEnv placeholder expansion, got %q", expanded)
+	}
+
+	merged := mergeEnvVars(
+		[]string{"PATH=/usr/bin", "MTEAM_API_KEY=stale-os-val"},
+		extra,
+		map[string]string{"MTEAM_API_BASE": "https://api.m-team.io/api"},
+	)
+	kv := map[string]string{}
+	counts := map[string]int{}
+	for _, entry := range merged {
+		k, v, ok := strings.Cut(entry, "=")
+		if ok {
+			kv[k] = v
+			counts[k]++
+		}
+	}
+	if kv["MTEAM_API_KEY"] != "vault-secret-123" || kv["MTEAM_API_BASE"] != "https://api.m-team.io/api" {
+		t.Fatalf("unexpected merged env: %+v", kv)
+	}
+	if counts["MTEAM_API_KEY"] != 1 {
+		t.Fatalf("expected no duplicate keys in merged env, count=%d", counts["MTEAM_API_KEY"])
+	}
+
+	// Verify SetExtraEnv closes live connections only when values change
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool := NewPool(nil)
+	defer pool.Close()
+
+	var connects int
+	pool.connectFn = func(cctx context.Context, _ store.MCPServerRecord) (*mcp.ClientSession, *bytes.Buffer, error) {
+		connects++
+		srv := mcp.NewServer(&mcp.Implementation{Name: "mock-env", Version: "1.0.0"}, nil)
+		srvTr, cliTr := mcp.NewInMemoryTransports()
+		if _, err := srv.Connect(ctx, srvTr, nil); err != nil {
+			return nil, nil, err
+		}
+		cli := mcp.NewClient(&mcp.Implementation{Name: "nex-test", Version: "1.0.0"}, nil)
+		cs, err := cli.Connect(cctx, cliTr, nil)
+		return cs, nil, err
+	}
+	pool.SyncServers([]store.MCPServerRecord{{Name: "mteam", HostMode: "runner_local", Command: "mock", Enabled: true}})
+
+	if err := pool.EnsureNamespaceHydrated(ctx, "mteam"); err != nil {
+		t.Fatal(err)
+	}
+	pool.SetExtraEnv(map[string]string{"MTEAM_API_KEY": "k1"})
+	// Same env again -> should keep existing liveConns untouched (even if hydrated)
+	pool.SetExtraEnv(map[string]string{"MTEAM_API_KEY": "k1"})
+	if connects != 1 {
+		t.Fatalf("expected 1 connect before respawn, got %d", connects)
+	}
+	if _, err := pool.getOrSpawnLocalSession(ctx, pool.servers["mteam"]); err != nil {
+		t.Fatal(err)
+	}
+	if connects != 2 {
+		t.Fatalf("expected SetExtraEnv change to close live conn and trigger respawn, got %d connects", connects)
+	}
+}
