@@ -88,6 +88,9 @@ jobs:
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-relay-${VER_TAG}-darwin-arm64" ./cmd/nex-relay
           CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-relay-${VER_TAG}-darwin-amd64" ./cmd/nex-relay
 
+          # Package Nex Browser Bridge MV3 extension (Chrome / Edge / headless=new Chromium)
+          (cd clients/browser-ext && zip -r "../../dist/artifacts/nex-browser-ext-${VER_TAG}.zip" .)
+
       - name: Upload Server Artifacts
         uses: actions/upload-artifact@v4
         with:

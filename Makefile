@@ -1,4 +1,4 @@
-.PHONY: test test-web verify-nocgo build-web build build-runners package-server run-local clean client-generate client-dev client-dev-ios client-dev-android build-clients-desktop build-client-ios build-client-android
+.PHONY: test test-web verify-nocgo build-web build build-runners package-server package-browser-ext run-local clean client-generate client-dev client-dev-ios client-dev-android build-clients-desktop build-client-ios build-client-android
 
 NODE_PATH_DIR := $(shell dirname "$$(command -v node 2>/dev/null || echo /Users/tylinux/.nvm/versions/node/v23.9.0/bin/node)")
 MYGO_CLI := go run github.com/egoist/mygo/cmd/mygo@v0.10.0
@@ -34,6 +34,10 @@ build-runners:
 
 package-server:
 	./scripts/package-server.sh
+
+package-browser-ext:
+	mkdir -p dist
+	cd clients/browser-ext && zip -r ../../dist/nex-browser-ext.zip .
 
 run-local: build
 	./scripts/start-local.sh
