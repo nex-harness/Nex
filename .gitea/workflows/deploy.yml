@@ -42,7 +42,7 @@ jobs:
         run: |
           BASE_VER="$(node -p "require('./mygo.json').version")"
           SHA="$(git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)"
-          VER="v${BASE_VER#v}"
+          VER="v${BASE_VER#v}-local"
           export VERSION="$VER"
           export COMMIT_SHA="$SHA"
           mkdir -p dist/runners

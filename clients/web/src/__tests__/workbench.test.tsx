@@ -6456,6 +6456,7 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     expect(formatRunnerVersion('v0.4.0', '49019b2')).toBe('v0.4.0(49019b2)');
     expect(formatRunnerVersion('v0.4.0+49019b2')).toBe('v0.4.0(49019b2)');
     expect(formatRunnerVersion('0.4.0', '')).toBe('v0.4.0');
+    expect(formatRunnerVersion('v0.4.1-local', '704f4c9')).toBe('v0.4.1-local(704f4c9)');
     expect(formatRunnerVersion('1dd48cf', '')).toBe('1dd48cf');
     expect(formatRunnerVersion('dev', '49019b2')).toBe('dev(49019b2)');
   });

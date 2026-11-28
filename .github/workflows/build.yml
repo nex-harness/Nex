@@ -2,10 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [main, feat/nex-v3]
     tags: ["v*"]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -14,7 +11,7 @@ permissions:
 
 env:
   # Fallback app version for non-tag builds; tag builds use the tag name.
-  APP_VERSION_FALLBACK: "0.4.0"
+  APP_VERSION_FALLBACK: "0.4.1"
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
 jobs:
@@ -430,7 +427,7 @@ jobs:
   docker-images:
     needs: [resolve-version, server-artifacts]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
