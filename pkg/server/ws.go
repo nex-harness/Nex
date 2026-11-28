@@ -196,6 +196,9 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 		case protocol.TypeMemorySync:
 			go s.handleRunnerMemorySync(ctx, env)
 
+		case protocol.TypeCronManage:
+			go s.handleRunnerCronManage(ctx, rc, env)
+
 		case protocol.TypeRunnerUpdateStatus:
 			var st protocol.RunnerUpdateStatusPayload
 			if json.Unmarshal(env.Payload, &st) == nil {

@@ -467,8 +467,17 @@ func (w *DefaultRuntimeWiring) PrepareSession(
 	})
 	extraTools = append(extraTools, subTools...)
 
-	// 3. Mount plugin-registered custom tools
+	// 3. Mount plugin-registered custom tools + schedule_task automation tool
 	extraTools = append(extraTools, reg.Tools()...)
+	if sess.Depth == 0 {
+		extraTools = append(extraTools, &scheduleTaskTool{
+			node:           node,
+			workspacePath:  sess.WorkspacePath,
+			providerID:     sess.ProviderID,
+			modelID:        sess.ModelID,
+			thinkingEffort: sess.ThinkingEffort,
+		})
+	}
 
 	return extraTools, extraSections, reg, func() {}, nil
 }

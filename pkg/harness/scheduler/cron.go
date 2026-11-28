@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kardianos/service"
+	"github.com/nex-harness/nex/pkg/ai"
 	"github.com/nex-harness/nex/pkg/protocol"
 	"github.com/nex-harness/nex/pkg/store"
 	"github.com/robfig/cron/v3"
@@ -139,6 +140,9 @@ func BuildPromptForCron(job store.CronJobRecord) protocol.PromptPayload {
 		SessionID:         fmt.Sprintf("sess_cron_%s_%d", job.ID, time.Now().UnixNano()),
 		RunnerID:          job.RunnerID,
 		WorkspacePath:     job.WorkspacePath,
+		ProviderID:        job.ProviderID,
+		ModelID:           job.ModelID,
+		ThinkingEffort:    ai.ThinkingEffort(job.ThinkingEffort),
 		PermissionMode:    perm,
 		CronCredentialIDs: job.CredentialIDs,
 		Text:              job.Prompt,

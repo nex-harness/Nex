@@ -298,6 +298,9 @@ export interface CronJobRecord {
   timezone: string;
   prompt: string;
   workspace_path: string;
+  provider_id?: string;
+  model_id?: string;
+  thinking_effort?: string;
   permission_mode: string;
   credential_ids?: string[];
   recurring: boolean;

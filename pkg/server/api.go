@@ -1277,17 +1277,68 @@ func (s *Server) handleCronJobs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCronDelete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+	rest := strings.TrimPrefix(r.URL.Path, "/api/v1/cron/")
+	rest = strings.Trim(rest, "/")
+	if rest == "" {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	id := strings.TrimPrefix(r.URL.Path, "/api/v1/cron/")
-	if err := s.store.DeleteCronJob(r.Context(), id); err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
+	parts := strings.Split(rest, "/")
+	id := parts[0]
+	action := ""
+	if len(parts) > 1 {
+		action = parts[1]
+	}
+
+	if action == "run" && r.Method == http.MethodPost {
+		jobs, err := s.store.ListCronJobs(r.Context(), "")
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		var found *store.CronJobRecord
+		for i := range jobs {
+			if jobs[i].ID == id {
+				found = &jobs[i]
+				break
+			}
+		}
+		if found == nil {
+			writeErr(w, http.StatusNotFound, fmt.Errorf("cron job %q not found", id))
+			return
+		}
+		targetRunner := strings.TrimSpace(found.RunnerID)
+		if targetRunner == "" {
+			targetRunner = s.firstOnlineRunnerID()
+		}
+		if targetRunner == "" || !s.isRunnerOnline(targetRunner) {
+			writeErr(w, http.StatusBadGateway, fmt.Errorf("runner %q is offline", targetRunner))
+			return
+		}
+		env, err := protocol.NewEnvelope(protocol.TypeCronRunNow, protocol.CronRunNowPayload{Job: *found})
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		env.RunnerID = targetRunner
+		if _, err := s.callRunnerRPC(r.Context(), targetRunner, env, 15*time.Second); err != nil {
+			writeErr(w, http.StatusBadGateway, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "job_id": id, "runner_id": targetRunner})
 		return
 	}
-	s.BroadcastConfigSync(r.Context())
-	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+
+	if action == "" && r.Method == http.MethodDelete {
+		if err := s.store.DeleteCronJob(r.Context(), id); err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		s.BroadcastConfigSync(r.Context())
+		writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+		return
+	}
+	w.WriteHeader(http.StatusMethodNotAllowed)
 }
 
 func (s *Server) deleteRegistryHandler(w http.ResponseWriter, r *http.Request, prefix, table, col string) {

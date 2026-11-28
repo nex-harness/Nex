@@ -1,17 +1,18 @@
 import { formatEffortLabel, resolveEffortLevels } from '../core/effort';
 import { formatMsg, type LocaleCode } from '../i18n/messages';
 import type { MessageKey } from '../i18n/locales/en-US';
-import { ChevronRight, LoaderCircle, Pencil, Search, Sparkles, Trash2 } from 'lucide-react';
+import { ChevronRight, LoaderCircle, MessageSquarePlus, Pencil, Play, Search, Sparkles, Trash2, X } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { apiFetch } from '../core/protocol';
 import { useNexStore } from '../core/store';
-import type { AgentProfile, ModelMeta, ProviderRecord, ThinkingEffort } from '../core/types';
+import type { AgentProfile, CronJobRecord, ModelMeta, ProviderRecord, ThinkingEffort } from '../core/types';
 import { CodeEditorWithHighlight, HighlightedCode } from './MarkdownRenderer';
 import { MCPManagerSection } from './SettingsMCP';
 import { SkillsManagerSection } from './SettingsSkills';
 import {
   SectionHeading,
   SettingsGroupCard,
+  Toggle,
   settingsInputClass,
   settingsMonoInputClass,
   settingsSelectClass,
@@ -701,21 +702,138 @@ export function SkillsAndPluginsSection({
 /* Automations                                                                */
 /* -------------------------------------------------------------------------- */
 
+type ScheduleFrequency = 'daily' | 'weekdays' | 'every_n_days' | 'hourly' | 'custom';
+
+interface ParsedSchedule {
+  freq: ScheduleFrequency;
+  time: string; // HH:MM
+  intervalDays: number;
+  minute: number;
+}
+
+function parseCronToSimple(expr: string): ParsedSchedule {
+  const parts = expr.trim().split(/\s+/);
+  if (parts.length !== 5) {
+    return { freq: 'custom', time: '09:00', intervalDays: 3, minute: 0 };
+  }
+  const [min, hour, dom, mon, dow] = parts;
+  const pad2 = (n: number) => String(n).padStart(2, '0');
+  const minNum = /^\d+$/.test(min) ? Number(min) : -1;
+  const hourNum = /^\d+$/.test(hour) ? Number(hour) : -1;
+
+  if (minNum >= 0 && minNum <= 59 && hour === '*' && dom === '*' && mon === '*' && dow === '*') {
+    return { freq: 'hourly', time: `09:${pad2(minNum)}`, intervalDays: 3, minute: minNum };
+  }
+  if (minNum >= 0 && minNum <= 59 && hourNum >= 0 && hourNum <= 23 && mon === '*') {
+    const time = `${pad2(hourNum)}:${pad2(minNum)}`;
+    if (dom === '*' && dow === '*') {
+      return { freq: 'daily', time, intervalDays: 3, minute: minNum };
+    }
+    if (dom === '*' && dow === '1-5') {
+      return { freq: 'weekdays', time, intervalDays: 3, minute: minNum };
+    }
+    const domMatch = dom.match(/^\*\/(\d+)$/);
+    if (domMatch && dow === '*') {
+      return { freq: 'every_n_days', time, intervalDays: Math.max(1, Number(domMatch[1])), minute: minNum };
+    }
+  }
+  return { freq: 'custom', time: '09:00', intervalDays: 3, minute: 0 };
+}
+
+function buildCronFromSimple(p: ParsedSchedule, fallbackCron: string): string {
+  const [hStr, mStr] = p.time.split(':');
+  const h = Math.min(23, Math.max(0, Number(hStr) || 0));
+  const m = Math.min(59, Math.max(0, Number(mStr) || 0));
+  switch (p.freq) {
+    case 'daily':
+      return `${m} ${h} * * *`;
+    case 'weekdays':
+      return `${m} ${h} * * 1-5`;
+    case 'every_n_days':
+      return `${m} ${h} */${Math.max(1, Math.min(31, p.intervalDays || 1))} * *`;
+    case 'hourly':
+      return `${Math.min(59, Math.max(0, p.minute || 0))} * * * *`;
+    default:
+      return fallbackCron;
+  }
+}
+
+function formatCronHuman(locale: LocaleCode, expr: string): string {
+  const trimmed = expr.trim();
+  const parts = trimmed.split(/\s+/);
+  if (parts.length !== 5) return trimmed;
+  const [min, hour, dom, mon, dow] = parts;
+  const pad2 = (n: number) => String(n).padStart(2, '0');
+  const minStep = min.match(/^\*\/(\d+)$/);
+  if (minStep && hour === '*' && dom === '*' && mon === '*' && dow === '*') {
+    return formatMsg(locale, 'capabilities.schedule.everyNMinutes', { n: Number(minStep[1]) });
+  }
+  const p = parseCronToSimple(trimmed);
+  if (p.freq === 'hourly') {
+    return formatMsg(locale, 'capabilities.schedule.hourlyAt', { min: pad2(p.minute) });
+  }
+  if (p.freq === 'daily') {
+    return formatMsg(locale, 'capabilities.schedule.dailyAt', { time: p.time });
+  }
+  if (p.freq === 'weekdays') {
+    return formatMsg(locale, 'capabilities.schedule.weekdaysAt', { time: p.time });
+  }
+  if (p.freq === 'every_n_days') {
+    return formatMsg(locale, 'capabilities.schedule.everyNDaysAt', { n: p.intervalDays, time: p.time });
+  }
+  return trimmed;
+}
+
 export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void }) {
-  const { locale, runners, cronJobs, credentials, selectedRunnerId, refreshRegistries } = useNexStore();
+  const {
+    locale,
+    runners,
+    providers,
+    models,
+    cronJobs,
+    credentials,
+    selectedRunnerId,
+    refreshRegistries,
+    closeSettings,
+    startNewSession,
+    setComposerText,
+  } = useNexStore();
 
-  const [runnerId, setRunnerId] = useState(selectedRunnerId || runners[0]?.id || '');
-  const [title, setTitle] = useState(
-    formatMsg(locale, 'capabilities.dailyWorkspaceHealthCheckAt'),
-  );
-  const [cronExpr, setCronExpr] = useState('0 9 * * *');
-  const [prompt, setPrompt] = useState(
-    formatMsg(locale, 'capabilities.runTheTestSuiteAnd'),
-  );
-  const [selectedCredIds, setSelectedCredIds] = useState<string[]>([]);
+  const [editingJob, setEditingJob] = useState<CronJobRecord | null>(null);
+  const [runningId, setRunningId] = useState<string | null>(null);
 
-  const eligibleCronCreds = useMemo(() => {
-    const target = runnerId || runners[0]?.id || '';
+  // Edit modal state
+  const [editRunnerId, setEditRunnerId] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [editCronExpr, setEditCronExpr] = useState('0 9 * * *');
+  const [editFreq, setEditFreq] = useState<ScheduleFrequency>('daily');
+  const [editTime, setEditTime] = useState('09:00');
+  const [editIntervalDays, setEditIntervalDays] = useState(3);
+  const [editMinute, setEditMinute] = useState(0);
+  const [editPrompt, setEditPrompt] = useState('');
+  const [editModelKey, setEditModelKey] = useState('');
+  const [editCredIds, setEditCredIds] = useState<string[]>([]);
+  const [editEnabled, setEditEnabled] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const modelOptions = useMemo(() => {
+    const providerMap = new Map(providers.map((p) => [p.id, p]));
+    const out: Array<{ key: string; providerId: string; modelId: string; label: string }> = [];
+    for (const m of models) {
+      const p = providerMap.get(m.provider_id);
+      if (p && !p.enabled) continue;
+      out.push({
+        key: `${m.provider_id}::${m.id}`,
+        providerId: m.provider_id,
+        modelId: m.id,
+        label: `${p?.name || m.provider_id} / ${m.display_name || m.id}`,
+      });
+    }
+    return out;
+  }, [providers, models]);
+
+  const eligibleEditCreds = useMemo(() => {
+    const target = editRunnerId || selectedRunnerId || runners[0]?.id || '';
     return credentials.filter((c) => {
       if (!c.enabled || c.usage_policy === 'chat_only') return false;
       if (c.target_runners && c.target_runners.length > 0 && target && !c.target_runners.includes(target)) {
@@ -723,122 +841,161 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
       }
       return true;
     });
-  }, [credentials, runnerId, runners]);
+  }, [credentials, editRunnerId, selectedRunnerId, runners]);
 
-  const toggleCred = (id: string) => {
-    setSelectedCredIds((prev) =>
+  const openEditModal = (job: CronJobRecord) => {
+    setEditingJob(job);
+    setEditRunnerId(job.runner_id || selectedRunnerId || runners[0]?.id || '');
+    setEditTitle(job.title || '');
+    setEditCronExpr(job.cron_expr || '0 9 * * *');
+    const parsed = parseCronToSimple(job.cron_expr || '0 9 * * *');
+    setEditFreq(parsed.freq);
+    setEditTime(parsed.time);
+    setEditIntervalDays(parsed.intervalDays);
+    setEditMinute(parsed.minute);
+    setEditPrompt(job.prompt || '');
+    setEditModelKey(job.provider_id && job.model_id ? `${job.provider_id}::${job.model_id}` : '');
+    setEditCredIds(job.credential_ids || []);
+    setEditEnabled(job.enabled !== false);
+  };
+
+  const handleFreqChange = (nextFreq: ScheduleFrequency) => {
+    setEditFreq(nextFreq);
+    if (nextFreq !== 'custom') {
+      setEditCronExpr(
+        buildCronFromSimple(
+          { freq: nextFreq, time: editTime, intervalDays: editIntervalDays, minute: editMinute },
+          editCronExpr,
+        ),
+      );
+    }
+  };
+
+  const handleTimeChange = (nextTime: string) => {
+    setEditTime(nextTime);
+    setEditCronExpr(
+      buildCronFromSimple(
+        { freq: editFreq, time: nextTime, intervalDays: editIntervalDays, minute: editMinute },
+        editCronExpr,
+      ),
+    );
+  };
+
+  const handleIntervalDaysChange = (days: number) => {
+    const clamped = Math.max(1, Math.min(31, days || 1));
+    setEditIntervalDays(clamped);
+    setEditCronExpr(
+      buildCronFromSimple(
+        { freq: editFreq, time: editTime, intervalDays: clamped, minute: editMinute },
+        editCronExpr,
+      ),
+    );
+  };
+
+  const handleMinuteChange = (minute: number) => {
+    const clamped = Math.max(0, Math.min(59, minute || 0));
+    setEditMinute(clamped);
+    setEditCronExpr(
+      buildCronFromSimple(
+        { freq: editFreq, time: editTime, intervalDays: editIntervalDays, minute: clamped },
+        editCronExpr,
+      ),
+    );
+  };
+
+  const toggleEditCred = (id: string) => {
+    setEditCredIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   };
 
-  const createCron = async () => {
-    const targetRunner = runnerId || runners[0]?.id || 'local';
+  const saveEditedJob = async () => {
+    if (!editingJob) return;
+    setSaving(true);
+    try {
+      const [providerId, modelId] = editModelKey ? editModelKey.split('::') : ['', ''];
+      await apiFetch('/api/v1/cron', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...editingJob,
+          runner_id: editRunnerId || editingJob.runner_id || runners[0]?.id || 'local',
+          title: editTitle.trim() || editingJob.title,
+          cron_expr: editCronExpr.trim(),
+          timezone: editingJob.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local',
+          prompt: editPrompt,
+          provider_id: providerId || '',
+          model_id: modelId || '',
+          credential_ids: editCredIds,
+          enabled: editEnabled,
+        }),
+      });
+      await refreshRegistries();
+      setEditingJob(null);
+      onFlash(formatMsg(locale, 'capabilities.automationScheduledOnRunner', { title: editTitle.trim() || editingJob.title }));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleJobEnabled = async (job: CronJobRecord) => {
     await apiFetch('/api/v1/cron', {
       method: 'POST',
       body: JSON.stringify({
-        runner_id: targetRunner,
-        title: title.trim(),
-        cron_expr: cronExpr.trim(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local',
-        prompt,
-        permission_mode: 'autonomous',
-        credential_ids: selectedCredIds,
-        recurring: true,
-        enabled: true,
+        ...job,
+        enabled: !job.enabled,
       }),
     });
-    setSelectedCredIds([]);
     await refreshRegistries();
-    onFlash(
-      formatMsg(locale, 'capabilities.automationScheduledOnRunner', { title }),
-    );
   };
 
+  const triggerTestRun = async (job: CronJobRecord) => {
+    if (!job.id || runningId) return;
+    setRunningId(job.id);
+    try {
+      await apiFetch(`/api/v1/cron/${encodeURIComponent(job.id)}/run`, {
+        method: 'POST',
+      });
+      onFlash(formatMsg(locale, 'capabilities.automationTriggered', { title: job.title }));
+    } catch {
+      onFlash(formatMsg(locale, 'capabilities.automationTriggerFailed'));
+    } finally {
+      setRunningId(null);
+    }
+  };
+
+  const handleCreateInChat = () => {
+    closeSettings();
+    startNewSession();
+    setComposerText('/schedule ');
+  };
+
+  const runnerNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of runners) map.set(r.id, r.name || r.id);
+    return map;
+  }, [runners]);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Conversational creation CTA */}
       <SettingsGroupCard>
-        <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-3">
-          <Field label={formatMsg(locale, 'capabilities.runner')}>
-            <select
-              value={runnerId}
-              onChange={(e) => setRunnerId(e.target.value)}
-              className={settingsSelectClass}
-            >
-              {runners.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name} ({r.os})
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label={formatMsg(locale, 'common.title')}>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className={settingsInputClass}
-            />
-          </Field>
-          <Field
-            label={formatMsg(locale, 'capabilities.cronExpression')}
-            description={formatMsg(locale, 'capabilities.runsInTheRunnerTimezone')}
-          >
-            <input
-              value={cronExpr}
-              onChange={(e) => setCronExpr(e.target.value)}
-              placeholder="*/30 * * * *"
-              className={settingsMonoInputClass}
-            />
-          </Field>
-        </div>
-        <div className="space-y-3 px-5 py-4">
-          <Field
-            label={formatMsg(locale, 'capabilities.prompt')}
-            description={
-              formatMsg(locale, 'capabilities.executedAutonomouslyWhenTheSchedule')
-            }
-          >
-            <textarea
-              rows={3}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              className={areaClass}
-            />
-          </Field>
-          {eligibleCronCreds.length > 0 && (
-            <Field
-              label={formatMsg(locale, 'automations.credentialGroups.label')}
-              description={formatMsg(locale, 'automations.credentialGroups.desc')}
-            >
-              <div className="flex flex-wrap gap-2">
-                {eligibleCronCreds.map((c) => {
-                  const active = selectedCredIds.includes(c.id);
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => toggleCred(c.id)}
-                      className={`rounded-lg border px-2.5 py-1 text-ui-xs transition-colors ${
-                        active
-                          ? 'border-brand-blue bg-brand-blue/10 font-medium text-foreground'
-                          : 'border-border bg-surface text-foreground-subtle hover:bg-hover'
-                      }`}
-                    >
-                      {c.name}
-                      {c.usage_policy === 'cron_explicit'
-                        ? formatMsg(locale, 'automations.credentialGroups.explicitSuffix')
-                        : ''}
-                    </button>
-                  );
-                })}
-              </div>
-            </Field>
-          )}
-          <div className="flex justify-end">
-            <SaveButton
-              label={formatMsg(locale, 'capabilities.createAutomation')}
-              onClick={() => void createCron()}
-            />
+        <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-ui-base font-medium text-foreground">
+              {formatMsg(locale, 'capabilities.createViaChatTitle')}
+            </div>
+            <p className="mt-0.5 text-ui-sm text-foreground-subtle">
+              {formatMsg(locale, 'capabilities.createViaChatHint')}
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={handleCreateInChat}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-foreground px-3.5 py-2 text-ui-sm font-medium text-background transition-opacity hover:opacity-90"
+          >
+            <MessageSquarePlus className="size-4" />
+            {formatMsg(locale, 'capabilities.createInChat')}
+          </button>
         </div>
       </SettingsGroupCard>
 
@@ -850,37 +1007,267 @@ export function AutomationsSection({ onFlash }: { onFlash: (msg: string) => void
         {cronJobs.length === 0 ? (
           <EmptyRow>{formatMsg(locale, 'capabilities.noAutomationsYet')}</EmptyRow>
         ) : (
-          cronJobs.map((j) => (
-            <div key={j.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-ui-base font-medium text-foreground">{j.title}</span>
-                  <MetaBadge mono>{j.cron_expr}</MetaBadge>
-                  <span className="text-ui-xs text-foreground-subtlest">
-                    {formatMsg(locale, 'capabilities.runs', { runner_id: j.runner_id, v: j.run_count || 0 })}
-                  </span>
-                </div>
-                <p className="mt-0.5 truncate text-ui-sm text-foreground-subtle">{j.prompt}</p>
-              </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (j.id) {
-                    await apiFetch(`/api/v1/cron/${encodeURIComponent(j.id)}`, {
-                      method: 'DELETE',
-                    });
-                    await refreshRegistries();
-                  }
-                }}
-                aria-label={formatMsg(locale, 'capabilities.deleteAutomation')}
-                className="flex size-7 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
+          cronJobs.map((j) => {
+            const isRunning = runningId === j.id;
+            const modelBadge = j.model_id || formatMsg(locale, 'capabilities.defaultModel');
+            return (
+              <div
+                key={j.id}
+                className={`flex items-center justify-between gap-3 px-5 py-3.5 ${j.enabled === false ? 'opacity-60' : ''}`}
               >
-                <Trash2 className="size-4" />
-              </button>
-            </div>
-          ))
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-ui-base font-medium text-foreground">{j.title}</span>
+                    <MetaBadge>{formatCronHuman(locale, j.cron_expr)}</MetaBadge>
+                    <MetaBadge mono>{modelBadge}</MetaBadge>
+                    <span className="text-ui-xs text-foreground-subtlest">
+                      {formatMsg(locale, 'capabilities.runs', {
+                        runner_id: runnerNameById.get(j.runner_id) || j.runner_id,
+                        v: j.run_count || 0,
+                      })}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 truncate text-ui-sm text-foreground-subtle">{j.prompt}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Toggle
+                    checked={j.enabled !== false}
+                    onChange={() => void toggleJobEnabled(j)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void triggerTestRun(j)}
+                    disabled={isRunning}
+                    title={formatMsg(locale, 'capabilities.testRunNow')}
+                    aria-label={formatMsg(locale, 'capabilities.testRun')}
+                    className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground disabled:opacity-50"
+                  >
+                    {isRunning ? (
+                      <LoaderCircle className="size-3.5 animate-spin" />
+                    ) : (
+                      <Play className="size-3.5" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(j)}
+                    title={formatMsg(locale, 'capabilities.editAutomation')}
+                    aria-label={formatMsg(locale, 'capabilities.editAutomation')}
+                    className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (j.id) {
+                        await apiFetch(`/api/v1/cron/${encodeURIComponent(j.id)}`, {
+                          method: 'DELETE',
+                        });
+                        await refreshRegistries();
+                      }
+                    }}
+                    aria-label={formatMsg(locale, 'capabilities.deleteAutomation')}
+                    className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-destructive-surface hover:text-destructive-surface-fg"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })
         )}
       </SettingsGroupCard>
+
+      {/* Edit Automation Modal */}
+      {editingJob && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+          onClick={() => setEditingJob(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-border bg-surface shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+              <h3 className="text-ui-base font-semibold text-foreground">
+                {formatMsg(locale, 'capabilities.editAutomation')}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingJob(null)}
+                className="flex size-7 items-center justify-center rounded-md text-foreground-subtle hover:bg-hover hover:text-foreground"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="max-h-[75vh] space-y-4 overflow-y-auto px-5 py-4">
+              <Field label={formatMsg(locale, 'common.title')}>
+                <input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className={settingsInputClass}
+                />
+              </Field>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label={formatMsg(locale, 'capabilities.scheduleFrequency')}>
+                  <select
+                    value={editFreq}
+                    onChange={(e) => handleFreqChange(e.target.value as ScheduleFrequency)}
+                    className={settingsSelectClass}
+                  >
+                    <option value="daily">{formatMsg(locale, 'capabilities.freq.daily')}</option>
+                    <option value="weekdays">{formatMsg(locale, 'capabilities.freq.weekdays')}</option>
+                    <option value="every_n_days">{formatMsg(locale, 'capabilities.freq.everyNDays')}</option>
+                    <option value="hourly">{formatMsg(locale, 'capabilities.freq.hourly')}</option>
+                    <option value="custom">{formatMsg(locale, 'capabilities.freq.custom')}</option>
+                  </select>
+                </Field>
+
+                {(editFreq === 'daily' || editFreq === 'weekdays' || editFreq === 'every_n_days') && (
+                  <Field label={formatMsg(locale, 'capabilities.scheduleTime')}>
+                    <input
+                      type="time"
+                      value={editTime}
+                      onChange={(e) => handleTimeChange(e.target.value)}
+                      className={settingsInputClass}
+                    />
+                  </Field>
+                )}
+
+                {editFreq === 'hourly' && (
+                  <Field label={formatMsg(locale, 'capabilities.scheduleTime')}>
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={editMinute}
+                      onChange={(e) => handleMinuteChange(Number(e.target.value))}
+                      className={settingsInputClass}
+                    />
+                  </Field>
+                )}
+              </div>
+
+              {editFreq === 'every_n_days' && (
+                <Field label={formatMsg(locale, 'capabilities.everyDaysLabel')}>
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={editIntervalDays}
+                    onChange={(e) => handleIntervalDaysChange(Number(e.target.value))}
+                    className={settingsInputClass}
+                  />
+                </Field>
+              )}
+
+              {editFreq === 'custom' && (
+                <Field
+                  label={formatMsg(locale, 'capabilities.cronExpression')}
+                  description={formatMsg(locale, 'capabilities.runsInTheRunnerTimezone')}
+                >
+                  <input
+                    value={editCronExpr}
+                    onChange={(e) => setEditCronExpr(e.target.value)}
+                    placeholder="0 9 * * *"
+                    className={settingsMonoInputClass}
+                  />
+                </Field>
+              )}
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label={formatMsg(locale, 'capabilities.runner')}>
+                  <select
+                    value={editRunnerId}
+                    onChange={(e) => setEditRunnerId(e.target.value)}
+                    className={settingsSelectClass}
+                  >
+                    {runners.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name} ({r.os})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label={formatMsg(locale, 'capabilities.executionModel')}>
+                  <select
+                    value={editModelKey}
+                    onChange={(e) => setEditModelKey(e.target.value)}
+                    className={settingsSelectClass}
+                  >
+                    <option value="">{formatMsg(locale, 'capabilities.defaultModel')}</option>
+                    {modelOptions.map((m) => (
+                      <option key={m.key} value={m.key}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+
+              <Field
+                label={formatMsg(locale, 'capabilities.prompt')}
+                description={formatMsg(locale, 'capabilities.executedAutonomouslyWhenTheSchedule')}
+              >
+                <textarea
+                  rows={4}
+                  value={editPrompt}
+                  onChange={(e) => setEditPrompt(e.target.value)}
+                  className={areaClass}
+                />
+              </Field>
+
+              {eligibleEditCreds.length > 0 && (
+                <Field
+                  label={formatMsg(locale, 'automations.credentialGroups.label')}
+                  description={formatMsg(locale, 'automations.credentialGroups.desc')}
+                >
+                  <div className="flex flex-wrap gap-2">
+                    {eligibleEditCreds.map((c) => {
+                      const active = editCredIds.includes(c.id);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => toggleEditCred(c.id)}
+                          className={`rounded-lg border px-2.5 py-1 text-ui-xs transition-colors ${
+                            active
+                              ? 'border-brand-blue bg-brand-blue/10 font-medium text-foreground'
+                              : 'border-border bg-surface text-foreground-subtle hover:bg-hover'
+                          }`}
+                        >
+                          {c.name}
+                          {c.usage_policy === 'cron_explicit'
+                            ? formatMsg(locale, 'automations.credentialGroups.explicitSuffix')
+                            : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Field>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setEditingJob(null)}
+                className="rounded-lg border border-border px-3.5 py-1.5 text-ui-sm text-foreground-subtle hover:bg-hover"
+              >
+                {formatMsg(locale, 'common.cancel')}
+              </button>
+              <SaveButton
+                label={formatMsg(locale, 'common.save')}
+                onClick={() => {
+                  if (!saving) void saveEditedJob();
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

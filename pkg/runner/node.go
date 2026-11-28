@@ -24,6 +24,7 @@ import (
 	"github.com/nex-harness/nex/pkg/ai"
 	"github.com/nex-harness/nex/pkg/harness/browser"
 	"github.com/nex-harness/nex/pkg/harness/codemode"
+	"github.com/nex-harness/nex/pkg/harness/scheduler"
 	"github.com/nex-harness/nex/pkg/harness/tools"
 	"github.com/nex-harness/nex/pkg/protocol"
 	"github.com/nex-harness/nex/pkg/skills"
@@ -1169,6 +1170,25 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 			reply, _ := protocol.NewEnvelope(protocol.TypeMCPDiscover, found)
 			reply.ReplyTo = env.ID
 			_ = n.sendEnvelope(ctx, reply)
+		}()
+
+	case protocol.TypeCronRunNow:
+		go func() {
+			var req protocol.CronRunNowPayload
+			if err := json.Unmarshal(env.Payload, &req); err != nil {
+				reply, _ := protocol.NewEnvelope(protocol.TypeError, map[string]any{"error": "invalid cron.run_now payload"})
+				reply.ReplyTo = env.ID
+				_ = n.sendEnvelope(ctx, reply)
+				return
+			}
+			// Acknowledge immediately and execute the cron prompt asynchronously
+			reply, _ := protocol.NewEnvelope(protocol.TypeCronRunNow, map[string]any{"ok": true, "job_id": req.Job.ID})
+			reply.ReplyTo = env.ID
+			_ = n.sendEnvelope(ctx, reply)
+			go func() {
+				p := scheduler.BuildPromptForCron(req.Job)
+				_, _ = n.ExecutePrompt(context.Background(), p, "cron", false)
+			}()
 		}()
 
 	case protocol.TypeMCPProbe:

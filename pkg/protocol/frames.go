@@ -61,6 +61,8 @@ const (
 	TypeSkillsDiscover     = "skills.discover"
 	TypeMCPDiscover        = "mcp.discover"
 	TypeMCPProbe           = "mcp.probe"
+	TypeCronRunNow         = "cron.run_now"
+	TypeCronManage         = "cron.manage"
 	TypeCredentialLocalSet = "credential.local_set"
 	TypeCredentialProbe    = "credential.probe"
 
@@ -438,6 +440,18 @@ type MCPDiscoverPayload struct {
 // MCPProbePayload asks a Runner to test-connect a runner_local MCP server and return discovered tools.
 type MCPProbePayload struct {
 	Server store.MCPServerRecord `json:"server"`
+}
+
+// CronRunNowPayload asks a Runner to immediately trigger a cron job for testing/manual execution.
+type CronRunNowPayload struct {
+	Job store.CronJobRecord `json:"job"`
+}
+
+// CronManagePayload is sent from a Runner (via the schedule_task tool) to the Server to create/update/list/delete/run cron jobs.
+type CronManagePayload struct {
+	Action string              `json:"action"` // "create" | "update" | "list" | "delete" | "run_now"
+	JobID  string              `json:"job_id,omitempty"`
+	Job    store.CronJobRecord `json:"job,omitempty"`
 }
 
 // OutboxAckPayload confirms persistence of Runner outbox event IDs / sequences on Server.

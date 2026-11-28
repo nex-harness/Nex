@@ -1434,6 +1434,12 @@ function Composer({
           formatMsg(locale, 'chat.switchToPlanModeExplore'),
       },
       {
+        command: '/schedule',
+        insertText: '/schedule ',
+        badge: formatMsg(locale, 'chat.builtIn'),
+        description: formatMsg(locale, 'chat.scheduleAutomationDesc'),
+      },
+      {
         command: '/compact',
         insertText: '/compact ',
         badge: formatMsg(locale, 'chat.builtIn'),
