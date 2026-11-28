@@ -30,6 +30,7 @@ type Manager struct {
 	cfg                 Config
 	proc                *ManagedProcess
 	cdp                 *CDPClient
+	bridge              *BridgeServer
 	tabsBySession       map[string][]*TabSession
 	activeTabBySession  map[string]string
 	tabsByID            map[string]*TabSession
@@ -120,7 +121,33 @@ func (m *Manager) Close() {
 	m.stopOnce.Do(func() {
 		close(m.stopCh)
 	})
+	m.mu.Lock()
+	br := m.bridge
+	m.bridge = nil
+	m.mu.Unlock()
+	if br != nil {
+		br.Close()
+	}
 	m.shutdownBackend()
+}
+
+// ensureBridge lazily starts the local WebSocket BridgeServer for extension_bridge mode.
+func (m *Manager) ensureBridge() (*BridgeServer, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.bridge != nil {
+		return m.bridge, nil
+	}
+	addr := strings.TrimSpace(os.Getenv("NEX_BROWSER_BRIDGE_ADDR"))
+	if addr == "" {
+		addr = DefaultBridgeListenAddr
+	}
+	br, err := NewBridgeServer(addr)
+	if err != nil {
+		return nil, err
+	}
+	m.bridge = br
+	return br, nil
 }
 
 func (m *Manager) idleReapLoop() {

@@ -142,6 +142,21 @@ func (b *BrowserTool) Execute(ctx context.Context, workDir string, rawArgs json.
 	}
 
 	action := strings.ToLower(strings.TrimSpace(args.Action))
+	if b.mgr.Config().Mode == ModeExtensionBridge {
+		br, err := b.mgr.ensureBridge()
+		if err != nil {
+			return errResult(err), nil
+		}
+		var rawMap map[string]any
+		_ = json.Unmarshal(rawArgs, &rawMap)
+		delete(rawMap, "action")
+		out, err := br.Call(ctx, action, rawMap)
+		if err != nil {
+			return errResult(err), nil
+		}
+		return tools.Result{Output: string(out)}, nil
+	}
+
 	switch action {
 	case "open":
 		if strings.TrimSpace(args.URL) == "" {
