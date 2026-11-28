@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-28
+
+### Added
+- **Autonomous Goal Mode**: Multi-round autonomous Goal Mode with independent verifier, `ConfigSnapshot` sync, inline `GoalDivider`, and Web UI controls.
+- **Conversational `/schedule` Automations**: Natural-language `/schedule` creation, per-job model selection, manual test-run, and redesigned Automations Settings UI.
+- **Auto-Discovered MCP & Lazy Catalog Hydration**: Automatic discovery of workspace `.mcp.json` and user `~/.nex/mcp.json` / `~/.claude/mcp.json` servers with hot merge, plus on-demand `ListTools` lazy hydration in `codemode` (`searchTools` / `describeTool`) and object-argument support.
+- **Multi-Runner Sidebar & Appearance**: Runner filter chips with Morandi tinted or minimal border badge styles (configurable in Appearance), Active & Unread section, recency-sorted smart-collapsing projects, and time-bucketed Recent view.
+- **Runner Rename & Delete Confirmation**: Sticky inline runner renaming (`PATCH /api/v1/runners/{id}`) preserved across reconnects, plus confirmation dialog before removing runners.
+- **Usage Analytics Trend Chart**: Interactive hourly (`24h`) and daily (`7d` / `30d`) stacked Token / Cost / Turns SVG chart with token composition bar, hover inspector, and provider display names.
+- **Update Check & Bilingual Docs**: Server & Desktop update check API integrated into the About modal, plus comprehensive English and Chinese READMEs (`README.md` and `README.zh-CN.md`).
+
+### Changed
+- **Default Permission Mode & Persistence**: Changed default permission mode to `interactive` (confirm before changes) and persisted user selection in `localStorage`.
+- **Model & Provider UX**: Removed auto-seeded placeholder `anthropic`/`openai` providers on fresh startup, hid internal Provider ID input, removed redundant inline model rename button, distinguished Add vs Edit model modal titles, and exposed `PDF`, `Tools`, and `Prompt Cache` capability toggles.
+- **Question Card UX**: Single-select options now auto-advance to the next question or auto-submit on the last question, and question prompts render only inside conversation views (not over Settings).
+- **SSH Runner Deployment**: Unified runner connect actions inside modal and streamlined deployment to version-matched GitHub Release downloads (`remote_install` or local download + SCP).
+- **Conversation Timeline**: Folded intermediate tool-calling narration into a single `WorkGroup` per turn, enabled editing sent messages in the main composer, and kept the abort button visible while running.
+
+### Fixed
+- **Relay `server_proxy` Routing**: Routed `server_proxy` LLM providers over the Runner's active `ServerWSURL` origin so E2EE relay runners work without direct LAN access.
+- **Runner Self-Update & Desktop**: Bypassed lingering idle PTYs on manual runner upgrades, surfaced draining workload details, injected Desktop version into embedded server/runner, defaulted workspace to `$HOME`, and protected embedded runner from deletion.
+- **Web UI & Input**: Fixed Tailwind v4 `.dark` mode contrast, prevented IME Enter confirmation from prematurely sending messages on Safari/WKWebView, deduplicated identical assistant `message_end` events, fixed absolute file preview paths with visible load/error states, fixed literal `{path}` placeholder in Global Instructions heading, and restored macOS titlebar double-click maximize.
+
 ## [0.3.0] - 2026-11-24
 
 ### Added

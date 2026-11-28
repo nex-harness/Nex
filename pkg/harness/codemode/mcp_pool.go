@@ -60,7 +60,7 @@ func (rt *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 }
 
 func connectMCPServer(ctx context.Context, rec store.MCPServerRecord) (*mcp.ClientSession, *bytes.Buffer, error) {
-	client := mcp.NewClient(&mcp.Implementation{Name: "nex-runner", Version: "0.3.0"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "nex-runner", Version: "0.4.0"}, nil)
 	transportKind := strings.ToLower(strings.TrimSpace(rec.Transport))
 	if transportKind == "http" || transportKind == "streamable-http" || (transportKind == "" && strings.TrimSpace(rec.URL) != "") {
 		endpoint := strings.TrimSpace(rec.URL)

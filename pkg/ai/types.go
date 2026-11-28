@@ -6,7 +6,7 @@ import (
 )
 
 // DefaultUserAgent is sent on all outbound HTTP requests to LLM providers and model catalogs.
-const DefaultUserAgent = "Nex/0.3.0"
+const DefaultUserAgent = "Nex/0.4.0"
 
 // Driver identifies the underlying wire protocol used by a Provider.
 type Driver string
