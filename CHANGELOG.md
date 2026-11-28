@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-28
+
+### Added
+- **Desktop & Server Self-Updater**: Cross-platform GitHub Release auto-check, optional auto-download, skip-version persistence, and install prompt across `UpdateBanner`, `AboutModal`, and Settings update preferences.
+- **macOS Release Code Signing & Notarization**: Added conditional Developer ID code signing and Apple Notarization (`NEX_ENABLE_MAC_SIGN`) to GitHub Release CI workflows.
+
+### Changed
+- **Versioned Release Artifacts**: Added `v${VERSION}` tags to all server tarballs, standalone runner/relay binaries, and desktop/mobile release asset filenames.
+- **Runner & Update Version Badges**: Injected base SemVer + `buildSHA` in CI and formatted Runner and target update badges as `vX.Y.Z(sha)`.
+
+### Fixed
+- **MCP Credentials Vault & Workspace Dir**: Injected Nex Credentials Vault environment variables (`ResolveEffectiveEnv`) and workspace `cmd.Dir` into runner-local `.mcp.json` stdio MCP subprocesses.
+
 ## [0.4.0] - 2026-11-28
 
 ### Added

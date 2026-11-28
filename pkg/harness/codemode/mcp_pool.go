@@ -100,7 +100,7 @@ func connectMCPServer(ctx context.Context, rec store.MCPServerRecord) (*mcp.Clie
 }
 
 func connectMCPServerWithEnv(ctx context.Context, rec store.MCPServerRecord, extraEnv map[string]string) (*mcp.ClientSession, *bytes.Buffer, error) {
-	client := mcp.NewClient(&mcp.Implementation{Name: "nex-runner", Version: "0.4.0"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "nex-runner", Version: "0.4.1"}, nil)
 	transportKind := strings.ToLower(strings.TrimSpace(rec.Transport))
 	if transportKind == "http" || transportKind == "streamable-http" || (transportKind == "" && strings.TrimSpace(rec.URL) != "") {
 		endpoint := strings.TrimSpace(expandEnvPlaceholdersWithExtra(rec.URL, extraEnv))
