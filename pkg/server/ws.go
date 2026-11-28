@@ -114,7 +114,14 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 
 	// Send runner.welcome with latest config snapshot and update compatibility verdict
 	snap, _ := s.buildConfigSnapshot(ctx, hello.RunnerID)
-	autoUpdateAllowed := !meta.IsDev &&
+	autoUpdatePref, updateModePref := s.effectiveRunnerUpdatePolicy(ctx)
+	hasMatchedSSH := false
+	if updateModePref == "scp" {
+		hasMatchedSSH = s.hasMatchingSSHTarget(ctx, hello.RunnerID, hello.Name, hello.Hostname)
+	}
+	autoUpdateAllowed := autoUpdatePref &&
+		!(updateModePref == "scp" && hasMatchedSSH) &&
+		!meta.IsDev &&
 		(meta.UpdateStatus == "update_available" || meta.UpdateStatus == "update_required") &&
 		len(meta.DownloadURLs) > 0
 	serverVer := strings.TrimSpace(s.cfg.Version)

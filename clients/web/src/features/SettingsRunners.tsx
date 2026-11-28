@@ -79,6 +79,16 @@ const EMPTY_FORM: SSHFormState = {
   download_url: '',
 };
 
+/** Mirrors Go's `sshTargetRunnerID(name)` so renamed runners stay linked to their SSH target. */
+export function sshTargetRunnerId(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return `run_${slug || 'remote'}`;
+}
+
 /** Formats a runner or target version cleanly as `v0.4.0(49019b2)` when build metadata or SHA is present. */
 export function formatRunnerVersion(version?: string, buildSha?: string): string {
   const rawVer = (version || '').trim();
@@ -195,7 +205,31 @@ function formatRunnerUpdatePhase(locale: LocaleCode, phase?: string, progress?: 
 }
 
 export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {
-  const { locale, runners, sshTargets, refreshInitialData, refreshRegistries, renameRunner, triggerRunnerUpdate, triggerAllRunnersUpdate } = useNexStore();
+  const { locale, runners, sshTargets, preferences, refreshInitialData, refreshRegistries, renameRunner, triggerRunnerUpdate, triggerAllRunnersUpdate } = useNexStore();
+  const [policySaving, setPolicySaving] = useState(false);
+
+  const runnerAutoUpdate = preferences.runner_auto_update ?? true;
+  const runnerUpdateMode: 'self_update' | 'scp' = preferences.runner_update_mode === 'scp' ? 'scp' : 'self_update';
+
+  const saveRunnerUpdatePrefs = async (patch: { runner_auto_update?: boolean; runner_update_mode?: 'self_update' | 'scp' }) => {
+    const nextPrefs = {
+      ...useNexStore.getState().preferences,
+      ...patch,
+    };
+    setPolicySaving(true);
+    try {
+      const saved = await apiFetch<typeof nextPrefs>('/api/v1/preferences', {
+        method: 'PUT',
+        body: JSON.stringify(nextPrefs),
+      });
+      useNexStore.setState({ preferences: saved || nextPrefs });
+      onFlash(formatMsg(locale, 'runners.updatePolicySaved'));
+    } catch (err) {
+      onFlash(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (mountedRef.current) setPolicySaving(false);
+    }
+  };
 
   const [copied, setCopied] = useState(false);
   const [manualModalOpen, setManualModalOpen] = useState(false);
@@ -606,6 +640,20 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
   ).length;
 
   const triggerSingleUpgrade = async (r: RunnerRecord, mode: 'when_idle' | 'immediate') => {
+    const matched = matchSshTargetForRunner(r);
+    if (runnerUpdateMode === 'scp' && matched) {
+      setUpgradingRunnerIds((prev) => ({ ...prev, [r.id]: true }));
+      try {
+        await runTargetAction(matched, 'deploy');
+      } finally {
+        setUpgradingRunnerIds((prev) => {
+          const next = { ...prev };
+          delete next[r.id];
+          return next;
+        });
+      }
+      return;
+    }
     setUpgradingRunnerIds((prev) => ({ ...prev, [r.id]: true }));
     try {
       const res = await triggerRunnerUpdate(r.id, { mode, force: true });
@@ -683,10 +731,11 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
 
   const livePreview = `${form.username.trim() || 'user'}@${form.host.trim() || 'host'}:${form.port.trim() || '22'}`;
 
-  // Map each connected runner to its matching SSH target (by name or hostname).
+  // Map each connected runner to its matching SSH target (by deterministic runner ID, name, or hostname).
   const matchSshTargetForRunner = (r: (typeof runners)[number]): (typeof sshTargets)[number] | undefined =>
     sshTargets.find(
       (t) =>
+        sshTargetRunnerId(t.name) === r.id ||
         t.name.toLowerCase() === r.name.toLowerCase() ||
         (Boolean(r.hostname) && t.host.toLowerCase() === r.hostname!.toLowerCase()),
     );
@@ -1031,7 +1080,11 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                         className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-destructive px-2 text-ui-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                       >
                         {upgrading ? <LoaderCircle className="size-3 animate-spin" /> : <ArrowUpCircle className="size-3" />}
-                        <span>{formatMsg(locale, 'runners.updateNowBtn')}</span>
+                        <span>
+                          {runnerUpdateMode === 'scp' && matchedSsh
+                            ? formatMsg(locale, 'runners.updateViaScpBtn')
+                            : formatMsg(locale, 'runners.updateNowBtn')}
+                        </span>
                       </button>
                     </div>
                   )}
@@ -1059,7 +1112,11 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                         className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-amber-500/40 bg-card px-2 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover disabled:opacity-50"
                       >
                         {upgrading ? <LoaderCircle className="size-3 animate-spin" /> : <ArrowUpCircle className="size-3" />}
-                        <span>{formatMsg(locale, 'runners.updateBtn')}</span>
+                        <span>
+                          {runnerUpdateMode === 'scp' && matchedSsh
+                            ? formatMsg(locale, 'runners.updateViaScpBtn')
+                            : formatMsg(locale, 'runners.updateBtn')}
+                        </span>
                       </button>
                     </div>
                   )}
@@ -1146,6 +1203,58 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
           })
         )}
       </SettingsGroupCard>
+
+      {/* Runner Update Policy Card */}
+      <div className="space-y-3" data-testid="runner-update-policy-card">
+        <SectionHeading
+          title={formatMsg(locale, 'runners.updatePolicyTitle')}
+          description={formatMsg(locale, 'runners.updatePolicyDesc')}
+        />
+        <SettingsGroupCard>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+            <div className="min-w-0">
+              <div className="text-ui-sm font-medium text-foreground">
+                {formatMsg(locale, 'runners.autoUpdateLabel')}
+              </div>
+              <p className="mt-0.5 text-ui-xs text-foreground-subtlest">
+                {formatMsg(locale, 'runners.autoUpdateDesc')}
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              data-testid="runner-auto-update-toggle"
+              checked={runnerAutoUpdate}
+              disabled={policySaving}
+              onChange={(e) => void saveRunnerUpdatePrefs({ runner_auto_update: e.target.checked })}
+              className="size-4 shrink-0 accent-brand-blue"
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+            <div className="min-w-0 flex-1">
+              <div className="text-ui-sm font-medium text-foreground">
+                {formatMsg(locale, 'runners.updateDeliveryLabel')}
+              </div>
+              <p className="mt-0.5 text-ui-xs text-foreground-subtlest">
+                {formatMsg(locale, 'runners.updateDeliveryDesc')}
+              </p>
+            </div>
+            <select
+              data-testid="runner-update-mode-select"
+              value={runnerUpdateMode}
+              disabled={policySaving}
+              onChange={(e) =>
+                void saveRunnerUpdatePrefs({
+                  runner_update_mode: e.target.value === 'scp' ? 'scp' : 'self_update',
+                })
+              }
+              className={`${settingsInputClass} h-8 w-64 shrink-0 text-ui-xs`}
+            >
+              <option value="self_update">{formatMsg(locale, 'runners.updateModeSelfUpdate')}</option>
+              <option value="scp">{formatMsg(locale, 'runners.updateModeScp')}</option>
+            </select>
+          </div>
+        </SettingsGroupCard>
+      </div>
 
       {/* Manual Join Steps Modal */}
       {manualModalOpen && (

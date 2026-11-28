@@ -796,3 +796,73 @@ func TestRunnerPermissionsRPCAndRecordEnrichment(t *testing.T) {
 		t.Fatalf("expected enriched runner full_disk_access=true, got %+v", runners)
 	}
 }
+
+func TestRunnerUpdatePolicyDisablesAutoUpdateOnWelcome(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	// Seed prebuilt linux/amd64 runner so UpdateStatus is update_available
+	runnersDir := t.TempDir()
+	binBytes := []byte("fake-linux-runner-v0.4.1")
+	if err := os.WriteFile(filepath.Join(runnersDir, "nex-runner-linux-amd64"), binBytes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(binBytes)
+	mfBytes, _ := json.Marshal(RunnerManifest{
+		Version: "v0.4.1",
+		Binaries: map[string]RunnerBinaryEntry{
+			"linux/amd64": {
+				Filename:  "nex-runner-linux-amd64",
+				SHA256:    hex.EncodeToString(sum[:]),
+				SizeBytes: int64(len(binBytes)),
+			},
+		},
+	})
+	if err := os.WriteFile(filepath.Join(runnersDir, "manifest.json"), mfBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	disabled := false
+	prefs := store.DefaultUserPreferences()
+	prefs.RunnerAutoUpdate = &disabled
+	if err := st.SaveUserPreferences(ctx, prefs); err != nil {
+		t.Fatal(err)
+	}
+
+	srv, err := New(Config{
+		Store:      st,
+		Version:    "v0.4.1",
+		RunnersDir: runnersDir,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	wsBase := "ws" + strings.TrimPrefix(ts.URL, "http")
+
+	wsConn, welcome := dialTestRunnerHello(t, ctx, wsBase+"/ws/runner", protocol.RunnerHelloPayload{
+		RunnerID:        "run_policy_1",
+		Name:            "PolicyRunner",
+		OS:              "linux",
+		Arch:            "amd64",
+		Version:         "v0.4.0",
+		ProtocolVersion: protocol.ProtocolVersion,
+		Capabilities:    protocol.DefaultRunnerCapabilities,
+	})
+	defer wsConn.Close(websocket.StatusNormalClosure, "")
+	if welcome.UpdateStatus != "update_available" {
+		t.Fatalf("expected update_available, got %+v", welcome)
+	}
+	if welcome.AutoUpdateAllowed {
+		t.Fatalf("expected AutoUpdateAllowed=false when runner_auto_update preference is disabled, got %+v", welcome)
+	}
+}

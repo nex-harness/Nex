@@ -127,6 +127,8 @@ export interface UserPreferences {
   auto_check_updates?: boolean;
   auto_download_updates?: boolean;
   skipped_update_version?: string;
+  runner_auto_update?: boolean;
+  runner_update_mode?: 'self_update' | 'scp';
 }
 
 export type ClientNotificationKind =

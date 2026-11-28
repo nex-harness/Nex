@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -187,7 +188,27 @@ type UserPreferences struct {
 	AutoCheckUpdates             bool                        `json:"auto_check_updates"`
 	AutoDownloadUpdates          bool                        `json:"auto_download_updates"`
 	SkippedUpdateVersion         string                      `json:"skipped_update_version,omitempty"`
+	RunnerAutoUpdate             *bool                       `json:"runner_auto_update,omitempty"`
+	RunnerUpdateMode             string                      `json:"runner_update_mode,omitempty"` // "self_update" | "scp"
 }
+
+// EffectiveRunnerAutoUpdate returns whether runners may automatically self-update (defaults to true).
+func (p UserPreferences) EffectiveRunnerAutoUpdate() bool {
+	if p.RunnerAutoUpdate == nil {
+		return true
+	}
+	return *p.RunnerAutoUpdate
+}
+
+// EffectiveRunnerUpdateMode returns "scp" or "self_update" (defaults to "self_update").
+func (p UserPreferences) EffectiveRunnerUpdateMode() string {
+	if strings.EqualFold(strings.TrimSpace(p.RunnerUpdateMode), "scp") {
+		return "scp"
+	}
+	return "self_update"
+}
+
+func boolPtr(v bool) *bool { return &v }
 
 func DefaultUserPreferences() UserPreferences {
 	return UserPreferences{
@@ -218,6 +239,8 @@ func DefaultUserPreferences() UserPreferences {
 		GoalVerifierModelID:          "",
 		AutoCheckUpdates:             true,
 		AutoDownloadUpdates:          false,
+		RunnerAutoUpdate:             boolPtr(true),
+		RunnerUpdateMode:             "self_update",
 	}
 }
 

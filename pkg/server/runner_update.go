@@ -930,6 +930,39 @@ func (s *Server) handleRunnersUpdateAll(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+func (s *Server) effectiveRunnerUpdatePolicy(ctx context.Context) (autoUpdate bool, updateMode string) {
+	if s.store == nil {
+		return true, "self_update"
+	}
+	prefs, err := s.store.GetUserPreferences(ctx)
+	if err != nil {
+		return true, "self_update"
+	}
+	return prefs.EffectiveRunnerAutoUpdate(), prefs.EffectiveRunnerUpdateMode()
+}
+
+func (s *Server) hasMatchingSSHTarget(ctx context.Context, runnerID, runnerName, hostname string) bool {
+	if s.store == nil {
+		return false
+	}
+	targets, err := s.store.ListSSHTargets(ctx)
+	if err != nil {
+		return false
+	}
+	for _, t := range targets {
+		if sshTargetRunnerID(t.Name) == runnerID {
+			return true
+		}
+		if runnerName != "" && strings.EqualFold(t.Name, runnerName) {
+			return true
+		}
+		if hostname != "" && strings.EqualFold(t.Host, hostname) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) handleRunnerPermissions(w http.ResponseWriter, r *http.Request, runnerID string) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)

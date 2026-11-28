@@ -6529,4 +6529,102 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       globalThis.fetch = origFetch;
     }
   });
+
+  it('matches renamed runners to SSH targets by deterministic runner ID and supports Runner Update Policy (auto-update + SCP deploy)', async () => {
+    const origFetch = globalThis.fetch;
+    const putPrefs: string[] = [];
+    const deployHits: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/v1/preferences') && init?.method === 'PUT') {
+        putPrefs.push(String(init.body || '{}'));
+        return new Response(String(init.body || '{}'), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/v1/ssh/targets/ssh_mac/deploy') && init?.method === 'POST') {
+        deployHits.push(url);
+        return new Response(JSON.stringify({ ok: true, log: 'deployed via scp' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as typeof fetch;
+
+    try {
+      useNexStore.setState({
+        mainView: 'settings',
+        settingsSection: 'runners',
+        preferences: {
+          ...useNexStore.getState().preferences,
+          runner_auto_update: true,
+          runner_update_mode: 'self_update',
+        },
+        sshTargets: [
+          {
+            id: 'ssh_mac',
+            name: 'macM4',
+            host: '192.168.123.22',
+            port: 22,
+            username: 'tylinux',
+            auth_method: 'key',
+            key_path: '~/.ssh/id_ed25519',
+            install_mode: 'scp',
+            install_dir: '~/.nex-runner',
+            workspace_path: '/Users/tylinux',
+            server_ws_url: 'wss://nex.tylinux.cn/ws/runner',
+            last_status: 'deployed',
+            last_error: '',
+            last_log: '',
+          },
+        ],
+        runners: [
+          {
+            id: 'run_macm4',
+            name: 'M4',
+            hostname: 'MacMini-WiFi.lan',
+            os: 'darwin',
+            arch: 'arm64',
+            shell: '/bin/bash',
+            version: 'v0.4.1-local',
+            build_sha: '64cc395',
+            tags: [],
+            status: 'online',
+            last_seen_at: Date.now(),
+            synced_config_rev: 1,
+            workspace_default: '/Users/tylinux',
+            update_status: 'update_available',
+            target_version: 'v0.4.1-local',
+            target_build_sha: '7841c1e',
+          },
+        ],
+      });
+
+      render(<App />);
+
+      // Renamed runner `M4` (id run_macm4) still displays SSH actions from target `macM4`
+      expect(screen.getByTestId('ssh-deploy-ssh_mac')).toBeTruthy();
+
+      // Toggle auto-update OFF and switch delivery mode to SCP
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('runner-auto-update-toggle'));
+      });
+      await act(async () => {
+        fireEvent.change(screen.getByTestId('runner-update-mode-select'), { target: { value: 'scp' } });
+      });
+
+      expect(putPrefs.some((b) => b.includes('"runner_auto_update":false'))).toBe(true);
+      expect(putPrefs.some((b) => b.includes('"runner_update_mode":"scp"'))).toBe(true);
+
+      // Clicking upgrade now triggers SSH SCP deploy
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('upgrade-runner-run_macm4'));
+      });
+      expect(deployHits.length).toBe(1);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });
