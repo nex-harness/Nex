@@ -15,7 +15,7 @@ import {
 } from '../core/store';
 import { wsClient } from '../core/wsClient';
 import { createHostBridge } from '../host/bridge';
-import { parsePastedSSHTarget } from '../features/SettingsRunners';
+import { formatRunnerVersion, parsePastedSSHTarget } from '../features/SettingsRunners';
 import { computeTurnTickLayout } from '../features/ConversationPane';
 import { ConversationStatusPanel } from '../features/ConversationStatusPanel';
 
@@ -6449,5 +6449,14 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       });
       globalThis.fetch = origFetch;
     }
+  });
+
+  it('formats runner and target versions with build SHA cleanly', () => {
+    expect(formatRunnerVersion('0.4.0', '49019b2abcdef')).toBe('v0.4.0(49019b2)');
+    expect(formatRunnerVersion('v0.4.0', '49019b2')).toBe('v0.4.0(49019b2)');
+    expect(formatRunnerVersion('v0.4.0+49019b2')).toBe('v0.4.0(49019b2)');
+    expect(formatRunnerVersion('0.4.0', '')).toBe('v0.4.0');
+    expect(formatRunnerVersion('1dd48cf', '')).toBe('1dd48cf');
+    expect(formatRunnerVersion('dev', '49019b2')).toBe('dev(49019b2)');
   });
 });

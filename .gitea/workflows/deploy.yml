@@ -37,19 +37,20 @@ jobs:
 
       - name: Build Linux amd64 Binaries & Multi-Platform Runners (CGO_ENABLED=0)
         run: |
-          VER="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
-          SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+          BASE_VER="$(node -p "require('./mygo.json').version")"
+          SHA="$(git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)"
+          VER="v${BASE_VER#v}"
           export VERSION="$VER"
           export COMMIT_SHA="$SHA"
           mkdir -p dist/runners
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VER} -X main.buildSHA=${SHA}" -o dist/nex-server ./cmd/nex-server
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VER}" -o dist/nex-runner ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VER}" -o dist/runners/nex-runner-linux-amd64 ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VER}" -o dist/runners/nex-runner-linux-arm64 ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VER}" -o dist/runners/nex-runner-darwin-arm64 ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VER}" -o dist/runners/nex-runner-darwin-amd64 ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VER}" -o dist/runners/nex-runner-windows-amd64.exe ./cmd/nex-runner
-          VERSION="$VER" COMMIT_SHA="${GITHUB_SHA:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}" ./scripts/gen-runner-manifest.sh dist/runners
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VER} -X main.buildSHA=${SHA}" -o dist/nex-runner ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VER} -X main.buildSHA=${SHA}" -o dist/runners/nex-runner-linux-amd64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VER} -X main.buildSHA=${SHA}" -o dist/runners/nex-runner-linux-arm64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VER} -X main.buildSHA=${SHA}" -o dist/runners/nex-runner-darwin-arm64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VER} -X main.buildSHA=${SHA}" -o dist/runners/nex-runner-darwin-amd64 ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VER} -X main.buildSHA=${SHA}" -o dist/runners/nex-runner-windows-amd64.exe ./cmd/nex-runner
+          VERSION="$VER" COMMIT_SHA="$SHA" ./scripts/gen-runner-manifest.sh dist/runners
           SKIP_WEB=1 ./scripts/package-server.sh linux amd64
           ls -lh dist/nex-server dist/nex-runner dist/runners/
 

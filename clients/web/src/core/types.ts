@@ -20,6 +20,7 @@ export interface RunnerRecord {
   update_status?: 'up_to_date' | 'update_available' | 'update_required' | string;
   update_reason?: string;
   target_version?: string;
+  target_build_sha?: string;
   update_phase?: string;
   update_progress?: number;
   update_message?: string;

@@ -492,6 +492,7 @@ func (s *Server) enrichRunnerRecord(ctx context.Context, rec *store.RunnerRecord
 	rec.UpdateStatus = meta.UpdateStatus
 	rec.UpdateReason = meta.UpdateReason
 	rec.TargetVersion = meta.TargetVersion
+	rec.TargetBuildSHA = meta.TargetBuildSHA
 	rec.UpdatePhase = meta.UpdatePhase
 	rec.UpdateProgress = meta.UpdateProgress
 	rec.UpdateMessage = meta.UpdateMessage

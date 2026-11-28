@@ -37,6 +37,7 @@ type RunnerRecord struct {
 	UpdateStatus    string   `json:"update_status,omitempty"` // "up_to_date" | "update_available" | "update_required"
 	UpdateReason    string   `json:"update_reason,omitempty"`
 	TargetVersion   string   `json:"target_version,omitempty"`
+	TargetBuildSHA  string   `json:"target_build_sha,omitempty"`
 	UpdatePhase     string   `json:"update_phase,omitempty"`
 	UpdateProgress  int      `json:"update_progress,omitempty"`
 	UpdateMessage   string   `json:"update_message,omitempty"`

@@ -74,6 +74,43 @@ const EMPTY_FORM: SSHFormState = {
   download_url: '',
 };
 
+/** Formats a runner or target version cleanly as `v0.4.0(49019b2)` when build metadata or SHA is present. */
+export function formatRunnerVersion(version?: string, buildSha?: string): string {
+  const rawVer = (version || '').trim();
+  const rawSha = (buildSha || '').trim();
+  const shortSha = rawSha && rawSha.toLowerCase() !== 'unknown' ? rawSha.slice(0, 7) : '';
+
+  if (!rawVer) {
+    return shortSha;
+  }
+
+  const plusIdx = rawVer.indexOf('+');
+  if (plusIdx > 0) {
+    const baseRaw = rawVer.slice(0, plusIdx).trim();
+    const metaSha = rawVer.slice(plusIdx + 1).trim().slice(0, 7);
+    const base = baseRaw.toLowerCase() === 'dev'
+      ? 'dev'
+      : baseRaw.startsWith('v') || baseRaw.startsWith('V')
+        ? `v${baseRaw.slice(1)}`
+        : `v${baseRaw}`;
+    return metaSha ? `${base}(${metaSha})` : base;
+  }
+
+  if (rawVer.toLowerCase() === 'dev') {
+    return shortSha ? `dev(${shortSha})` : 'dev';
+  }
+
+  if (/^[0-9a-f]{7,40}$/i.test(rawVer)) {
+    return rawVer.slice(0, 7);
+  }
+
+  const base = rawVer.startsWith('v') || rawVer.startsWith('V') ? `v${rawVer.slice(1)}` : `v${rawVer}`;
+  if (shortSha && !base.includes(shortSha)) {
+    return `${base}(${shortSha})`;
+  }
+  return base;
+}
+
 /** Parses pasted SSH targets like `user@host`, `user@host:2222`, or `ssh user@host -p 2222`. */
 export function parsePastedSSHTarget(raw: string): { host?: string; username?: string; port?: string } | null {
   const s = raw.trim();
@@ -737,11 +774,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
             const upgrading = Boolean(upgradingRunnerIds[r.id]);
             const matchedSsh = matchSshTargetForRunner(r);
             const sshLogOpen = matchedSsh ? Boolean(expandedLogs[matchedSsh.id]) : false;
-            const formattedVersion = r.version
-              ? r.version.startsWith('v')
-                ? r.version
-                : formatMsg(locale, 'runners.versionLabel', { version: r.version })
-              : '';
+            const formattedVersion = formatRunnerVersion(r.version, r.build_sha);
             const isRequired = Boolean(r.incompatible || r.update_status === 'update_required');
             const isAvailable = !isRequired && r.update_status === 'update_available';
             const phaseLabel = formatRunnerUpdatePhase(locale, r.update_phase, r.update_progress);
@@ -905,7 +938,9 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       <div className="flex min-w-0 items-center gap-1.5">
                         <AlertTriangle className="size-3.5 shrink-0" />
                         <span className="font-medium">
-                          {formatMsg(locale, 'runners.updateRequired', { version: r.target_version || 'latest' })}
+                          {formatMsg(locale, 'runners.updateRequired', {
+                            version: formatRunnerVersion(r.target_version, r.target_build_sha) || 'latest',
+                          })}
                         </span>
                         {r.update_reason && <span className="truncate opacity-85">— {r.update_reason}</span>}
                       </div>
@@ -929,7 +964,9 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       <div className="flex min-w-0 items-center gap-1.5">
                         <ArrowUpCircle className="size-3.5 shrink-0" />
                         <span className="font-medium">
-                          {formatMsg(locale, 'runners.updateAvailable', { version: r.target_version || 'latest' })}
+                          {formatMsg(locale, 'runners.updateAvailable', {
+                            version: formatRunnerVersion(r.target_version, r.target_build_sha) || 'latest',
+                          })}
                         </span>
                         {r.is_dev && (
                           <span className="truncate opacity-80">({formatMsg(locale, 'runners.devAutoUpdateDisabled')})</span>

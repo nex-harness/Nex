@@ -77,17 +77,21 @@ jobs:
 
           # Standalone nex-runner binaries (versioned filenames)
           VER_TAG="v${VERSION#v}"
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-runner-${VER_TAG}-linux-amd64" ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-runner-${VER_TAG}-linux-arm64" ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-runner-${VER_TAG}-darwin-arm64" ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-runner-${VER_TAG}-darwin-amd64" ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-runner-${VER_TAG}-windows-amd64.exe" ./cmd/nex-runner
+          SHORT_SHA="${GITHUB_SHA:-unknown}"
+          if [ "$SHORT_SHA" != "unknown" ]; then
+            SHORT_SHA="${SHORT_SHA:0:7}"
+          fi
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${SHORT_SHA}" -o "dist/artifacts/nex-runner-${VER_TAG}-linux-amd64" ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${SHORT_SHA}" -o "dist/artifacts/nex-runner-${VER_TAG}-linux-arm64" ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${SHORT_SHA}" -o "dist/artifacts/nex-runner-${VER_TAG}-darwin-arm64" ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${SHORT_SHA}" -o "dist/artifacts/nex-runner-${VER_TAG}-darwin-amd64" ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${SHORT_SHA}" -o "dist/artifacts/nex-runner-${VER_TAG}-windows-amd64.exe" ./cmd/nex-runner
 
           REL_BASE=""
           if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
             REL_BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
           fi
-          VERSION="${VERSION}" COMMIT_SHA="${GITHUB_SHA:-unknown}" RELEASE_BASE_URL="${REL_BASE}" \
+          VERSION="${VERSION}" COMMIT_SHA="${SHORT_SHA}" RELEASE_BASE_URL="${REL_BASE}" \
             OUT_FILE=dist/artifacts/runner-manifest.json \
             ./scripts/gen-runner-manifest.sh dist/artifacts
 
