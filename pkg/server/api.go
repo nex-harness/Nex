@@ -46,6 +46,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/models/test", s.handleModelTest)
 	s.mux.HandleFunc("/api/v1/image/test", s.handleImageTest)
 	s.mux.HandleFunc("/api/v1/classifier/test", s.handleClassifierTest)
+	s.mux.HandleFunc("/api/v1/audio/transcribe", s.handleAudioTranscribe)
 	s.mux.HandleFunc("/api/v1/runners", s.handleRunners)
 	s.mux.HandleFunc("/api/v1/runners/auth", s.handleRunnersAuth)
 	s.mux.HandleFunc("/api/v1/runners/auth/rotate", s.handleRunnersAuthRotate)

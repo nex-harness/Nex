@@ -50,7 +50,7 @@ import {
 } from './SettingsCapabilities';
 import { SettingsBrowserSection } from './SettingsBrowser';
 import { SettingsCredentialsSection } from './SettingsCredentials';
-import { ClassifierSettingsCard, ImageGenerationSettingsCard } from './SettingsMultimodal';
+import { ClassifierSettingsCard, ImageGenerationSettingsCard, VoiceInputSettingsCard } from './SettingsMultimodal';
 import { SettingsRemoteAccessSection } from './SettingsRemoteAccess';
 import { RunnersSettingsSection } from './SettingsRunners';
 
@@ -1465,7 +1465,7 @@ function ProvidersAndModelsSection({
     reorderProviderModels,
   } = useNexStore();
 
-  const [providersTab, setProvidersTab] = useState<'chat' | 'image' | 'classifier'>('chat');
+  const [providersTab, setProvidersTab] = useState<'chat' | 'image' | 'classifier' | 'voice'>('chat');
   const [draft, setDraft] = useState<ProviderDraft | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -1891,6 +1891,7 @@ function ProvidersAndModelsSection({
             { id: 'chat', labelKey: 'settings.providersTabChat' },
             { id: 'image', labelKey: 'settings.providersTabImage' },
             { id: 'classifier', labelKey: 'settings.providersTabClassifier' },
+            { id: 'voice', labelKey: 'settings.providersTabVoice' },
           ] as const
         ).map((tab) => {
           const active = providersTab === tab.id;
@@ -1917,6 +1918,8 @@ function ProvidersAndModelsSection({
         <ImageGenerationSettingsCard onFlash={onFlash} />
       ) : providersTab === 'classifier' ? (
         <ClassifierSettingsCard onFlash={onFlash} />
+      ) : providersTab === 'voice' ? (
+        <VoiceInputSettingsCard onFlash={onFlash} />
       ) : (
       <div className="mt-5 grid grid-cols-1 overflow-hidden rounded-2xl border border-border bg-card md:grid-cols-[220px_minmax(0,1fr)]">
         {/* Left: custom providers */}

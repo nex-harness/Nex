@@ -655,3 +655,263 @@ export function ClassifierSettingsCard({ onFlash }: { onFlash: (msg: string) => 
     </div>
   );
 }
+
+const STT_PRESETS = [
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini-transcribe',
+  },
+  {
+    id: 'groq',
+    label: 'Groq',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    model: 'whisper-large-v3-turbo',
+  },
+  {
+    id: 'siliconflow',
+    label: 'SiliconFlow',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    model: 'FunAudioLLM/SenseVoiceSmall',
+  },
+  {
+    id: 'local',
+    label: 'Local Whisper',
+    baseUrl: 'http://127.0.0.1:8000/v1',
+    model: 'whisper-1',
+  },
+] as const;
+
+export function VoiceInputSettingsCard({ onFlash }: { onFlash: (msg: string) => void }) {
+  const { locale, preferences, refreshInitialData } = useNexStore();
+
+  const [enabled, setEnabled] = useState(preferences?.stt_enabled !== false);
+  const [engine, setEngine] = useState<string>(preferences?.stt_engine || 'auto');
+  const [baseUrl, setBaseUrl] = useState(preferences?.stt_base_url || '');
+  const [apiKey, setApiKey] = useState(preferences?.stt_api_key || '');
+  const [showKey, setShowKey] = useState(false);
+  const [model, setModel] = useState(preferences?.stt_model || 'gpt-4o-mini-transcribe');
+  const [language, setLanguage] = useState(preferences?.stt_language || '');
+  const [autoSend, setAutoSend] = useState(Boolean(preferences?.stt_auto_send));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setEnabled(preferences?.stt_enabled !== false);
+    setEngine(preferences?.stt_engine || 'auto');
+    setBaseUrl(preferences?.stt_base_url || '');
+    setApiKey(preferences?.stt_api_key || '');
+    setModel(preferences?.stt_model || 'gpt-4o-mini-transcribe');
+    setLanguage(preferences?.stt_language || '');
+    setAutoSend(Boolean(preferences?.stt_auto_send));
+  }, [
+    preferences?.stt_enabled,
+    preferences?.stt_engine,
+    preferences?.stt_base_url,
+    preferences?.stt_api_key,
+    preferences?.stt_model,
+    preferences?.stt_language,
+    preferences?.stt_auto_send,
+  ]);
+
+  const persist = async (patch: Partial<UserPreferences>, flashKey?: MessageKey) => {
+    if (!preferences) return;
+    setSaving(true);
+    try {
+      const next: UserPreferences = { ...preferences, ...patch };
+      await apiFetch('/api/v1/preferences', {
+        method: 'POST',
+        body: JSON.stringify(next),
+      });
+      await refreshInitialData();
+      if (flashKey) {
+        onFlash(formatMsg(locale, flashKey));
+      }
+    } catch (err) {
+      onFlash(formatMsg(locale, 'settings.multimodalSaveFailed', { error: String(err) }));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveApi = () => {
+    void persist(
+      {
+        stt_enabled: enabled,
+        stt_engine: engine,
+        stt_base_url: baseUrl.trim(),
+        stt_api_key: apiKey.trim(),
+        stt_model: model.trim() || 'gpt-4o-mini-transcribe',
+        stt_language: language,
+        stt_auto_send: autoSend,
+      },
+      'settings.voiceSaved',
+    );
+  };
+
+  return (
+    <div className="mt-5 space-y-5">
+      <SettingsGroupCard>
+        <SettingsRow
+          label={formatMsg(locale, 'settings.voiceEnabled')}
+          description={formatMsg(locale, 'settings.voiceEnabledDesc')}
+        >
+          <Toggle
+            checked={enabled}
+            onChange={(checked) => {
+              setEnabled(checked);
+              void persist({ stt_enabled: checked });
+            }}
+            label={formatMsg(locale, 'settings.voiceEnabled')}
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          label={formatMsg(locale, 'settings.voiceEngine')}
+          description={formatMsg(locale, 'settings.voiceEngineDesc')}
+        >
+          <select
+            value={engine}
+            onChange={(e) => {
+              const v = e.target.value;
+              setEngine(v);
+              void persist({ stt_engine: v });
+            }}
+            className={`${settingsSelectClass} w-56`}
+          >
+            <option value="auto">{formatMsg(locale, 'settings.voiceEngineAuto')}</option>
+            <option value="api">{formatMsg(locale, 'settings.voiceEngineApi')}</option>
+            <option value="browser">{formatMsg(locale, 'settings.voiceEngineBrowser')}</option>
+          </select>
+        </SettingsRow>
+
+        <SettingsRow
+          label={formatMsg(locale, 'settings.voiceLanguage')}
+          description={formatMsg(locale, 'settings.voiceLanguageDesc')}
+        >
+          <select
+            value={language}
+            onChange={(e) => {
+              const v = e.target.value;
+              setLanguage(v);
+              void persist({ stt_language: v });
+            }}
+            className={`${settingsSelectClass} w-44`}
+          >
+            <option value="">{formatMsg(locale, 'settings.voiceLangAuto')}</option>
+            <option value="zh">{formatMsg(locale, 'settings.voiceLangZh')}</option>
+            <option value="en">{formatMsg(locale, 'settings.voiceLangEn')}</option>
+            <option value="ja">{formatMsg(locale, 'settings.voiceLangJa')}</option>
+          </select>
+        </SettingsRow>
+
+        <SettingsRow
+          label={formatMsg(locale, 'settings.voiceAutoSend')}
+          description={formatMsg(locale, 'settings.voiceAutoSendDesc')}
+        >
+          <Toggle
+            checked={autoSend}
+            onChange={(checked) => {
+              setAutoSend(checked);
+              void persist({ stt_auto_send: checked });
+            }}
+            label={formatMsg(locale, 'settings.voiceAutoSend')}
+          />
+        </SettingsRow>
+      </SettingsGroupCard>
+
+      {engine !== 'browser' && (
+        <SettingsGroupCard>
+          <div className="space-y-4 px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="text-ui-base font-semibold text-foreground">
+                  {formatMsg(locale, 'settings.voiceApiConfigTitle')}
+                </h4>
+                <p className="mt-0.5 text-ui-xs text-foreground-subtlest">
+                  {formatMsg(locale, 'settings.voiceApiConfigDesc')}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {STT_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setBaseUrl(preset.baseUrl);
+                      setModel(preset.model);
+                    }}
+                    className="rounded-md border border-border bg-surface px-2.5 py-1 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block space-y-1.5">
+                <span className="text-ui-xs text-foreground-subtle">
+                  {formatMsg(locale, 'settings.voiceBaseUrl')}
+                </span>
+                <input
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  placeholder="https://api.openai.com/v1"
+                  className={settingsMonoInputClass}
+                />
+              </label>
+
+              <label className="block space-y-1.5">
+                <span className="text-ui-xs text-foreground-subtle">
+                  {formatMsg(locale, 'settings.voiceModel')}
+                </span>
+                <input
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder="gpt-4o-mini-transcribe"
+                  className={settingsMonoInputClass}
+                />
+              </label>
+            </div>
+
+            <label className="block space-y-1.5">
+              <span className="text-ui-xs text-foreground-subtle">
+                {formatMsg(locale, 'settings.voiceApiKey')}
+              </span>
+              <div className="relative">
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="sk-..."
+                  className={`${settingsMonoInputClass} pr-9`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-foreground-subtlest hover:text-foreground"
+                  aria-label={showKey ? 'Hide API key' : 'Show API key'}
+                >
+                  {showKey ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                </button>
+              </div>
+            </label>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleSaveApi}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-3.5 py-1.5 text-ui-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                <Check className="size-3.5" />
+                {formatMsg(locale, 'common.save')}
+              </button>
+            </div>
+          </div>
+        </SettingsGroupCard>
+      )}
+    </div>
+  );
+}

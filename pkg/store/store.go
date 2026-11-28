@@ -189,6 +189,13 @@ type UserPreferences struct {
 	AutoCheckUpdates             bool                        `json:"auto_check_updates"`
 	AutoDownloadUpdates          bool                        `json:"auto_download_updates"`
 	SkippedUpdateVersion         string                      `json:"skipped_update_version,omitempty"`
+	STTEnabled                   bool                        `json:"stt_enabled"`
+	STTEngine                    string                      `json:"stt_engine,omitempty"`      // "auto" | "api" | "browser"
+	STTBaseURL                   string                      `json:"stt_base_url,omitempty"`    // OpenAI-compatible base URL (e.g. https://api.openai.com/v1, https://api.groq.com/openai/v1)
+	STTAPIKey                    string                      `json:"stt_api_key,omitempty"`     // API key (server-side only)
+	STTModel                     string                      `json:"stt_model,omitempty"`       // e.g. gpt-4o-mini-transcribe, whisper-1, whisper-large-v3-turbo
+	STTLanguage                  string                      `json:"stt_language,omitempty"`    // "" (auto) | "zh" | "en" | etc.
+	STTAutoSend                  bool                        `json:"stt_auto_send"`             // Auto-send transcribed text immediately
 }
 
 func DefaultUserPreferences() UserPreferences {
@@ -220,6 +227,11 @@ func DefaultUserPreferences() UserPreferences {
 		GoalVerifierModelID:          "",
 		AutoCheckUpdates:             true,
 		AutoDownloadUpdates:          false,
+		STTEnabled:                   true,
+		STTEngine:                    "auto",
+		STTModel:                     "gpt-4o-mini-transcribe",
+		STTLanguage:                  "",
+		STTAutoSend:                  false,
 	}
 }
 

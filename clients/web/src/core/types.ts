@@ -129,6 +129,13 @@ export interface UserPreferences {
   auto_check_updates?: boolean;
   auto_download_updates?: boolean;
   skipped_update_version?: string;
+  stt_enabled?: boolean;
+  stt_engine?: 'auto' | 'api' | 'browser' | string;
+  stt_base_url?: string;
+  stt_api_key?: string;
+  stt_model?: string;
+  stt_language?: string;
+  stt_auto_send?: boolean;
 }
 
 export type ClientNotificationKind =

@@ -68,6 +68,7 @@ import {
 } from './ConversationStatusPanel';
 import { DirectoryBrowserModal } from './DirectoryBrowserModal';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { VoiceInputButton } from './VoiceInputButton';
 
 function getGreetingKey(hour: number): MessageKey {
   if (hour >= 5 && hour < 9) return 'chat.empty.greeting.morningEarly';
@@ -2394,6 +2395,25 @@ function Composer({
         </select>
 
         <div className="ml-0.5 flex items-center gap-1">
+          <VoiceInputButton
+            onTranscript={(text, autoSend) => {
+              const trimmed = text.trim();
+              if (!trimmed) return;
+              const next = composerText.trim()
+                ? `${composerText.trimEnd()} ${trimmed}`
+                : trimmed;
+              if (autoSend && !isRunning && hasValidModel) {
+                setComposerText(next);
+                window.setTimeout(() => {
+                  sendPromptOrSteer(next, 'follow_up');
+                }, 0);
+              } else {
+                setComposerText(next);
+                setCursorPos(next.length);
+                textareaRef.current?.focus();
+              }
+            }}
+          />
           {isRunning && (
             <button
               type="button"
