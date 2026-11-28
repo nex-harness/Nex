@@ -1432,4 +1432,9 @@ export const zhCN = {
   "update.skipVersion": "跳过此版本",
   "update.showNotes": "查看更新说明",
   "update.hideNotes": "收起说明",
+  "update.stagedTitle": "新构建已就绪",
+  "update.stagedDesc": "服务端新构建 {build} 已就绪，可在当前对话结束后手动重启生效。",
+  "update.stagedLater": "稍后",
+  "update.stagedApplyNow": "立即重启生效",
+  "update.stagedRestarting": "正在重启…",
 } satisfies Record<MessageKey, string>;

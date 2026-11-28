@@ -1,5 +1,6 @@
-import { ArrowUpCircle, CheckCircle2, Download, ExternalLink, LoaderCircle, PackageOpen, X } from 'lucide-react';
+import { ArrowUpCircle, CheckCircle2, Download, ExternalLink, LoaderCircle, PackageOpen, RefreshCw, X } from 'lucide-react';
 import { useState } from 'react';
+import { apiFetch } from '../core/protocol';
 import { useNexStore } from '../core/store';
 import { hostBridge } from '../host/bridge';
 import { formatMsg } from '../i18n/messages';
@@ -16,15 +17,94 @@ export function UpdateBanner() {
   const skipAppUpdateVersion = useNexStore((s) => s.skipAppUpdateVersion);
   const dismissUpdateBanner = useNexStore((s) => s.dismissUpdateBanner);
   const [notesExpanded, setNotesExpanded] = useState(false);
+  const [applyingStaged, setApplyingStaged] = useState(false);
+  const [stagedError, setStagedError] = useState('');
 
   if (!appUpdate || updateBannerDismissed) return null;
-  if (!appUpdate.client_has_update && !appUpdate.server_has_update) return null;
+  const hasStaged = Boolean(appUpdate.staged_server_update);
+  if (!hasStaged && !appUpdate.client_has_update && !appUpdate.server_has_update) return null;
   if (
+    !hasStaged &&
     appUpdate.latest_version &&
     preferences.skipped_update_version &&
     preferences.skipped_update_version === appUpdate.latest_version
   ) {
     return null;
+  }
+
+  const handleApplyStaged = async () => {
+    setApplyingStaged(true);
+    setStagedError('');
+    try {
+      await apiFetch('/api/v1/updates/apply-staged', { method: 'POST' });
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 2500);
+    } catch (err) {
+      setStagedError(err instanceof Error ? err.message : String(err));
+      setApplyingStaged(false);
+    }
+  };
+
+  if (hasStaged) {
+    const label = appUpdate.staged_build_sha
+      ? `${appUpdate.staged_version || 'new'} (${appUpdate.staged_build_sha})`
+      : appUpdate.staged_version || 'new';
+    return (
+      <div
+        data-testid="staged-deploy-banner"
+        className="fixed right-4 bottom-4 z-40 w-[340px] max-w-[calc(100vw-2rem)] rounded-2xl border border-border bg-popover p-4 text-foreground shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-brand-blue/12 text-brand-blue">
+              <CheckCircle2 className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-ui-sm font-semibold text-foreground">
+                {formatMsg(locale, 'update.stagedTitle')}
+              </div>
+              <div className="mt-0.5 truncate text-ui-xs text-foreground-subtle">
+                {formatMsg(locale, 'update.stagedDesc', { build: label })}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            data-testid="update-banner-close-btn"
+            aria-label={formatMsg(locale, 'common.close')}
+            onClick={dismissUpdateBanner}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+        {stagedError && <p className="mt-2 text-ui-xs text-destructive">{stagedError}</p>}
+        <div className="mt-3.5 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={dismissUpdateBanner}
+            className="h-7 rounded-lg border border-border bg-card px-2.5 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+          >
+            {formatMsg(locale, 'update.stagedLater')}
+          </button>
+          <button
+            type="button"
+            data-testid="apply-staged-deploy-btn"
+            disabled={applyingStaged}
+            onClick={() => void handleApplyStaged()}
+            className="inline-flex h-7 items-center gap-1 rounded-lg bg-foreground px-2.5 text-ui-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {applyingStaged ? (
+              <LoaderCircle className="size-3 animate-spin" />
+            ) : (
+              <RefreshCw className="size-3" />
+            )}
+            <span>{formatMsg(locale, applyingStaged ? 'update.stagedRestarting' : 'update.stagedApplyNow')}</span>
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const isNative = hostBridge.kind !== 'browser';

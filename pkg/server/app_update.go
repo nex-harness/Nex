@@ -45,8 +45,77 @@ type AppUpdateCheckResult struct {
 	ClientDownloadURL  string             `json:"client_download_url,omitempty"`
 	ClientAssetName    string             `json:"client_asset_name,omitempty"`
 	Assets             []ReleaseAssetInfo `json:"assets,omitempty"`
+	StagedServerUpdate bool               `json:"staged_server_update,omitempty"`
+	StagedBuildSHA     string             `json:"staged_build_sha,omitempty"`
+	StagedVersion      string             `json:"staged_version,omitempty"`
 	Cached             bool               `json:"cached"`
 	Error              string             `json:"error,omitempty"`
+}
+
+type stagedDeployMarker struct {
+	Version  string `json:"version"`
+	BuildSHA string `json:"build_sha"`
+	StagedAt int64  `json:"staged_at,omitempty"`
+}
+
+func stagedMarkerPath() string {
+	if p := strings.TrimSpace(os.Getenv("NEX_STAGED_DEPLOY_FILE")); p != "" {
+		return p
+	}
+	exe, err := os.Executable()
+	if err == nil && exe != "" {
+		return exe + ".staged.json"
+	}
+	return "/opt/nex-v3/bin/nex-server.staged.json"
+}
+
+func (s *Server) detectStagedDeploy() (bool, string, string) {
+	raw, err := os.ReadFile(stagedMarkerPath())
+	if err != nil {
+		return false, "", ""
+	}
+	var m stagedDeployMarker
+	if json.Unmarshal(raw, &m) != nil {
+		return false, "", ""
+	}
+	stagedSHA := strings.TrimSpace(m.BuildSHA)
+	stagedVer := strings.TrimSpace(m.Version)
+	curSHA := strings.TrimSpace(s.cfg.BuildSHA)
+	if stagedSHA != "" && curSHA != "" && stagedSHA == curSHA {
+		// Already running this build; clean up stale marker
+		_ = os.Remove(stagedMarkerPath())
+		return false, "", ""
+	}
+	if stagedSHA == "" && stagedVer == "" {
+		return false, "", ""
+	}
+	return true, stagedVer, stagedSHA
+}
+
+// handleUpdatesApplyStaged acknowledges the user's confirmation and cleanly exits the server
+// process so systemd (Restart=always) launches the newly staged binary.
+func (s *Server) handleUpdatesApplyStaged(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	hasStaged, ver, sha := s.detectStagedDeploy()
+	if !hasStaged {
+		writeErr(w, http.StatusConflict, fmt.Errorf("no staged server deployment is pending"))
+		return
+	}
+	_ = os.Remove(stagedMarkerPath())
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":        true,
+		"restarting": true,
+		"version":   ver,
+		"build_sha": sha,
+	})
+	go func() {
+		time.Sleep(400 * time.Millisecond)
+		_ = s.Close()
+		os.Exit(0)
+	}()
 }
 
 type githubLatestRelease struct {
@@ -239,14 +308,18 @@ func (s *Server) handleUpdatesCheck(w http.ResponseWriter, r *http.Request) {
 		serverVer = "dev"
 	}
 
+	stagedHas, stagedVer, stagedSHA := s.detectStagedDeploy()
 	res := AppUpdateCheckResult{
-		CheckedAt:      time.Now().UnixMilli(),
-		ReleaseURL:     defaultGitHubReleasesPage,
-		ServerVersion:  serverVer,
-		ServerIsDev:    protocol.IsDevVersion(serverVer),
-		ClientVersion:  clientVer,
-		ClientPlatform: clientPlatform,
-		ClientIsDev:    clientVer != "" && protocol.IsDevVersion(clientVer),
+		CheckedAt:          time.Now().UnixMilli(),
+		ReleaseURL:         defaultGitHubReleasesPage,
+		ServerVersion:      serverVer,
+		ServerIsDev:        protocol.IsDevVersion(serverVer),
+		ClientVersion:      clientVer,
+		ClientPlatform:     clientPlatform,
+		ClientIsDev:        clientVer != "" && protocol.IsDevVersion(clientVer),
+		StagedServerUpdate: stagedHas,
+		StagedVersion:      stagedVer,
+		StagedBuildSHA:     stagedSHA,
 	}
 
 	rel, cached, err := s.fetchLatestAppRelease(r.Context(), force)

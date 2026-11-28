@@ -1430,6 +1430,11 @@ export const enUS = {
   "update.skipVersion": "Skip this version",
   "update.showNotes": "Release notes",
   "update.hideNotes": "Hide notes",
+  "update.stagedTitle": "New server build ready",
+  "update.stagedDesc": "Build {build} is staged on disk. Restart when your current conversation finishes.",
+  "update.stagedLater": "Later",
+  "update.stagedApplyNow": "Restart & apply",
+  "update.stagedRestarting": "Restarting…",
 } as const;
 
 export type MessageKey = keyof typeof enUS;

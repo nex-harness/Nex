@@ -106,24 +106,25 @@ jobs:
           scp $SSH_OPTS dist/runners/* "${USER}@${HOST}:/opt/nex-v3/runners/"
           scp -r $SSH_OPTS deploy/* "${USER}@${HOST}:/opt/nex-v3/config/"
 
-          # Atomically swap binaries and restart systemd services
-          ssh $SSH_OPTS "${USER}@${HOST}" 'set -euo pipefail
+          # Atomically swap binaries on disk and write a staged deployment marker.
+          # Running nex-server surfaces an update banner so the user can restart when idle
+          # without interrupting active conversations.
+          BASE_VER="$(node -p "require('./mygo.json').version")"
+          SHA="$(git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)"
+          VER="v${BASE_VER#v}-local"
+          STAGED_AT="$(date +%s)000"
+          ssh $SSH_OPTS "${USER}@${HOST}" "set -euo pipefail
             chmod +x /opt/nex-v3/bin/nex-server.new /opt/nex-v3/bin/nex-runner.new /opt/nex-v3/runners/nex-runner-*
             mv -f /opt/nex-v3/bin/nex-server.new /opt/nex-v3/bin/nex-server
             mv -f /opt/nex-v3/bin/nex-runner.new /opt/nex-v3/bin/nex-runner
-            sudo systemctl restart nex-v3-server.service
-            sleep 1
-            sudo systemctl restart nex-v3-runner.service
-            for i in $(seq 1 20); do
-              if curl -fsS http://127.0.0.1:80/api/v1/health >/dev/null 2>&1; then
-                break
-              fi
-              sleep 0.5
-            done
+            printf '{\"version\":\"%s\",\"build_sha\":\"%s\",\"staged_at\":%s}\n' '${VER}' '${SHA}' '${STAGED_AT}' > /opt/nex-v3/bin/nex-server.staged.json
+            if ! systemctl is-active --quiet nex-v3-server.service; then
+              sudo systemctl start nex-v3-server.service
+            fi
             curl -fsS http://127.0.0.1:80/api/v1/health
-            echo ""
+            echo ''
             sudo systemctl is-active nex-v3-server.service nex-v3-runner.service
-          '
+          "
 
       - name: Verify Public Endpoint
         env:
