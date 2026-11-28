@@ -307,11 +307,20 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
     }
   };
 
+  const httpOrigin =
+    typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'http://127.0.0.1:8080';
   const wsProto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss' : 'ws';
   const wsHost = typeof window !== 'undefined' ? window.location.host : '127.0.0.1:8080';
   const tokenSnippet =
     runnerAuth?.require_auth && runnerAuth?.pairing_secret ? ` -token "${runnerAuth.pairing_secret}"` : '';
+  const tokenQuery =
+    runnerAuth?.require_auth && runnerAuth?.pairing_secret
+      ? `?token=${encodeURIComponent(runnerAuth.pairing_secret)}`
+      : '';
   const joinCmd = `./nex-runner -name "My-Linux-Box" -server ${wsProto}://${wsHost}/ws/runner${tokenSnippet}`;
+  const winInstallCmd = `irm "${httpOrigin}/api/v1/runners/install.ps1${tokenQuery}" | iex`;
+  const unixInstallCmd = `curl -fsSL "${httpOrigin}/api/v1/runners/install.sh${tokenQuery}" | sh`;
+  const [copiedKey, setCopiedKey] = useState<'win' | 'unix' | null>(null);
 
   const loadRunnerAuth = async () => {
     try {
@@ -1360,6 +1369,64 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                   </div>
                 </div>
               )}
+
+              {/* Zero-SSH One-Liner Installers (Windows PowerShell & Linux/macOS) */}
+              <div className="space-y-2.5 rounded-lg border border-border bg-surface/40 p-3.5">
+                <div>
+                  <div className="text-ui-xs font-medium text-foreground">
+                    {formatMsg(locale, 'runners.oneLinerTitle')}
+                  </div>
+                  <div className="text-ui-xs text-foreground-subtlest">
+                    {formatMsg(locale, 'runners.oneLinerDesc')}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-ui-xs text-foreground-subtle">
+                    {formatMsg(locale, 'runners.oneLinerWindows')}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+                    <code data-testid="runner-win-install-cmd" className="truncate font-mono text-ui-xs text-foreground">
+                      {winInstallCmd}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(winInstallCmd);
+                        setCopiedKey('win');
+                        setTimeout(() => setCopiedKey((cur) => (cur === 'win' ? null : cur)), 1500);
+                      }}
+                      className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-ui-xs text-foreground transition-colors hover:bg-hover"
+                    >
+                      {copiedKey === 'win' ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
+                      <span>{copiedKey === 'win' ? formatMsg(locale, 'common.copied') : formatMsg(locale, 'runners.copyCommand')}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-ui-xs text-foreground-subtle">
+                    {formatMsg(locale, 'runners.oneLinerUnix')}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+                    <code data-testid="runner-unix-install-cmd" className="truncate font-mono text-ui-xs text-foreground">
+                      {unixInstallCmd}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(unixInstallCmd);
+                        setCopiedKey('unix');
+                        setTimeout(() => setCopiedKey((cur) => (cur === 'unix' ? null : cur)), 1500);
+                      }}
+                      className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-ui-xs text-foreground transition-colors hover:bg-hover"
+                    >
+                      {copiedKey === 'unix' ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
+                      <span>{copiedKey === 'unix' ? formatMsg(locale, 'common.copied') : formatMsg(locale, 'runners.copyCommand')}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2">
                 <code data-testid="runner-manual-join-cmd" className="truncate font-mono text-ui-sm text-foreground">

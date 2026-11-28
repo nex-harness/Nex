@@ -51,6 +51,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/v1/runners/auth", s.handleRunnersAuth)
 	s.mux.HandleFunc("/api/v1/runners/auth/rotate", s.handleRunnersAuthRotate)
 	s.mux.HandleFunc("/api/v1/runners/manifest", s.handleRunnersManifest)
+	s.mux.HandleFunc("/api/v1/runners/install.ps1", s.handleRunnerInstallPS1)
+	s.mux.HandleFunc("/api/v1/runners/install.sh", s.handleRunnerInstallSH)
 	s.mux.HandleFunc("/api/v1/runners/binary/", s.handleRunnerBinaryDownload)
 	s.mux.HandleFunc("/api/v1/runners/update-all", s.handleRunnersUpdateAll)
 	s.mux.HandleFunc("/api/v1/runners/", s.handleRunnerSubroutes)
