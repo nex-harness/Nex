@@ -41,6 +41,11 @@ PLATFORMS=(
   "windows/amd64:nex-runner-windows-amd64.exe"
 )
 
+VER_PREFIX=""
+if [ -n "$VERSION" ] && [ "$VERSION" != "dev" ]; then
+  VER_PREFIX="v${VERSION#v}-"
+fi
+
 CAPS_JSON="[]"
 if [ -n "$REQUIRED_CAPABILITIES" ]; then
   CAPS_JSON="["
@@ -62,7 +67,11 @@ BINARIES_JSON=""
 first_bin=1
 for item in "${PLATFORMS[@]}"; do
   plat="${item%%:*}"
-  fname="${item#*:}"
+  base_fname="${item#*:}"
+  fname="${base_fname}"
+  if [ -n "$VER_PREFIX" ] && [ -f "${DIR}/nex-runner-${VER_PREFIX}${base_fname#nex-runner-}" ]; then
+    fname="nex-runner-${VER_PREFIX}${base_fname#nex-runner-}"
+  fi
   fpath="${DIR}/${fname}"
   if [ ! -f "$fpath" ]; then
     continue

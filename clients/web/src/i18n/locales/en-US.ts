@@ -1337,6 +1337,18 @@ export const enUS = {
   "about.downloadDesktop": "Download Installer",
   "about.viewRelease": "View Release",
   "about.checkFailed": "Update check failed: {error}",
+  "settings.autoCheckUpdates": "Auto-check for updates",
+  "settings.autoCheckUpdatesDesc": "Periodically check GitHub Releases for new Server and App versions.",
+  "settings.autoDownloadUpdates": "Auto-download app updates",
+  "settings.autoDownloadUpdatesDesc": "Automatically download desktop installers in the background when a new version is found.",
+  "update.availableTitle": "Update available: {version}",
+  "update.readyTitle": "Update ready: {version}",
+  "update.downloading": "Downloading update…",
+  "update.downloadNow": "Download",
+  "update.installNow": "Install update",
+  "update.skipVersion": "Skip this version",
+  "update.showNotes": "Release notes",
+  "update.hideNotes": "Hide notes",
 } as const;
 
 export type MessageKey = keyof typeof enUS;

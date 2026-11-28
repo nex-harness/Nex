@@ -121,6 +121,9 @@ export interface UserPreferences {
   goal_max_consecutive_no_progress?: number;
   goal_verifier_provider_id?: string;
   goal_verifier_model_id?: string;
+  auto_check_updates?: boolean;
+  auto_download_updates?: boolean;
+  skipped_update_version?: string;
 }
 
 export type ClientNotificationKind =
@@ -844,4 +847,34 @@ export interface BackgroundTaskItem {
   started_at: number;
   exit_code?: number;
   stopped_by?: string;
+}
+
+export interface AppUpdateCheckResult {
+  checked_at: number;
+  release_url: string;
+  latest_version: string;
+  published_at?: string;
+  release_notes?: string;
+  server_version: string;
+  server_is_dev: boolean;
+  server_has_update: boolean;
+  client_version?: string;
+  client_platform?: string;
+  client_is_dev?: boolean;
+  client_has_update?: boolean;
+  client_download_url?: string;
+  client_asset_name?: string;
+  cached?: boolean;
+  error?: string;
+}
+
+export interface UpdateDownloadProgress {
+  version: string;
+  asset_name: string;
+  downloaded_bytes: number;
+  total_bytes: number;
+  percent: number;
+  status: 'downloading' | 'ready' | 'error' | string;
+  local_path?: string;
+  error?: string;
 }

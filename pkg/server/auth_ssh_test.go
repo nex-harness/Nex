@@ -357,7 +357,7 @@ func TestRunnerReleaseDownloadURLAndLocalDownload(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := srv.runnerReleaseDownloadURL("linux", "arm64")
-	want := "https://github.com/nex-harness/Nex/releases/download/v0.2.0/nex-runner-linux-arm64"
+	want := "https://github.com/nex-harness/Nex/releases/download/v0.2.0/nex-runner-v0.2.0-linux-arm64"
 	if got != want {
 		t.Fatalf("runnerReleaseDownloadURL(0.2.0) = %q, want %q", got, want)
 	}

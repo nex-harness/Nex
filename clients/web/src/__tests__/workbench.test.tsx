@@ -3613,6 +3613,13 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
 
       expect(deletedIds).toEqual(['run_win_stale']);
     } finally {
+      useNexStore.setState({
+        appUpdate: null,
+        appUpdateError: '',
+        checkingAppUpdate: false,
+        updateDownload: null,
+        updateBannerDismissed: false,
+      });
       globalThis.fetch = origFetch;
     }
   });
@@ -4398,6 +4405,13 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       const afterCount = fetchCalls.filter((c) => c.url.includes('/api/v1/runners/run_req/update')).length;
       expect(afterCount).toBe(beforeCount + 1);
     } finally {
+      useNexStore.setState({
+        appUpdate: null,
+        appUpdateError: '',
+        checkingAppUpdate: false,
+        updateDownload: null,
+        updateBannerDismissed: false,
+      });
       globalThis.fetch = origFetch;
     }
   });
@@ -4668,6 +4682,13 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       expect(screen.getByTestId('about-download-desktop-btn')).toBeTruthy();
       expect(screen.getByTestId('about-view-release-btn')).toBeTruthy();
     } finally {
+      useNexStore.setState({
+        appUpdate: null,
+        appUpdateError: '',
+        checkingAppUpdate: false,
+        updateDownload: null,
+        updateBannerDismissed: false,
+      });
       globalThis.fetch = origFetch;
     }
   });
@@ -5674,6 +5695,13 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       expect(req).toBeTruthy();
       expect(JSON.parse(req!.body || '{}')).toMatchObject({ mode: 'immediate', force: true });
     } finally {
+      useNexStore.setState({
+        appUpdate: null,
+        appUpdateError: '',
+        checkingAppUpdate: false,
+        updateDownload: null,
+        updateBannerDismissed: false,
+      });
       globalThis.fetch = origFetch;
     }
   });
@@ -6018,6 +6046,13 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       fireEvent.click(screen.getByTestId('settings-back-btn'));
       expect(screen.getByTestId('sidebar-runner-pill-run_hk').className).toContain('bg-background/45');
     } finally {
+      useNexStore.setState({
+        appUpdate: null,
+        appUpdateError: '',
+        checkingAppUpdate: false,
+        updateDownload: null,
+        updateBannerDismissed: false,
+      });
       globalThis.fetch = origFetch;
     }
   });
@@ -6223,6 +6258,13 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       fireEvent.click(screen.getByTestId('usage-chart-metric-cost'));
       expect(screen.getByTestId('usage-chart-inspector').textContent).toContain('$0.1000');
     } finally {
+      useNexStore.setState({
+        appUpdate: null,
+        appUpdateError: '',
+        checkingAppUpdate: false,
+        updateDownload: null,
+        updateBannerDismissed: false,
+      });
       globalThis.fetch = origFetch;
     }
   });
@@ -6322,6 +6364,89 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       expect(screen.getByText('My OpenAI Gateway')).toBeTruthy();
       expect(screen.queryByText('custom_gw_1')).toBeNull();
     } finally {
+      useNexStore.setState({
+        appUpdate: null,
+        appUpdateError: '',
+        checkingAppUpdate: false,
+        updateDownload: null,
+        updateBannerDismissed: false,
+      });
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it('renders UpdateBanner for available/ready updates, persists skip version, and toggles auto-check preference', async () => {
+    const origFetch = globalThis.fetch;
+    const putBodies: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/api/v1/preferences') && (init?.method || 'GET').toUpperCase() === 'PUT') {
+        putBodies.push(String(init?.body || ''));
+        return new Response(String(init?.body || '{}'), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      useNexStore.setState({
+        serverConnectRequired: false,
+        authEnabled: false,
+        authenticated: true,
+        locale: 'zh-CN',
+        mainView: 'workspace',
+        activeSessionId: '',
+        updateBannerDismissed: false,
+        updateDownload: null,
+        appUpdate: {
+          checked_at: Date.now(),
+          release_url: 'https://github.com/nex-harness/Nex/releases/tag/v0.5.0',
+          latest_version: 'v0.5.0',
+          release_notes: '## Highlights\n- Signed macOS DMG',
+          server_version: 'v0.4.0',
+          server_is_dev: false,
+          server_has_update: true,
+          client_version: '0.4.0',
+          client_platform: 'darwin',
+          client_is_dev: false,
+          client_has_update: true,
+          client_download_url: 'https://github.com/nex-harness/Nex/releases/download/v0.5.0/Nex-v0.5.0-darwin-arm64.dmg',
+          client_asset_name: 'Nex-v0.5.0-darwin-arm64.dmg',
+        },
+      });
+
+      const { rerender } = render(<App />);
+
+      const banner = screen.getByTestId('app-update-banner');
+      expect(banner.textContent).toContain('v0.5.0');
+      expect(screen.getByTestId('update-banner-download-btn')).toBeTruthy();
+
+      // Switch to ready state -> shows Install update button
+      act(() => {
+        useNexStore.getState().setUpdateDownload({
+          version: 'v0.5.0',
+          asset_name: 'Nex-v0.5.0-darwin-arm64.dmg',
+          downloaded_bytes: 1024,
+          total_bytes: 1024,
+          percent: 100,
+          status: 'ready',
+          local_path: '/tmp/nex-updates/v0.5.0/Nex-v0.5.0-darwin-arm64.dmg',
+        });
+      });
+      rerender(<App />);
+      expect(screen.getByTestId('update-banner-install-btn')).toBeTruthy();
+
+      // Skip this version -> hides banner and persists skipped_update_version
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('update-banner-skip-btn'));
+      });
+      expect(screen.queryByTestId('app-update-banner')).toBeNull();
+      expect(putBodies.some((b) => b.includes('"skipped_update_version":"v0.5.0"'))).toBe(true);
+    } finally {
+      useNexStore.setState({
+        appUpdate: null,
+        updateDownload: null,
+        updateBannerDismissed: false,
+      });
       globalThis.fetch = origFetch;
     }
   });

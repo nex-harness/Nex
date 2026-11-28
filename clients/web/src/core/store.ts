@@ -14,6 +14,7 @@ import {
 import { applySessionEvent, emptyStreamState, mergeCompactedTelemetry, RawSessionEventRow, sealRunningItems, SessionStreamState } from './reducer';
 import {
   AgentProfile,
+  AppUpdateCheckResult,
   BrowseDirsResult,
   BrowserHandoffState,
   BrowserProbeResult,
@@ -42,6 +43,7 @@ import {
   SSHTargetRecord,
   ThinkingEffort,
   TurnTelemetry,
+  UpdateDownloadProgress,
   UsageSummary,
   UserPreferences,
   WorkbenchTab,
@@ -555,6 +557,11 @@ export interface AppState {
   browserProbes: Record<string, BrowserProbeResult>;
   browserInstalling: Record<string, boolean>;
   notificationToasts: InAppNotificationToast[];
+  appUpdate: AppUpdateCheckResult | null;
+  checkingAppUpdate: boolean;
+  appUpdateError: string;
+  updateDownload: UpdateDownloadProgress | null;
+  updateBannerDismissed: boolean;
 
   rightTabs: WorkbenchTab[];
   activeRightTabId: string;
@@ -590,6 +597,14 @@ export interface AppState {
   pushNotificationToast: (toast: Omit<InAppNotificationToast, 'id' | 'createdAt'>) => void;
   dismissNotificationToast: (id: string) => void;
   dispatchClientNotification: (payload: ClientNotificationPayload) => Promise<void>;
+  checkForAppUpdates: (force?: boolean) => Promise<AppUpdateCheckResult | null>;
+  downloadAppUpdate: () => Promise<void>;
+  installAppUpdate: () => Promise<void>;
+  setAutoCheckUpdates: (enabled: boolean) => Promise<void>;
+  setAutoDownloadUpdates: (enabled: boolean) => Promise<void>;
+  skipAppUpdateVersion: (version: string) => Promise<void>;
+  dismissUpdateBanner: () => void;
+  setUpdateDownload: (progress: UpdateDownloadProgress | null) => void;
 
   bootstrap: () => Promise<void>;
   connectToServer: (rawUrl: string) => Promise<{ ok: boolean; error?: string }>;
@@ -876,6 +891,11 @@ export const useNexStore = create<AppState>((set, get) => ({
   browserProbes: {},
   browserInstalling: {},
   notificationToasts: [],
+  appUpdate: null,
+  checkingAppUpdate: false,
+  appUpdateError: '',
+  updateDownload: null,
+  updateBannerDismissed: false,
 
   openSettings: (section) => {
     const nextSection = normalizeSettingsSection(section || get().settingsSection);
@@ -1139,6 +1159,158 @@ export const useNexStore = create<AppState>((set, get) => ({
     applyDocumentTheme(theme);
     set({ preferences: nextPrefs });
     await apiFetch('/api/v1/preferences', { method: 'PUT', body: JSON.stringify(nextPrefs) }).catch(() => {});
+  },
+
+  setUpdateDownload: (progress) => set({ updateDownload: progress }),
+
+  dismissUpdateBanner: () => set({ updateBannerDismissed: true }),
+
+  setAutoCheckUpdates: async (enabled) => {
+    const nextPrefs = { ...get().preferences, auto_check_updates: enabled };
+    set({ preferences: nextPrefs });
+    await apiFetch('/api/v1/preferences', { method: 'PUT', body: JSON.stringify(nextPrefs) }).catch(() => {});
+  },
+
+  setAutoDownloadUpdates: async (enabled) => {
+    const nextPrefs = { ...get().preferences, auto_download_updates: enabled };
+    set({ preferences: nextPrefs });
+    await apiFetch('/api/v1/preferences', { method: 'PUT', body: JSON.stringify(nextPrefs) }).catch(() => {});
+    const st = get();
+    if (
+      enabled &&
+      hostBridge.kind !== 'browser' &&
+      st.appUpdate?.client_has_update &&
+      st.appUpdate?.client_download_url &&
+      st.updateDownload?.status !== 'downloading' &&
+      st.updateDownload?.status !== 'ready'
+    ) {
+      void st.downloadAppUpdate();
+    }
+  },
+
+  skipAppUpdateVersion: async (version) => {
+    const trimmed = version.trim();
+    if (!trimmed) return;
+    const nextPrefs = { ...get().preferences, skipped_update_version: trimmed };
+    set({ preferences: nextPrefs, updateBannerDismissed: true });
+    await apiFetch('/api/v1/preferences', { method: 'PUT', body: JSON.stringify(nextPrefs) }).catch(() => {});
+  },
+
+  checkForAppUpdates: async (force = false) => {
+    set({
+      checkingAppUpdate: true,
+      appUpdateError: '',
+      ...(force ? { updateBannerDismissed: false } : {}),
+    });
+    try {
+      let clientVer = (get().hostInfo?.version || '').trim();
+      let clientPlat = (get().hostInfo?.platform || '').trim();
+      if (hostBridge.kind !== 'browser' && (!clientVer || !clientPlat)) {
+        const info = await hostBridge.getHostInfo().catch(() => null);
+        if (info) {
+          clientVer = (info.version || '').trim();
+          clientPlat = (info.platform || hostBridge.platform || '').trim();
+          set({ hostInfo: info });
+        }
+      }
+      const params = new URLSearchParams();
+      if (force) params.set('force', '1');
+      if (clientVer) params.set('client_version', clientVer);
+      if (clientPlat) params.set('client_platform', clientPlat);
+      const qs = params.toString();
+      const res = await apiFetch<AppUpdateCheckResult>(`/api/v1/updates/check${qs ? `?${qs}` : ''}`);
+      if (res && typeof res === 'object') {
+        const nextPrefs = get().preferences;
+        // Manual check overrides previously skipped version.
+        if (force && nextPrefs.skipped_update_version && nextPrefs.skipped_update_version === res.latest_version) {
+          const cleared = { ...nextPrefs, skipped_update_version: '' };
+          set({ preferences: cleared });
+          void apiFetch('/api/v1/preferences', { method: 'PUT', body: JSON.stringify(cleared) }).catch(() => {});
+        }
+        set({
+          appUpdate: res,
+          appUpdateError: res.error || '',
+        });
+        const prefsNow = get().preferences;
+        if (
+          !res.error &&
+          res.client_has_update &&
+          res.client_download_url &&
+          hostBridge.kind !== 'browser' &&
+          prefsNow.auto_download_updates &&
+          prefsNow.skipped_update_version !== res.latest_version &&
+          get().updateDownload?.status !== 'downloading' &&
+          get().updateDownload?.status !== 'ready'
+        ) {
+          void get().downloadAppUpdate();
+        }
+        return res;
+      }
+      return null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      set({ appUpdateError: msg });
+      return null;
+    } finally {
+      set({ checkingAppUpdate: false });
+    }
+  },
+
+  downloadAppUpdate: async () => {
+    const up = get().appUpdate;
+    if (!up?.client_download_url) {
+      if (up?.release_url) {
+        await hostBridge.openExternal(up.release_url);
+      }
+      return;
+    }
+    const assetName = up.client_asset_name || 'nex-update';
+    const version = up.latest_version || 'latest';
+    set({
+      updateDownload: {
+        version,
+        asset_name: assetName,
+        downloaded_bytes: 0,
+        total_bytes: 0,
+        percent: 0,
+        status: 'downloading',
+      },
+    });
+    try {
+      const progress = await hostBridge.downloadUpdate(up.client_download_url, assetName, version);
+      set({ updateDownload: progress });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      set({
+        updateDownload: {
+          version,
+          asset_name: assetName,
+          downloaded_bytes: 0,
+          total_bytes: 0,
+          percent: 0,
+          status: 'error',
+          error: msg,
+        },
+      });
+    }
+  },
+
+  installAppUpdate: async () => {
+    const st = get();
+    if (st.updateDownload?.status === 'ready' && st.updateDownload.local_path && hostBridge.kind !== 'browser') {
+      try {
+        await hostBridge.installUpdate(st.updateDownload.local_path);
+        return;
+      } catch (err) {
+        set({
+          appUpdateError: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    const targetUrl = st.appUpdate?.client_download_url || st.appUpdate?.release_url;
+    if (targetUrl) {
+      await hostBridge.openExternal(targetUrl);
+    }
   },
 
   pushNotificationToast: (toast) => {

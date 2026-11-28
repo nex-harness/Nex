@@ -14,7 +14,8 @@ permissions:
 
 env:
   # Fallback app version for non-tag builds; tag builds use the tag name.
-  APP_VERSION_FALLBACK: "0.2.0"
+  APP_VERSION_FALLBACK: "0.4.0"
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
 jobs:
   resolve-version:
@@ -74,12 +75,13 @@ jobs:
           SKIP_WEB=1 ./scripts/package-server.sh darwin amd64
           cp dist/nex-server-*.tar.gz dist/artifacts/
 
-          # Standalone nex-runner binaries
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-runner-linux-amd64 ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-runner-linux-arm64 ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-runner-darwin-arm64 ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-runner-darwin-amd64 ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-runner-windows-amd64.exe ./cmd/nex-runner
+          # Standalone nex-runner binaries (versioned filenames)
+          VER_TAG="v${VERSION#v}"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-runner-${VER_TAG}-linux-amd64" ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-runner-${VER_TAG}-linux-arm64" ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-runner-${VER_TAG}-darwin-arm64" ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-runner-${VER_TAG}-darwin-amd64" ./cmd/nex-runner
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-runner-${VER_TAG}-windows-amd64.exe" ./cmd/nex-runner
 
           REL_BASE=""
           if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
@@ -89,11 +91,11 @@ jobs:
             OUT_FILE=dist/artifacts/runner-manifest.json \
             ./scripts/gen-runner-manifest.sh dist/artifacts
 
-          # Standalone nex-relay binaries
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-relay-linux-amd64 ./cmd/nex-relay
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-relay-linux-arm64 ./cmd/nex-relay
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-relay-darwin-arm64 ./cmd/nex-relay
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o dist/artifacts/nex-relay-darwin-amd64 ./cmd/nex-relay
+          # Standalone nex-relay binaries (versioned filenames)
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-relay-${VER_TAG}-linux-amd64" ./cmd/nex-relay
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-relay-${VER_TAG}-linux-arm64" ./cmd/nex-relay
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-relay-${VER_TAG}-darwin-arm64" ./cmd/nex-relay
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-relay-${VER_TAG}-darwin-amd64" ./cmd/nex-relay
 
       - name: Upload Server Artifacts
         uses: actions/upload-artifact@v4
@@ -125,22 +127,79 @@ jobs:
           chmod +x scripts/set-app-version.sh
           ./scripts/set-app-version.sh "${{ needs.resolve-version.outputs.version }}"
 
+      - name: Import macOS Signing Certificate
+        if: vars.NEX_ENABLE_MAC_SIGN == '1'
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          KEYCHAIN=build.keychain-db
+          echo "$APPLE_CERT_P12" | base64 --decode -o /tmp/nex-signing.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import /tmp/nex-signing.p12 -k "$KEYCHAIN" -P "$APPLE_CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          rm -f /tmp/nex-signing.p12
+
       - name: Build macOS Desktop Client (.app / .dmg)
         run: |
           npm --prefix clients/web ci
           npm --prefix clients/web run build
           ./scripts/build-clients.sh desktop-macos
 
+      - name: Sign & Notarize macOS App & DMG
+        if: vars.NEX_ENABLE_MAC_SIGN == '1'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find dist/clients -maxdepth 4 -type d -name 'Nex.app' | grep -v 'ios-simulator' | head -n 1 || true)"
+          if [ -n "$APP_PATH" ]; then
+            echo "[sign] signing $APP_PATH with $APPLE_SIGNING_IDENTITY"
+            codesign --force --deep --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH"
+            codesign --verify --deep --strict "$APP_PATH"
+          fi
+          while IFS= read -r -d '' dmg; do
+            echo "[sign] signing DMG $dmg"
+            codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$dmg"
+            echo "[notarize] submitting $dmg"
+            xcrun notarytool submit "$dmg" --no-s3-acceleration \
+              --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" --wait
+            xcrun stapler staple "$dmg"
+            xcrun stapler validate "$dmg"
+            spctl -a -t open --context context:primary-signature "$dmg"
+          done < <(find dist/clients -maxdepth 3 -type f -name '*.dmg' -print0)
+
       - name: Build iOS Simulator App
         run: ./scripts/build-clients.sh ios-sim
 
-      - name: Package iOS Simulator Bundle
+      - name: Package macOS / iOS Simulator Artifacts
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
         run: |
           mkdir -p dist/artifacts
+          VER_TAG="v${VERSION#v}"
           if [ -d dist/clients/ios-simulator/Nex.app ]; then
-            ditto -c -k --sequesterRsrc --keepParent dist/clients/ios-simulator/Nex.app dist/artifacts/nex-ios-simulator.app.zip
+            ditto -c -k --sequesterRsrc --keepParent dist/clients/ios-simulator/Nex.app "dist/artifacts/nex-ios-simulator-${VER_TAG}.app.zip"
           fi
-          find dist/clients -maxdepth 3 -type f -name '*.dmg' -exec cp {} dist/artifacts/ \; || true
+          while IFS= read -r -d '' dmg; do
+            base="$(basename "$dmg")"
+            if [[ "$base" != *"${VERSION}"* ]]; then
+              cp "$dmg" "dist/artifacts/Nex-${VER_TAG}-darwin-arm64.dmg"
+            else
+              cp "$dmg" "dist/artifacts/${base}"
+            fi
+          done < <(find dist/clients -maxdepth 3 -type f -name '*.dmg' -print0)
           ls -lh dist/artifacts/
 
       - name: Upload macOS / iOS Simulator Artifacts
@@ -182,9 +241,38 @@ jobs:
           ./scripts/build-clients.sh desktop-linux
 
       - name: Collect Desktop Artifacts
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
         run: |
           mkdir -p dist/artifacts
-          find dist/clients -maxdepth 3 -type f \( -name '*.exe' -o -name '*.deb' -o -name '*.rpm' -o -name 'nex-*-linux-*.tar.gz' -o -name 'PKGBUILD' \) -exec cp {} dist/artifacts/ \; || true
+          VER_TAG="v${VERSION#v}"
+          while IFS= read -r -d '' f; do
+            base="$(basename "$f")"
+            if [[ "$base" == *"${VERSION}"* ]]; then
+              cp "$f" "dist/artifacts/${base}"
+              continue
+            fi
+            case "$base" in
+              Nex.exe)
+                cp "$f" "dist/artifacts/Nex-${VER_TAG}-windows-amd64.exe"
+                ;;
+              *.exe)
+                cp "$f" "dist/artifacts/${base%.exe}-${VER_TAG}.exe"
+                ;;
+              *.deb)
+                cp "$f" "dist/artifacts/${base%.deb}-${VER_TAG}.deb"
+                ;;
+              *.rpm)
+                cp "$f" "dist/artifacts/${base%.rpm}-${VER_TAG}.rpm"
+                ;;
+              *.tar.gz)
+                cp "$f" "dist/artifacts/${base%.tar.gz}-${VER_TAG}.tar.gz"
+                ;;
+              *)
+                cp "$f" "dist/artifacts/${base}"
+                ;;
+            esac
+          done < <(find dist/clients -maxdepth 3 -type f \( -name '*.exe' -o -name '*.deb' -o -name '*.rpm' -o -name 'nex-*-linux-*.tar.gz' -o -name 'PKGBUILD' \) -print0)
           ls -lh dist/artifacts/
 
       - name: Upload Linux / Windows Artifacts
@@ -243,9 +331,23 @@ jobs:
           ./scripts/build-clients.sh android
 
       - name: Collect Android Artifacts
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
         run: |
           mkdir -p dist/artifacts
-          find dist/clients -maxdepth 3 -type f \( -name '*.apk' -o -name '*.aab' \) -exec cp {} dist/artifacts/ \; || true
+          VER_TAG="v${VERSION#v}"
+          while IFS= read -r -d '' f; do
+            base="$(basename "$f")"
+            if [[ "$base" == *"${VERSION}"* ]]; then
+              cp "$f" "dist/artifacts/${base}"
+            elif [[ "$base" == *.apk ]]; then
+              cp "$f" "dist/artifacts/Nex-${VER_TAG}-android-arm64.apk"
+            elif [[ "$base" == *.aab ]]; then
+              cp "$f" "dist/artifacts/Nex-${VER_TAG}-android-arm64.aab"
+            else
+              cp "$f" "dist/artifacts/${base}"
+            fi
+          done < <(find dist/clients -maxdepth 3 -type f \( -name '*.apk' -o -name '*.aab' \) -print0)
           ls -lh dist/artifacts/
 
       - name: Upload Android Artifacts

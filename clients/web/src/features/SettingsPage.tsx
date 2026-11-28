@@ -684,6 +684,30 @@ function GeneralSettingsSection({ onFlash }: { onFlash: (msg: string) => void })
             <option value="read_only">{formatMsg(locale, 'mode.readOnly')}</option>
           </select>
         </SettingsRow>
+
+        <SettingsRow
+          label={formatMsg(locale, 'settings.autoCheckUpdates')}
+          description={formatMsg(locale, 'settings.autoCheckUpdatesDesc')}
+        >
+          <Toggle
+            checked={preferences.auto_check_updates !== false}
+            onChange={(checked) => void useNexStore.getState().setAutoCheckUpdates(checked)}
+            label={formatMsg(locale, 'settings.autoCheckUpdates')}
+          />
+        </SettingsRow>
+
+        {hostBridge.kind !== 'browser' && (
+          <SettingsRow
+            label={formatMsg(locale, 'settings.autoDownloadUpdates')}
+            description={formatMsg(locale, 'settings.autoDownloadUpdatesDesc')}
+          >
+            <Toggle
+              checked={Boolean(preferences.auto_download_updates)}
+              onChange={(checked) => void useNexStore.getState().setAutoDownloadUpdates(checked)}
+              label={formatMsg(locale, 'settings.autoDownloadUpdates')}
+            />
+          </SettingsRow>
+        )}
       </SettingsGroupCard>
 
       <div data-testid="settings-global-instructions" className="space-y-3">

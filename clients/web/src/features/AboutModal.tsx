@@ -1,5 +1,5 @@
-import { ArrowUpCircle, Check, Copy, Download, ExternalLink, Keyboard, RefreshCw, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { ArrowUpCircle, Check, Copy, Download, ExternalLink, Keyboard, PackageOpen, RefreshCw, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { apiFetch } from '../core/protocol';
 import { useNexStore } from '../core/store';
 import { hostBridge } from '../host/bridge';
@@ -9,25 +9,6 @@ interface HealthBuildInfo {
   version?: string;
   build_sha?: string;
   is_dev?: boolean;
-}
-
-interface AppUpdateCheckResult {
-  checked_at: number;
-  release_url: string;
-  latest_version: string;
-  published_at?: string;
-  release_notes?: string;
-  server_version: string;
-  server_is_dev: boolean;
-  server_has_update: boolean;
-  client_version?: string;
-  client_platform?: string;
-  client_is_dev?: boolean;
-  client_has_update?: boolean;
-  client_download_url?: string;
-  client_asset_name?: string;
-  cached?: boolean;
-  error?: string;
 }
 
 /** Nex squircle brand mark aligned with clients/app/resources/launch-logo.png. */
@@ -52,39 +33,16 @@ export function NexLogo({ className = 'size-12' }: { className?: string }) {
 
 export function AboutModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const locale = useNexStore((s) => s.locale);
+  const updateInfo = useNexStore((s) => s.appUpdate);
+  const checkingUpdate = useNexStore((s) => s.checkingAppUpdate);
+  const updateErr = useNexStore((s) => s.appUpdateError);
+  const updateDownload = useNexStore((s) => s.updateDownload);
+  const checkForAppUpdates = useNexStore((s) => s.checkForAppUpdates);
+  const downloadAppUpdate = useNexStore((s) => s.downloadAppUpdate);
+  const installAppUpdate = useNexStore((s) => s.installAppUpdate);
   const [health, setHealth] = useState<HealthBuildInfo | null>(null);
   const [hostVersion, setHostVersion] = useState<string>('');
-  const [hostPlatform, setHostPlatform] = useState<string>('');
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<AppUpdateCheckResult | null>(null);
-  const [updateErr, setUpdateErr] = useState<string>('');
   const [copiedSha, setCopiedSha] = useState(false);
-
-  const runUpdateCheck = useCallback(
-    async (force: boolean, clientVer?: string, clientPlat?: string) => {
-      setCheckingUpdate(true);
-      setUpdateErr('');
-      try {
-        const params = new URLSearchParams();
-        if (force) params.set('force', '1');
-        const cv = (clientVer ?? hostVersion).trim();
-        const cp = (clientPlat ?? hostPlatform).trim();
-        if (cv) params.set('client_version', cv);
-        if (cp) params.set('client_platform', cp);
-        const qs = params.toString();
-        const res = await apiFetch<AppUpdateCheckResult>(`/api/v1/updates/check${qs ? `?${qs}` : ''}`);
-        if (res && typeof res === 'object') {
-          setUpdateInfo(res);
-          if (res.error) setUpdateErr(res.error);
-        }
-      } catch (err) {
-        setUpdateErr(err instanceof Error ? err.message : String(err));
-      } finally {
-        setCheckingUpdate(false);
-      }
-    },
-    [hostPlatform, hostVersion],
-  );
 
   useEffect(() => {
     if (!open) return;
@@ -105,7 +63,6 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
         .then((info) => {
           if (!cancelled && info) {
             setHostVersion((info.version || '').trim());
-            setHostPlatform((info.platform || hostBridge.platform || '').trim());
           }
         })
         .catch(() => {});
@@ -265,7 +222,7 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
                   type="button"
                   data-testid="about-check-updates-btn"
                   disabled={checkingUpdate}
-                  onClick={() => void runUpdateCheck(true)}
+                  onClick={() => void checkForAppUpdates(true)}
                   className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover disabled:opacity-50"
                 >
                   <RefreshCw className={`size-3.5 ${checkingUpdate ? 'animate-spin' : ''}`} />
@@ -293,16 +250,33 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
                     </div>
                   )}
                   <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                    {updateInfo.client_download_url && (
+                    {updateDownload?.status === 'ready' && updateDownload.local_path ? (
                       <button
                         type="button"
-                        data-testid="about-download-desktop-btn"
-                        onClick={() => void hostBridge.openExternal(updateInfo.client_download_url!)}
-                        className="inline-flex h-7 items-center gap-1 rounded-md bg-primary px-2.5 text-ui-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                        data-testid="about-install-desktop-btn"
+                        onClick={() => void installAppUpdate()}
+                        className="inline-flex h-7 items-center gap-1 rounded-md bg-foreground px-2.5 text-ui-xs font-medium text-background transition-opacity hover:opacity-90"
                       >
-                        <Download className="size-3.5" />
-                        <span>{formatMsg(locale, 'about.downloadDesktop')}</span>
+                        <PackageOpen className="size-3.5" />
+                        <span>{formatMsg(locale, 'update.installNow')}</span>
                       </button>
+                    ) : (
+                      updateInfo.client_download_url && (
+                        <button
+                          type="button"
+                          data-testid="about-download-desktop-btn"
+                          disabled={updateDownload?.status === 'downloading'}
+                          onClick={() => void downloadAppUpdate()}
+                          className="inline-flex h-7 items-center gap-1 rounded-md bg-primary px-2.5 text-ui-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                        >
+                          <Download className="size-3.5" />
+                          <span>
+                            {updateDownload?.status === 'downloading'
+                              ? `${formatMsg(locale, 'update.downloading')} ${Math.round(updateDownload.percent || 0)}%`
+                              : formatMsg(locale, 'about.downloadDesktop')}
+                          </span>
+                        </button>
+                      )
                     )}
                     {updateInfo.release_url && (
                       <button

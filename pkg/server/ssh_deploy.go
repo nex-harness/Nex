@@ -339,11 +339,20 @@ func normalizeTargetOSArch(rawOS, rawArch string) (string, string) {
 	return osName, archName
 }
 
-func runnerBinaryFileName(targetOS, targetArch string) string {
-	if targetOS == "windows" {
-		return fmt.Sprintf("nex-runner-%s-%s.exe", targetOS, targetArch)
+func runnerVersionedFileName(versionTag, targetOS, targetArch string) string {
+	osNorm, archNorm := normalizeTargetOSArch(targetOS, targetArch)
+	prefix := "nex-runner-"
+	if versionTag != "" {
+		prefix += versionTag + "-"
 	}
-	return fmt.Sprintf("nex-runner-%s-%s", targetOS, targetArch)
+	if osNorm == "windows" {
+		return fmt.Sprintf("%s%s-%s.exe", prefix, osNorm, archNorm)
+	}
+	return fmt.Sprintf("%s%s-%s", prefix, osNorm, archNorm)
+}
+
+func runnerBinaryFileName(targetOS, targetArch string) string {
+	return runnerVersionedFileName("", targetOS, targetArch)
 }
 
 func detectBinaryOSArch(data []byte) (string, string, error) {
@@ -441,6 +450,10 @@ func parseRunnerFileOSArch(name string) (string, string, bool) {
 	rest := strings.TrimPrefix(name, "nex-runner-")
 	rest = strings.TrimSuffix(rest, ".exe")
 	parts := strings.Split(rest, "-")
+	// Accept both "nex-runner-linux-amd64" and versioned "nex-runner-v0.4.0-linux-amd64".
+	if len(parts) >= 3 && strings.HasPrefix(parts[0], "v") {
+		parts = parts[len(parts)-2:]
+	}
 	if len(parts) != 2 {
 		return "", "", false
 	}
@@ -1023,23 +1036,19 @@ func buildDarwinLaunchAgentPlist(label, binPath, runnerID, name, wsURL, workspac
 const defaultGitHubReleaseDownloadBase = "https://github.com/nex-harness/Nex/releases"
 
 // runnerReleaseDownloadURL builds the GitHub Release download URL for a runner binary
-// matching the current Server version (e.g. v0.3.0 -> .../releases/download/v0.3.0/nex-runner-linux-amd64).
+// matching the current Server version (e.g. v0.4.0 -> .../releases/download/v0.4.0/nex-runner-v0.4.0-linux-amd64).
 // For dev/unversioned servers, it falls back to .../releases/latest/download/nex-runner-<os>-<arch>.
 func (s *Server) runnerReleaseDownloadURL(targetOS, targetArch string) string {
-	fileName := runnerBinaryFileName(targetOS, targetArch)
 	base := strings.TrimRight(strings.TrimSpace(os.Getenv("NEX_RUNNER_RELEASE_BASE_URL")), "/")
 	if base != "" {
-		return base + "/" + fileName
+		return base + "/" + runnerBinaryFileName(targetOS, targetArch)
 	}
 	ver := strings.TrimSpace(s.cfg.Version)
 	if ver == "" || ver == "dev" || strings.Contains(strings.ToLower(ver), "dev") {
-		return defaultGitHubReleaseDownloadBase + "/latest/download/" + fileName
+		return defaultGitHubReleaseDownloadBase + "/latest/download/" + runnerBinaryFileName(targetOS, targetArch)
 	}
-	tag := ver
-	if !strings.HasPrefix(tag, "v") {
-		tag = "v" + tag
-	}
-	return fmt.Sprintf("%s/download/%s/%s", defaultGitHubReleaseDownloadBase, tag, fileName)
+	tag := "v" + strings.TrimPrefix(ver, "v")
+	return fmt.Sprintf("%s/download/%s/%s", defaultGitHubReleaseDownloadBase, tag, runnerVersionedFileName(tag, targetOS, targetArch))
 }
 
 // downloadRunnerBinaryFromRelease downloads the matching nex-runner binary from GitHub Release

@@ -5,12 +5,13 @@ import {
   NexHost,
   type PairedHostProfile,
   type TransportStatus,
+  type UpdateDownloadProgress,
 } from './mygo.gen';
 
 export type HostKind = 'browser' | 'mygo-desktop' | 'mygo-mobile';
 export type HostPlatform = 'web' | 'darwin' | 'linux' | 'win32' | 'ios' | 'android';
 
-export type { HostInfo, PairedHostProfile, TransportStatus };
+export type { HostInfo, PairedHostProfile, TransportStatus, UpdateDownloadProgress };
 
 export interface ApprovalNotification {
   sessionId: string;
@@ -57,6 +58,9 @@ export interface HostBridge {
   haptic(style: 'selection' | 'light' | 'medium' | 'heavy' | 'success' | 'warning' | 'error'): void;
   pickDirectory(): Promise<string | null>;
   openExternal(rawUrl: string): Promise<void>;
+  downloadUpdate(downloadUrl: string, assetName: string, version: string): Promise<UpdateDownloadProgress>;
+  installUpdate(localPath: string): Promise<void>;
+  onUpdateProgress(cb: (p: UpdateDownloadProgress) => void): () => void;
   shareText(text: string, rawUrl?: string): Promise<void>;
   onAppResume(cb: (ts: number) => void): () => void;
   onOpenSession(cb: (sessionId: string) => void): () => void;
@@ -437,6 +441,34 @@ export function createHostBridge(): HostBridge {
     onPairInvite(cb) {
       if (!hasNativeMyGo) return () => {};
       return events.nexPairInvite.on(cb);
+    },
+
+    async downloadUpdate(downloadUrl: string, assetName: string, version: string): Promise<UpdateDownloadProgress> {
+      if (hasNativeMyGo) {
+        return await NexHost.downloadUpdate(downloadUrl, assetName, version);
+      }
+      if (typeof window !== 'undefined') {
+        window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+      }
+      return {
+        version,
+        asset_name: assetName,
+        downloaded_bytes: 0,
+        total_bytes: 0,
+        percent: 100,
+        status: 'ready',
+      };
+    },
+
+    async installUpdate(localPath: string): Promise<void> {
+      if (hasNativeMyGo) {
+        await NexHost.installUpdate(localPath);
+      }
+    },
+
+    onUpdateProgress(cb) {
+      if (!hasNativeMyGo) return () => {};
+      return events.nexUpdateProgress.on(cb);
     },
 
     getDeviceFontScale(): number {

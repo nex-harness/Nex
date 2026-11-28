@@ -8,7 +8,12 @@ SERVER_OS="${1:-$(go env GOOS)}"
 SERVER_ARCH="${2:-$(go env GOARCH)}"
 VERSION="${VERSION:-dev}"
 COMMIT_SHA="${COMMIT_SHA:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
-PKG_NAME="nex-server-${SERVER_OS}-${SERVER_ARCH}"
+if [ -n "$VERSION" ] && [ "$VERSION" != "dev" ]; then
+  VER_TAG="v${VERSION#v}"
+  PKG_NAME="nex-server-${VER_TAG}-${SERVER_OS}-${SERVER_ARCH}"
+else
+  PKG_NAME="nex-server-dev-${SERVER_OS}-${SERVER_ARCH}"
+fi
 STAGE_DIR="dist/pkg/${PKG_NAME}"
 OUT_TARBALL="dist/${PKG_NAME}.tar.gz"
 

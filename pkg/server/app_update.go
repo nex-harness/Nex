@@ -144,6 +144,9 @@ func pickDesktopAsset(assets []ReleaseAssetInfo, platform string) *ReleaseAssetI
 	matchExts := func(exts ...string) *ReleaseAssetInfo {
 		for i := range assets {
 			lower := strings.ToLower(assets[i].Name)
+			if strings.HasPrefix(lower, "nex-runner-") || strings.HasPrefix(lower, "nex-relay-") || strings.HasPrefix(lower, "nex-server-") {
+				continue
+			}
 			for _, ext := range exts {
 				if strings.HasSuffix(lower, ext) {
 					return &assets[i]

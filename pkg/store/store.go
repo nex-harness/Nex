@@ -184,6 +184,9 @@ type UserPreferences struct {
 	GoalMaxConsecutiveNoProgress int                         `json:"goal_max_consecutive_no_progress"`
 	GoalVerifierProviderID       string                      `json:"goal_verifier_provider_id"`
 	GoalVerifierModelID          string                      `json:"goal_verifier_model_id"`
+	AutoCheckUpdates             bool                        `json:"auto_check_updates"`
+	AutoDownloadUpdates          bool                        `json:"auto_download_updates"`
+	SkippedUpdateVersion         string                      `json:"skipped_update_version,omitempty"`
 }
 
 func DefaultUserPreferences() UserPreferences {
@@ -213,6 +216,8 @@ func DefaultUserPreferences() UserPreferences {
 		GoalMaxConsecutiveNoProgress: 2,
 		GoalVerifierProviderID:       "",
 		GoalVerifierModelID:          "",
+		AutoCheckUpdates:             true,
+		AutoDownloadUpdates:          false,
 	}
 }
 

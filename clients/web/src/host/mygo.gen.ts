@@ -48,6 +48,18 @@ export interface TransportStatus {
   error?: string;
 }
 
+/** UpdateDownloadProgress reports download & ready status for desktop/mobile app updates. */
+export interface UpdateDownloadProgress {
+  version: string;
+  asset_name: string;
+  downloaded_bytes: number;
+  total_bytes: number;
+  percent: number;
+  status: string;
+  local_path?: string;
+  error?: string;
+}
+
 // ---- Services ----
 
 /**
@@ -59,6 +71,8 @@ export const NexHost = {
   clearAuthToken: bind<[string], void>("NexHost.ClearAuthToken", (serverURL: string) => [serverURL]),
   /** ConnectPairedHost starts the loopback E2EE proxy for nodeID and switches connection mode to "paired". */
   connectPairedHost: bind<[string], HostInfo>("NexHost.ConnectPairedHost", (nodeID: string) => [nodeID]),
+  /** DownloadUpdate downloads a release installer/asset into temp managed cache and returns progress/local path. */
+  downloadUpdate: bind<[string, string, string], UpdateDownloadProgress>("NexHost.DownloadUpdate", (downloadURL: string, assetName: string, version: string) => [downloadURL, assetName, version]),
   /** GetAuthToken retrieves the stored bearer token for serverURL (or default if empty). */
   getAuthToken: bind<[string], string>("NexHost.GetAuthToken", (serverURL: string) => [serverURL]),
   /** GetMobilePushToken returns the stored APNs/FCM device push token. */
@@ -69,6 +83,8 @@ export const NexHost = {
   haptic: bind<[string], void>("NexHost.Haptic", (style: string) => [style]),
   /** Info returns runtime host metadata and current connection state. */
   info: bind<[], HostInfo>("NexHost.Info", () => []),
+  /** InstallUpdate launches/opens a downloaded update installer located inside the managed nex-updates folder. */
+  installUpdate: bind<[string], void>("NexHost.InstallUpdate", (localPath: string) => [localPath]),
   /** ListPairedHosts returns all paired intranet host profiles saved on this client. */
   listPairedHosts: bind<[], PairedHostProfile[]>("NexHost.ListPairedHosts", () => []),
   /** Notify displays a native desktop or mobile notification for approval alerts or task events. */
@@ -111,4 +127,5 @@ export const events = {
   nexServerChanged: event<HostInfo>("nex:server-changed"),
   nexRemoteStatus: event<TransportStatus>("nex:remote-status"),
   nexPairInvite: event<string>("nex:pair-invite"),
+  nexUpdateProgress: event<UpdateDownloadProgress>("nex:update-progress"),
 } as const;

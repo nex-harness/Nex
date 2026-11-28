@@ -21,7 +21,8 @@ func TestAppUpdateCheckEndpoint(t *testing.T) {
 			"published_at": "2026-11-25T10:00:00Z",
 			"body":         "## Highlights\n- Faster updates",
 			"assets": []map[string]any{
-				{"name": "Nex-v0.4.0-darwin-universal.dmg", "browser_download_url": "https://example.com/Nex-v0.4.0.dmg", "size": 12345},
+				{"name": "nex-runner-v0.4.0-windows-amd64.exe", "browser_download_url": "https://example.com/nex-runner.exe", "size": 99999},
+				{"name": "Nex-v0.4.0-darwin-arm64.dmg", "browser_download_url": "https://example.com/Nex-v0.4.0.dmg", "size": 12345},
 				{"name": "Nex-v0.4.0-windows-amd64-setup.exe", "browser_download_url": "https://example.com/Nex-v0.4.0-setup.exe", "size": 23456},
 				{"name": "Nex-v0.4.0-linux-amd64.AppImage", "browser_download_url": "https://example.com/Nex-v0.4.0.AppImage", "size": 34567},
 			},
@@ -67,7 +68,7 @@ func TestAppUpdateCheckEndpoint(t *testing.T) {
 	if !out.ServerHasUpdate || !out.ClientHasUpdate {
 		t.Fatalf("expected both server and client to have updates: %+v", out)
 	}
-	if out.ClientAssetName != "Nex-v0.4.0-darwin-universal.dmg" || out.ClientDownloadURL != "https://example.com/Nex-v0.4.0.dmg" {
+	if out.ClientAssetName != "Nex-v0.4.0-darwin-arm64.dmg" || out.ClientDownloadURL != "https://example.com/Nex-v0.4.0.dmg" {
 		t.Fatalf("unexpected darwin asset match: %+v", out)
 	}
 	if out.Cached {

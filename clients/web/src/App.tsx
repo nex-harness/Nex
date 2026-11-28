@@ -13,7 +13,9 @@ import { NotificationToastStack } from './features/NotificationToastStack';
 import { ProjectSidebar } from './features/ProjectSidebar';
 import { ServerConnectGate } from './features/ServerConnectGate';
 import { SettingsPage } from './features/SettingsPage';
+import { UpdateBanner } from './features/UpdateBanner';
 import { WorkbenchSidebar } from './features/WorkbenchSidebar';
+import { hostBridge } from './host/bridge';
 import { formatMsg } from './i18n/messages';
 
 export function App() {
@@ -31,6 +33,7 @@ export function App() {
   const bootstrap = useNexStore((s) => s.bootstrap);
   const spawnBottomTerminal = useNexStore((s) => s.spawnBottomTerminal);
   const closeBottomTerminal = useNexStore((s) => s.closeBottomTerminal);
+  const autoCheckUpdates = useNexStore((s) => s.preferences.auto_check_updates !== false);
 
   // Subscribe ONLY to blocking modal states so App shell NEVER re-renders on text/tool streaming frames!
   const pendingApproval = useNexStore((s) =>
@@ -50,6 +53,27 @@ export function App() {
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  useEffect(() => {
+    const offProgress = hostBridge.onUpdateProgress((p) => {
+      useNexStore.getState().setUpdateDownload(p);
+    });
+    return () => offProgress();
+  }, []);
+
+  useEffect(() => {
+    if (serverConnectRequired || (authEnabled && !authenticated) || !autoCheckUpdates) return;
+    const startupTimer = window.setTimeout(() => {
+      void useNexStore.getState().checkForAppUpdates(false);
+    }, 4000);
+    const pollTimer = window.setInterval(() => {
+      void useNexStore.getState().checkForAppUpdates(false);
+    }, 30 * 60 * 1000);
+    return () => {
+      window.clearTimeout(startupTimer);
+      window.clearInterval(pollTimer);
+    };
+  }, [serverConnectRequired, authEnabled, authenticated, autoCheckUpdates]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -165,6 +189,7 @@ export function App() {
         <CommandPaletteModal />
         <ImagePreviewModal />
         <NotificationToastStack />
+        <UpdateBanner />
         {pendingApproval && <ApprovalModal approval={pendingApproval} />}
       </div>
     );
@@ -324,6 +349,7 @@ export function App() {
       <CommandPaletteModal />
       <ImagePreviewModal />
       <NotificationToastStack />
+      <UpdateBanner />
       {pendingApproval && <ApprovalModal approval={pendingApproval} />}
     </div>
   );
