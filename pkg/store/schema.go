@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS runners (
     synced_config_rev   INTEGER NOT NULL DEFAULT 0,
     auth_token          TEXT NOT NULL DEFAULT '',
     workspace_default   TEXT NOT NULL DEFAULT '',
+    auto_update         INTEGER NOT NULL DEFAULT 1,
+    update_mode         TEXT NOT NULL DEFAULT 'self_update',
     created_at          INTEGER NOT NULL
 );
 

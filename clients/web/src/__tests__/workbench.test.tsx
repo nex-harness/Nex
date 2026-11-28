@@ -6530,18 +6530,24 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     }
   });
 
-  it('matches renamed runners to SSH targets by deterministic runner ID and supports Runner Update Policy (auto-update + SCP deploy)', async () => {
+  it('matches renamed runners to SSH targets by deterministic runner ID and supports per-runner Update Policy (auto-update + SCP deploy)', async () => {
     const origFetch = globalThis.fetch;
-    const putPrefs: string[] = [];
+    const patchBodies: string[] = [];
     const deployHits: string[] = [];
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes('/api/v1/preferences') && init?.method === 'PUT') {
-        putPrefs.push(String(init.body || '{}'));
-        return new Response(String(init.body || '{}'), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
+      if (url.includes('/api/v1/runners/run_macm4') && init?.method === 'PATCH') {
+        const body = String(init.body || '{}');
+        patchBodies.push(body);
+        const parsed = JSON.parse(body) as { auto_update?: boolean; update_mode?: 'self_update' | 'scp' };
+        return new Response(
+          JSON.stringify({
+            id: 'run_macm4',
+            name: 'M4',
+            ...parsed,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
       }
       if (url.includes('/api/v1/ssh/targets/ssh_mac/deploy') && init?.method === 'POST') {
         deployHits.push(url);
@@ -6557,11 +6563,6 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       useNexStore.setState({
         mainView: 'settings',
         settingsSection: 'runners',
-        preferences: {
-          ...useNexStore.getState().preferences,
-          runner_auto_update: true,
-          runner_update_mode: 'self_update',
-        },
         sshTargets: [
           {
             id: 'ssh_mac',
@@ -6595,6 +6596,8 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
             last_seen_at: Date.now(),
             synced_config_rev: 1,
             workspace_default: '/Users/tylinux',
+            auto_update: true,
+            update_mode: 'self_update',
             update_status: 'update_available',
             target_version: 'v0.4.1-local',
             target_build_sha: '7841c1e',
@@ -6607,16 +6610,16 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
       // Renamed runner `M4` (id run_macm4) still displays SSH actions from target `macM4`
       expect(screen.getByTestId('ssh-deploy-ssh_mac')).toBeTruthy();
 
-      // Toggle auto-update OFF and switch delivery mode to SCP
+      // Toggle per-runner auto-update OFF and switch delivery mode to SCP
       await act(async () => {
-        fireEvent.click(screen.getByTestId('runner-auto-update-toggle'));
+        fireEvent.click(screen.getByTestId('runner-auto-update-run_macm4'));
       });
       await act(async () => {
-        fireEvent.change(screen.getByTestId('runner-update-mode-select'), { target: { value: 'scp' } });
+        fireEvent.change(screen.getByTestId('runner-update-mode-run_macm4'), { target: { value: 'scp' } });
       });
 
-      expect(putPrefs.some((b) => b.includes('"runner_auto_update":false'))).toBe(true);
-      expect(putPrefs.some((b) => b.includes('"runner_update_mode":"scp"'))).toBe(true);
+      expect(patchBodies.some((b) => b.includes('"auto_update":false'))).toBe(true);
+      expect(patchBodies.some((b) => b.includes('"update_mode":"scp"'))).toBe(true);
 
       // Clicking upgrade now triggers SSH SCP deploy
       await act(async () => {

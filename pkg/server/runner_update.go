@@ -930,15 +930,19 @@ func (s *Server) handleRunnersUpdateAll(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func (s *Server) effectiveRunnerUpdatePolicy(ctx context.Context) (autoUpdate bool, updateMode string) {
+func (s *Server) effectiveRunnerUpdatePolicy(ctx context.Context, runnerID string) (autoUpdate bool, updateMode string) {
 	if s.store == nil {
 		return true, "self_update"
 	}
-	prefs, err := s.store.GetUserPreferences(ctx)
-	if err != nil {
+	rec, err := s.store.GetRunner(ctx, runnerID)
+	if err != nil || rec == nil {
 		return true, "self_update"
 	}
-	return prefs.EffectiveRunnerAutoUpdate(), prefs.EffectiveRunnerUpdateMode()
+	mode := strings.ToLower(strings.TrimSpace(rec.UpdateMode))
+	if mode != "scp" {
+		mode = "self_update"
+	}
+	return rec.AutoUpdate, mode
 }
 
 func (s *Server) hasMatchingSSHTarget(ctx context.Context, runnerID, runnerName, hostname string) bool {

@@ -205,29 +205,33 @@ function formatRunnerUpdatePhase(locale: LocaleCode, phase?: string, progress?: 
 }
 
 export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {
-  const { locale, runners, sshTargets, preferences, refreshInitialData, refreshRegistries, renameRunner, triggerRunnerUpdate, triggerAllRunnersUpdate } = useNexStore();
-  const [policySaving, setPolicySaving] = useState(false);
+  const { locale, runners, sshTargets, refreshInitialData, refreshRegistries, renameRunner, triggerRunnerUpdate, triggerAllRunnersUpdate } = useNexStore();
+  const [policyBusyIds, setPolicyBusyIds] = useState<Record<string, boolean>>({});
 
-  const runnerAutoUpdate = preferences.runner_auto_update ?? true;
-  const runnerUpdateMode: 'self_update' | 'scp' = preferences.runner_update_mode === 'scp' ? 'scp' : 'self_update';
-
-  const saveRunnerUpdatePrefs = async (patch: { runner_auto_update?: boolean; runner_update_mode?: 'self_update' | 'scp' }) => {
-    const nextPrefs = {
-      ...useNexStore.getState().preferences,
-      ...patch,
-    };
-    setPolicySaving(true);
+  const updateRunnerPolicy = async (
+    r: RunnerRecord,
+    patch: { auto_update?: boolean; update_mode?: 'self_update' | 'scp' },
+  ) => {
+    setPolicyBusyIds((prev) => ({ ...prev, [r.id]: true }));
     try {
-      const saved = await apiFetch<typeof nextPrefs>('/api/v1/preferences', {
-        method: 'PUT',
-        body: JSON.stringify(nextPrefs),
+      const updated = await apiFetch<RunnerRecord>(`/api/v1/runners/${encodeURIComponent(r.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
       });
-      useNexStore.setState({ preferences: saved || nextPrefs });
+      useNexStore.setState((prev) => ({
+        runners: prev.runners.map((item) => (item.id === r.id ? { ...item, ...patch, ...updated } : item)),
+      }));
       onFlash(formatMsg(locale, 'runners.updatePolicySaved'));
     } catch (err) {
       onFlash(err instanceof Error ? err.message : String(err));
     } finally {
-      if (mountedRef.current) setPolicySaving(false);
+      if (mountedRef.current) {
+        setPolicyBusyIds((prev) => {
+          const next = { ...prev };
+          delete next[r.id];
+          return next;
+        });
+      }
     }
   };
 
@@ -641,7 +645,8 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
 
   const triggerSingleUpgrade = async (r: RunnerRecord, mode: 'when_idle' | 'immediate') => {
     const matched = matchSshTargetForRunner(r);
-    if (runnerUpdateMode === 'scp' && matched) {
+    const effectiveMode = r.update_mode === 'scp' ? 'scp' : 'self_update';
+    if (effectiveMode === 'scp' && matched) {
       setUpgradingRunnerIds((prev) => ({ ...prev, [r.id]: true }));
       try {
         await runTargetAction(matched, 'deploy');
@@ -1055,6 +1060,38 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     {r.hostname ? <span className="font-mono">{r.hostname}</span> : null}
                     {r.workspace_default ? <span className="truncate font-mono">{r.workspace_default}</span> : null}
                   </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-ui-xs text-foreground-subtle">
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 select-none">
+                      <input
+                        type="checkbox"
+                        data-testid={`runner-auto-update-${r.id}`}
+                        checked={r.auto_update !== false}
+                        disabled={Boolean(policyBusyIds[r.id])}
+                        onChange={(e) => void updateRunnerPolicy(r, { auto_update: e.target.checked })}
+                        className="size-3.5 accent-brand-blue"
+                      />
+                      <span>{formatMsg(locale, 'runners.autoUpdateLabel')}</span>
+                    </label>
+                    {matchedSsh && (
+                      <label className="inline-flex items-center gap-1.5">
+                        <span className="text-foreground-subtlest">{formatMsg(locale, 'runners.updateDeliveryLabel')}:</span>
+                        <select
+                          data-testid={`runner-update-mode-${r.id}`}
+                          value={r.update_mode === 'scp' ? 'scp' : 'self_update'}
+                          disabled={Boolean(policyBusyIds[r.id])}
+                          onChange={(e) =>
+                            void updateRunnerPolicy(r, {
+                              update_mode: e.target.value === 'scp' ? 'scp' : 'self_update',
+                            })
+                          }
+                          className={`${settingsInputClass} h-6 px-2 py-0 text-ui-xs`}
+                        >
+                          <option value="self_update">{formatMsg(locale, 'runners.updateModeSelfUpdate')}</option>
+                          <option value="scp">{formatMsg(locale, 'runners.updateModeScp')}</option>
+                        </select>
+                      </label>
+                    )}
+                  </div>
                   {matchedSsh?.last_error && (
                     <p className="mt-1 truncate text-ui-xs text-destructive">{matchedSsh.last_error}</p>
                   )}
@@ -1081,7 +1118,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       >
                         {upgrading ? <LoaderCircle className="size-3 animate-spin" /> : <ArrowUpCircle className="size-3" />}
                         <span>
-                          {runnerUpdateMode === 'scp' && matchedSsh
+                          {r.update_mode === 'scp' && matchedSsh
                             ? formatMsg(locale, 'runners.updateViaScpBtn')
                             : formatMsg(locale, 'runners.updateNowBtn')}
                         </span>
@@ -1113,7 +1150,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       >
                         {upgrading ? <LoaderCircle className="size-3 animate-spin" /> : <ArrowUpCircle className="size-3" />}
                         <span>
-                          {runnerUpdateMode === 'scp' && matchedSsh
+                          {r.update_mode === 'scp' && matchedSsh
                             ? formatMsg(locale, 'runners.updateViaScpBtn')
                             : formatMsg(locale, 'runners.updateBtn')}
                         </span>
@@ -1203,58 +1240,6 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
           })
         )}
       </SettingsGroupCard>
-
-      {/* Runner Update Policy Card */}
-      <div className="space-y-3" data-testid="runner-update-policy-card">
-        <SectionHeading
-          title={formatMsg(locale, 'runners.updatePolicyTitle')}
-          description={formatMsg(locale, 'runners.updatePolicyDesc')}
-        />
-        <SettingsGroupCard>
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-            <div className="min-w-0">
-              <div className="text-ui-sm font-medium text-foreground">
-                {formatMsg(locale, 'runners.autoUpdateLabel')}
-              </div>
-              <p className="mt-0.5 text-ui-xs text-foreground-subtlest">
-                {formatMsg(locale, 'runners.autoUpdateDesc')}
-              </p>
-            </div>
-            <input
-              type="checkbox"
-              data-testid="runner-auto-update-toggle"
-              checked={runnerAutoUpdate}
-              disabled={policySaving}
-              onChange={(e) => void saveRunnerUpdatePrefs({ runner_auto_update: e.target.checked })}
-              className="size-4 shrink-0 accent-brand-blue"
-            />
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-            <div className="min-w-0 flex-1">
-              <div className="text-ui-sm font-medium text-foreground">
-                {formatMsg(locale, 'runners.updateDeliveryLabel')}
-              </div>
-              <p className="mt-0.5 text-ui-xs text-foreground-subtlest">
-                {formatMsg(locale, 'runners.updateDeliveryDesc')}
-              </p>
-            </div>
-            <select
-              data-testid="runner-update-mode-select"
-              value={runnerUpdateMode}
-              disabled={policySaving}
-              onChange={(e) =>
-                void saveRunnerUpdatePrefs({
-                  runner_update_mode: e.target.value === 'scp' ? 'scp' : 'self_update',
-                })
-              }
-              className={`${settingsInputClass} h-8 w-64 shrink-0 text-ui-xs`}
-            >
-              <option value="self_update">{formatMsg(locale, 'runners.updateModeSelfUpdate')}</option>
-              <option value="scp">{formatMsg(locale, 'runners.updateModeScp')}</option>
-            </select>
-          </div>
-        </SettingsGroupCard>
-      </div>
 
       {/* Manual Join Steps Modal */}
       {manualModalOpen && (

@@ -11,6 +11,8 @@ export interface RunnerRecord {
   last_seen_at: number;
   synced_config_rev: number;
   workspace_default: string;
+  auto_update?: boolean;
+  update_mode?: 'self_update' | 'scp';
   build_sha?: string;
   binary_sha256?: string;
   protocol_version?: number;
@@ -127,8 +129,6 @@ export interface UserPreferences {
   auto_check_updates?: boolean;
   auto_download_updates?: boolean;
   skipped_update_version?: string;
-  runner_auto_update?: boolean;
-  runner_update_mode?: 'self_update' | 'scp';
 }
 
 export type ClientNotificationKind =

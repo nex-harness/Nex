@@ -828,13 +828,6 @@ func TestRunnerUpdatePolicyDisablesAutoUpdateOnWelcome(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	disabled := false
-	prefs := store.DefaultUserPreferences()
-	prefs.RunnerAutoUpdate = &disabled
-	if err := st.SaveUserPreferences(ctx, prefs); err != nil {
-		t.Fatal(err)
-	}
-
 	srv, err := New(Config{
 		Store:      st,
 		Version:    "v0.4.1",
@@ -849,20 +842,60 @@ func TestRunnerUpdatePolicyDisablesAutoUpdateOnWelcome(t *testing.T) {
 	defer ts.Close()
 	wsBase := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	wsConn, welcome := dialTestRunnerHello(t, ctx, wsBase+"/ws/runner", protocol.RunnerHelloPayload{
-		RunnerID:        "run_policy_1",
-		Name:            "PolicyRunner",
+	// Connect runner A and runner B
+	wsA, welcomeA1 := dialTestRunnerHello(t, ctx, wsBase+"/ws/runner", protocol.RunnerHelloPayload{
+		RunnerID:        "run_policy_a",
+		Name:            "PolicyRunnerA",
 		OS:              "linux",
 		Arch:            "amd64",
 		Version:         "v0.4.0",
 		ProtocolVersion: protocol.ProtocolVersion,
 		Capabilities:    protocol.DefaultRunnerCapabilities,
 	})
-	defer wsConn.Close(websocket.StatusNormalClosure, "")
-	if welcome.UpdateStatus != "update_available" {
-		t.Fatalf("expected update_available, got %+v", welcome)
+	if welcomeA1.UpdateStatus != "update_available" || !welcomeA1.AutoUpdateAllowed {
+		t.Fatalf("expected runner A initial AutoUpdateAllowed=true, got %+v", welcomeA1)
 	}
-	if welcome.AutoUpdateAllowed {
-		t.Fatalf("expected AutoUpdateAllowed=false when runner_auto_update preference is disabled, got %+v", welcome)
+	_ = wsA.Close(websocket.StatusNormalClosure, "")
+
+	// Disable auto_update ONLY for runner A via PATCH /api/v1/runners/{id}
+	patchReq, _ := http.NewRequest(http.MethodPatch, ts.URL+"/api/v1/runners/run_policy_a", strings.NewReader(`{"auto_update":false,"update_mode":"scp"}`))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchResp, err := http.DefaultClient.Do(patchReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = patchResp.Body.Close()
+	if patchResp.StatusCode != http.StatusOK {
+		t.Fatalf("PATCH /api/v1/runners/run_policy_a expected 200, got %d", patchResp.StatusCode)
+	}
+
+	// Runner A reconnects -> AutoUpdateAllowed=false
+	wsA2, welcomeA2 := dialTestRunnerHello(t, ctx, wsBase+"/ws/runner", protocol.RunnerHelloPayload{
+		RunnerID:        "run_policy_a",
+		Name:            "PolicyRunnerA",
+		OS:              "linux",
+		Arch:            "amd64",
+		Version:         "v0.4.0",
+		ProtocolVersion: protocol.ProtocolVersion,
+		Capabilities:    protocol.DefaultRunnerCapabilities,
+	})
+	defer wsA2.Close(websocket.StatusNormalClosure, "")
+	if welcomeA2.AutoUpdateAllowed {
+		t.Fatalf("expected runner A AutoUpdateAllowed=false after PATCH, got %+v", welcomeA2)
+	}
+
+	// Runner B connects -> unaffected (AutoUpdateAllowed=true)
+	wsB, welcomeB := dialTestRunnerHello(t, ctx, wsBase+"/ws/runner", protocol.RunnerHelloPayload{
+		RunnerID:        "run_policy_b",
+		Name:            "PolicyRunnerB",
+		OS:              "linux",
+		Arch:            "amd64",
+		Version:         "v0.4.0",
+		ProtocolVersion: protocol.ProtocolVersion,
+		Capabilities:    protocol.DefaultRunnerCapabilities,
+	})
+	defer wsB.Close(websocket.StatusNormalClosure, "")
+	if !welcomeB.AutoUpdateAllowed {
+		t.Fatalf("expected runner B AutoUpdateAllowed=true (per-runner isolation), got %+v", welcomeB)
 	}
 }

@@ -25,6 +25,8 @@ type RunnerRecord struct {
 	SyncedConfigRev  int64    `json:"synced_config_rev"`
 	AuthToken        string   `json:"auth_token,omitempty"`
 	WorkspaceDefault string   `json:"workspace_default"`
+	AutoUpdate       bool     `json:"auto_update"`
+	UpdateMode       string   `json:"update_mode,omitempty"` // "self_update" | "scp"
 	CreatedAt        int64    `json:"created_at"`
 
 	// Live runtime / update metadata (enriched in-memory by Server from runner.hello & manifest)
@@ -91,15 +93,55 @@ func (s *Store) RenameRunner(ctx context.Context, id, name string) error {
 	return err
 }
 
+// UpdateRunnerPolicy updates per-runner auto_update and update_mode settings.
+func (s *Store) UpdateRunnerPolicy(ctx context.Context, id string, autoUpdate *bool, updateMode *string) error {
+	var sets []string
+	var args []any
+	if autoUpdate != nil {
+		val := 0
+		if *autoUpdate {
+			val = 1
+		}
+		sets = append(sets, "auto_update = ?")
+		args = append(args, val)
+	}
+	if updateMode != nil {
+		mode := strings.ToLower(strings.TrimSpace(*updateMode))
+		if mode != "self_update" && mode != "scp" {
+			return fmt.Errorf("invalid update_mode %q (expected self_update or scp)", *updateMode)
+		}
+		sets = append(sets, "update_mode = ?")
+		args = append(args, mode)
+	}
+	if len(sets) == 0 {
+		return nil
+	}
+	args = append(args, id)
+	res, err := s.mainDB.ExecContext(ctx, `UPDATE runners SET `+strings.Join(sets, ", ")+` WHERE id = ?`, args...)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err == nil && affected == 0 {
+		return sql.ErrNoRows
+	}
+	return err
+}
+
 func (s *Store) GetRunner(ctx context.Context, id string) (*RunnerRecord, error) {
 	var r RunnerRecord
 	var tagsStr string
+	var autoUpdateInt int
 	err := s.mainDB.QueryRowContext(ctx, `
-		SELECT id, name, hostname, os, arch, shell, version, tags_json, status, last_seen_at, synced_config_rev, auth_token, workspace_default, created_at
+		SELECT id, name, hostname, os, arch, shell, version, tags_json, status, last_seen_at, synced_config_rev, auth_token, workspace_default, auto_update, update_mode, created_at
 		FROM runners WHERE id = ?
-	`, id).Scan(&r.ID, &r.Name, &r.Hostname, &r.OS, &r.Arch, &r.Shell, &r.Version, &tagsStr, &r.Status, &r.LastSeenAt, &r.SyncedConfigRev, &r.AuthToken, &r.WorkspaceDefault, &r.CreatedAt)
+	`, id).Scan(&r.ID, &r.Name, &r.Hostname, &r.OS, &r.Arch, &r.Shell, &r.Version, &tagsStr, &r.Status, &r.LastSeenAt, &r.SyncedConfigRev, &r.AuthToken, &r.WorkspaceDefault, &autoUpdateInt, &r.UpdateMode, &r.CreatedAt)
 	if err != nil {
 		return nil, err
+	}
+	r.AutoUpdate = autoUpdateInt != 0
+	if strings.TrimSpace(r.UpdateMode) == "" {
+		r.UpdateMode = "self_update"
 	}
 	_ = json.Unmarshal([]byte(tagsStr), &r.Tags)
 	return &r, nil
@@ -107,7 +149,7 @@ func (s *Store) GetRunner(ctx context.Context, id string) (*RunnerRecord, error)
 
 func (s *Store) ListRunners(ctx context.Context) ([]RunnerRecord, error) {
 	rows, err := s.mainDB.QueryContext(ctx, `
-		SELECT id, name, hostname, os, arch, shell, version, tags_json, status, last_seen_at, synced_config_rev, auth_token, workspace_default, created_at
+		SELECT id, name, hostname, os, arch, shell, version, tags_json, status, last_seen_at, synced_config_rev, auth_token, workspace_default, auto_update, update_mode, created_at
 		FROM runners ORDER BY created_at ASC
 	`)
 	if err != nil {
@@ -118,8 +160,13 @@ func (s *Store) ListRunners(ctx context.Context) ([]RunnerRecord, error) {
 	for rows.Next() {
 		var r RunnerRecord
 		var tagsStr string
-		if err := rows.Scan(&r.ID, &r.Name, &r.Hostname, &r.OS, &r.Arch, &r.Shell, &r.Version, &tagsStr, &r.Status, &r.LastSeenAt, &r.SyncedConfigRev, &r.AuthToken, &r.WorkspaceDefault, &r.CreatedAt); err != nil {
+		var autoUpdateInt int
+		if err := rows.Scan(&r.ID, &r.Name, &r.Hostname, &r.OS, &r.Arch, &r.Shell, &r.Version, &tagsStr, &r.Status, &r.LastSeenAt, &r.SyncedConfigRev, &r.AuthToken, &r.WorkspaceDefault, &autoUpdateInt, &r.UpdateMode, &r.CreatedAt); err != nil {
 			return nil, err
+		}
+		r.AutoUpdate = autoUpdateInt != 0
+		if strings.TrimSpace(r.UpdateMode) == "" {
+			r.UpdateMode = "self_update"
 		}
 		_ = json.Unmarshal([]byte(tagsStr), &r.Tags)
 		out = append(out, r)

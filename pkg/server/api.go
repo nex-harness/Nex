@@ -596,28 +596,53 @@ func (s *Server) handleRunnerSubroutes(w http.ResponseWriter, r *http.Request) {
 	}
 	if action == "" && (r.Method == http.MethodPatch || r.Method == http.MethodPut) {
 		var body struct {
-			Name string `json:"name"`
+			Name       *string `json:"name"`
+			AutoUpdate *bool   `json:"auto_update"`
+			UpdateMode *string `json:"update_mode"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeErr(w, http.StatusBadRequest, err)
 			return
 		}
-		trimmed := strings.TrimSpace(body.Name)
-		if trimmed == "" {
-			writeErr(w, http.StatusBadRequest, fmt.Errorf("name is required"))
+		if body.Name == nil && body.AutoUpdate == nil && body.UpdateMode == nil {
+			writeErr(w, http.StatusBadRequest, fmt.Errorf("at least one field (name, auto_update, update_mode) is required"))
 			return
 		}
-		if utf8.RuneCountInString(trimmed) > 80 {
-			writeErr(w, http.StatusBadRequest, fmt.Errorf("name must be 80 characters or fewer"))
-			return
-		}
-		if err := s.store.RenameRunner(r.Context(), runnerID, trimmed); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				writeErr(w, http.StatusNotFound, fmt.Errorf("runner not found"))
+		if body.Name != nil {
+			trimmed := strings.TrimSpace(*body.Name)
+			if trimmed == "" {
+				writeErr(w, http.StatusBadRequest, fmt.Errorf("name is required"))
 				return
 			}
-			writeErr(w, http.StatusInternalServerError, err)
-			return
+			if utf8.RuneCountInString(trimmed) > 80 {
+				writeErr(w, http.StatusBadRequest, fmt.Errorf("name must be 80 characters or fewer"))
+				return
+			}
+			if err := s.store.RenameRunner(r.Context(), runnerID, trimmed); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeErr(w, http.StatusNotFound, fmt.Errorf("runner not found"))
+					return
+				}
+				writeErr(w, http.StatusInternalServerError, err)
+				return
+			}
+		}
+		if body.AutoUpdate != nil || body.UpdateMode != nil {
+			if body.UpdateMode != nil {
+				m := strings.ToLower(strings.TrimSpace(*body.UpdateMode))
+				if m != "self_update" && m != "scp" {
+					writeErr(w, http.StatusBadRequest, fmt.Errorf("invalid update_mode %q (expected self_update or scp)", *body.UpdateMode))
+					return
+				}
+			}
+			if err := s.store.UpdateRunnerPolicy(r.Context(), runnerID, body.AutoUpdate, body.UpdateMode); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeErr(w, http.StatusNotFound, fmt.Errorf("runner not found"))
+					return
+				}
+				writeErr(w, http.StatusInternalServerError, err)
+				return
+			}
 		}
 		rec, err := s.store.GetRunner(r.Context(), runnerID)
 		if err != nil {

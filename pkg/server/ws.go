@@ -114,7 +114,7 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 
 	// Send runner.welcome with latest config snapshot and update compatibility verdict
 	snap, _ := s.buildConfigSnapshot(ctx, hello.RunnerID)
-	autoUpdatePref, updateModePref := s.effectiveRunnerUpdatePolicy(ctx)
+	autoUpdatePref, updateModePref := s.effectiveRunnerUpdatePolicy(ctx, hello.RunnerID)
 	hasMatchedSSH := false
 	if updateModePref == "scp" {
 		hasMatchedSSH = s.hasMatchingSSHTarget(ctx, hello.RunnerID, hello.Name, hello.Hostname)

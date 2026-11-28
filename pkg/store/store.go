@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -76,6 +75,8 @@ func Open(dataDir string) (*Store, error) {
 	_, _ = mainDB.Exec(`ALTER TABLE cron_jobs ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`)
 	_, _ = mainDB.Exec(`ALTER TABLE cron_jobs ADD COLUMN thinking_effort TEXT NOT NULL DEFAULT ''`)
 	_, _ = mainDB.Exec(`ALTER TABLE runners ADD COLUMN name_customized INTEGER NOT NULL DEFAULT 0`)
+	_, _ = mainDB.Exec(`ALTER TABLE runners ADD COLUMN auto_update INTEGER NOT NULL DEFAULT 1`)
+	_, _ = mainDB.Exec(`ALTER TABLE runners ADD COLUMN update_mode TEXT NOT NULL DEFAULT 'self_update'`)
 
 	vaultKey, err := loadOrCreateVaultKey(dataDir)
 	if err != nil {
@@ -188,27 +189,7 @@ type UserPreferences struct {
 	AutoCheckUpdates             bool                        `json:"auto_check_updates"`
 	AutoDownloadUpdates          bool                        `json:"auto_download_updates"`
 	SkippedUpdateVersion         string                      `json:"skipped_update_version,omitempty"`
-	RunnerAutoUpdate             *bool                       `json:"runner_auto_update,omitempty"`
-	RunnerUpdateMode             string                      `json:"runner_update_mode,omitempty"` // "self_update" | "scp"
 }
-
-// EffectiveRunnerAutoUpdate returns whether runners may automatically self-update (defaults to true).
-func (p UserPreferences) EffectiveRunnerAutoUpdate() bool {
-	if p.RunnerAutoUpdate == nil {
-		return true
-	}
-	return *p.RunnerAutoUpdate
-}
-
-// EffectiveRunnerUpdateMode returns "scp" or "self_update" (defaults to "self_update").
-func (p UserPreferences) EffectiveRunnerUpdateMode() string {
-	if strings.EqualFold(strings.TrimSpace(p.RunnerUpdateMode), "scp") {
-		return "scp"
-	}
-	return "self_update"
-}
-
-func boolPtr(v bool) *bool { return &v }
 
 func DefaultUserPreferences() UserPreferences {
 	return UserPreferences{
@@ -239,8 +220,6 @@ func DefaultUserPreferences() UserPreferences {
 		GoalVerifierModelID:          "",
 		AutoCheckUpdates:             true,
 		AutoDownloadUpdates:          false,
-		RunnerAutoUpdate:             boolPtr(true),
-		RunnerUpdateMode:             "self_update",
 	}
 }
 
