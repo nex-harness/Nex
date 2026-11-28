@@ -1385,13 +1385,17 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 		if effectiveSecret != "" {
 			tokenFlag = " -token " + shellQuote(effectiveSecret)
 		}
+		appCodeSigDir := joinRemotePath(appContentsDir, "_CodeSignature", "darwin")
 		logf("Installing macOS NexRunner.app (%s) & LaunchAgent %s (%s)...", appBundleDir, label, plistPath)
 		startCmd = fmt.Sprintf(
 			"if [ -f %s ]; then oldpid=$(cat %s 2>/dev/null || true); [ -n \"$oldpid\" ] && kill \"$oldpid\" 2>/dev/null || true; rm -f %s; fi; "+
 				"pkill -f -- %s 2>/dev/null || true; "+
 				"mkdir -p %s %s && printf '%%s' %s | base64 -d > %s && cp -f %s %s && chmod +x %s && "+
 				"xattr -dr com.apple.quarantine %s 2>/dev/null || true; "+
-				"if command -v codesign >/dev/null 2>&1; then codesign --force --deep --sign - %s 2>/dev/null || true; fi; "+
+				"if command -v codesign >/dev/null 2>&1; then "+
+				"if codesign -dvv %s 2>&1 | grep -qE '^TeamIdentifier=[A-Z0-9]{10}$'; then rm -rf %s 2>/dev/null || true; "+
+				"else codesign --force --deep --sign - %s 2>/dev/null || true; fi; "+
+				"fi; "+
 				"/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f %s 2>/dev/null || true; "+
 				"printf '%%s' %s | base64 -d > %s && : > %s; "+
 				"uid=$(id -u); domain=''; "+
@@ -1417,7 +1421,7 @@ func (s *Server) handleSSHTargetDeploy(w http.ResponseWriter, r *http.Request, i
 			shellQuote("-id "+runnerID),
 			shellQuote(appMacOSDir), shellQuote(launchAgentsDir), shellQuote(infoPlistB64), shellQuote(appInfoPlist), shellQuote(remoteBin), shellQuote(appBin), shellQuote(appBin),
 			shellQuote(appBundleDir),
-			shellQuote(appBundleDir),
+			shellQuote(appBin), shellQuote(appCodeSigDir), shellQuote(appBundleDir),
 			shellQuote(appBundleDir),
 			shellQuote(plistB64), shellQuote(plistPath), shellQuote(logFile),
 			label, label,

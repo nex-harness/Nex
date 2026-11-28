@@ -6459,4 +6459,73 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     expect(formatRunnerVersion('1dd48cf', '')).toBe('1dd48cf');
     expect(formatRunnerVersion('dev', '49019b2')).toBe('dev(49019b2)');
   });
+
+  it('shows macOS Full Disk Access badge, opens drag-to-grant guide modal, and updates status after check', async () => {
+    const origFetch = globalThis.fetch;
+    const permActions: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/v1/runners/mac_fda/permissions') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body || '{}')) as { action?: string };
+        permActions.push(body.action || '');
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            runner_id: 'mac_fda',
+            action: body.action,
+            full_disk_access: body.action === 'check',
+            app_path: '/Users/tylinux/.nex-runner/NexRunner.app',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as typeof fetch;
+
+    try {
+      useNexStore.setState({
+        mainView: 'settings',
+        settingsSection: 'runners',
+        runners: [
+          {
+            id: 'mac_fda',
+            name: 'macM4',
+            hostname: 'MacMini',
+            os: 'darwin',
+            arch: 'arm64',
+            shell: '/bin/zsh',
+            version: 'v0.4.1',
+            build_sha: '5bd72ee',
+            tags: [],
+            status: 'online',
+            last_seen_at: Date.now(),
+            synced_config_rev: 1,
+            workspace_default: '/Users/tylinux',
+            full_disk_access: false,
+            app_path: '/Users/tylinux/.nex-runner/NexRunner.app',
+          },
+        ],
+      });
+
+      render(<App />);
+
+      const badgeBtn = screen.getByTestId('runner-fda-btn-mac_fda');
+      fireEvent.click(badgeBtn);
+
+      const modal = screen.getByTestId('runner-fda-modal');
+      expect(modal.textContent).toContain('NexRunner.app');
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('fda-open-guide-btn'));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('fda-recheck-btn'));
+      });
+
+      expect(permActions).toEqual(['open_guide', 'check']);
+      expect(screen.getByTestId('runner-fda-granted-mac_fda')).toBeTruthy();
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
 });

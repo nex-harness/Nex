@@ -36,6 +36,9 @@ jobs:
         run: CGO_ENABLED=0 go test ./...
 
       - name: Build Linux amd64 Binaries & Multi-Platform Runners (CGO_ENABLED=0)
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
         run: |
           BASE_VER="$(node -p "require('./mygo.json').version")"
           SHA="$(git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)"
@@ -50,6 +53,31 @@ jobs:
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VER} -X main.buildSHA=${SHA}" -o dist/runners/nex-runner-darwin-arm64 ./cmd/nex-runner
           CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VER} -X main.buildSHA=${SHA}" -o dist/runners/nex-runner-darwin-amd64 ./cmd/nex-runner
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VER} -X main.buildSHA=${SHA}" -o dist/runners/nex-runner-windows-amd64.exe ./cmd/nex-runner
+          if [ -n "${APPLE_CERT_P12:-}" ] && [ -n "${APPLE_CERT_PASSWORD:-}" ]; then
+            RCODESIGN_BIN="$(command -v rcodesign || true)"
+            if [ -z "$RCODESIGN_BIN" ]; then
+              mkdir -p /tmp/rcodesign-bin
+              curl -fsSL "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign/0.29.0/apple-codesign-0.29.0-x86_64-unknown-linux-musl.tar.gz" \
+                | tar -xz -C /tmp/rcodesign-bin --strip-components=1
+              RCODESIGN_BIN="/tmp/rcodesign-bin/rcodesign"
+              chmod +x "$RCODESIGN_BIN"
+            fi
+            TMP_P12="$(mktemp)"
+            TMP_PW="$(mktemp)"
+            trap 'rm -f "$TMP_P12" "$TMP_PW"' EXIT
+            printf '%s' "$APPLE_CERT_P12" | base64 --decode > "$TMP_P12"
+            printf '%s' "$APPLE_CERT_PASSWORD" > "$TMP_PW"
+            chmod 600 "$TMP_P12" "$TMP_PW"
+            for bin in dist/runners/nex-runner-darwin-arm64 dist/runners/nex-runner-darwin-amd64; do
+              echo "[sign] cross-signing $bin with Developer ID certificate"
+              "$RCODESIGN_BIN" sign \
+                --p12-file "$TMP_P12" \
+                --p12-password-file "$TMP_PW" \
+                --binary-identifier com.nex.runner \
+                --code-signature-flags runtime \
+                "$bin"
+            done
+          fi
           VERSION="$VER" COMMIT_SHA="$SHA" ./scripts/gen-runner-manifest.sh dist/runners
           SKIP_WEB=1 ./scripts/package-server.sh linux amd64
           ls -lh dist/nex-server dist/nex-runner dist/runners/

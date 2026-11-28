@@ -34,6 +34,8 @@ type RunnerRecord struct {
 	Capabilities    []string `json:"capabilities,omitempty"`
 	IsDev           bool     `json:"is_dev,omitempty"`
 	Elevated        bool     `json:"elevated,omitempty"`
+	FullDiskAccess  *bool    `json:"full_disk_access,omitempty"`
+	AppPath         string   `json:"app_path,omitempty"`
 	UpdateStatus    string   `json:"update_status,omitempty"` // "up_to_date" | "update_available" | "update_required"
 	UpdateReason    string   `json:"update_reason,omitempty"`
 	TargetVersion   string   `json:"target_version,omitempty"`

@@ -2,6 +2,7 @@ import { formatMsg } from '../i18n/messages';
 import type { LocaleCode } from '../i18n';
 import {
   AlertTriangle,
+  ArrowRight,
   ArrowUpCircle,
   Check,
   ChevronDown,
@@ -9,9 +10,12 @@ import {
   CloudDownload,
   Copy,
   Ellipsis,
+  ExternalLink,
   Eye,
   EyeOff,
   FileCode2,
+  FolderOpen,
+  HardDrive,
   KeyRound,
   Link2,
   LoaderCircle,
@@ -21,6 +25,7 @@ import {
   RefreshCw,
   Server,
   Shield,
+  ShieldCheck,
   Square,
   Terminal,
   Trash2,
@@ -223,6 +228,58 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
   const [relayPairCmd, setRelayPairCmd] = useState('');
   const [relayPairLoading, setRelayPairLoading] = useState(false);
   const [relayCopied, setRelayCopied] = useState(false);
+  const [fdaRunnerId, setFdaRunnerId] = useState<string | null>(null);
+  const [fdaBusyAction, setFdaBusyAction] = useState<string | null>(null);
+  const fdaRunner = fdaRunnerId ? runners.find((item) => item.id === fdaRunnerId) || null : null;
+
+  const triggerRunnerPermission = async (
+    runner: RunnerRecord,
+    action: 'check' | 'open_settings' | 'reveal_app' | 'open_guide',
+  ) => {
+    setFdaBusyAction(action);
+    try {
+      const res = await apiFetch<{
+        ok?: boolean;
+        full_disk_access?: boolean;
+        app_path?: string;
+        error?: string;
+      }>(`/api/v1/runners/${encodeURIComponent(runner.id)}/permissions`, {
+        method: 'POST',
+        body: JSON.stringify({ action }),
+      });
+      if (mountedRef.current && res) {
+        useNexStore.setState((prev) => ({
+          runners: prev.runners.map((item) =>
+            item.id === runner.id
+              ? {
+                  ...item,
+                  full_disk_access:
+                    typeof res.full_disk_access === 'boolean' ? res.full_disk_access : item.full_disk_access,
+                  app_path: res.app_path || item.app_path,
+                }
+              : item,
+          ),
+        }));
+        if (res.error) {
+          onFlash(formatMsg(locale, 'runners.fdaActionFailed', { error: res.error }));
+        } else if (action === 'check') {
+          if (res.full_disk_access) {
+            onFlash(formatMsg(locale, 'runners.fdaGrantedToast', { name: runner.name }));
+          } else {
+            onFlash(formatMsg(locale, 'runners.fdaStillMissingToast', { name: runner.name }));
+          }
+        } else if (action === 'open_guide') {
+          onFlash(formatMsg(locale, 'runners.fdaGuideOpened', { name: runner.name }));
+        }
+      }
+    } catch (err) {
+      if (mountedRef.current) {
+        onFlash(formatMsg(locale, 'runners.fdaActionFailed', { error: err instanceof Error ? err.message : String(err) }));
+      }
+    } finally {
+      if (mountedRef.current) setFdaBusyAction(null);
+    }
+  };
 
   const wsProto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss' : 'ws';
   const wsHost = typeof window !== 'undefined' ? window.location.host : '127.0.0.1:8080';
@@ -890,6 +947,28 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                         <Shield className="size-3" />
                         <span>{formatMsg(locale, 'runners.adminBadge')}</span>
                       </span>
+                    )}
+                    {r.status === 'online' && r.os === 'darwin' && r.full_disk_access === false && (
+                      <button
+                        type="button"
+                        data-testid={`runner-fda-btn-${r.id}`}
+                        onClick={() => setFdaRunnerId(r.id)}
+                        className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-ui-xs font-medium text-amber-700 transition-colors hover:bg-amber-500/25 dark:text-amber-300"
+                      >
+                        <HardDrive className="size-3" />
+                        <span>{formatMsg(locale, 'runners.fdaNeeded')}</span>
+                      </button>
+                    )}
+                    {r.status === 'online' && r.os === 'darwin' && r.full_disk_access === true && (
+                      <button
+                        type="button"
+                        data-testid={`runner-fda-granted-${r.id}`}
+                        onClick={() => setFdaRunnerId(r.id)}
+                        className="inline-flex items-center gap-1 rounded-md border border-success/30 bg-success-surface px-1.5 py-0.5 text-ui-xs font-medium text-success-surface-fg transition-opacity hover:opacity-85"
+                      >
+                        <ShieldCheck className="size-3" />
+                        <span>{formatMsg(locale, 'runners.fdaGranted')}</span>
+                      </button>
                     )}
                     {matchedSsh?.ssh_alias && (
                       <span className="inline-flex items-center gap-1 rounded-md bg-brand-blue/10 px-1.5 py-0.5 font-mono text-[11px] text-brand-blue">
@@ -1647,6 +1726,193 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
           </div>
         </div>
       )}
+
+      {fdaRunner && (() => {
+        const displayPath = fdaRunner.app_path || '~/.nex-runner/NexRunner.app';
+        const appName = displayPath.split('/').filter(Boolean).pop() || 'NexRunner.app';
+        const granted = fdaRunner.full_disk_access === true;
+        return (
+          <div
+            data-testid="runner-fda-modal"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setFdaRunnerId(null);
+            }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
+          >
+            <div className="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-popover text-foreground shadow-2xl">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <HardDrive className="size-4 shrink-0 text-amber-500" />
+                    <h3 className="text-ui-lg font-semibold text-foreground">
+                      {formatMsg(locale, 'runners.fdaModalTitle')}
+                    </h3>
+                  </div>
+                  <p className="mt-1 text-ui-xs leading-relaxed text-foreground-subtle">
+                    {formatMsg(locale, 'runners.fdaModalSubtitle', { name: fdaRunner.name })}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFdaRunnerId(null)}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-lg text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="space-y-4 px-5 py-4">
+                {/* Live status bar */}
+                <div
+                  data-testid="fda-status-pill"
+                  className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-ui-xs font-medium ${
+                    granted
+                      ? 'border-success/30 bg-success-surface text-success-surface-fg'
+                      : 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    {granted ? <ShieldCheck className="size-3.5" /> : <AlertTriangle className="size-3.5" />}
+                    <span>
+                      {granted
+                        ? formatMsg(locale, 'runners.fdaStatusGranted')
+                        : formatMsg(locale, 'runners.fdaStatusMissing')}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="fda-recheck-btn"
+                    disabled={fdaBusyAction !== null}
+                    onClick={() => void triggerRunnerPermission(fdaRunner, 'check')}
+                    className="inline-flex h-6 items-center gap-1 rounded-md border border-current/25 bg-card/80 px-2 text-ui-xs font-medium text-foreground transition-colors hover:bg-hover disabled:opacity-50"
+                  >
+                    {fdaBusyAction === 'check' ? (
+                      <LoaderCircle className="size-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="size-3" />
+                    )}
+                    <span>{formatMsg(locale, 'runners.fdaRecheckBtn')}</span>
+                  </button>
+                </div>
+
+                {/* Visual drag-to-grant illustration */}
+                <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 rounded-xl border border-dashed border-border bg-surface/60 p-3.5">
+                  <div className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-3 text-center shadow-sm">
+                    <FolderOpen className="size-5 text-brand-blue" />
+                    <span className="text-[11px] text-foreground-subtlest">
+                      {formatMsg(locale, 'runners.fdaDragVisualApp')}
+                    </span>
+                    <span className="max-w-full truncate rounded bg-surface px-1.5 py-0.5 font-mono text-[11px] font-medium text-foreground">
+                      {appName}
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1 px-1 text-foreground-subtlest">
+                    <ArrowRight className="size-4 animate-pulse text-brand-blue" />
+                    <span className="whitespace-nowrap text-[10px] font-medium text-brand-blue">
+                      {formatMsg(locale, 'runners.fdaDragVisualArrow')}
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-3 text-center shadow-sm">
+                    <ShieldCheck className="size-5 text-success" />
+                    <span className="text-[11px] font-medium leading-tight text-foreground">
+                      {formatMsg(locale, 'runners.fdaDragVisualSettings')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Numbered steps */}
+                <ol className="space-y-2 text-ui-xs leading-relaxed text-foreground-subtle">
+                  <li className="flex gap-2">
+                    <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-surface font-mono text-[10px] font-semibold text-foreground">
+                      1
+                    </span>
+                    <span>{formatMsg(locale, 'runners.fdaStep1')}</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-surface font-mono text-[10px] font-semibold text-foreground">
+                      2
+                    </span>
+                    <span>{formatMsg(locale, 'runners.fdaStep2', { appName })}</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-surface font-mono text-[10px] font-semibold text-foreground">
+                      3
+                    </span>
+                    <span>{formatMsg(locale, 'runners.fdaStep3')}</span>
+                  </li>
+                </ol>
+
+                {/* Copyable app bundle path */}
+                <div className="space-y-1">
+                  <div className="text-[11px] font-medium text-foreground-subtle">
+                    {formatMsg(locale, 'runners.fdaAppPathLabel')}
+                  </div>
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-2.5 py-1.5">
+                    <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground">
+                      {displayPath}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(displayPath);
+                        onFlash(formatMsg(locale, 'common.copied'));
+                      }}
+                      className="inline-flex h-6 shrink-0 items-center gap-1 rounded border border-border bg-card px-2 text-[11px] text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground"
+                    >
+                      <Copy className="size-3" />
+                      <span>{formatMsg(locale, 'common.copy')}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-[11px] leading-relaxed text-foreground-subtlest">
+                  {formatMsg(locale, 'runners.fdaSignNote')}
+                </p>
+              </div>
+
+              {/* Footer */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface/40 px-5 py-3.5">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={fdaBusyAction !== null}
+                    onClick={() => void triggerRunnerPermission(fdaRunner, 'open_settings')}
+                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-border bg-card px-2.5 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground disabled:opacity-50"
+                  >
+                    <ExternalLink className="size-3" />
+                    <span>{formatMsg(locale, 'runners.fdaOpenSettingsBtn')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={fdaBusyAction !== null}
+                    onClick={() => void triggerRunnerPermission(fdaRunner, 'reveal_app')}
+                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-border bg-card px-2.5 text-ui-xs text-foreground-subtle transition-colors hover:bg-hover hover:text-foreground disabled:opacity-50"
+                  >
+                    <FolderOpen className="size-3" />
+                    <span>{formatMsg(locale, 'runners.fdaRevealAppBtn')}</span>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  data-testid="fda-open-guide-btn"
+                  disabled={fdaBusyAction !== null}
+                  onClick={() => void triggerRunnerPermission(fdaRunner, 'open_guide')}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3.5 text-ui-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {fdaBusyAction === 'open_guide' ? (
+                    <LoaderCircle className="size-3.5 animate-spin" />
+                  ) : (
+                    <HardDrive className="size-3.5" />
+                  )}
+                  <span>{formatMsg(locale, 'runners.fdaOpenGuideBtn')}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -112,6 +112,8 @@ type runnerRuntimeMeta struct {
 	Capabilities    []string
 	IsDev           bool
 	Elevated        bool
+	FullDiskAccess  *bool
+	AppPath         string
 	UpdateStatus    string
 	UpdateReason    string
 	TargetVersion   string
@@ -490,6 +492,8 @@ func (s *Server) enrichRunnerRecord(ctx context.Context, rec *store.RunnerRecord
 	rec.Capabilities = meta.Capabilities
 	rec.IsDev = meta.IsDev
 	rec.Elevated = meta.Elevated
+	rec.FullDiskAccess = meta.FullDiskAccess
+	rec.AppPath = meta.AppPath
 	rec.UpdateStatus = meta.UpdateStatus
 	rec.UpdateReason = meta.UpdateReason
 	rec.TargetVersion = meta.TargetVersion
@@ -923,5 +927,73 @@ func (s *Server) handleRunnersUpdateAll(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusAccepted, map[string]any{
 		"triggered": triggered,
 		"skipped":   skipped,
+	})
+}
+
+func (s *Server) handleRunnerPermissions(w http.ResponseWriter, r *http.Request, runnerID string) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Action string `json:"action"`
+	}
+	if r.Body != nil {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&body); err != nil && err != io.EOF {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+	}
+	action := strings.TrimSpace(body.Action)
+	if action == "" {
+		action = "check"
+	}
+	switch action {
+	case "check", "open_settings", "reveal_app", "open_guide":
+	default:
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("unsupported permission action %q", action))
+		return
+	}
+
+	reqID := "perm_" + uuid.NewString()
+	env, err := protocol.NewEnvelope(protocol.TypeRunnerPermission, protocol.RunnerPermissionPayload{
+		RequestID: reqID,
+		Action:    action,
+	})
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	env.RunnerID = runnerID
+	resp, err := s.callRunnerRPC(r.Context(), runnerID, env, 10*time.Second)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	var res protocol.RunnerPermissionResultPayload
+	if err := json.Unmarshal(resp.Payload, &res); err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	s.mu.Lock()
+	if cur := s.runnerMeta[runnerID]; cur != nil {
+		if res.FullDiskAccess != nil {
+			v := *res.FullDiskAccess
+			cur.FullDiskAccess = &v
+		}
+		if res.AppPath != "" {
+			cur.AppPath = res.AppPath
+		}
+	}
+	s.mu.Unlock()
+	s.broadcastRunnerStatus(r.Context(), runnerID, "online")
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":               res.Error == "",
+		"runner_id":        runnerID,
+		"action":           action,
+		"full_disk_access": res.FullDiskAccess,
+		"app_path":         res.AppPath,
+		"error":            res.Error,
 	})
 }

@@ -696,3 +696,103 @@ func TestStaleOnlineResetLegacyRunnerDetectionAndSucceededTTL(t *testing.T) {
 		t.Fatalf("expected expired succeeded phase to clear, got %+v", copied)
 	}
 }
+
+func TestRunnerPermissionsRPCAndRecordEnrichment(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	srv, err := New(Config{
+		Store:   st,
+		Version: "v0.4.1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	wsBase := "ws" + strings.TrimPrefix(ts.URL, "http")
+
+	fdaFalse := false
+	wsConn, _ := dialTestRunnerHello(t, ctx, wsBase+"/ws/runner", protocol.RunnerHelloPayload{
+		RunnerID:        "mac_fda_1",
+		Name:            "macM4",
+		OS:              "darwin",
+		Arch:            "arm64",
+		Version:         "v0.4.1",
+		ProtocolVersion: protocol.ProtocolVersion,
+		Capabilities:    protocol.DefaultRunnerCapabilities,
+		FullDiskAccess:  &fdaFalse,
+		AppPath:         "/Users/tylinux/.nex-runner/NexRunner.app",
+	})
+	defer wsConn.Close(websocket.StatusNormalClosure, "")
+
+	// Mock runner responding to TypeRunnerPermission -> granted=true
+	go func() {
+		for {
+			_, raw, rErr := wsConn.Read(ctx)
+			if rErr != nil {
+				return
+			}
+			var env protocol.Envelope
+			if json.Unmarshal(raw, &env) != nil {
+				continue
+			}
+			if env.Type == protocol.TypeRunnerPermission {
+				fdaTrue := true
+				reply, _ := protocol.NewEnvelope(protocol.TypeRunnerPermissionResult, protocol.RunnerPermissionResultPayload{
+					FullDiskAccess: &fdaTrue,
+					AppPath:        "/Users/tylinux/.nex-runner/NexRunner.app",
+				})
+				reply.ReplyTo = env.ID
+				b, _ := json.Marshal(reply)
+				_ = wsConn.Write(ctx, websocket.MessageText, b)
+				return
+			}
+		}
+	}()
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/runners/mac_fda_1/permissions", strings.NewReader(`{"action":"check"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, string(b))
+	}
+	var out struct {
+		OK             bool   `json:"ok"`
+		FullDiskAccess *bool  `json:"full_disk_access"`
+		AppPath        string `json:"app_path"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if !out.OK || out.FullDiskAccess == nil || !*out.FullDiskAccess || out.AppPath != "/Users/tylinux/.nex-runner/NexRunner.app" {
+		t.Fatalf("unexpected permission response: %+v", out)
+	}
+
+	// Verify GET /api/v1/runners reflects updated full_disk_access=true
+	listResp, err := http.Get(ts.URL + "/api/v1/runners")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listResp.Body.Close()
+	var runners []store.RunnerRecord
+	if err := json.NewDecoder(listResp.Body).Decode(&runners); err != nil {
+		t.Fatal(err)
+	}
+	if len(runners) != 1 || runners[0].FullDiskAccess == nil || !*runners[0].FullDiskAccess {
+		t.Fatalf("expected enriched runner full_disk_access=true, got %+v", runners)
+	}
+}

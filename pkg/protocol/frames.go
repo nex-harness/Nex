@@ -28,13 +28,15 @@ func IsDevVersion(version string) bool {
 // Frame Types exchanged over /ws/runner and /ws/client.
 const (
 	// Handshake & Sync
-	TypeRunnerHello        = "runner.hello"
-	TypeRunnerWelcome      = "runner.welcome"
-	TypeRunnerUpdate       = "runner.update"
-	TypeRunnerUpdateStatus = "runner.update_status"
-	TypeConfigSync         = "config.sync"
-	TypeOutboxAck          = "outbox.ack"
-	TypeRunnerStatus       = "runner.status"
+	TypeRunnerHello            = "runner.hello"
+	TypeRunnerWelcome          = "runner.welcome"
+	TypeRunnerUpdate           = "runner.update"
+	TypeRunnerUpdateStatus     = "runner.update_status"
+	TypeRunnerPermission       = "runner.permission"
+	TypeRunnerPermissionResult = "runner.permission_result"
+	TypeConfigSync             = "config.sync"
+	TypeOutboxAck              = "outbox.ack"
+	TypeRunnerStatus           = "runner.status"
 
 	// Client Subscription & Session Control
 	TypeClientSubscribe = "client.subscribe"
@@ -137,6 +139,8 @@ type RunnerHelloPayload struct {
 	Capabilities     []string `json:"capabilities,omitempty"`
 	IsDev            bool     `json:"is_dev,omitempty"`
 	Elevated         bool     `json:"elevated,omitempty"`
+	FullDiskAccess   *bool    `json:"full_disk_access,omitempty"`
+	AppPath          string   `json:"app_path,omitempty"`
 	UpdateState      string   `json:"update_state,omitempty"`
 	UpdateError      string   `json:"update_error,omitempty"`
 	Tags                 []string `json:"tags,omitempty"`
@@ -164,6 +168,20 @@ type RunnerUpdateStatusPayload struct {
 	TargetVersion string `json:"target_version,omitempty"`
 	Message       string `json:"message,omitempty"`
 	Error         string `json:"error,omitempty"`
+}
+
+// RunnerPermissionPayload instructs a macOS runner to re-check Full Disk Access or open guided grant UI.
+type RunnerPermissionPayload struct {
+	RequestID string `json:"request_id,omitempty"`
+	Action    string `json:"action"` // "check" | "open_settings" | "reveal_app" | "open_guide"
+}
+
+// RunnerPermissionResultPayload reports updated permission state and target bundle path from a runner.
+type RunnerPermissionResultPayload struct {
+	RequestID      string `json:"request_id,omitempty"`
+	FullDiskAccess *bool  `json:"full_disk_access,omitempty"`
+	AppPath        string `json:"app_path,omitempty"`
+	Error          string `json:"error,omitempty"`
 }
 
 // MemoryConfigSync distributes memory automation preferences from Server to Runners.

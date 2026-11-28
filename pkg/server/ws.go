@@ -78,6 +78,8 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 		Capabilities:    append([]string(nil), hello.Capabilities...),
 		IsDev:           isDev,
 		Elevated:        hello.Elevated,
+		FullDiskAccess:  hello.FullDiskAccess,
+		AppPath:         hello.AppPath,
 		UpdatePhase:     hello.UpdateState,
 		UpdateError:     hello.UpdateError,
 		Online:          true,
@@ -198,6 +200,23 @@ func (s *Server) handleRunnerWS(w http.ResponseWriter, r *http.Request) {
 
 		case protocol.TypeCronManage:
 			go s.handleRunnerCronManage(ctx, rc, env)
+
+		case protocol.TypeRunnerPermissionResult:
+			var res protocol.RunnerPermissionResultPayload
+			if json.Unmarshal(env.Payload, &res) == nil {
+				s.mu.Lock()
+				if cur := s.runnerMeta[hello.RunnerID]; cur != nil {
+					if res.FullDiskAccess != nil {
+						v := *res.FullDiskAccess
+						cur.FullDiskAccess = &v
+					}
+					if res.AppPath != "" {
+						cur.AppPath = res.AppPath
+					}
+				}
+				s.mu.Unlock()
+				s.broadcastRunnerStatus(ctx, hello.RunnerID, "online")
+			}
 
 		case protocol.TypeRunnerUpdateStatus:
 			var st protocol.RunnerUpdateStatusPayload

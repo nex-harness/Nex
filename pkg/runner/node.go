@@ -653,6 +653,8 @@ func (n *Node) connectOnce(ctx context.Context) error {
 		Capabilities:     n.cfg.Capabilities,
 		IsDev:            n.isDev,
 		Elevated:         n.cfg.Elevated,
+		FullDiskAccess:   detectFullDiskAccess(),
+		AppPath:          resolveRunnerAppPath(),
 		UpdateState:      helloUpdateState,
 		UpdateError:      helloUpdateErr,
 		Tags:                 n.cfg.Tags,
@@ -985,6 +987,22 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 		if json.Unmarshal(env.Payload, &up) == nil && n.updater != nil {
 			n.updater.HandleUpdateCommand(ctx, up)
 		}
+
+	case protocol.TypeRunnerPermission:
+		var req protocol.RunnerPermissionPayload
+		_ = json.Unmarshal(env.Payload, &req)
+		fda, appPath, pErr := handleRunnerPermissionAction(req.Action)
+		res := protocol.RunnerPermissionResultPayload{
+			RequestID:      req.RequestID,
+			FullDiskAccess: fda,
+			AppPath:        appPath,
+		}
+		if pErr != nil {
+			res.Error = pErr.Error()
+		}
+		reply, _ := protocol.NewEnvelope(protocol.TypeRunnerPermissionResult, res)
+		reply.ReplyTo = env.ID
+		_ = n.sendEnvelope(ctx, reply)
 
 	case protocol.TypeSessionPrompt:
 		var p protocol.PromptPayload

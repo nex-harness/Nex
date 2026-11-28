@@ -17,6 +17,8 @@ export interface RunnerRecord {
   capabilities?: string[];
   is_dev?: boolean;
   elevated?: boolean;
+  full_disk_access?: boolean;
+  app_path?: string;
   update_status?: 'up_to_date' | 'update_available' | 'update_required' | string;
   update_reason?: string;
   target_version?: string;

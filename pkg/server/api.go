@@ -665,6 +665,10 @@ func (s *Server) handleRunnerSubroutes(w http.ResponseWriter, r *http.Request) {
 		s.handleRunnerUpdateTrigger(w, r, runnerID)
 		return
 	}
+	if action == "permissions" {
+		s.handleRunnerPermissions(w, r, runnerID)
+		return
+	}
 	if action != "dirs" {
 		w.WriteHeader(http.StatusNotFound)
 		return

@@ -75,7 +75,7 @@ jobs:
           SKIP_WEB=1 ./scripts/package-server.sh darwin amd64
           cp dist/nex-server-*.tar.gz dist/artifacts/
 
-          # Standalone nex-runner binaries (versioned filenames)
+          # Standalone non-macOS nex-runner binaries (versioned filenames; macOS runners are built & signed in desktop-macos)
           VER_TAG="v${VERSION#v}"
           SHORT_SHA="${GITHUB_SHA:-unknown}"
           if [ "$SHORT_SHA" != "unknown" ]; then
@@ -83,17 +83,7 @@ jobs:
           fi
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${SHORT_SHA}" -o "dist/artifacts/nex-runner-${VER_TAG}-linux-amd64" ./cmd/nex-runner
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${SHORT_SHA}" -o "dist/artifacts/nex-runner-${VER_TAG}-linux-arm64" ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${SHORT_SHA}" -o "dist/artifacts/nex-runner-${VER_TAG}-darwin-arm64" ./cmd/nex-runner
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${SHORT_SHA}" -o "dist/artifacts/nex-runner-${VER_TAG}-darwin-amd64" ./cmd/nex-runner
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${SHORT_SHA}" -o "dist/artifacts/nex-runner-${VER_TAG}-windows-amd64.exe" ./cmd/nex-runner
-
-          REL_BASE=""
-          if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
-            REL_BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
-          fi
-          VERSION="${VERSION}" COMMIT_SHA="${SHORT_SHA}" RELEASE_BASE_URL="${REL_BASE}" \
-            OUT_FILE=dist/artifacts/runner-manifest.json \
-            ./scripts/gen-runner-manifest.sh dist/artifacts
 
           # Standalone nex-relay binaries (versioned filenames)
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o "dist/artifacts/nex-relay-${VER_TAG}-linux-amd64" ./cmd/nex-relay
@@ -186,6 +176,32 @@ jobs:
 
       - name: Build iOS Simulator App
         run: ./scripts/build-clients.sh ios-sim
+
+      - name: Build, Sign & Package macOS Runners (arm64 / amd64)
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
+          NEX_ENABLE_MAC_SIGN: ${{ vars.NEX_ENABLE_MAC_SIGN }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/artifacts
+          VER_TAG="v${VERSION#v}"
+          SHORT_SHA="${GITHUB_SHA:-unknown}"
+          if [ "$SHORT_SHA" != "unknown" ]; then
+            SHORT_SHA="${SHORT_SHA:0:7}"
+          fi
+          for arch in arm64 amd64; do
+            out="dist/artifacts/nex-runner-${VER_TAG}-darwin-${arch}"
+            CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -trimpath \
+              -ldflags="-s -w -X main.version=${VERSION} -X main.buildSHA=${SHORT_SHA}" \
+              -o "$out" ./cmd/nex-runner
+            if [ "${NEX_ENABLE_MAC_SIGN:-}" = "1" ]; then
+              echo "[sign] signing $out with $APPLE_SIGNING_IDENTITY"
+              codesign --force --options runtime --timestamp --identifier com.nex.runner \
+                --sign "$APPLE_SIGNING_IDENTITY" "$out"
+              codesign --verify --strict "$out"
+            fi
+          done
 
       - name: Package macOS / iOS Simulator Artifacts
         env:
@@ -365,6 +381,9 @@ jobs:
     needs: [resolve-version, server-artifacts, desktop-macos, desktop-linux-windows, android]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -372,11 +391,23 @@ jobs:
           pattern: "*-artifacts"
           merge-multiple: true
 
-      - name: Generate Update Manifest & Checksums
+      - name: Generate Runner Manifest, Update Manifest & Checksums
         env:
           VERSION: ${{ needs.resolve-version.outputs.version }}
         run: |
           set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA:-unknown}"
+          if [ "$SHORT_SHA" != "unknown" ]; then
+            SHORT_SHA="${SHORT_SHA:0:7}"
+          fi
+          REL_BASE=""
+          if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
+            REL_BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          fi
+          chmod +x scripts/gen-runner-manifest.sh
+          VERSION="${VERSION}" COMMIT_SHA="${SHORT_SHA}" RELEASE_BASE_URL="${REL_BASE}" \
+            OUT_FILE=dist/artifacts/runner-manifest.json \
+            ./scripts/gen-runner-manifest.sh dist/artifacts
           cd dist/artifacts
           cat > latest.json <<EOF
           {

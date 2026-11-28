@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"syscall"
 )
 
@@ -30,6 +31,15 @@ func (n *Node) platformSwapAndRestart(ctx context.Context, currentExe, stagedPat
 		return fmt.Errorf("atomic rename into %s: %w", currentExe, err)
 	}
 	_ = os.Remove(stagedPath)
+
+	// Remove any stale ad-hoc bundle seal so macOS validates the new Mach-O executable's embedded Developer ID signature cleanly.
+	if runtime.GOOS == "darwin" {
+		macOSDir := filepath.Dir(currentExe)
+		contentsDir := filepath.Dir(macOSDir)
+		if filepath.Base(macOSDir) == "MacOS" && filepath.Base(contentsDir) == "Contents" {
+			_ = os.RemoveAll(filepath.Join(contentsDir, "_CodeSignature"))
+		}
+	}
 
 	if err := n.updater.saveState(*state); err != nil {
 		_ = copyFile(backupPath, currentExe, 0o755)
