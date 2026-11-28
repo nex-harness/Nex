@@ -1202,6 +1202,8 @@ export const zhCN = {
   "runners.updateModeScp": "服务端本地准备 + SSH SCP 部署",
   "runners.updateViaScpBtn": "SCP 升级",
   "runners.updatePolicySaved": "已保存 Runner 更新策略",
+  "runners.runnerSettingsTitle": "Runner 更新设置",
+  "runners.editRunnerSettings": "Runner 更新设置",
   "chat.loadEarlierTurns": "加载更早的 {count} 条消息",
   "chat.showAllTurns": "展开全部 ({total})",
   "settings.providersTabChat": "提供商与聊天模型",

@@ -6530,20 +6530,34 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
     }
   });
 
-  it('matches renamed runners to SSH targets by deterministic runner ID and supports per-runner Update Policy (auto-update + SCP deploy)', async () => {
+  it('matches renamed runners to SSH targets and merges per-runner update policy into the SSH/Runner modal', async () => {
     const origFetch = globalThis.fetch;
-    const patchBodies: string[] = [];
+    const patchBodies: Array<{ url: string; body: string }> = [];
     const deployHits: string[] = [];
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes('/api/v1/runners/run_macm4') && init?.method === 'PATCH') {
+      if (url.includes('/api/v1/ssh/targets') && init?.method === 'POST' && !url.includes('/deploy')) {
+        const body = JSON.parse(String(init.body || '{}')) as { id?: string; name?: string; install_mode?: string };
+        return new Response(
+          JSON.stringify({
+            id: body.id || 'ssh_mac',
+            name: body.name || 'macM4',
+            host: '192.168.123.22',
+            port: 22,
+            username: 'tylinux',
+            auth_method: 'key',
+            install_mode: body.install_mode || 'scp',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (url.includes('/api/v1/runners/') && init?.method === 'PATCH') {
         const body = String(init.body || '{}');
-        patchBodies.push(body);
+        patchBodies.push({ url, body });
         const parsed = JSON.parse(body) as { auto_update?: boolean; update_mode?: 'self_update' | 'scp' };
         return new Response(
           JSON.stringify({
-            id: 'run_macm4',
-            name: 'M4',
+            id: url.split('/').pop(),
             ...parsed,
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -6572,7 +6586,7 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
             username: 'tylinux',
             auth_method: 'key',
             key_path: '~/.ssh/id_ed25519',
-            install_mode: 'scp',
+            install_mode: 'remote_install',
             install_dir: '~/.nex-runner',
             workspace_path: '/Users/tylinux',
             server_ws_url: 'wss://nex.tylinux.cn/ws/runner',
@@ -6602,30 +6616,67 @@ describe('Nex-v3 Workbench Layout, Blocks, i18n & On-Demand Side Pane', () => {
             target_version: 'v0.4.1-local',
             target_build_sha: '7841c1e',
           },
+          {
+            id: 'run_hk',
+            name: 'HK',
+            hostname: 'localhost',
+            os: 'linux',
+            arch: 'amd64',
+            shell: '/usr/bin/bash',
+            version: 'v0.4.1-local',
+            build_sha: '64cc395',
+            tags: [],
+            status: 'online',
+            last_seen_at: Date.now(),
+            synced_config_rev: 1,
+            workspace_default: '/home/tylinux',
+            auto_update: true,
+            update_mode: 'self_update',
+          },
         ],
       });
 
       render(<App />);
 
-      // Renamed runner `M4` (id run_macm4) still displays SSH actions from target `macM4`
+      // 1. Renamed SSH runner `M4` matches `ssh_mac`; open SSH edit modal
       expect(screen.getByTestId('ssh-deploy-ssh_mac')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('ssh-edit-ssh_mac'));
+      expect(screen.getByTestId('ssh-host-input')).toBeTruthy();
+      expect(screen.getByTestId('modal-runner-auto-update-toggle')).toBeTruthy();
 
-      // Toggle per-runner auto-update OFF and switch delivery mode to SCP
+      fireEvent.click(screen.getByTestId('ssh-mode-scp'));
+      fireEvent.click(screen.getByTestId('modal-runner-auto-update-toggle'));
       await act(async () => {
-        fireEvent.click(screen.getByTestId('runner-auto-update-run_macm4'));
-      });
-      await act(async () => {
-        fireEvent.change(screen.getByTestId('runner-update-mode-run_macm4'), { target: { value: 'scp' } });
+        fireEvent.click(screen.getByTestId('ssh-save-btn'));
       });
 
-      expect(patchBodies.some((b) => b.includes('"auto_update":false'))).toBe(true);
-      expect(patchBodies.some((b) => b.includes('"update_mode":"scp"'))).toBe(true);
+      expect(
+        patchBodies.some(
+          (p) =>
+            p.url.includes('/api/v1/runners/run_macm4') &&
+            p.body.includes('"auto_update":false') &&
+            p.body.includes('"update_mode":"scp"'),
+        ),
+      ).toBe(true);
 
       // Clicking upgrade now triggers SSH SCP deploy
       await act(async () => {
         fireEvent.click(screen.getByTestId('upgrade-runner-run_macm4'));
       });
       expect(deployHits.length).toBe(1);
+
+      // 2. Non-SSH runner `HK` opens runner-only settings modal WITHOUT upper SSH fields
+      fireEvent.click(screen.getByTestId('edit-runner-settings-run_hk'));
+      expect(screen.queryByTestId('ssh-host-input')).toBeNull();
+      expect(screen.getByTestId('modal-runner-auto-update-toggle')).toBeTruthy();
+
+      fireEvent.click(screen.getByTestId('modal-runner-auto-update-toggle'));
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('runner-settings-save-btn'));
+      });
+      expect(
+        patchBodies.some((p) => p.url.includes('/api/v1/runners/run_hk') && p.body.includes('"auto_update":false')),
+      ).toBe(true);
     } finally {
       globalThis.fetch = origFetch;
     }

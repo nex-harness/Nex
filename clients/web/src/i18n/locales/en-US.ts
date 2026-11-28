@@ -1200,6 +1200,8 @@ export const enUS = {
   "runners.updateModeScp": "Server Download + SSH SCP Deploy",
   "runners.updateViaScpBtn": "SCP Upgrade",
   "runners.updatePolicySaved": "Runner update policy saved",
+  "runners.runnerSettingsTitle": "Runner Update Settings",
+  "runners.editRunnerSettings": "Runner update settings",
   "chat.loadEarlierTurns": "Show {count} earlier messages",
   "chat.showAllTurns": "Show all ({total})",
   "settings.providersTabChat": "Providers & Chat Models",

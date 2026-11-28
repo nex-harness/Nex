@@ -206,38 +206,26 @@ function formatRunnerUpdatePhase(locale: LocaleCode, phase?: string, progress?: 
 
 export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => void }) {
   const { locale, runners, sshTargets, refreshInitialData, refreshRegistries, renameRunner, triggerRunnerUpdate, triggerAllRunnersUpdate } = useNexStore();
-  const [policyBusyIds, setPolicyBusyIds] = useState<Record<string, boolean>>({});
 
   const updateRunnerPolicy = async (
-    r: RunnerRecord,
+    runnerId: string,
     patch: { auto_update?: boolean; update_mode?: 'self_update' | 'scp' },
   ) => {
-    setPolicyBusyIds((prev) => ({ ...prev, [r.id]: true }));
-    try {
-      const updated = await apiFetch<RunnerRecord>(`/api/v1/runners/${encodeURIComponent(r.id)}`, {
-        method: 'PATCH',
-        body: JSON.stringify(patch),
-      });
-      useNexStore.setState((prev) => ({
-        runners: prev.runners.map((item) => (item.id === r.id ? { ...item, ...patch, ...updated } : item)),
-      }));
-      onFlash(formatMsg(locale, 'runners.updatePolicySaved'));
-    } catch (err) {
-      onFlash(err instanceof Error ? err.message : String(err));
-    } finally {
-      if (mountedRef.current) {
-        setPolicyBusyIds((prev) => {
-          const next = { ...prev };
-          delete next[r.id];
-          return next;
-        });
-      }
-    }
+    const updated = await apiFetch<RunnerRecord>(`/api/v1/runners/${encodeURIComponent(runnerId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+    useNexStore.setState((prev) => ({
+      runners: prev.runners.map((item) => (item.id === runnerId ? { ...item, ...patch, ...updated } : item)),
+    }));
   };
 
   const [copied, setCopied] = useState(false);
   const [manualModalOpen, setManualModalOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [sshModalMode, setSshModalMode] = useState<'ssh' | 'runner_only'>('ssh');
+  const [editingRunner, setEditingRunner] = useState<RunnerRecord | null>(null);
+  const [autoUpdateDraft, setAutoUpdateDraft] = useState(true);
   const [form, setForm] = useState<SSHFormState>(EMPTY_FORM);
   const [showPwd, setShowPwd] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -427,6 +415,9 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
   };
 
   const openCreateModal = () => {
+    setSshModalMode('ssh');
+    setEditingRunner(null);
+    setAutoUpdateDraft(true);
     setForm(EMPTY_FORM);
     setFormError('');
     setDeployLog('');
@@ -439,7 +430,19 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
     void loadStagedBinaries();
   };
 
-  const openEditModal = (t: SSHTargetRecord) => {
+  const openEditModal = (t: SSHTargetRecord, linkedRunner?: RunnerRecord) => {
+    const matched =
+      linkedRunner ||
+      runners.find(
+        (r) =>
+          sshTargetRunnerId(t.name) === r.id ||
+          t.name.toLowerCase() === r.name.toLowerCase() ||
+          (Boolean(r.hostname) && t.host.toLowerCase() === r.hostname!.toLowerCase()),
+      ) ||
+      null;
+    setSshModalMode('ssh');
+    setEditingRunner(matched);
+    setAutoUpdateDraft(matched ? matched.auto_update !== false : true);
     setForm({
       id: t.id,
       name: t.name || '',
@@ -466,6 +469,20 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
     setModalOpen(true);
     void loadSSHConfigHosts();
     void loadStagedBinaries();
+  };
+
+  const openRunnerSettingsModal = (r: RunnerRecord) => {
+    setSshModalMode('runner_only');
+    setEditingRunner(r);
+    setAutoUpdateDraft(r.auto_update !== false);
+    setForm({ ...EMPTY_FORM, name: r.name || r.id });
+    setFormError('');
+    setDeployLog('');
+    setPasteNotice('');
+    setAdvancedOpen(false);
+    setShowPwd(false);
+    setConfigMenuOpen(false);
+    setModalOpen(true);
   };
 
   const applyConfigHost = (h: SSHConfigHost) => {
@@ -503,6 +520,21 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
 
   const submitForm = async (e: FormEvent, deployAfterSave = false) => {
     e.preventDefault();
+    if (sshModalMode === 'runner_only') {
+      if (!editingRunner) return;
+      setSaving(true);
+      setFormError('');
+      try {
+        await updateRunnerPolicy(editingRunner.id, { auto_update: autoUpdateDraft });
+        setModalOpen(false);
+        onFlash(formatMsg(locale, 'runners.updatePolicySaved'));
+      } catch (err) {
+        setFormError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     const host = form.host.trim();
     const portNum = Number(form.port.trim() || '22');
     if (!host) {
@@ -538,6 +570,17 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
       });
       if (saved?.id) {
         setForm((prev) => ({ ...prev, id: saved.id }));
+      }
+      const linkedRunnerId = editingRunner?.id || sshTargetRunnerId(saved?.name || form.name.trim() || host);
+      if (linkedRunnerId && runners.some((item) => item.id === linkedRunnerId)) {
+        try {
+          await updateRunnerPolicy(linkedRunnerId, {
+            auto_update: autoUpdateDraft,
+            update_mode: form.install_mode === 'scp' ? 'scp' : 'self_update',
+          });
+        } catch {
+          // ignore if runner policy patch fails (SSH save succeeded)
+        }
       }
 
       if (!deployAfterSave || !saved?.id) {
@@ -645,8 +688,8 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
 
   const triggerSingleUpgrade = async (r: RunnerRecord, mode: 'when_idle' | 'immediate') => {
     const matched = matchSshTargetForRunner(r);
-    const effectiveMode = r.update_mode === 'scp' ? 'scp' : 'self_update';
-    if (effectiveMode === 'scp' && matched) {
+    const useScp = Boolean(matched && (r.update_mode ? r.update_mode === 'scp' : matched.install_mode === 'scp'));
+    if (useScp && matched) {
       setUpgradingRunnerIds((prev) => ({ ...prev, [r.id]: true }));
       try {
         await runTargetAction(matched, 'deploy');
@@ -745,7 +788,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
         (Boolean(r.hostname) && t.host.toLowerCase() === r.hostname!.toLowerCase()),
     );
 
-  const renderSshActionButtons = (t: (typeof sshTargets)[number], isOnline: boolean) => {
+  const renderSshActionButtons = (t: (typeof sshTargets)[number], isOnline: boolean, linkedRunner: RunnerRecord) => {
     const busy = busyById[t.id];
     const logOpen = Boolean(expandedLogs[t.id]);
     return (
@@ -807,7 +850,8 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
         )}
         <button
           type="button"
-          onClick={() => openEditModal(t)}
+          data-testid={`ssh-edit-${t.id}`}
+          onClick={() => openEditModal(t, linkedRunner)}
           aria-label={formatMsg(locale, 'runners.editSshServer')}
           title={formatMsg(locale, 'runners.editSshServer')}
           className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
@@ -1060,38 +1104,6 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     {r.hostname ? <span className="font-mono">{r.hostname}</span> : null}
                     {r.workspace_default ? <span className="truncate font-mono">{r.workspace_default}</span> : null}
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-ui-xs text-foreground-subtle">
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 select-none">
-                      <input
-                        type="checkbox"
-                        data-testid={`runner-auto-update-${r.id}`}
-                        checked={r.auto_update !== false}
-                        disabled={Boolean(policyBusyIds[r.id])}
-                        onChange={(e) => void updateRunnerPolicy(r, { auto_update: e.target.checked })}
-                        className="size-3.5 accent-brand-blue"
-                      />
-                      <span>{formatMsg(locale, 'runners.autoUpdateLabel')}</span>
-                    </label>
-                    {matchedSsh && (
-                      <label className="inline-flex items-center gap-1.5">
-                        <span className="text-foreground-subtlest">{formatMsg(locale, 'runners.updateDeliveryLabel')}:</span>
-                        <select
-                          data-testid={`runner-update-mode-${r.id}`}
-                          value={r.update_mode === 'scp' ? 'scp' : 'self_update'}
-                          disabled={Boolean(policyBusyIds[r.id])}
-                          onChange={(e) =>
-                            void updateRunnerPolicy(r, {
-                              update_mode: e.target.value === 'scp' ? 'scp' : 'self_update',
-                            })
-                          }
-                          className={`${settingsInputClass} h-6 px-2 py-0 text-ui-xs`}
-                        >
-                          <option value="self_update">{formatMsg(locale, 'runners.updateModeSelfUpdate')}</option>
-                          <option value="scp">{formatMsg(locale, 'runners.updateModeScp')}</option>
-                        </select>
-                      </label>
-                    )}
-                  </div>
                   {matchedSsh?.last_error && (
                     <p className="mt-1 truncate text-ui-xs text-destructive">{matchedSsh.last_error}</p>
                   )}
@@ -1118,7 +1130,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       >
                         {upgrading ? <LoaderCircle className="size-3 animate-spin" /> : <ArrowUpCircle className="size-3" />}
                         <span>
-                          {r.update_mode === 'scp' && matchedSsh
+                          {Boolean(matchedSsh && (r.update_mode ? r.update_mode === 'scp' : matchedSsh.install_mode === 'scp'))
                             ? formatMsg(locale, 'runners.updateViaScpBtn')
                             : formatMsg(locale, 'runners.updateNowBtn')}
                         </span>
@@ -1150,7 +1162,7 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                       >
                         {upgrading ? <LoaderCircle className="size-3 animate-spin" /> : <ArrowUpCircle className="size-3" />}
                         <span>
-                          {r.update_mode === 'scp' && matchedSsh
+                          {Boolean(matchedSsh && (r.update_mode ? r.update_mode === 'scp' : matchedSsh.install_mode === 'scp'))
                             ? formatMsg(locale, 'runners.updateViaScpBtn')
                             : formatMsg(locale, 'runners.updateBtn')}
                         </span>
@@ -1210,7 +1222,20 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                   )}
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-1.5">
-                  {matchedSsh && renderSshActionButtons(matchedSsh, r.status === 'online')}
+                  {matchedSsh ? (
+                    renderSshActionButtons(matchedSsh, r.status === 'online', r)
+                  ) : (
+                    <button
+                      type="button"
+                      data-testid={`edit-runner-settings-${r.id}`}
+                      onClick={() => openRunnerSettingsModal(r)}
+                      aria-label={formatMsg(locale, 'runners.editRunnerSettings')}
+                      title={formatMsg(locale, 'runners.editRunnerSettings')}
+                      className="flex size-7 items-center justify-center rounded-md text-foreground-subtlest transition-colors hover:bg-hover hover:text-foreground"
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                  )}
                   {r.id !== 'run_desktop_embedded' && (
                     <button
                       type="button"
@@ -1422,12 +1447,14 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
             <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
               <div className="min-w-0">
                 <h2 className="text-ui-lg font-semibold text-foreground">
-                  {form.id
-                    ? formatMsg(locale, 'runners.editSshConnection')
-                    : formatMsg(locale, 'runners.newSshConnection')}
+                  {sshModalMode === 'runner_only'
+                    ? formatMsg(locale, 'runners.runnerSettingsTitle')
+                    : form.id
+                      ? formatMsg(locale, 'runners.editSshConnection')
+                      : formatMsg(locale, 'runners.newSshConnection')}
                 </h2>
                 <div className="mt-0.5 truncate font-mono text-ui-xs text-foreground-subtlest">
-                  {livePreview}
+                  {sshModalMode === 'runner_only' ? editingRunner?.name || editingRunner?.id : livePreview}
                 </div>
               </div>
               <button
@@ -1441,6 +1468,8 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
             </div>
 
             <div className="max-h-[70vh] space-y-4 overflow-y-auto px-5 py-4">
+              {sshModalMode === 'ssh' && (
+                <>
               {/* Top row: Import from ~/.ssh/config (Nex pattern) */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -1680,6 +1709,24 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                     form.install_mode === 'scp' ? 'runners.probesRemoteOsArchAuto' : 'runners.runsCurlWgetOnThe',
                   )}
                 </p>
+
+                <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-2.5">
+                  <div className="min-w-0">
+                    <div className="text-ui-xs font-medium text-foreground">
+                      {formatMsg(locale, 'runners.autoUpdateLabel')}
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-foreground-subtlest">
+                      {formatMsg(locale, 'runners.autoUpdateDesc')}
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    data-testid="modal-runner-auto-update-toggle"
+                    checked={autoUpdateDraft}
+                    onChange={(e) => setAutoUpdateDraft(e.target.checked)}
+                    className="size-4 shrink-0 accent-brand-blue"
+                  />
+                </div>
               </div>
 
               {/* Collapsible Advanced Options */}
@@ -1735,6 +1782,38 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
                   </div>
                 )}
               </div>
+                </>
+              )}
+
+              {sshModalMode === 'runner_only' && (
+                <>
+                  {formError && (
+                    <div
+                      data-testid="ssh-modal-error"
+                      className="rounded-lg border border-destructive/30 bg-destructive-surface px-3 py-2 text-ui-xs text-destructive-surface-fg"
+                    >
+                      <div className="font-medium break-words">{formError}</div>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface/50 p-3.5">
+                    <div className="min-w-0">
+                      <div className="text-ui-sm font-medium text-foreground">
+                        {formatMsg(locale, 'runners.autoUpdateLabel')}
+                      </div>
+                      <p className="mt-0.5 text-ui-xs leading-relaxed text-foreground-subtlest">
+                        {formatMsg(locale, 'runners.autoUpdateDesc')}
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      data-testid="modal-runner-auto-update-toggle"
+                      checked={autoUpdateDraft}
+                      onChange={(e) => setAutoUpdateDraft(e.target.checked)}
+                      className="size-4 shrink-0 accent-brand-blue"
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Footer */}
@@ -1747,32 +1826,46 @@ export function RunnersSettingsSection({ onFlash }: { onFlash: (msg: string) => 
               >
                 {formatMsg(locale, 'common.cancel')}
               </button>
-              {form.id && (
+              {sshModalMode === 'runner_only' ? (
                 <button
                   type="submit"
-                  data-testid="ssh-save-btn"
+                  data-testid="runner-settings-save-btn"
                   disabled={saving}
-                  className="h-8 rounded-lg border border-border bg-card px-3 text-ui-sm font-medium text-foreground transition-colors hover:bg-hover disabled:opacity-50"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3.5 text-ui-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
-                  {formatMsg(locale, 'common.save2')}
+                  {saving && <LoaderCircle className="size-3.5 animate-spin" />}
+                  <span>{formatMsg(locale, 'common.save2')}</span>
                 </button>
+              ) : (
+                <>
+                  {form.id && (
+                    <button
+                      type="submit"
+                      data-testid="ssh-save-btn"
+                      disabled={saving}
+                      className="h-8 rounded-lg border border-border bg-card px-3 text-ui-sm font-medium text-foreground transition-colors hover:bg-hover disabled:opacity-50"
+                    >
+                      {formatMsg(locale, 'common.save2')}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    data-testid="ssh-save-deploy-btn"
+                    disabled={saving}
+                    onClick={(e) => void submitForm(e, true)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3.5 text-ui-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    {saving && <LoaderCircle className="size-3.5 animate-spin" />}
+                    <span>
+                      {saving
+                        ? formatMsg(locale, 'runners.connectingAndDeploying')
+                        : form.id
+                          ? formatMsg(locale, 'runners.saveDeploy')
+                          : formatMsg(locale, 'runners.connectAndJoin')}
+                    </span>
+                  </button>
+                </>
               )}
-              <button
-                type="button"
-                data-testid="ssh-save-deploy-btn"
-                disabled={saving}
-                onClick={(e) => void submitForm(e, true)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3.5 text-ui-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                {saving && <LoaderCircle className="size-3.5 animate-spin" />}
-                <span>
-                  {saving
-                    ? formatMsg(locale, 'runners.connectingAndDeploying')
-                    : form.id
-                      ? formatMsg(locale, 'runners.saveDeploy')
-                      : formatMsg(locale, 'runners.connectAndJoin')}
-                </span>
-              </button>
             </div>
           </form>
         </div>
