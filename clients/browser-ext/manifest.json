@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Nex Browser Bridge",
+  "version": "0.1.0",
+  "description": "Connects Chrome/Chromium tabs (including headless=new) to local Nex Runner for fast in-page DOM snapshot and batch automation.",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "activeTab",
+    "alarms",
+    "storage",
+    "debugger"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Nex Browser Bridge"
+  }
+}

@@ -72,6 +72,14 @@ func LaunchManaged(ctx context.Context, execPath, profileDir string, headless bo
 	if profileDir != "" {
 		args = append(args, "--user-data-dir="+profileDir)
 	}
+	if extDir := strings.TrimSpace(os.Getenv("NEX_BROWSER_EXT_DIR")); extDir != "" {
+		if st, err := os.Stat(filepath.Join(extDir, "manifest.json")); err == nil && !st.IsDir() {
+			args = append(args,
+				"--disable-extensions-except="+extDir,
+				"--load-extension="+extDir,
+			)
+		}
+	}
 	if headless {
 		if strings.Contains(filepath.Base(execPath), "chrome-headless-shell") {
 			args = append(args, "--headless")

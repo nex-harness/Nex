@@ -21,8 +21,9 @@ const (
 type Mode string
 
 const (
-	ModeManagedCDP Mode = "managed_cdp"
-	ModeAttachCDP  Mode = "attach_cdp"
+	ModeManagedCDP      Mode = "managed_cdp"
+	ModeAttachCDP       Mode = "attach_cdp"
+	ModeExtensionBridge Mode = "extension_bridge"
 )
 
 type ProfileMode string

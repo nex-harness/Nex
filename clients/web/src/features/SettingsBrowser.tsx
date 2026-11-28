@@ -178,10 +178,18 @@ export function SettingsBrowserSection({ onFlash }: { onFlash: (msg: string) => 
           >
             <option value="managed_cdp">{formatMsg(locale, 'settings.browser.modeManaged')}</option>
             <option value="attach_cdp">{formatMsg(locale, 'settings.browser.modeAttach')}</option>
+            <option value="extension_bridge">{formatMsg(locale, 'settings.browser.modeExtensionBridge')}</option>
           </select>
         </SettingsRow>
 
-        {(prefs.browser_mode || 'managed_cdp') === 'managed_cdp' ? (
+        {(prefs.browser_mode || 'managed_cdp') === 'extension_bridge' ? (
+          <SettingsRow
+            label={formatMsg(locale, 'settings.browser.extensionBridgeLabel')}
+            description={formatMsg(locale, 'settings.browser.extensionBridgeDesc')}
+          >
+            <span className="font-mono text-ui-xs text-foreground-subtle">ws://127.0.0.1:19222/ws/bridge</span>
+          </SettingsRow>
+        ) : (prefs.browser_mode || 'managed_cdp') === 'managed_cdp' ? (
           <>
             <SettingsRow
               label={formatMsg(locale, 'settings.browser.headless')}

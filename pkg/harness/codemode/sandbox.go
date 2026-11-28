@@ -70,12 +70,17 @@ type ModelBridge struct {
 	ResolveImage      func(ctx context.Context, modelID string) (ai.ImageProvider, string, error)
 }
 
+// BrowserCaller invokes a browser action (same JSON schema as the `browser` tool) from inside codemode scripts,
+// enabling Code-First multi-step browser automation in a single LLM turn.
+type BrowserCaller func(ctx context.Context, action string, args map[string]any) (string, error)
+
 // Tool exposes the single unified `codemode` LLM tool backed by an isolated zero-privilege goja sandbox.
 type Tool struct {
 	pool          *Pool
 	kv            *SessionKV
 	authorizer    SubCallAuthorizer
 	modelBridge   *ModelBridge
+	browserCaller BrowserCaller
 	workspacePath string
 }
 
@@ -94,6 +99,14 @@ func NewTool(pool *Pool, kv *SessionKV, authorizer SubCallAuthorizer) *Tool {
 // SetModelBridge attaches classifier and image model resolvers to the codemode sandbox.
 func (t *Tool) SetModelBridge(b *ModelBridge) {
 	t.modelBridge = b
+}
+
+// SetBrowserCaller attaches the session browser executor so codemode scripts can run
+// multi-step browser automation (`await browser.open(...)`, `await browser.snapshot()`,
+// `await browser.click(...)`, `await browser.fill(...)`, `await browser.eval(...)`, etc.)
+// in a single turn without LLM round-trips.
+func (t *Tool) SetBrowserCaller(fn BrowserCaller) {
+	t.browserCaller = fn
 }
 
 // SetWorkspacePath scopes `searchTools` discovery and workspace MCP visibility checks to a session workspace.
@@ -356,6 +369,93 @@ func (t *Tool) Execute(ctx context.Context, _ string, rawArgs json.RawMessage, o
 		return promise
 	})
 	_ = vm.Set("models", modelsObj)
+
+	// Expose `browser` Code-First helpers for batch multi-step browser automation in a single turn.
+	browserObj := vm.NewObject()
+	invokeBrowser := func(action string, args map[string]any) *goja.Promise {
+		promise, resolve, reject := vm.NewPromise()
+		if t.browserCaller == nil {
+			_ = reject(vm.ToValue("browser is not enabled for this session"))
+			return promise
+		}
+		if args == nil {
+			args = map[string]any{}
+		}
+		pendingAsync++
+		go func() {
+			out, callErr := t.browserCaller(execCtx, action, args)
+			vmTasks <- func() {
+				pendingAsync--
+				if callErr != nil {
+					_ = reject(vm.ToValue(callErr.Error()))
+					return
+				}
+				var parsed any
+				if json.Unmarshal([]byte(out), &parsed) == nil {
+					_ = resolve(vm.ToValue(parsed))
+				} else {
+					_ = resolve(vm.ToValue(out))
+				}
+			}
+		}()
+		return promise
+	}
+	toArgMap := func(v goja.Value) map[string]any {
+		if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+			return map[string]any{}
+		}
+		if m, ok := v.Export().(map[string]any); ok {
+			return m
+		}
+		return map[string]any{}
+	}
+	_ = browserObj.Set("call", func(action string, args goja.Value) *goja.Promise {
+		return invokeBrowser(action, toArgMap(args))
+	})
+	_ = browserObj.Set("open", func(url string, opts goja.Value) *goja.Promise {
+		m := toArgMap(opts)
+		m["url"] = url
+		return invokeBrowser("open", m)
+	})
+	_ = browserObj.Set("snapshot", func(opts goja.Value) *goja.Promise {
+		return invokeBrowser("snapshot", toArgMap(opts))
+	})
+	_ = browserObj.Set("click", func(refOrSelector string, opts goja.Value) *goja.Promise {
+		m := toArgMap(opts)
+		if strings.HasPrefix(refOrSelector, "e") && len(refOrSelector) >= 2 && refOrSelector[1] >= '0' && refOrSelector[1] <= '9' {
+			m["ref"] = refOrSelector
+		} else {
+			m["selector"] = refOrSelector
+		}
+		return invokeBrowser("click", m)
+	})
+	_ = browserObj.Set("fill", func(refOrSelector string, value string, opts goja.Value) *goja.Promise {
+		m := toArgMap(opts)
+		if strings.HasPrefix(refOrSelector, "e") && len(refOrSelector) >= 2 && refOrSelector[1] >= '0' && refOrSelector[1] <= '9' {
+			m["ref"] = refOrSelector
+		} else {
+			m["selector"] = refOrSelector
+		}
+		m["value"] = value
+		return invokeBrowser("fill", m)
+	})
+	_ = browserObj.Set("eval", func(expression string) *goja.Promise {
+		return invokeBrowser("eval", map[string]any{"expression": expression})
+	})
+	_ = browserObj.Set("wait", func(opts goja.Value) *goja.Promise {
+		return invokeBrowser("wait", toArgMap(opts))
+	})
+	_ = browserObj.Set("scroll", func(direction string, opts goja.Value) *goja.Promise {
+		m := toArgMap(opts)
+		if direction != "" {
+			m["direction"] = direction
+		}
+		return invokeBrowser("scroll", m)
+	})
+	_ = browserObj.Set("getState", func() *goja.Promise {
+		return invokeBrowser("get_state", nil)
+	})
+	_ = vm.Set("browser", browserObj)
 
 	_ = vm.Set("store", func(key string, val any) {
 		if err := t.kv.Store(key, val); err != nil {

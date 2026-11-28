@@ -451,6 +451,28 @@ func (w *DefaultRuntimeWiring) PrepareSession(
 		ResolveClassifier: node.resolveClassifierProvider,
 		ResolveImage:      node.resolveImageProvider,
 	})
+	if node.cfg.Browser != nil && node.cfg.Browser.Enabled() {
+		bTool := node.cfg.Browser.SessionTool(sess.ID, sess.WorkspacePath)
+		cmTool.SetBrowserCaller(func(callCtx context.Context, action string, args map[string]any) (string, error) {
+			payload := make(map[string]any, len(args)+1)
+			for k, v := range args {
+				payload[k] = v
+			}
+			payload["action"] = action
+			rawArgs, err := json.Marshal(payload)
+			if err != nil {
+				return "", err
+			}
+			res, err := bTool.Execute(callCtx, sess.WorkspacePath, rawArgs, nil)
+			if err != nil {
+				return "", err
+			}
+			if res.IsError {
+				return "", fmt.Errorf("%s", res.Output)
+			}
+			return res.Output, nil
+		})
+	}
 	extraTools = append(extraTools, cmTool)
 
 	if mcpSummary := w.mcpPool.NamespaceSummaryPromptForWorkspace(sess.WorkspacePath); mcpSummary != "" {
