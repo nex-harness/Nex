@@ -1,10 +1,12 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/nex-harness/nex/pkg/store"
@@ -58,5 +60,35 @@ func TestRunnerInstallScripts(t *testing.T) {
 	}
 	if !strings.Contains(recSH.Body.String(), "wss://nex.example.com/ws/runner") {
 		t.Fatalf("unexpected sh script:\n%s", recSH.Body.String())
+	}
+}
+
+func TestRestartEmbeddedRunnerEndpoint(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "nex.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+
+	var called atomic.Int32
+	srv, err := New(Config{
+		Store: st,
+		OnRestartLocalRunner: func(_ context.Context) error {
+			called.Add(1)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runners/run_desktop_embedded/restart", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if called.Load() != 1 {
+		t.Fatalf("expected OnRestartLocalRunner called once, got %d", called.Load())
 	}
 }

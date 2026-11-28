@@ -4,11 +4,14 @@ package app
 
 import (
 	"context"
+	"log"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/nex-harness/nex/pkg/runner"
@@ -48,10 +51,72 @@ type AllInOneInstance struct {
 	httpServer     *http.Server
 	cpSrv          *server.Server
 	serverDB       *store.Store
-	node           *runner.Node
-	wiring         *runner.DefaultRuntimeWiring
 	sleepInhibitor *SleepInhibitor
-	cancel         context.CancelFunc
+
+	rootCtx     context.Context
+	rootCancel  context.CancelFunc
+	runnerCfg   runner.Config
+	runnerMu    sync.Mutex
+	node        *runner.Node
+	wiring      *runner.DefaultRuntimeWiring
+	runnerStop  context.CancelFunc
+}
+
+func (a *AllInOneInstance) startEmbeddedRunnerLocked() error {
+	node, err := runner.NewNode(a.runnerCfg)
+	if err != nil {
+		return err
+	}
+	wiring := runner.AttachDefaultSubsystems(node)
+	runCtx, stop := context.WithCancel(a.rootCtx)
+	a.node = node
+	a.wiring = wiring
+	a.runnerStop = stop
+
+	go func(n *runner.Node, rCtx context.Context) {
+		for {
+			panicked := false
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						panicked = true
+						log.Printf("nex-desktop: embedded runner panic recovered: %v", r)
+					}
+				}()
+				n.StartConnectLoop(rCtx)
+			}()
+			if !panicked || rCtx.Err() != nil {
+				return
+			}
+			select {
+			case <-rCtx.Done():
+				return
+			case <-time.After(2 * time.Second):
+			}
+		}
+	}(node, runCtx)
+	return nil
+}
+
+// RestartEmbeddedRunner cleanly tears down the in-process embedded runner (MCP/Browser/PTY/WS)
+// and boots a fresh instance without restarting the desktop app.
+func (a *AllInOneInstance) RestartEmbeddedRunner(_ context.Context) error {
+	a.runnerMu.Lock()
+	defer a.runnerMu.Unlock()
+
+	if a.runnerStop != nil {
+		a.runnerStop()
+		a.runnerStop = nil
+	}
+	if a.wiring != nil {
+		a.wiring.Close()
+		a.wiring = nil
+	}
+	if a.node != nil {
+		_ = a.node.Close()
+		a.node = nil
+	}
+	return a.startEmbeddedRunnerLocked()
 }
 
 // StartAllInOne boots an embedded nex-server (serving embedded Web UI) and auto-connects an in-process local nex-runner.
@@ -78,64 +143,80 @@ func StartAllInOne(ctx context.Context, baseDataDir, workspaceDir, listenAddr st
 	appVer := embeddedAppVersion()
 	effectiveWorkspace := resolveDefaultWorkspace(workspaceDir)
 
+	rootCtx, rootCancel := context.WithCancel(ctx)
+	inst := &AllInOneInstance{
+		URL:        "http://" + actualAddr,
+		serverDB:   srvStore,
+		rootCtx:    rootCtx,
+		rootCancel: rootCancel,
+		runnerCfg: runner.Config{
+			RunnerID:         "run_desktop_embedded",
+			Name:             "Local Embedded Runner",
+			Version:          appVer,
+			ServerWSURL:      "ws://" + actualAddr + "/ws/runner",
+			DataDir:          filepath.Join(baseDataDir, "runner"),
+			WorkspaceDefault: effectiveWorkspace,
+		},
+	}
+
 	cpSrv, err := server.New(server.Config{
-		Store:      srvStore,
-		ListenPort: listenPort,
-		StaticFS:   webui.DistFS(),
-		Version:    appVer,
+		Store:                srvStore,
+		ListenPort:           listenPort,
+		StaticFS:             webui.DistFS(),
+		Version:              appVer,
+		OnRestartLocalRunner: inst.RestartEmbeddedRunner,
 	})
 	if err != nil {
+		rootCancel()
 		_ = srvStore.Close()
 		_ = ln.Close()
 		return nil, err
 	}
+	inst.cpSrv = cpSrv
 
 	httpSrv := &http.Server{Handler: cpSrv.Handler()}
+	inst.httpServer = httpSrv
 	go func() {
 		_ = httpSrv.Serve(ln)
 	}()
 
-	node, err := runner.NewNode(runner.Config{
-		RunnerID:         "run_desktop_embedded",
-		Name:             "Local Embedded Runner",
-		Version:          appVer,
-		ServerWSURL:      "ws://" + actualAddr + "/ws/runner",
-		DataDir:          filepath.Join(baseDataDir, "runner"),
-		WorkspaceDefault: effectiveWorkspace,
-	})
+	inst.runnerMu.Lock()
+	err = inst.startEmbeddedRunnerLocked()
+	inst.runnerMu.Unlock()
 	if err != nil {
+		rootCancel()
 		_ = httpSrv.Close()
 		_ = srvStore.Close()
 		return nil, err
 	}
 
-	wiring := runner.AttachDefaultSubsystems(node)
-	runCtx, cancel := context.WithCancel(ctx)
-	go node.StartConnectLoop(runCtx)
-
 	inhibitor := &SleepInhibitor{}
 	inhibitor.Start()
+	inst.sleepInhibitor = inhibitor
 
-	return &AllInOneInstance{
-		URL:            "http://" + actualAddr,
-		httpServer:     httpSrv,
-		cpSrv:          cpSrv,
-		serverDB:       srvStore,
-		node:           node,
-		wiring:         wiring,
-		sleepInhibitor: inhibitor,
-		cancel:         cancel,
-	}, nil
+	return inst, nil
 }
 
 // Close cleanly shuts down the embedded Runner and embedded Server.
 func (a *AllInOneInstance) Close() error {
-	a.cancel()
+	a.rootCancel()
 	if a.sleepInhibitor != nil {
 		a.sleepInhibitor.Stop()
 	}
-	a.wiring.Close()
-	_ = a.node.Close()
+	a.runnerMu.Lock()
+	if a.runnerStop != nil {
+		a.runnerStop()
+		a.runnerStop = nil
+	}
+	if a.wiring != nil {
+		a.wiring.Close()
+		a.wiring = nil
+	}
+	if a.node != nil {
+		_ = a.node.Close()
+		a.node = nil
+	}
+	a.runnerMu.Unlock()
 	if a.cpSrv != nil {
 		_ = a.cpSrv.Close()
 	}

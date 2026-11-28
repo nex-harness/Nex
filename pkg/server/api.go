@@ -666,6 +666,31 @@ func (s *Server) handleRunnerSubroutes(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, rec)
 		return
 	}
+	if action == "restart" && r.Method == http.MethodPost {
+		if runnerID == "run_desktop_embedded" {
+			if s.cfg.OnRestartLocalRunner == nil {
+				writeErr(w, http.StatusNotImplemented, fmt.Errorf("embedded runner restart hook is not registered"))
+				return
+			}
+			if err := s.cfg.OnRestartLocalRunner(r.Context()); err != nil {
+				writeErr(w, http.StatusInternalServerError, fmt.Errorf("restart embedded runner: %w", err))
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "runner_id": runnerID, "mode": "embedded_hot_restart"})
+			return
+		}
+		env, err := protocol.NewEnvelope(protocol.TypeRunnerRestart, map[string]any{"runner_id": runnerID})
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		if _, err := s.callRunnerRPC(r.Context(), runnerID, env, 5*time.Second); err != nil {
+			writeErr(w, http.StatusBadGateway, fmt.Errorf("runner is offline or did not acknowledge restart: %w", err))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "runner_id": runnerID, "mode": "remote_restart"})
+		return
+	}
 	if action == "" && r.Method == http.MethodDelete {
 		if runnerID == "run_desktop_embedded" {
 			writeErr(w, http.StatusForbidden, fmt.Errorf("cannot delete embedded local runner"))

@@ -45,8 +45,9 @@ type Config struct {
 	StaticFS                   fs.FS           // Optional embedded clients/web/dist filesystem
 	HTTPClient    *http.Client    // Optional custom HTTP client (for tests / models.dev / proxy)
 	RemoteMCP     RemoteMCPExecutor
-	EnableRelay   bool   // Mount stateless zero-trust /relay/v1/* endpoints onto this server
-	RelayToken    string // Optional shared token protecting /relay/v1/*
+	EnableRelay            bool                                            // Mount stateless zero-trust /relay/v1/* endpoints onto this server
+	RelayToken             string                                          // Optional shared token protecting /relay/v1/*
+	OnRestartLocalRunner   func(ctx context.Context) error                 // Optional hook registered by Desktop AllInOneInstance to hot-restart the embedded local runner
 }
 
 type runnerConn struct {

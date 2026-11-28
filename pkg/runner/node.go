@@ -1190,6 +1190,17 @@ func (n *Node) handleServerFrame(ctx context.Context, env protocol.Envelope) {
 			_ = n.sendEnvelope(ctx, reply)
 		}()
 
+	case protocol.TypeRunnerRestart:
+		go func() {
+			reply, _ := protocol.NewEnvelope(protocol.TypeRunnerRestart, map[string]any{"ok": true})
+			reply.ReplyTo = env.ID
+			_ = n.sendEnvelope(ctx, reply)
+			// Give the ACK frame a moment to flush, then cleanly exit so the OS service / Task Scheduler restarts the process.
+			time.Sleep(350 * time.Millisecond)
+			_ = n.Close()
+			os.Exit(0)
+		}()
+
 	case protocol.TypeCronRunNow:
 		go func() {
 			var req protocol.CronRunNowPayload

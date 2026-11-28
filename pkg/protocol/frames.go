@@ -32,6 +32,7 @@ const (
 	TypeRunnerWelcome          = "runner.welcome"
 	TypeRunnerUpdate           = "runner.update"
 	TypeRunnerUpdateStatus     = "runner.update_status"
+	TypeRunnerRestart          = "runner.restart"
 	TypeRunnerPermission       = "runner.permission"
 	TypeRunnerPermissionResult = "runner.permission_result"
 	TypeConfigSync             = "config.sync"
